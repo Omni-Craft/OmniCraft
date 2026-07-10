@@ -1984,7 +1984,7 @@ def test_format_version_falls_back_to_bare_version_when_build_info_missing() -> 
     # Exact prefix match — if the format ever gains extra content
     # in the no-build-info case, scripts that look for "omnicraft
     # X.Y.Z" at the start of the line still work.
-    assert out.startswith("omnicraft ")
+    assert out.startswith("OmniCraft ")
     # The version comes from importlib.metadata; just check it's
     # non-empty and contains no parenthesized build-info suffix.
     assert "(" not in out

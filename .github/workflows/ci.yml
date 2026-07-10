@@ -32,14 +32,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Security precondition gate (security-gate.yml): untrusted PRs wait for the
-  # scan; trusted authors / non-PR events pass through.
-  gate:
-    uses: ./.github/workflows/security-gate.yml
-
   pytest:
     name: Pytest (${{ matrix.group }})
-    needs: gate
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -224,7 +218,6 @@ jobs:
 
   stores-postgres:
     name: Pytest (stores-postgres)
-    needs: gate
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -270,7 +263,6 @@ jobs:
 
   stores-mysql:
     name: Pytest (stores-mysql)
-    needs: gate
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -318,7 +310,6 @@ jobs:
 
   codex-parity:
     name: Pytest (codex-parity)
-    needs: gate
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 30

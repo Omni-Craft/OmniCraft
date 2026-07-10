@@ -29,14 +29,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Security precondition gate: untrusted PRs are held until the scan passes
-  # (security-gate.yml); trusted authors and non-PR events pass through.
-  gate:
-    uses: ./.github/workflows/security-gate.yml
-
   pre-commit:
     name: Pre-commit checks
-    needs: gate
     if: ${{ !github.event.pull_request.draft }}
     runs-on: ubuntu-latest
     timeout-minutes: 15

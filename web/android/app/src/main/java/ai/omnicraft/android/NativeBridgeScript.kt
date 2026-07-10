@@ -1,24 +1,24 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 /**
  * The JavaScript injected into the main frame on every load to expose
- * `window.omnigentNative` with `kind: "android"`, mirroring the iOS shell's
- * bridge (`web/ios/Omnigent/OmnigentWebView.swift`). The web layer consumes
+ * `window.omnicraftNative` with `kind: "android"`, mirroring the iOS shell's
+ * bridge (`web/ios/OmniCraft/OmniCraftWebView.swift`). The web layer consumes
  * this through `web/src/lib/nativeBridge.ts` — same object shape, same
- * `__omnigentNativeEmit*` callback names — so no web change is needed beyond
+ * `__omnicraftNativeEmit*` callback names — so no web change is needed beyond
  * accepting the `"android"` discriminator.
  *
- * web -> native goes through [OmnigentBridgeListener.JS_OBJECT_NAME], the
+ * web -> native goes through [OmniCraftBridgeListener.JS_OBJECT_NAME], the
  * transport object injected by `WebViewCompat.addWebMessageListener` only into
  * frames on the pinned origin. `notify()` resolves `true` optimistically (as on
  * iOS) since the post is fire-and-forget. native -> web is driven by
- * `evaluateJavascript` into the `window.__omnigentNativeEmit*` functions here.
+ * `evaluateJavascript` into the `window.__omnicraftNativeEmit*` functions here.
  */
 object NativeBridgeScript {
     val source: String =
         """
         (() => {
-          if (window.omnigentNative && window.omnigentNative.kind === "android") return;
+          if (window.omnicraftNative && window.omnicraftNative.kind === "android") return;
 
           const ensureViewportFit = () => {
             let meta = document.querySelector('meta[name="viewport"]');
@@ -48,7 +48,7 @@ object NativeBridgeScript {
           else document.addEventListener("DOMContentLoaded", ensureViewportFit, { once: true });
 
           // Apply the OS safe area to the layout from the native side. emitInsets
-          // feeds --omnigent-safe-top/bottom (the app's own inset vars), but on a
+          // feeds --omnicraft-safe-top/bottom (the app's own inset vars), but on a
           // server whose web build predates the Android shell the inset-aware rules
           // lose the cascade: their semantic selectors (.chat-conversation-content
           // etc., specificity 0,1,0) tie with the Tailwind utility classes on the
@@ -59,14 +59,14 @@ object NativeBridgeScript {
           // The header additionally reads a raw env(safe-area-inset-top), which
           // Android WebView reports as 0, so it needs the override even pre-Tailwind.
           const ensureInsetStyles = () => {
-            if (document.getElementById("omnigent-android-insets")) return;
-            const T = "var(--omnigent-safe-top, 0px)";
-            const B = "var(--omnigent-safe-bottom, 0px)";
+            if (document.getElementById("omnicraft-android-insets")) return;
+            const T = "var(--omnicraft-safe-top, 0px)";
+            const B = "var(--omnicraft-safe-bottom, 0px)";
             const style = document.createElement("style");
-            style.id = "omnigent-android-insets";
+            style.id = "omnicraft-android-insets";
             style.textContent = [
               ".chat-header{top:max(0px, calc(" + T + " - 0.5rem)) !important}",
-              ".chat-conversation-content{padding-top:calc(var(--omnigent-header-height, 3.5rem) + 1.5rem + " + T + ") !important}",
+              ".chat-conversation-content{padding-top:calc(var(--omnicraft-header-height, 3.5rem) + 1.5rem + " + T + ") !important}",
               ".main-terminal-view{padding-top:calc(3.25rem + " + T + ") !important}",
               // Bottom inset belongs on whichever element is bottom-most per mode:
               // the composer in regular chat, the switcher pill in terminal-first
@@ -84,7 +84,7 @@ object NativeBridgeScript {
 
           const post = (payload) => {
             try {
-              const bridge = window.${OmnigentBridgeListener.JS_OBJECT_NAME};
+              const bridge = window.${OmniCraftBridgeListener.JS_OBJECT_NAME};
               if (bridge) bridge.postMessage(JSON.stringify(payload));
             } catch (_) {}
           };
@@ -95,7 +95,7 @@ object NativeBridgeScript {
           // mounts. So if there is no subscriber yet, stash the path and hand it
           // to the FIRST subscriber once, then clear it — never re-deliver.
           let pendingNotificationPath = null;
-          Object.defineProperty(window, "__omnigentNativeEmitNotificationActivated", {
+          Object.defineProperty(window, "__omnicraftNativeEmitNotificationActivated", {
             configurable: false, enumerable: false, writable: false,
             value(path) {
               if (typeof path !== "string" || !path.startsWith("/")) return;
@@ -109,7 +109,7 @@ object NativeBridgeScript {
           // first emitted (the React app mounts later than document-start) still
           // gets the current value immediately on subscribe.
           let lastInsets = null;
-          Object.defineProperty(window, "__omnigentNativeEmitInsets", {
+          Object.defineProperty(window, "__omnicraftNativeEmitInsets", {
             configurable: false, enumerable: false, writable: false,
             value(topBar, bottomBar) {
               const insets = {
@@ -126,7 +126,7 @@ object NativeBridgeScript {
           // doesn't put every overlay in history). Returns true only when it
           // actually closed a VISIBLE modal/drawer — the native side falls back to
           // WebView history / finish() otherwise, so this never traps the user.
-          Object.defineProperty(window, "__omnigentNativeHandleBack", {
+          Object.defineProperty(window, "__omnicraftNativeHandleBack", {
             configurable: false, enumerable: false, writable: false,
             value() {
               try {
@@ -201,7 +201,7 @@ object NativeBridgeScript {
             },
           });
 
-          window.omnigentNative = Object.freeze({
+          window.omnicraftNative = Object.freeze({
             kind: "android",
             setBadgeCount(count) {
               // Note: unlike iOS, the native side ignores count <= 0 — Android has

@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.util.Log
 
@@ -8,5 +8,5 @@ import android.util.Log
  * ship in release logcat.
  */
 fun authLog(message: String) {
-    if (BuildConfig.DEBUG) Log.i("OmnigentAuth", message)
+    if (BuildConfig.DEBUG) Log.i("OmniCraftAuth", message)
 }

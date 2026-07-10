@@ -17,8 +17,8 @@ final class SettingsStore: ObservableObject {
     self.defaults = defaults
     #if DEBUG
       serverURL =
-        ProcessInfo.processInfo.omnigentArgumentValue(after: "--omnigent-server-url")
-        ?? ProcessInfo.processInfo.environment["OMNIGENT_SCREENSHOT_APP_URL"]
+        ProcessInfo.processInfo.omnicraftArgumentValue(after: "--omnicraft-server-url")
+        ?? ProcessInfo.processInfo.environment["OMNICRAFT_SCREENSHOT_APP_URL"]
         ?? defaults.string(forKey: Keys.serverURL)
     #else
       serverURL = defaults.string(forKey: Keys.serverURL)
@@ -52,15 +52,15 @@ final class SettingsStore: ObservableObject {
   }
 
   private enum Keys {
-    static let serverURL = "omnigent.serverURL"
-    static let recentServers = "omnigent.recentServers"
-    static let allowedProtocols = "omnigent.allowedProtocols"
+    static let serverURL = "omnicraft.serverURL"
+    static let recentServers = "omnicraft.recentServers"
+    static let allowedProtocols = "omnicraft.allowedProtocols"
   }
 }
 
 #if DEBUG
   extension ProcessInfo {
-    fileprivate func omnigentArgumentValue(after argumentName: String) -> String? {
+    fileprivate func omnicraftArgumentValue(after argumentName: String) -> String? {
       guard let index = arguments.firstIndex(of: argumentName) else { return nil }
       let valueIndex = arguments.index(after: index)
       guard arguments.indices.contains(valueIndex) else { return nil }

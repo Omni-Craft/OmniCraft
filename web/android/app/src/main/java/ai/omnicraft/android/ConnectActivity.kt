@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.content.Intent
 import android.os.Bundle

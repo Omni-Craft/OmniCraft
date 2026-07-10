@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Omnigent
+@testable import OmniCraft
 
 @MainActor
 final class SettingsStoreTests: XCTestCase {

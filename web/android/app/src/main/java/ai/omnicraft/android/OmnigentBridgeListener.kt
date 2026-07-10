@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.net.Uri
 import android.webkit.WebView
@@ -20,7 +20,7 @@ import org.json.JSONObject
  * Callbacks arrive on the UI thread, so notification calls need no hop; the
  * blob write offloads to [BlobSaver]'s own worker.
  */
-class OmnigentBridgeListener(
+class OmniCraftBridgeListener(
     private val notifications: NativeNotificationManager,
     private val blobSaver: BlobSaver,
 ) : WebViewCompat.WebMessageListener {
@@ -67,6 +67,6 @@ class OmnigentBridgeListener(
 
     companion object {
         /** Name of the injected transport object as seen from page JS. */
-        const val JS_OBJECT_NAME = "omnigentNativeBridge"
+        const val JS_OBJECT_NAME = "omnicraftNativeBridge"
     }
 }

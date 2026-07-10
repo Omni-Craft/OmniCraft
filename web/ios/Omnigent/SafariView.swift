@@ -2,7 +2,7 @@ import SafariServices
 import SwiftUI
 
 // Presents a URL in an in-app Safari sheet so external links (website, docs,
-// privacy policy) open without leaving Omnigent.
+// privacy policy) open without leaving OmniCraft.
 struct SafariView: UIViewControllerRepresentable {
   let url: URL
 

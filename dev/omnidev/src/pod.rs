@@ -13,13 +13,13 @@ pub struct Pod {
     pub ports: Ports,
     pub vite_host: String,
     /// LAN origins to trust for device testing (`--trust-lan-origins`); empty
-    /// otherwise. Fed to the server as `OMNIGENT_WS_ALLOWED_ORIGINS`.
+    /// otherwise. Fed to the server as `OMNICRAFT_WS_ALLOWED_ORIGINS`.
     pub trusted_origins: Vec<String>,
 }
 
 impl Pod {
     /// Create the pod directory tree (idempotent) and return the pod handle.
-    /// Only omnigent's own state is isolated (DB, artifacts, logs, config); the
+    /// Only omnicraft's own state is isolated (DB, artifacts, logs, config); the
     /// pod inherits your real home, credentials, and caches.
     pub fn create(
         repo_root: PathBuf,
@@ -28,7 +28,7 @@ impl Pod {
         vite_host: String,
         trusted_origins: Vec<String>,
     ) -> Result<Pod> {
-        for sub in ["data/omnigent", "artifacts", "logs", "config"] {
+        for sub in ["data/omnicraft", "artifacts", "logs", "config"] {
             let p = dir.join(sub);
             std::fs::create_dir_all(&p)
                 .with_context(|| format!("creating pod dir {}", p.display()))?;
@@ -55,7 +55,7 @@ impl Pod {
     pub fn db_uri(&self) -> String {
         format!(
             "sqlite:///{}",
-            self.dir.join("data/omnigent/chat.db").display()
+            self.dir.join("data/omnicraft/chat.db").display()
         )
     }
 
@@ -64,8 +64,8 @@ impl Pod {
     }
 
     /// The pod's isolated config home, exposed to children as
-    /// `OMNIGENT_CONFIG_HOME` so its `config.yaml` is separate from the
-    /// developer's real `~/.omnigent/config.yaml`.
+    /// `OMNICRAFT_CONFIG_HOME` so its `config.yaml` is separate from the
+    /// developer's real `~/.omnicraft/config.yaml`.
     pub fn config_dir(&self) -> PathBuf {
         self.dir.join("config")
     }
@@ -76,7 +76,7 @@ impl Pod {
 
     /// Clickable URLs for display. Terminals linkify `localhost` but often not
     /// a bare `127.0.0.1`. Functional uses (server bind, host `--server`,
-    /// `OMNIGENT_URL`) stay on `127.0.0.1` so we don't accidentally target IPv6
+    /// `OMNICRAFT_URL`) stay on `127.0.0.1` so we don't accidentally target IPv6
     /// `localhost` (`::1`), where the server isn't listening.
     pub fn server_display_url(&self) -> String {
         format!("http://localhost:{}", self.ports.server)
@@ -112,8 +112,8 @@ impl Pod {
     }
 
     /// Directory to watch for backend source changes.
-    pub fn omnigent_dir(&self) -> PathBuf {
-        self.repo_root.join("omnigent")
+    pub fn omnicraft_dir(&self) -> PathBuf {
+        self.repo_root.join("omnicraft")
     }
 
     pub fn log_file(&self, name: &str) -> PathBuf {
@@ -121,30 +121,30 @@ impl Pod {
     }
 
     /// The env overrides applied on top of the inherited parent env for every
-    /// child. We isolate omnigent's own state — the DB, data dir, and config
+    /// child. We isolate omnicraft's own state — the DB, data dir, and config
     /// home — so concurrent pods don't share a database, pidfile, or
     /// `config.yaml`. The rest (real `HOME`, credentials, uv/npm caches) is
-    /// inherited, since the agents omnigent runs need it. `OMNIGENT_URL` is the
+    /// inherited, since the agents omnicraft runs need it. `OMNICRAFT_URL` is the
     /// seam `web/vite.config.ts` reads to point its proxy at this pod's backend;
-    /// `OMNIGENT_CONFIG_HOME` is where the server/host/runner read `config.yaml`.
+    /// `OMNICRAFT_CONFIG_HOME` is where the server/host/runner read `config.yaml`.
     pub fn env(&self) -> Vec<(String, String)> {
         let d = |p: &str| self.dir.join(p).display().to_string();
         let mut env = vec![
-            ("OMNIGENT_DATA_DIR".into(), d("data/omnigent")),
-            ("OMNIGENT_DATABASE_URI".into(), self.db_uri()),
-            ("OMNIGENT_URL".into(), self.server_url()),
+            ("OMNICRAFT_DATA_DIR".into(), d("data/omnicraft")),
+            ("OMNICRAFT_DATABASE_URI".into(), self.db_uri()),
+            ("OMNICRAFT_URL".into(), self.server_url()),
             (
-                "OMNIGENT_CONFIG_HOME".into(),
+                "OMNICRAFT_CONFIG_HOME".into(),
                 self.config_dir().display().to_string(),
             ),
         ];
         if let Some(allowed) = self.allowed_origins_env() {
-            env.push(("OMNIGENT_WS_ALLOWED_ORIGINS".into(), allowed));
+            env.push(("OMNICRAFT_WS_ALLOWED_ORIGINS".into(), allowed));
         }
         env
     }
 
-    /// The `OMNIGENT_WS_ALLOWED_ORIGINS` value to inject, or `None` to leave it
+    /// The `OMNICRAFT_WS_ALLOWED_ORIGINS` value to inject, or `None` to leave it
     /// untouched. Merges the trusted LAN origins onto any value inherited from
     /// the parent environment (comma-separated, order-preserving, deduped) so a
     /// developer's own allowlist survives. Returns `None` when there are no LAN
@@ -153,7 +153,7 @@ impl Pod {
         if self.trusted_origins.is_empty() {
             return None;
         }
-        let inherited = std::env::var("OMNIGENT_WS_ALLOWED_ORIGINS").unwrap_or_default();
+        let inherited = std::env::var("OMNICRAFT_WS_ALLOWED_ORIGINS").unwrap_or_default();
         let mut merged: Vec<String> = Vec::new();
         let parts = inherited
             .split(',')
@@ -179,16 +179,16 @@ pub fn clean(dir: &Path) -> Result<()> {
     Ok(())
 }
 
-/// The developer's real omnigent `config.yaml` to seed a fresh pod from.
+/// The developer's real omnicraft `config.yaml` to seed a fresh pod from.
 ///
-/// Honors `OMNIGENT_CONFIG_HOME` if the parent env sets it (nested/test
-/// setups), else `~/.omnigent/config.yaml` via `HOME`. Returns `None` when the
+/// Honors `OMNICRAFT_CONFIG_HOME` if the parent env sets it (nested/test
+/// setups), else `~/.omnicraft/config.yaml` via `HOME`. Returns `None` when the
 /// file does not exist — a fresh pod then starts with an empty config, just
 /// like a first-run user.
 fn real_config_path() -> Option<PathBuf> {
-    let home = match std::env::var_os("OMNIGENT_CONFIG_HOME") {
+    let home = match std::env::var_os("OMNICRAFT_CONFIG_HOME") {
         Some(h) if !h.is_empty() => PathBuf::from(h),
-        _ => PathBuf::from(std::env::var_os("HOME")?).join(".omnigent"),
+        _ => PathBuf::from(std::env::var_os("HOME")?).join(".omnicraft"),
     };
     let path = home.join("config.yaml");
     path.exists().then_some(path)
@@ -244,17 +244,17 @@ mod tests {
         .unwrap()
     }
 
-    /// Point `OMNIGENT_CONFIG_HOME` at `home` for the duration of `f`, restoring
+    /// Point `OMNICRAFT_CONFIG_HOME` at `home` for the duration of `f`, restoring
     /// the previous value afterwards. Serialized against other env-touching
     /// tests via `ENV_LOCK`.
     fn with_config_home<T>(home: &Path, f: impl FnOnce() -> T) -> T {
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var_os("OMNIGENT_CONFIG_HOME");
-        std::env::set_var("OMNIGENT_CONFIG_HOME", home);
+        let prev = std::env::var_os("OMNICRAFT_CONFIG_HOME");
+        std::env::set_var("OMNICRAFT_CONFIG_HOME", home);
         let out = f();
         match prev {
-            Some(v) => std::env::set_var("OMNIGENT_CONFIG_HOME", v),
-            None => std::env::remove_var("OMNIGENT_CONFIG_HOME"),
+            Some(v) => std::env::set_var("OMNICRAFT_CONFIG_HOME", v),
+            None => std::env::remove_var("OMNICRAFT_CONFIG_HOME"),
         }
         out
     }
@@ -273,7 +273,7 @@ mod tests {
         let env = pod.env();
         let got = env
             .iter()
-            .find(|(k, _)| k == "OMNIGENT_CONFIG_HOME")
+            .find(|(k, _)| k == "OMNICRAFT_CONFIG_HOME")
             .map(|(_, v)| v.clone());
         assert_eq!(got, Some(pod.config_dir().display().to_string()));
     }
@@ -319,30 +319,30 @@ mod tests {
     }
 
     #[test]
-    fn real_config_path_falls_back_to_home_dot_omnigent() {
-        // With no OMNIGENT_CONFIG_HOME, the real config resolves under
-        // `$HOME/.omnigent/` — the path a normal pod run seeds from.
+    fn real_config_path_falls_back_to_home_dot_omnicraft() {
+        // With no OMNICRAFT_CONFIG_HOME, the real config resolves under
+        // `$HOME/.omnicraft/` — the path a normal pod run seeds from.
         let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev_cfg = std::env::var_os("OMNIGENT_CONFIG_HOME");
+        let prev_cfg = std::env::var_os("OMNICRAFT_CONFIG_HOME");
         let prev_home = std::env::var_os("HOME");
 
         let home = tempdir();
-        std::fs::create_dir_all(home.join(".omnigent")).unwrap();
-        std::fs::write(home.join(".omnigent/config.yaml"), "y: 2\n").unwrap();
+        std::fs::create_dir_all(home.join(".omnicraft")).unwrap();
+        std::fs::write(home.join(".omnicraft/config.yaml"), "y: 2\n").unwrap();
 
-        std::env::remove_var("OMNIGENT_CONFIG_HOME");
+        std::env::remove_var("OMNICRAFT_CONFIG_HOME");
         std::env::set_var("HOME", &home);
         let got = real_config_path();
 
         match prev_cfg {
-            Some(v) => std::env::set_var("OMNIGENT_CONFIG_HOME", v),
-            None => std::env::remove_var("OMNIGENT_CONFIG_HOME"),
+            Some(v) => std::env::set_var("OMNICRAFT_CONFIG_HOME", v),
+            None => std::env::remove_var("OMNICRAFT_CONFIG_HOME"),
         }
         match prev_home {
             Some(v) => std::env::set_var("HOME", v),
             None => std::env::remove_var("HOME"),
         }
 
-        assert_eq!(got, Some(home.join(".omnigent/config.yaml")));
+        assert_eq!(got, Some(home.join(".omnicraft/config.yaml")));
     }
 }

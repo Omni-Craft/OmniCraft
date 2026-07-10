@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.content.Context
 
@@ -36,7 +36,7 @@ class ServerStore(
     }
 
     private companion object {
-        const val PREFS = "ai.omnigent.android.servers"
+        const val PREFS = "ai.omnicraft.android.servers"
         const val KEY_CURRENT = "current_server_url"
         const val KEY_RECENTS = "recent_server_urls"
         const val MAX_RECENTS = 8

@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.app.Activity
 import android.content.Intent
@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * cookie store is isolated from the browser's.
  *
  * Reuses the server's existing browser-login endpoints (the same ones the
- * `omnigent login` CLI uses, no server change):
+ * `omnicraft login` CLI uses, no server change):
  *   1. `POST /auth/cli-login` -> `{ticket, login_url}`
  *   2. open `login_url` in the browser; the user authenticates; the OIDC
  *      callback fulfills the ticket server-side

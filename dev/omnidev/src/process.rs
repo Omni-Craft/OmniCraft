@@ -13,14 +13,14 @@ pub struct ProcSpec {
 }
 
 impl ProcSpec {
-    /// `uv run omnigent server --host 127.0.0.1 --port <p> --database-uri <db>
+    /// `uv run omnicraft server --host 127.0.0.1 --port <p> --database-uri <db>
     /// --artifact-location <dir>`, from the repo root.
     pub fn server(pod: &Pod) -> ProcSpec {
         ProcSpec {
             program: "uv".into(),
             args: vec![
                 "run".into(),
-                "omnigent".into(),
+                "omnicraft".into(),
                 "server".into(),
                 "--host".into(),
                 "127.0.0.1".into(),
@@ -35,13 +35,13 @@ impl ProcSpec {
         }
     }
 
-    /// `uv run omnigent host --server http://127.0.0.1:<p>`, from the repo root.
+    /// `uv run omnicraft host --server http://127.0.0.1:<p>`, from the repo root.
     pub fn host(pod: &Pod) -> ProcSpec {
         ProcSpec {
             program: "uv".into(),
             args: vec![
                 "run".into(),
-                "omnigent".into(),
+                "omnicraft".into(),
                 "host".into(),
                 "--server".into(),
                 pod.server_url(),
@@ -71,7 +71,7 @@ impl ProcSpec {
     }
 
     /// `npm run dev -- --host <host> --port <p> --strictPort`, from `web/`.
-    /// `OMNIGENT_URL` (in the pod env) points Vite's proxy at this pod's backend.
+    /// `OMNICRAFT_URL` (in the pod env) points Vite's proxy at this pod's backend.
     pub fn vite(pod: &Pod) -> ProcSpec {
         ProcSpec {
             program: "npm".into(),

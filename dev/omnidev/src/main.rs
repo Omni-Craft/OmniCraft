@@ -1,11 +1,11 @@
-//! omnidev — dev tooling for Omnigent.
+//! omnidev — dev tooling for OmniCraft.
 //!
 //! Two independent capabilities in one binary:
 //! - **pod supervisor** (bare `omnidev`): manages an isolated dev instance for
 //!   the current checkout — server/host/vite, restarting the backend on Python
 //!   changes while Vite handles frontend HMR.
 //! - **install management** (`omnidev install`/`update`/`check`/…): install and
-//!   keep a git-based omnigent up to date. These need no checkout and run
+//!   keep a git-based omnicraft up to date. These need no checkout and run
 //!   anywhere.
 
 mod install;
@@ -37,7 +37,7 @@ use state::Shared;
 use supervisor::{Cmd, Supervisor};
 
 #[derive(Parser, Debug)]
-#[command(name = "omnidev", about = "Dev tooling for Omnigent", version)]
+#[command(name = "omnidev", about = "Dev tooling for OmniCraft", version)]
 struct Args {
     #[command(subcommand)]
     command: Option<Command>,
@@ -81,7 +81,7 @@ struct RunArgs {
 
 #[derive(Subcommand, Debug)]
 enum Command {
-    /// Install omnigent from git (defaults to the databricks extra, main).
+    /// Install omnicraft from git (defaults to the databricks extra, main).
     Install {
         /// Git ref (branch/tag/sha) to track.
         #[arg(long, default_value = install::DEFAULT_REF)]
@@ -98,7 +98,7 @@ enum Command {
     },
     /// Reinstall the latest of the tracked ref/extras.
     Update,
-    /// Check for an omnigent update (the shell hook calls this).
+    /// Check for an omnicraft update (the shell hook calls this).
     Check {
         /// Print nothing when already up to date.
         #[arg(long)]
@@ -148,7 +148,7 @@ fn main() -> Result<()> {
 }
 
 /// Default path: the pod supervisor for the current checkout. This is the only
-/// path that requires an Omnigent checkout.
+/// path that requires an OmniCraft checkout.
 #[tokio::main]
 async fn run_supervisor(args: RunArgs) -> Result<()> {
     let cwd = std::env::current_dir()?;
@@ -188,7 +188,7 @@ async fn run_supervisor(args: RunArgs) -> Result<()> {
 
     // File watcher: Python changes -> Reload commands. Keep the debouncer alive
     // for the whole session.
-    let _watcher = watcher::spawn(&pod.omnigent_dir(), cmd_tx.clone())?;
+    let _watcher = watcher::spawn(&pod.omnicraft_dir(), cmd_tx.clone())?;
 
     // Supervisor runs on the tokio runtime; the TUI drives it via cmd_tx.
     let supervisor = Supervisor::new(

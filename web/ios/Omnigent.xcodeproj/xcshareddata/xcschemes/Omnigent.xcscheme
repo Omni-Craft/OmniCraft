@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A00000000000000000000006"
-               BuildableName = "Omnigent.app"
-               BlueprintName = "Omnigent"
-               ReferencedContainer = "container:Omnigent.xcodeproj">
+               BuildableName = "OmniCraft.app"
+               BlueprintName = "OmniCraft"
+               ReferencedContainer = "container:OmniCraft.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -34,9 +34,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A00000000000000000000007"
-               BuildableName = "OmnigentTests.xctest"
-               BlueprintName = "OmnigentTests"
-               ReferencedContainer = "container:Omnigent.xcodeproj">
+               BuildableName = "OmniCraftTests.xctest"
+               BlueprintName = "OmniCraftTests"
+               ReferencedContainer = "container:OmniCraft.xcodeproj">
             </BuildableReference>
          </TestableReference>
          <TestableReference
@@ -45,9 +45,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "A0000000000000000000000A"
-               BuildableName = "OmnigentUITests.xctest"
-               BlueprintName = "OmnigentUITests"
-               ReferencedContainer = "container:Omnigent.xcodeproj">
+               BuildableName = "OmniCraftUITests.xctest"
+               BlueprintName = "OmniCraftUITests"
+               ReferencedContainer = "container:OmniCraft.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A00000000000000000000006"
-            BuildableName = "Omnigent.app"
-            BlueprintName = "Omnigent"
-            ReferencedContainer = "container:Omnigent.xcodeproj">
+            BuildableName = "OmniCraft.app"
+            BlueprintName = "OmniCraft"
+            ReferencedContainer = "container:OmniCraft.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
    </TestAction>
@@ -76,9 +76,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A00000000000000000000006"
-            BuildableName = "Omnigent.app"
-            BlueprintName = "Omnigent"
-            ReferencedContainer = "container:Omnigent.xcodeproj">
+            BuildableName = "OmniCraft.app"
+            BlueprintName = "OmniCraft"
+            ReferencedContainer = "container:OmniCraft.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -93,9 +93,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "A00000000000000000000006"
-            BuildableName = "Omnigent.app"
-            BlueprintName = "Omnigent"
-            ReferencedContainer = "container:Omnigent.xcodeproj">
+            BuildableName = "OmniCraft.app"
+            BlueprintName = "OmniCraft"
+            ReferencedContainer = "container:OmniCraft.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

@@ -2,7 +2,7 @@ import Foundation
 import WebKit
 
 extension URL {
-  var omnigentOrigin: String? {
+  var omnicraftOrigin: String? {
     guard let scheme, let host else { return nil }
     var components = URLComponents()
     components.scheme = scheme.lowercased()
@@ -11,7 +11,7 @@ extension URL {
     return components.url?.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
   }
 
-  var omnigentHostLabel: String {
+  var omnicraftHostLabel: String {
     guard let host else { return absoluteString }
     if let port {
       return "\(host):\(port)"
@@ -21,7 +21,7 @@ extension URL {
 }
 
 extension WKSecurityOrigin {
-  var omnigentOrigin: String? {
+  var omnicraftOrigin: String? {
     guard !self.protocol.isEmpty, !host.isEmpty else { return nil }
     var components = URLComponents()
     components.scheme = self.protocol.lowercased()

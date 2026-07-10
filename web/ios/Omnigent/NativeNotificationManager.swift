@@ -26,7 +26,7 @@ final class NativeNotificationManager: NSObject, UNUserNotificationCenterDelegat
       do {
         try await center.setBadgeCount(max(0, count))
       } catch {
-        NSLog("[omnigent] failed to set badge count: \(String(describing: error))")
+        NSLog("[omnicraft] failed to set badge count: \(String(describing: error))")
       }
     }
   }
@@ -45,7 +45,7 @@ final class NativeNotificationManager: NSObject, UNUserNotificationCenterDelegat
       }
 
       let request = UNNotificationRequest(
-        identifier: "omnigent.\(UUID().uuidString)",
+        identifier: "omnicraft.\(UUID().uuidString)",
         content: content,
         trigger: nil
       )
@@ -53,7 +53,7 @@ final class NativeNotificationManager: NSObject, UNUserNotificationCenterDelegat
       do {
         try await center.add(request)
       } catch {
-        NSLog("[omnigent] failed to add notification: \(String(describing: error))")
+        NSLog("[omnicraft] failed to add notification: \(String(describing: error))")
       }
     }
   }
@@ -82,7 +82,7 @@ final class NativeNotificationManager: NSObject, UNUserNotificationCenterDelegat
 
   private func requestAuthorizationIfNeeded() async -> Bool {
     #if DEBUG
-      guard !ProcessInfo.processInfo.isOmnigentScreenshotRun else { return false }
+      guard !ProcessInfo.processInfo.isOmniCraftScreenshotRun else { return false }
     #endif
 
     let settings = await center.notificationSettings()
@@ -105,8 +105,8 @@ final class NativeNotificationManager: NSObject, UNUserNotificationCenterDelegat
 
 #if DEBUG
   extension ProcessInfo {
-    fileprivate var isOmnigentScreenshotRun: Bool {
-      environment["OMNIGENT_SCREENSHOT_APP_URL"] != nil
+    fileprivate var isOmniCraftScreenshotRun: Bool {
+      environment["OMNICRAFT_SCREENSHOT_APP_URL"] != nil
         || arguments.contains("-FASTLANE_SNAPSHOT")
     }
   }

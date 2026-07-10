@@ -15,7 +15,7 @@ struct WebShellView: View {
   var body: some View {
     GeometryReader { geometry in
       ZStack(alignment: .top) {
-        OmnigentWebView(
+        OmniCraftWebView(
           initialURL: initialURL,
           model: model,
           settings: settings,
@@ -45,7 +45,7 @@ struct WebShellView: View {
       .overlay(alignment: .bottom) {
         // Always present, shown/hidden by opacity rather than insert/remove, so
         // a transient visibility flip never slides the bar in and out. The web
-        // layer reserves a fixed footprint for it (`.omnigent-native-bottom-
+        // layer reserves a fixed footprint for it (`.omnicraft-native-bottom-
         // spacer` in index.css), so there's no size round-trip to coordinate.
         ChatTerminalBar(
           mode: $model.viewMode,
@@ -102,12 +102,12 @@ private struct ServerSwitcher: View {
     Menu {
       Button {
       } label: {
-        Label(currentURL.omnigentHostLabel, systemImage: "checkmark")
+        Label(currentURL.omnicraftHostLabel, systemImage: "checkmark")
       }
       .disabled(true)
 
       let otherServers = recents.filter {
-        URL(string: $0)?.omnigentOrigin != currentURL.omnigentOrigin
+        URL(string: $0)?.omnicraftOrigin != currentURL.omnicraftOrigin
       }
       if !otherServers.isEmpty {
         Divider()
@@ -115,7 +115,7 @@ private struct ServerSwitcher: View {
           Button {
             switchServer(recent)
           } label: {
-            Text(URL(string: recent)?.omnigentHostLabel ?? recent)
+            Text(URL(string: recent)?.omnicraftHostLabel ?? recent)
           }
         }
       }
@@ -133,7 +133,7 @@ private struct ServerSwitcher: View {
       }
     } label: {
       HStack(spacing: 6) {
-        Text(currentURL.omnigentHostLabel)
+        Text(currentURL.omnicraftHostLabel)
           .fontWeight(.medium)
           .lineLimit(1)
           .truncationMode(.middle)

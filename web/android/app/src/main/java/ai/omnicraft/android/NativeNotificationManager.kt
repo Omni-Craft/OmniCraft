@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.app.Notification
 import android.app.NotificationChannel
@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger
  * `NativeNotificationManager`. Tap routing forwards the notification's
  * `navigatePath` back into the SPA: the tap launches [MainActivity] with the
  * path as an intent extra, which the activity replays via
- * `window.__omnigentNativeEmitNotificationActivated`.
+ * `window.__omnicraftNativeEmitNotificationActivated`.
  *
  * Posting tolerates a missing `POST_NOTIFICATIONS` grant (requested by
  * [MainActivity] on API 33+): [post] drops silently if disabled or revoked, so
@@ -123,8 +123,8 @@ class NativeNotificationManager(
     }
 
     companion object {
-        const val EXTRA_NAVIGATE_PATH = "ai.omnigent.android.NAVIGATE_PATH"
-        private const val CHANNEL_ID = "omnigent.sessions"
+        const val EXTRA_NAVIGATE_PATH = "ai.omnicraft.android.NAVIGATE_PATH"
+        private const val CHANNEL_ID = "omnicraft.sessions"
         private const val BADGE_NOTIFICATION_ID = 1
     }
 }

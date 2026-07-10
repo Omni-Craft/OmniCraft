@@ -1,11 +1,11 @@
 import Foundation
 
 enum WorkspaceURLExpander {
-  static let workspaceUIPath = "/ml/omnigents"
+  static let workspaceUIPath = "/ml/omnicrafts"
 
   /// Databricks Apps are served from `*.databricksapps.com` and answer with the
   /// same `server: databricks` header as a workspace, but they are NOT
-  /// workspaces and have no `/ml/omnigents` mount, so expansion is skipped for
+  /// workspaces and have no `/ml/omnicrafts` mount, so expansion is skipped for
   /// these hosts.
   static let databricksAppsHostSuffix = "databricksapps.com"
 

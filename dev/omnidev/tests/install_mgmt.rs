@@ -32,20 +32,20 @@ fn spec_default_has_databricks_extra_and_main() {
     let c = InstallConfig::default();
     assert_eq!(
         c.spec(),
-        "omnigent[databricks] @ git+https://github.com/omnigent-ai/omnigent.git@main"
+        "omnicraft[databricks] @ git+https://github.com/omnicraft-ai/omnicraft.git@main"
     );
 }
 
 #[test]
 fn spec_no_extras_is_bare_git_url() {
     let c = InstallConfig {
-        repo: "https://github.com/omnigent-ai/omnigent.git".into(),
+        repo: "https://github.com/omnicraft-ai/omnicraft.git".into(),
         git_ref: "main".into(),
         extras: vec![],
     };
     assert_eq!(
         c.spec(),
-        "git+https://github.com/omnigent-ai/omnigent.git@main"
+        "git+https://github.com/omnicraft-ai/omnicraft.git@main"
     );
 }
 
@@ -58,7 +58,7 @@ fn spec_reflects_custom_ref_and_extras() {
     };
     assert_eq!(
         c.spec(),
-        "omnigent[databricks,kubernetes] @ git+https://example.com/x.git@dev"
+        "omnicraft[databricks,kubernetes] @ git+https://example.com/x.git@dev"
     );
 }
 
@@ -69,7 +69,7 @@ fn config_round_trips_through_disk() {
     std::env::set_var("XDG_CONFIG_HOME", &tmp);
 
     let c = InstallConfig {
-        repo: "https://github.com/omnigent-ai/omnigent.git".into(),
+        repo: "https://github.com/omnicraft-ai/omnicraft.git".into(),
         git_ref: "main".into(),
         extras: vec!["databricks".into()],
     };

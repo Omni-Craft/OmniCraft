@@ -7,7 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		B10000000000000000000001 /* OmnigentApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* OmnigentApp.swift */; };
+		B10000000000000000000001 /* OmniCraftApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000001 /* OmniCraftApp.swift */; };
 		B10000000000000000000002 /* AppRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002 /* AppRootView.swift */; };
 		B10000000000000000000003 /* ConnectView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000003 /* ConnectView.swift */; };
 		B10000000000000000000004 /* DesignTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004 /* DesignTokens.swift */; };
@@ -17,8 +17,8 @@
 		B10000000000000000000008 /* NativeNotificationManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008 /* NativeNotificationManager.swift */; };
 		B10000000000000000000009 /* WebShellView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000009 /* WebShellView.swift */; };
 		B1000000000000000000000A /* WebViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000A /* WebViewModel.swift */; };
-		B1000000000000000000000B /* OmnigentWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B /* OmnigentWebView.swift */; };
-		B1000000000000000000000C /* URL+Omnigent.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* URL+Omnigent.swift */; };
+		B1000000000000000000000B /* OmniCraftWebView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B /* OmniCraftWebView.swift */; };
+		B1000000000000000000000C /* URL+OmniCraft.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000C /* URL+OmniCraft.swift */; };
 		B10000000000000000000011 /* ChatTerminalBar.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000011 /* ChatTerminalBar.swift */; };
 		B10000000000000000000012 /* SafariView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000012 /* SafariView.swift */; };
 		B1000000000000000000000D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000D /* Assets.xcassets */; };
@@ -27,7 +27,7 @@
 		B20000000000000000000001 /* ServerURLTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* ServerURLTests.swift */; };
 		B20000000000000000000002 /* SettingsStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* SettingsStoreTests.swift */; };
 		B20000000000000000000003 /* WorkspaceURLExpanderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* WorkspaceURLExpanderTests.swift */; };
-		B40000000000000000000001 /* OmnigentUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000001 /* OmnigentUITests.swift */; };
+		B40000000000000000000001 /* OmniCraftUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000001 /* OmniCraftUITests.swift */; };
 		B40000000000000000000002 /* SnapshotHelper.swift in Sources */ = {isa = PBXBuildFile; fileRef = A40000000000000000000002 /* SnapshotHelper.swift */; };
 /* End PBXBuildFile section */
 
@@ -37,19 +37,19 @@
 			containerPortal = A00000000000000000000005 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A00000000000000000000006;
-			remoteInfo = Omnigent;
+			remoteInfo = OmniCraft;
 		};
 		E00000000000000000000003 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = A00000000000000000000005 /* Project object */;
 			proxyType = 1;
 			remoteGlobalIDString = A00000000000000000000006;
-			remoteInfo = Omnigent;
+			remoteInfo = OmniCraft;
 		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
-		A10000000000000000000001 /* OmnigentApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmnigentApp.swift; sourceTree = "<group>"; };
+		A10000000000000000000001 /* OmniCraftApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniCraftApp.swift; sourceTree = "<group>"; };
 		A10000000000000000000002 /* AppRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppRootView.swift; sourceTree = "<group>"; };
 		A10000000000000000000003 /* ConnectView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectView.swift; sourceTree = "<group>"; };
 		A10000000000000000000004 /* DesignTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DesignTokens.swift; sourceTree = "<group>"; };
@@ -59,8 +59,8 @@
 		A10000000000000000000008 /* NativeNotificationManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeNotificationManager.swift; sourceTree = "<group>"; };
 		A10000000000000000000009 /* WebShellView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebShellView.swift; sourceTree = "<group>"; };
 		A1000000000000000000000A /* WebViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebViewModel.swift; sourceTree = "<group>"; };
-		A1000000000000000000000B /* OmnigentWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmnigentWebView.swift; sourceTree = "<group>"; };
-		A1000000000000000000000C /* URL+Omnigent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+Omnigent.swift"; sourceTree = "<group>"; };
+		A1000000000000000000000B /* OmniCraftWebView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniCraftWebView.swift; sourceTree = "<group>"; };
+		A1000000000000000000000C /* URL+OmniCraft.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "URL+OmniCraft.swift"; sourceTree = "<group>"; };
 		A10000000000000000000011 /* ChatTerminalBar.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatTerminalBar.swift; sourceTree = "<group>"; };
 		A10000000000000000000012 /* SafariView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SafariView.swift; sourceTree = "<group>"; };
 		A1000000000000000000000D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -71,11 +71,11 @@
 		A20000000000000000000001 /* ServerURLTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServerURLTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* SettingsStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsStoreTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* WorkspaceURLExpanderTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkspaceURLExpanderTests.swift; sourceTree = "<group>"; };
-		A30000000000000000000003 /* OmnigentUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OmnigentUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
-		A40000000000000000000001 /* OmnigentUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmnigentUITests.swift; sourceTree = "<group>"; };
+		A30000000000000000000003 /* OmniCraftUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OmniCraftUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A40000000000000000000001 /* OmniCraftUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmniCraftUITests.swift; sourceTree = "<group>"; };
 		A40000000000000000000002 /* SnapshotHelper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnapshotHelper.swift; sourceTree = "<group>"; };
-		A30000000000000000000001 /* Omnigent.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Omnigent.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A30000000000000000000002 /* OmnigentTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OmnigentTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000001 /* OmniCraft.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = OmniCraft.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		A30000000000000000000002 /* OmniCraftTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OmniCraftTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,9 +106,9 @@
 		A00000000000000000000001 = {
 			isa = PBXGroup;
 			children = (
-				A00000000000000000000003 /* Omnigent */,
-				A00000000000000000000004 /* OmnigentTests */,
-				A00000000000000000000009 /* OmnigentUITests */,
+				A00000000000000000000003 /* OmniCraft */,
+				A00000000000000000000004 /* OmniCraftTests */,
+				A00000000000000000000009 /* OmniCraftUITests */,
 				A00000000000000000000008 /* Platform Assets */,
 				A00000000000000000000002 /* Products */,
 			);
@@ -117,17 +117,17 @@
 		A00000000000000000000002 /* Products */ = {
 			isa = PBXGroup;
 			children = (
-				A30000000000000000000001 /* Omnigent.app */,
-				A30000000000000000000002 /* OmnigentTests.xctest */,
-				A30000000000000000000003 /* OmnigentUITests.xctest */,
+				A30000000000000000000001 /* OmniCraft.app */,
+				A30000000000000000000002 /* OmniCraftTests.xctest */,
+				A30000000000000000000003 /* OmniCraftUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
-		A00000000000000000000003 /* Omnigent */ = {
+		A00000000000000000000003 /* OmniCraft */ = {
 			isa = PBXGroup;
 			children = (
-				A10000000000000000000001 /* OmnigentApp.swift */,
+				A10000000000000000000001 /* OmniCraftApp.swift */,
 				A10000000000000000000002 /* AppRootView.swift */,
 				A10000000000000000000003 /* ConnectView.swift */,
 				A10000000000000000000004 /* DesignTokens.swift */,
@@ -137,8 +137,8 @@
 				A10000000000000000000008 /* NativeNotificationManager.swift */,
 				A10000000000000000000009 /* WebShellView.swift */,
 				A1000000000000000000000A /* WebViewModel.swift */,
-				A1000000000000000000000B /* OmnigentWebView.swift */,
-				A1000000000000000000000C /* URL+Omnigent.swift */,
+				A1000000000000000000000B /* OmniCraftWebView.swift */,
+				A1000000000000000000000C /* URL+OmniCraft.swift */,
 				A10000000000000000000011 /* ChatTerminalBar.swift */,
 				A10000000000000000000012 /* SafariView.swift */,
 				A1000000000000000000000D /* Assets.xcassets */,
@@ -146,26 +146,26 @@
 				A1000000000000000000000F /* Info-Debug.plist */,
 				A10000000000000000000010 /* Info-Release.plist */,
 			);
-			path = Omnigent;
+			path = OmniCraft;
 			sourceTree = "<group>";
 		};
-		A00000000000000000000004 /* OmnigentTests */ = {
+		A00000000000000000000004 /* OmniCraftTests */ = {
 			isa = PBXGroup;
 			children = (
 				A20000000000000000000001 /* ServerURLTests.swift */,
 				A20000000000000000000002 /* SettingsStoreTests.swift */,
 				A20000000000000000000003 /* WorkspaceURLExpanderTests.swift */,
 			);
-			path = OmnigentTests;
+			path = OmniCraftTests;
 			sourceTree = "<group>";
 		};
-		A00000000000000000000009 /* OmnigentUITests */ = {
+		A00000000000000000000009 /* OmniCraftUITests */ = {
 			isa = PBXGroup;
 			children = (
-				A40000000000000000000001 /* OmnigentUITests.swift */,
+				A40000000000000000000001 /* OmniCraftUITests.swift */,
 				A40000000000000000000002 /* SnapshotHelper.swift */,
 			);
-			path = OmnigentUITests;
+			path = OmniCraftUITests;
 			sourceTree = "<group>";
 		};
 		A00000000000000000000008 /* Platform Assets */ = {
@@ -179,9 +179,9 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		A00000000000000000000006 /* Omnigent */ = {
+		A00000000000000000000006 /* OmniCraft */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D10000000000000000000001 /* Build configuration list for PBXNativeTarget "Omnigent" */;
+			buildConfigurationList = D10000000000000000000001 /* Build configuration list for PBXNativeTarget "OmniCraft" */;
 			buildPhases = (
 				C00000000000000000000001 /* Sources */,
 				C00000000000000000000002 /* Frameworks */,
@@ -191,14 +191,14 @@
 			);
 			dependencies = (
 			);
-			name = Omnigent;
-			productName = Omnigent;
-			productReference = A30000000000000000000001 /* Omnigent.app */;
+			name = OmniCraft;
+			productName = OmniCraft;
+			productReference = A30000000000000000000001 /* OmniCraft.app */;
 			productType = "com.apple.product-type.application";
 		};
-		A00000000000000000000007 /* OmnigentTests */ = {
+		A00000000000000000000007 /* OmniCraftTests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D20000000000000000000001 /* Build configuration list for PBXNativeTarget "OmnigentTests" */;
+			buildConfigurationList = D20000000000000000000001 /* Build configuration list for PBXNativeTarget "OmniCraftTests" */;
 			buildPhases = (
 				C00000000000000000000004 /* Sources */,
 				C00000000000000000000005 /* Frameworks */,
@@ -209,14 +209,14 @@
 			dependencies = (
 				E00000000000000000000002 /* PBXTargetDependency */,
 			);
-			name = OmnigentTests;
-			productName = OmnigentTests;
-			productReference = A30000000000000000000002 /* OmnigentTests.xctest */;
+			name = OmniCraftTests;
+			productName = OmniCraftTests;
+			productReference = A30000000000000000000002 /* OmniCraftTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
-		A0000000000000000000000A /* OmnigentUITests */ = {
+		A0000000000000000000000A /* OmniCraftUITests */ = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D40000000000000000000001 /* Build configuration list for PBXNativeTarget "OmnigentUITests" */;
+			buildConfigurationList = D40000000000000000000001 /* Build configuration list for PBXNativeTarget "OmniCraftUITests" */;
 			buildPhases = (
 				C00000000000000000000007 /* Sources */,
 				C00000000000000000000008 /* Frameworks */,
@@ -227,9 +227,9 @@
 			dependencies = (
 				E00000000000000000000004 /* PBXTargetDependency */,
 			);
-			name = OmnigentUITests;
-			productName = OmnigentUITests;
-			productReference = A30000000000000000000003 /* OmnigentUITests.xctest */;
+			name = OmniCraftUITests;
+			productName = OmniCraftUITests;
+			productReference = A30000000000000000000003 /* OmniCraftUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 /* End PBXNativeTarget section */
@@ -255,7 +255,7 @@
 					};
 				};
 			};
-			buildConfigurationList = D00000000000000000000001 /* Build configuration list for PBXProject "Omnigent" */;
+			buildConfigurationList = D00000000000000000000001 /* Build configuration list for PBXProject "OmniCraft" */;
 			compatibilityVersion = "Xcode 15.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
@@ -268,9 +268,9 @@
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				A00000000000000000000006 /* Omnigent */,
-				A00000000000000000000007 /* OmnigentTests */,
-				A0000000000000000000000A /* OmnigentUITests */,
+				A00000000000000000000006 /* OmniCraft */,
+				A00000000000000000000007 /* OmniCraftTests */,
+				A0000000000000000000000A /* OmniCraftUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -307,7 +307,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B10000000000000000000001 /* OmnigentApp.swift in Sources */,
+				B10000000000000000000001 /* OmniCraftApp.swift in Sources */,
 				B10000000000000000000002 /* AppRootView.swift in Sources */,
 				B10000000000000000000003 /* ConnectView.swift in Sources */,
 				B10000000000000000000004 /* DesignTokens.swift in Sources */,
@@ -317,8 +317,8 @@
 				B10000000000000000000008 /* NativeNotificationManager.swift in Sources */,
 				B10000000000000000000009 /* WebShellView.swift in Sources */,
 				B1000000000000000000000A /* WebViewModel.swift in Sources */,
-				B1000000000000000000000B /* OmnigentWebView.swift in Sources */,
-				B1000000000000000000000C /* URL+Omnigent.swift in Sources */,
+				B1000000000000000000000B /* OmniCraftWebView.swift in Sources */,
+				B1000000000000000000000C /* URL+OmniCraft.swift in Sources */,
 				B10000000000000000000011 /* ChatTerminalBar.swift in Sources */,
 				B10000000000000000000012 /* SafariView.swift in Sources */,
 			);
@@ -338,7 +338,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				B40000000000000000000001 /* OmnigentUITests.swift in Sources */,
+				B40000000000000000000001 /* OmniCraftUITests.swift in Sources */,
 				B40000000000000000000002 /* SnapshotHelper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -348,12 +348,12 @@
 /* Begin PBXTargetDependency section */
 		E00000000000000000000002 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A00000000000000000000006 /* Omnigent */;
+			target = A00000000000000000000006 /* OmniCraft */;
 			targetProxy = E00000000000000000000001 /* PBXContainerItemProxy */;
 		};
 		E00000000000000000000004 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			target = A00000000000000000000006 /* Omnigent */;
+			target = A00000000000000000000006 /* OmniCraft */;
 			targetProxy = E00000000000000000000003 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
@@ -478,7 +478,7 @@
 		D10000000000000000000002 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				APP_DISPLAY_NAME = Omnigent;
+				APP_DISPLAY_NAME = OmniCraft;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -487,7 +487,7 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 8RMX4WU6F8;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "Omnigent/Info-Debug.plist";
+				INFOPLIST_FILE = "OmniCraft/Info-Debug.plist";
 				VERSIONING_SYSTEM = "apple-generic";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -495,7 +495,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.omnigent.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.omnicraft.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -509,7 +509,7 @@
 		D10000000000000000000003 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				APP_DISPLAY_NAME = Omnigent;
+				APP_DISPLAY_NAME = OmniCraft;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_IDENTITY = "Apple Development";
@@ -518,7 +518,7 @@
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = 8RMX4WU6F8;
 				GENERATE_INFOPLIST_FILE = NO;
-				INFOPLIST_FILE = "Omnigent/Info-Release.plist";
+				INFOPLIST_FILE = "OmniCraft/Info-Release.plist";
 				VERSIONING_SYSTEM = "apple-generic";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -526,7 +526,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.omnigent.ios;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.omnicraft.ios;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
@@ -551,13 +551,13 @@
 					"@loader_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.omnigent.ios.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.omnicraft.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Omnigent.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Omnigent";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/OmniCraft.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/OmniCraft";
 			};
 			name = Debug;
 		};
@@ -575,13 +575,13 @@
 					"@loader_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.omnigent.ios.tests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.omnicraft.ios.tests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Omnigent.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Omnigent";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/OmniCraft.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/OmniCraft";
 			};
 			name = Release;
 		};
@@ -598,13 +598,13 @@
 					"@loader_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.omnigent.ios.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.omnicraft.ios.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_TARGET_NAME = Omnigent;
+				TEST_TARGET_NAME = OmniCraft;
 			};
 			name = Debug;
 		};
@@ -621,20 +621,20 @@
 					"@loader_path/Frameworks",
 				);
 				MARKETING_VERSION = 0.1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = ai.omnigent.ios.uitests;
+				PRODUCT_BUNDLE_IDENTIFIER = ai.omnicraft.ios.uitests;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = 1;
-				TEST_TARGET_NAME = Omnigent;
+				TEST_TARGET_NAME = OmniCraft;
 			};
 			name = Release;
 		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		D00000000000000000000001 /* Build configuration list for PBXProject "Omnigent" */ = {
+		D00000000000000000000001 /* Build configuration list for PBXProject "OmniCraft" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D00000000000000000000002 /* Debug */,
@@ -643,7 +643,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D10000000000000000000001 /* Build configuration list for PBXNativeTarget "Omnigent" */ = {
+		D10000000000000000000001 /* Build configuration list for PBXNativeTarget "OmniCraft" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D10000000000000000000002 /* Debug */,
@@ -652,7 +652,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D20000000000000000000001 /* Build configuration list for PBXNativeTarget "OmnigentTests" */ = {
+		D20000000000000000000001 /* Build configuration list for PBXNativeTarget "OmniCraftTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D20000000000000000000002 /* Debug */,
@@ -661,7 +661,7 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		D40000000000000000000001 /* Build configuration list for PBXNativeTarget "OmnigentUITests" */ = {
+		D40000000000000000000001 /* Build configuration list for PBXNativeTarget "OmniCraftUITests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				D40000000000000000000002 /* Debug */,

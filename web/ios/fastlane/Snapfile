@@ -1,7 +1,7 @@
-project("Omnigent.xcodeproj")
-scheme("Omnigent")
-test_target_name("Omnigent")
-only_testing(["OmnigentUITests/OmnigentUITests/testLocalServerSnapshot"])
+project("OmniCraft.xcodeproj")
+scheme("OmniCraft")
+test_target_name("OmniCraft")
+only_testing(["OmniCraftUITests/OmniCraftUITests/testLocalServerSnapshot"])
 configuration("Debug")
 
 devices([

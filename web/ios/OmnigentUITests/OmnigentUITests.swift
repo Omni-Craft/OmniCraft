@@ -1,36 +1,36 @@
 import XCTest
 
 @MainActor
-final class OmnigentUITests: XCTestCase {
+final class OmniCraftUITests: XCTestCase {
   override func setUpWithError() throws {
     continueAfterFailure = false
   }
 
   func testLocalServerSnapshot() throws {
-    let app = XCUIApplication(bundleIdentifier: "ai.omnigent.ios")
+    let app = XCUIApplication(bundleIdentifier: "ai.omnicraft.ios")
     setupSnapshot(app)
     let serverURL = try XCTUnwrap(
       ScreenshotConfiguration.serverURL(from: app),
-      "Pass --omnigent-server-url or OMNIGENT_SCREENSHOT_APP_URL for screenshot tests."
+      "Pass --omnicraft-server-url or OMNICRAFT_SCREENSHOT_APP_URL for screenshot tests."
     )
     app.launchArguments += [
-      "--omnigent-server-url",
+      "--omnicraft-server-url",
       serverURL,
     ]
-    NSLog("Omnigent screenshot server URL: \(serverURL)")
-    app.launchEnvironment["OMNIGENT_SCREENSHOT_APP_URL"] = serverURL
+    NSLog("OmniCraft screenshot server URL: \(serverURL)")
+    app.launchEnvironment["OMNICRAFT_SCREENSHOT_APP_URL"] = serverURL
     app.launch()
 
     XCTAssertTrue(
       app.staticTexts["Server URL"].waitForExistence(timeout: 15),
-      "Expected Omnigent to show the server selection screen before connecting."
+      "Expected OmniCraft to show the server selection screen before connecting."
     )
     snapshot("01-home", timeWaitingForIdle: 2)
 
     connectFromSetupIfNeeded(app, serverURL: serverURL)
     XCTAssertTrue(
       app.webViews.firstMatch.waitForExistence(timeout: 90),
-      "Expected Omnigent to connect to \(serverURL) before taking screenshots."
+      "Expected OmniCraft to connect to \(serverURL) before taking screenshots."
     )
 
     snapshot("02-connected", timeWaitingForIdle: 5)
@@ -66,9 +66,9 @@ final class OmnigentUITests: XCTestCase {
 
 private enum ScreenshotConfiguration {
   static func serverURL(from app: XCUIApplication) -> String? {
-    ProcessInfo.processInfo.environment["OMNIGENT_SCREENSHOT_APP_URL"]?.nonEmpty
-      ?? app.launchArguments.omnigentServerURL
-      ?? fastlaneLaunchArguments().omnigentServerURL
+    ProcessInfo.processInfo.environment["OMNICRAFT_SCREENSHOT_APP_URL"]?.nonEmpty
+      ?? app.launchArguments.omnicraftServerURL
+      ?? fastlaneLaunchArguments().omnicraftServerURL
   }
 
   private static func fastlaneLaunchArguments() -> [String] {
@@ -78,7 +78,7 @@ private enum ScreenshotConfiguration {
     guard let contents = try? String(contentsOf: path, encoding: .utf8) else {
       return []
     }
-    return contents.omnigentShellTokens
+    return contents.omnicraftShellTokens
   }
 
   private static var cacheDirectory: URL? {
@@ -98,11 +98,11 @@ private enum ScreenshotConfiguration {
 }
 
 extension [String] {
-  fileprivate var omnigentServerURL: String? {
-    omnigentArgumentValue(after: "--omnigent-server-url")
+  fileprivate var omnicraftServerURL: String? {
+    omnicraftArgumentValue(after: "--omnicraft-server-url")
       ?? compactMap { argument -> String? in
-        guard argument.hasPrefix("--omnigent-server-url=") else { return nil }
-        return String(argument.dropFirst("--omnigent-server-url=".count)).nonEmpty
+        guard argument.hasPrefix("--omnicraft-server-url=") else { return nil }
+        return String(argument.dropFirst("--omnicraft-server-url=".count)).nonEmpty
       }.first
       ?? firstWebURL
   }
@@ -113,7 +113,7 @@ extension [String] {
     }
   }
 
-  fileprivate func omnigentArgumentValue(after argumentName: String) -> String? {
+  fileprivate func omnicraftArgumentValue(after argumentName: String) -> String? {
     guard let index = firstIndex(of: argumentName) else { return nil }
     let valueIndex = self.index(after: index)
     guard indices.contains(valueIndex) else { return nil }
@@ -129,7 +129,7 @@ extension String {
     return value.isEmpty ? nil : value
   }
 
-  fileprivate var omnigentShellTokens: [String] {
+  fileprivate var omnicraftShellTokens: [String] {
     guard
       let regex = try? NSRegularExpression(pattern: "(\\\".+?\\\"|'[^']+?'|\\S+)", options: [])
     else {

@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "ai.omnigent.android"
+    namespace = "ai.omnicraft.android"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "ai.omnigent.android"
+        applicationId = "ai.omnicraft.android"
         minSdk = 28
         targetSdk = 35
         versionCode = 1

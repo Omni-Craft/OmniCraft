@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.net.Uri
 import android.webkit.PermissionRequest
@@ -16,7 +16,7 @@ import android.webkit.WebView
  *  - **Microphone** (`getUserMedia({audio:true})`): without `onPermissionRequest`
  *    the WebView denies capture, so voice input is dead.
  */
-class OmnigentWebChromeClient(
+class OmniCraftWebChromeClient(
     /** Open a file picker for [acceptTypes]; return true if it was launched. */
     private val onChooseFiles: (
         callback: ValueCallback<Array<Uri>>,

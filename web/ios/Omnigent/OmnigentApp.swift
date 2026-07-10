@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct OmnigentApp: App {
+struct OmniCraftApp: App {
   @StateObject private var settings = SettingsStore()
   @StateObject private var router = AppRouter()
 

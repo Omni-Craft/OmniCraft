@@ -12,11 +12,11 @@ use tokio::sync::mpsc;
 
 use crate::supervisor::Cmd;
 
-/// Start watching `omnigent_dir` for `*.py` changes. Coalesced bursts become a
+/// Start watching `omnicraft_dir` for `*.py` changes. Coalesced bursts become a
 /// single `Cmd::Reload(n)` on `cmd_tx`. The returned debouncer must be kept
 /// alive for the watch to persist.
 pub fn spawn(
-    omnigent_dir: &Path,
+    omnicraft_dir: &Path,
     cmd_tx: mpsc::UnboundedSender<Cmd>,
 ) -> Result<impl Send + 'static> {
     // The debouncer coalesces rapid saves; we still filter to *.py and skip
@@ -42,8 +42,8 @@ pub fn spawn(
     .context("creating file watcher")?;
 
     debouncer
-        .watch(omnigent_dir, RecursiveMode::Recursive)
-        .with_context(|| format!("watching {}", omnigent_dir.display()))?;
+        .watch(omnicraft_dir, RecursiveMode::Recursive)
+        .with_context(|| format!("watching {}", omnicraft_dir.display()))?;
 
     Ok(debouncer)
 }

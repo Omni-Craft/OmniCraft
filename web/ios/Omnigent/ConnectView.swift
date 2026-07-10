@@ -25,13 +25,13 @@ struct ConnectView: View {
       Spacer(minLength: 24)
 
       VStack(spacing: 0) {
-        Image(colorScheme == .dark ? "OmnigentLogoReverse" : "OmnigentLogo")
+        Image(colorScheme == .dark ? "OmniCraftLogoReverse" : "OmniCraftLogo")
           .resizable()
           .scaledToFit()
           .frame(height: 80)
           .padding(.bottom, 12)
 
-        Text("Enter the URL of the Omnigents server.")
+        Text("Enter the URL of the OmniCrafts server.")
           .font(.system(size: 14))
           .lineSpacing(2)
           .multilineTextAlignment(.center)
@@ -162,7 +162,7 @@ struct ConnectView: View {
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
     }
-    .accessibilityLabel("About Omnigent")
+    .accessibilityLabel("About OmniCraft")
   }
 
   private var primary: Color {
@@ -207,9 +207,9 @@ private enum InfoLink: Identifiable {
 
   var url: URL {
     switch self {
-    case .website: URL(string: "https://omnigent.ai")!
-    case .docs: URL(string: "https://omnigent.ai/docs")!
-    case .privacy: URL(string: "https://omnigent.ai/privacy")!
+    case .website: URL(string: "https://omnicraft.ai")!
+    case .docs: URL(string: "https://omnicraft.ai/docs")!
+    case .privacy: URL(string: "https://omnicraft.ai/privacy")!
     }
   }
 }

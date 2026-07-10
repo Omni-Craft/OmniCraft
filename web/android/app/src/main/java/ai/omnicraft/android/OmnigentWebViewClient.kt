@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.content.Intent
 import android.graphics.Bitmap
@@ -15,11 +15,11 @@ import androidx.webkit.WebViewFeature
  *
  * Unlike iOS's `WKUserScript(.atDocumentStart)`, Android has no pre-JS injection
  * hook; `onPageStarted` fires after the first response byte — in practice before
- * the SPA's bundle evaluates, so `window.omnigentNative` is present by the time
+ * the SPA's bundle evaluates, so `window.omnicraftNative` is present by the time
  * React mounts. Anything depending on the injected emit-callbacks (notification
  * replay, inset push) waits for [onPageReady].
  */
-class OmnigentWebViewClient(
+class OmniCraftWebViewClient(
     private val pinnedOrigin: () -> String?,
     private val onPageReady: (url: String?) -> Unit,
     private val onLoginRequired: () -> Unit,

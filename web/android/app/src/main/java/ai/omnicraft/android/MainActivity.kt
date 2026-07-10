@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.Manifest
 import android.annotation.SuppressLint
@@ -29,8 +29,8 @@ import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
 
 /**
- * The single WebView host. Mirrors the iOS `WebShellView` + `OmnigentWebView`:
- * loads the server-served SPA, installs the `window.omnigentNative` bridge, and
+ * The single WebView host. Mirrors the iOS `WebShellView` + `OmniCraftWebView`:
+ * loads the server-served SPA, installs the `window.omnicraftNative` bridge, and
  * wires the native capabilities the web layer expects.
  *
  * Server URL comes from [ServerStore]; when none is set yet, launch routes to
@@ -118,13 +118,13 @@ class MainActivity : ComponentActivity() {
                 settings.mediaPlaybackRequiresUserGesture = false
 
                 webViewClient =
-                    OmnigentWebViewClient(
+                    OmniCraftWebViewClient(
                         pinnedOrigin = { pinnedOrigin },
                         onPageReady = ::onPageReady,
                         onLoginRequired = ::startLogin,
                     )
                 webChromeClient =
-                    OmnigentWebChromeClient(
+                    OmniCraftWebChromeClient(
                         onChooseFiles = ::chooseFiles,
                         onPermission = ::handlePermissionRequest,
                     )
@@ -204,7 +204,7 @@ class MainActivity : ComponentActivity() {
                         }
                     webView.postDelayed(fallback, BACK_FALLBACK_MS)
                     webView.evaluateJavascript(
-                        "!!(window.__omnigentNativeHandleBack && window.__omnigentNativeHandleBack())",
+                        "!!(window.__omnicraftNativeHandleBack && window.__omnicraftNativeHandleBack())",
                     ) { handled ->
                         if (!acted) {
                             acted = true
@@ -223,7 +223,7 @@ class MainActivity : ComponentActivity() {
     /**
      * Install the web -> native bridge as an origin-allowlisted web message
      * listener (NOT addJavascriptInterface): the transport object reaches only
-     * frames on the pinned origin, and [OmnigentBridgeListener] also drops
+     * frames on the pinned origin, and [OmniCraftBridgeListener] also drops
      * non-main-frame messages — so a sandboxed agent-HTML iframe can't reach it.
      * Requires WebView 88+ (the same floor as our env()/inset handling); if the
      * feature is missing the bridge is simply absent and the web layer falls back.
@@ -234,9 +234,9 @@ class MainActivity : ComponentActivity() {
         try {
             WebViewCompat.addWebMessageListener(
                 webView,
-                OmnigentBridgeListener.JS_OBJECT_NAME,
+                OmniCraftBridgeListener.JS_OBJECT_NAME,
                 setOf(origin),
-                OmnigentBridgeListener(notifications, blobSaver),
+                OmniCraftBridgeListener(notifications, blobSaver),
             )
         } catch (_: IllegalArgumentException) {
             // Malformed origin rule — leave the bridge absent; the web layer falls back.
@@ -246,7 +246,7 @@ class MainActivity : ComponentActivity() {
     /**
      * Run the RFC 8252 login flow: authenticate in the system browser
      * (Google/passkey work there, not in a WebView), then [onSessionToken]
-     * injects the session. Triggered by [OmnigentWebViewClient] when the server
+     * injects the session. Triggered by [OmniCraftWebViewClient] when the server
      * redirects to the IdP.
      *
      * Capped retries: if injecting the session still leaves us redirected to
@@ -417,8 +417,8 @@ class MainActivity : ComponentActivity() {
     private fun emitNotificationActivation(path: String?) {
         if (path == null) return
         webView.evaluateJavascript(
-            "window.__omnigentNativeEmitNotificationActivated && " +
-                "window.__omnigentNativeEmitNotificationActivated(${jsString(path)});",
+            "window.__omnicraftNativeEmitNotificationActivated && " +
+                "window.__omnicraftNativeEmitNotificationActivated(${jsString(path)});",
             null,
         )
     }
@@ -428,16 +428,16 @@ class MainActivity : ComponentActivity() {
         // pins to a user-supplied server whose web build may PRE-DATE the Android
         // shell's CSS — it can't be assumed to carry the `[data-android-native]`
         // fold:
-        //   1. `--omnigent-safe-top/bottom` — the app's OWN base inset vars. Every
-        //      build already derives `--omnigent-inset-*` and its layout from
+        //   1. `--omnicraft-safe-top/bottom` — the app's OWN base inset vars. Every
+        //      build already derives `--omnicraft-inset-*` and its layout from
         //      these, defaulting them to `env(safe-area-inset-*)`, which Android
         //      WebView reports as 0. Setting them inline (highest priority)
         //      overrides that 0 everywhere the layout already reads them.
-        //   2. `--omnigent-android-safe-area-*` — consumed by the shell's own
+        //   2. `--omnicraft-android-safe-area-*` — consumed by the shell's own
         //      `[data-android-native]` rules when the server IS up to date (folded
         //      via max() in index.css); a harmless no-op otherwise.
-        // We deliberately do NOT call `__omnigentNativeEmitInsets` — that feeds the
-        // iOS *floating-bar* footprints (--omnigent-native-*-bar; nativeInsets.ts
+        // We deliberately do NOT call `__omnicraftNativeEmitInsets` — that feeds the
+        // iOS *floating-bar* footprints (--omnicraft-native-*-bar; nativeInsets.ts
         // is a "no-op off the iOS shell"), and Android has no such bars. Routing
         // the safe area there would mis-assign it to a bar-footprint variable.
         val bars = lastInsets ?: return
@@ -448,12 +448,12 @@ class MainActivity : ComponentActivity() {
               const s = document.documentElement.style;
               const top = '${bars.top / d}px';
               const bottom = '${bars.bottom / d}px';
-              s.setProperty('--omnigent-safe-top', top);
-              s.setProperty('--omnigent-safe-bottom', bottom);
-              s.setProperty('--omnigent-android-safe-area-top', top);
-              s.setProperty('--omnigent-android-safe-area-bottom', bottom);
-              s.setProperty('--omnigent-android-safe-area-left', '${bars.left / d}px');
-              s.setProperty('--omnigent-android-safe-area-right', '${bars.right / d}px');
+              s.setProperty('--omnicraft-safe-top', top);
+              s.setProperty('--omnicraft-safe-bottom', bottom);
+              s.setProperty('--omnicraft-android-safe-area-top', top);
+              s.setProperty('--omnicraft-android-safe-area-bottom', bottom);
+              s.setProperty('--omnicraft-android-safe-area-left', '${bars.left / d}px');
+              s.setProperty('--omnicraft-android-safe-area-right', '${bars.right / d}px');
             })();
             """.trimIndent()
         webView.evaluateJavascript(js, null)
@@ -470,7 +470,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Back [OmnigentWebChromeClient.onShowFileChooser] with a document picker. */
+    /** Back [OmniCraftWebChromeClient.onShowFileChooser] with a document picker. */
     private fun chooseFiles(
         callback: ValueCallback<Array<Uri>>,
         acceptTypes: Array<String>,
@@ -516,7 +516,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /** Back [OmnigentWebChromeClient.onPermissionRequest] — grant mic to the pinned origin only. */
+    /** Back [OmniCraftWebChromeClient.onPermissionRequest] — grant mic to the pinned origin only. */
     private fun handlePermissionRequest(request: PermissionRequest) {
         val wantsAudio = request.resources.contains(PermissionRequest.RESOURCE_AUDIO_CAPTURE)
         if (!wantsAudio || originOf(request.origin?.toString()) != pinnedOrigin) {
@@ -541,7 +541,7 @@ class MainActivity : ComponentActivity() {
 
         // Agent-generated files arrive as blob:/data: URLs, which DownloadManager
         // can't handle — fetch them in page context and save via the blob bridge
-        // (fixes omnigent-ai/omnigent#969, which the iOS shell leaves broken).
+        // (fixes omnicraft-ai/omnicraft#969, which the iOS shell leaves broken).
         if (url.startsWith("blob:") || url.startsWith("data:")) {
             webView.evaluateJavascript(BlobDownloadScript.fetchAsBase64(url, name), null)
             return

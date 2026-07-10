@@ -29,7 +29,7 @@
             android:adjustViewBounds="true"
             android:contentDescription="@string/connect_logo_desc"
             android:maxHeight="56dp"
-            android:src="@drawable/omnigents_logo" />
+            android:src="@drawable/omnicrafts_logo" />
 
         <TextView
             android:layout_width="match_parent"

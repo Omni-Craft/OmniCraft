@@ -28,7 +28,7 @@ struct AppRootView: View {
           },
           loadFailed: { failedURL, message in
             mode = .setup(
-              prefill: failedURL.omnigentOrigin ?? failedURL.absoluteString, error: message)
+              prefill: failedURL.omnicraftOrigin ?? failedURL.absoluteString, error: message)
           },
           loadSucceeded: { loadedURL in
             settings.rememberRecentServer(loadedURL)
@@ -55,7 +55,7 @@ struct AppRootView: View {
   private var shouldAutoOpenSavedServer: Bool {
     #if DEBUG
       let processInfo = ProcessInfo.processInfo
-      return processInfo.environment["OMNIGENT_SCREENSHOT_APP_URL"] == nil
+      return processInfo.environment["OMNICRAFT_SCREENSHOT_APP_URL"] == nil
         && !processInfo.arguments.contains("-FASTLANE_SNAPSHOT")
     #else
       true

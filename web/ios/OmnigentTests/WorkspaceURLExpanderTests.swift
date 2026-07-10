@@ -1,7 +1,7 @@
 import Foundation
 import XCTest
 
-@testable import Omnigent
+@testable import OmniCraft
 
 final class WorkspaceURLExpanderTests: XCTestCase {
   override func setUp() {
@@ -25,7 +25,7 @@ final class WorkspaceURLExpanderTests: XCTestCase {
       session: stubbedSession()
     )
 
-    XCTAssertEqual(expanded.absoluteString, "https://workspace.example.com/ml/omnigents")
+    XCTAssertEqual(expanded.absoluteString, "https://workspace.example.com/ml/omnicrafts")
   }
 
   func testLeavesNonWorkspaceRootUnchanged() async {
@@ -46,7 +46,7 @@ final class WorkspaceURLExpanderTests: XCTestCase {
   }
 
   func testLeavesURLsWithPathsUnchangedWithoutProbe() async {
-    let original = URL(string: "https://workspace.example.com/ml/omnigents")!
+    let original = URL(string: "https://workspace.example.com/ml/omnicrafts")!
     let expanded = await WorkspaceURLExpander.expandIfNeeded(original, session: stubbedSession())
 
     XCTAssertEqual(expanded, original)

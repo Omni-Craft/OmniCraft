@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 import android.content.ContentValues
 import android.content.Context
@@ -15,7 +15,7 @@ import java.util.concurrent.Executors
 
 /**
  * Decodes a base64 payload (produced by [BlobDownloadScript], dispatched by
- * [OmnigentBridgeListener]) and writes it to the device's Downloads — MediaStore
+ * [OmniCraftBridgeListener]) and writes it to the device's Downloads — MediaStore
  * on API 29+, the app-specific external dir on 28 (both permission-free). The
  * decode + write run on a worker so a large file never blocks the caller.
  *
@@ -106,7 +106,7 @@ class BlobSaver(
         // "" / "." / ".." aren't usable names — on the API 28 File path "." and
         // ".." resolve to a directory, so the write would fail. Fall back instead.
         return if (cleaned.isBlank() || cleaned == "." || cleaned == "..") {
-            "omnigent-${System.currentTimeMillis()}"
+            "omnicraft-${System.currentTimeMillis()}"
         } else {
             cleaned
         }

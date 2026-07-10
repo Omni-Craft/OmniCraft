@@ -1,6 +1,6 @@
 import XCTest
 
-@testable import Omnigent
+@testable import OmniCraft
 
 final class ServerURLTests: XCTestCase {
   func testReleasePolicyDefaultsBareHostToHTTPS() throws {

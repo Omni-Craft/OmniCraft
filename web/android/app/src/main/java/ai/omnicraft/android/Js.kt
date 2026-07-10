@@ -1,4 +1,4 @@
-package ai.omnigent.android
+package ai.omnicraft.android
 
 /**
  * JSON-encode a string so it can be interpolated safely into JavaScript passed

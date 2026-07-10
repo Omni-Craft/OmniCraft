@@ -1,4 +1,4 @@
-//! Manage the user's git-based omnigent installation via `uv tool install`.
+//! Manage the user's git-based omnicraft installation via `uv tool install`.
 //!
 //! None of this needs a local checkout: it drives `uv` and reads the installed
 //! tool's metadata, and any git call targets the remote.
@@ -11,12 +11,12 @@ use serde::{Deserialize, Serialize};
 
 use crate::paths;
 
-pub const DEFAULT_REPO: &str = "https://github.com/omnigent-ai/omnigent.git";
+pub const DEFAULT_REPO: &str = "https://github.com/omnicraft-ai/omnicraft.git";
 pub const DEFAULT_REF: &str = "main";
 pub const DEFAULT_EXTRA: &str = "databricks";
 const PYTHON_VERSION: &str = "3.12";
 
-/// Durable record of how the user wants omnigent installed. Persisted so
+/// Durable record of how the user wants omnicraft installed. Persisted so
 /// `update` reinstalls the same repo/ref/extras without re-specifying them.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstallConfig {
@@ -60,14 +60,14 @@ impl InstallConfig {
     }
 
     /// The PEP 508 install spec, e.g.
-    /// `omnigent[databricks] @ git+https://github.com/omnigent-ai/omnigent.git@main`.
+    /// `omnicraft[databricks] @ git+https://github.com/omnicraft-ai/omnicraft.git@main`.
     /// With no extras it collapses to the bare `git+<repo>@<ref>` URL.
     pub fn spec(&self) -> String {
         let source = format!("git+{}@{}", self.repo, self.git_ref);
         if self.extras.is_empty() {
             source
         } else {
-            format!("omnigent[{}] @ {}", self.extras.join(","), source)
+            format!("omnicraft[{}] @ {}", self.extras.join(","), source)
         }
     }
 }
@@ -81,14 +81,14 @@ fn preflight() -> Result<()> {
     }
     if which("npm").is_none() {
         bail!(
-            "`npm` is not on PATH. Installing omnigent from git builds the web UI \
+            "`npm` is not on PATH. Installing omnicraft from git builds the web UI \
              from source and needs Node 22+/npm. Install Node, then retry."
         );
     }
     Ok(())
 }
 
-/// Install omnigent from git per `config`. `reinstall` forces uv past its cache
+/// Install omnicraft from git per `config`. `reinstall` forces uv past its cache
 /// so a moving ref (e.g. `main`) actually re-resolves.
 pub fn run_uv_install(config: &InstallConfig, reinstall: bool) -> Result<()> {
     preflight()?;
@@ -116,7 +116,7 @@ pub fn install(config: &InstallConfig) -> Result<()> {
     config.save()?;
     run_uv_install(config, false)?;
     record_installed_sha(config);
-    println!("omnidev: installed omnigent ({})", config.spec());
+    println!("omnidev: installed omnicraft ({})", config.spec());
     Ok(())
 }
 
@@ -127,7 +127,7 @@ pub fn update() -> Result<()> {
     config.save()?;
     run_uv_install(&config, true)?;
     record_installed_sha(&config);
-    println!("omnidev: updated omnigent ({})", config.spec());
+    println!("omnidev: updated omnicraft ({})", config.spec());
     Ok(())
 }
 
@@ -140,14 +140,14 @@ fn record_installed_sha(config: &InstallConfig) {
     }
 }
 
-/// Read the commit the installed omnigent tool was built from, via its PEP 610
+/// Read the commit the installed omnicraft tool was built from, via its PEP 610
 /// `direct_url.json`. Returns `None` for a non-VCS install or when uv/metadata
 /// can't be read. Never touches the working directory.
 pub fn installed_commit() -> Option<String> {
     let dir = uv_tool_dir()?;
-    // …/omnigent/**/omnigent-*.dist-info/direct_url.json
-    let omnigent_root = dir.join("omnigent");
-    let dist_info = find_dist_info(&omnigent_root)?;
+    // …/omnicraft/**/omnicraft-*.dist-info/direct_url.json
+    let omnicraft_root = dir.join("omnicraft");
+    let dist_info = find_dist_info(&omnicraft_root)?;
     let text = std::fs::read_to_string(dist_info.join("direct_url.json")).ok()?;
     let value: serde_json::Value = serde_json::from_str(&text).ok()?;
     value
@@ -171,7 +171,7 @@ fn uv_tool_dir() -> Option<PathBuf> {
     }
 }
 
-/// Find the `omnigent-*.dist-info` dir under a uv tool's environment. uv lays
+/// Find the `omnicraft-*.dist-info` dir under a uv tool's environment. uv lays
 /// tools out as `<tool>/lib/pythonX.Y/site-packages/<pkg>-<ver>.dist-info`, so
 /// we walk rather than hardcode the python version.
 fn find_dist_info(root: &std::path::Path) -> Option<PathBuf> {
@@ -187,7 +187,7 @@ fn find_dist_info(root: &std::path::Path) -> Option<PathBuf> {
             }
             let name = entry.file_name();
             let name = name.to_string_lossy();
-            if name.starts_with("omnigent-") && name.ends_with(".dist-info") {
+            if name.starts_with("omnicraft-") && name.ends_with(".dist-info") {
                 return Some(path);
             }
             stack.push(path);

@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import WebKit
 
-struct OmnigentWebView: UIViewRepresentable {
+struct OmniCraftWebView: UIViewRepresentable {
   let initialURL: URL
   @ObservedObject var model: WebViewModel
   @ObservedObject var settings: SettingsStore
@@ -15,7 +15,7 @@ struct OmnigentWebView: UIViewRepresentable {
 
   func makeUIView(context: Context) -> WKWebView {
     let contentController = WKUserContentController()
-    contentController.add(context.coordinator, name: "omnigentNative")
+    contentController.add(context.coordinator, name: "omnicraftNative")
     contentController.addUserScript(
       WKUserScript(
         source: Self.nativeBridgeScript,
@@ -74,13 +74,13 @@ struct OmnigentWebView: UIViewRepresentable {
   }
 
   static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
-    uiView.configuration.userContentController.removeScriptMessageHandler(forName: "omnigentNative")
+    uiView.configuration.userContentController.removeScriptMessageHandler(forName: "omnicraftNative")
     coordinator.detach()
   }
 
   private static let nativeBridgeScript = """
     (() => {
-      if (window.omnigentNative && window.omnigentNative.kind === "ios") return;
+      if (window.omnicraftNative && window.omnicraftNative.kind === "ios") return;
       const ensureViewportFit = () => {
         let meta = document.querySelector('meta[name="viewport"]');
         if (!meta) {
@@ -132,13 +132,13 @@ struct OmnigentWebView: UIViewRepresentable {
           value: fn,
         });
       };
-      defineEmit("__omnigentNativeEmitNotificationActivated", (path) => {
+      defineEmit("__omnicraftNativeEmitNotificationActivated", (path) => {
         if (typeof path !== "string" || !path.startsWith("/")) return;
         for (const callback of callbacks) {
           try { callback(path); } catch {}
         }
       });
-      defineEmit("__omnigentNativeEmitViewModeChanged", (mode) => {
+      defineEmit("__omnicraftNativeEmitViewModeChanged", (mode) => {
         if (mode !== "chat" && mode !== "terminal") return;
         for (const callback of viewModeCallbacks) {
           try { callback(mode); } catch {}
@@ -149,7 +149,7 @@ struct OmnigentWebView: UIViewRepresentable {
       // first emitted (the React app mounts later than document-start) still
       // gets the current value immediately on subscribe.
       let lastInsets = null;
-      defineEmit("__omnigentNativeEmitInsets", (topBar, bottomBar) => {
+      defineEmit("__omnicraftNativeEmitInsets", (topBar, bottomBar) => {
         const insets = {
           topBar: typeof topBar === "number" && Number.isFinite(topBar) ? topBar : 0,
           bottomBar: typeof bottomBar === "number" && Number.isFinite(bottomBar) ? bottomBar : 0,
@@ -160,7 +160,7 @@ struct OmnigentWebView: UIViewRepresentable {
         }
       });
       const sidebarDragCallbacks = new Set();
-      Object.defineProperty(window, "__omnigentNativeEmitSidebarDrag", {
+      Object.defineProperty(window, "__omnicraftNativeEmitSidebarDrag", {
         configurable: false,
         enumerable: false,
         writable: false,
@@ -175,16 +175,16 @@ struct OmnigentWebView: UIViewRepresentable {
           }
         },
       });
-      window.omnigentNative = Object.freeze({
+      window.omnicraftNative = Object.freeze({
         kind: "ios",
         setBadgeCount(count) {
-          window.webkit.messageHandlers.omnigentNative.postMessage({
+          window.webkit.messageHandlers.omnicraftNative.postMessage({
             method: "setBadgeCount",
             count: Number.isFinite(count) ? count : 0,
           });
         },
         notify(params) {
-          window.webkit.messageHandlers.omnigentNative.postMessage({
+          window.webkit.messageHandlers.omnicraftNative.postMessage({
             method: "notify",
             params: {
               title: params && typeof params.title === "string" ? params.title : "",
@@ -206,20 +206,20 @@ struct OmnigentWebView: UIViewRepresentable {
           return () => sidebarDragCallbacks.delete(callback);
         },
         setServerSwitcherHidden(hidden) {
-          window.webkit.messageHandlers.omnigentNative.postMessage({
+          window.webkit.messageHandlers.omnicraftNative.postMessage({
             method: "setServerSwitcherHidden",
             hidden: hidden === true,
           });
         },
         setSidebarOpen(open) {
-          window.webkit.messageHandlers.omnigentNative.postMessage({
+          window.webkit.messageHandlers.omnicraftNative.postMessage({
             method: "setServerSwitcherHidden",
             hidden: open === true,
           });
         },
         setViewMode(params) {
           const mode = params && params.mode === "terminal" ? "terminal" : "chat";
-          window.webkit.messageHandlers.omnigentNative.postMessage({
+          window.webkit.messageHandlers.omnicraftNative.postMessage({
             method: "setViewMode",
             mode,
             terminalEnabled: !!(params && params.terminalEnabled),
@@ -246,12 +246,12 @@ struct OmnigentWebView: UIViewRepresentable {
   final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler,
     UIGestureRecognizerDelegate
   {
-    var parent: OmnigentWebView
+    var parent: OmniCraftWebView
     private weak var webView: WKWebView?
     private(set) var pinnedURL: URL?
     private var pinnedOrigin: String?
 
-    init(_ parent: OmnigentWebView) {
+    init(_ parent: OmniCraftWebView) {
       self.parent = parent
     }
 
@@ -303,7 +303,7 @@ struct OmnigentWebView: UIViewRepresentable {
 
     func load(_ url: URL, in webView: WKWebView) {
       pinnedURL = url
-      pinnedOrigin = url.omnigentOrigin
+      pinnedOrigin = url.omnicraftOrigin
       publishModelChanges { model in
         model.currentURL = url
         model.serverSwitcherHidden = true
@@ -369,7 +369,7 @@ struct OmnigentWebView: UIViewRepresentable {
       if webView.url?.path.starts(with: WorkspaceURLExpander.workspaceUIPath) == true {
         injectWorkspaceChromeCSS(webView)
       }
-      if webView.url?.omnigentOrigin == pinnedOrigin, let pinnedURL {
+      if webView.url?.omnicraftOrigin == pinnedOrigin, let pinnedURL {
         parent.loadSucceeded(pinnedURL)
       }
     }
@@ -442,8 +442,8 @@ struct OmnigentWebView: UIViewRepresentable {
       decisionHandler: @escaping (WKPermissionDecision) -> Void
     ) {
       guard Self.isAllowedMediaCaptureType(type),
-        origin.omnigentOrigin == pinnedOrigin,
-        webView.url?.omnigentOrigin == pinnedOrigin
+        origin.omnicraftOrigin == pinnedOrigin,
+        webView.url?.omnicraftOrigin == pinnedOrigin
       else {
         decisionHandler(.deny)
         return
@@ -462,8 +462,8 @@ struct OmnigentWebView: UIViewRepresentable {
 
     private func isTrustedBridgeMessage(_ message: WKScriptMessage) -> Bool {
       guard let pinnedOrigin else { return false }
-      guard message.frameInfo.securityOrigin.omnigentOrigin == pinnedOrigin else { return false }
-      guard webView?.url?.omnigentOrigin == pinnedOrigin else { return false }
+      guard message.frameInfo.securityOrigin.omnicraftOrigin == pinnedOrigin else { return false }
+      guard webView?.url?.omnicraftOrigin == pinnedOrigin else { return false }
       return message.frameInfo.isMainFrame
     }
 
@@ -477,7 +477,7 @@ struct OmnigentWebView: UIViewRepresentable {
     }
 
     private func promptForExternalURL(_ url: URL, scheme: String) {
-      let onPinnedServer = pinnedOrigin != nil && webView?.url?.omnigentOrigin == pinnedOrigin
+      let onPinnedServer = pinnedOrigin != nil && webView?.url?.omnicraftOrigin == pinnedOrigin
 
       if let pinnedOrigin, onPinnedServer,
         parent.settings.isProtocolAllowed(scheme, from: pinnedOrigin)
@@ -486,7 +486,7 @@ struct OmnigentWebView: UIViewRepresentable {
         return
       }
 
-      let requester = webView?.url?.omnigentOrigin ?? "This page"
+      let requester = webView?.url?.omnicraftOrigin ?? "This page"
       let alert = UIAlertController(
         title: "Open this \(scheme) link?",
         message: "\(requester) wants to open:\n\n\(url.absoluteString)",
@@ -515,7 +515,7 @@ struct OmnigentWebView: UIViewRepresentable {
       parent.model.cancelServerSwitcherWatchdog()
 
       let failedURL = failedURL(from: nsError) ?? webView.url ?? pinnedURL ?? parent.initialURL
-      guard failedURL.omnigentOrigin == pinnedOrigin else { return }
+      guard failedURL.omnicraftOrigin == pinnedOrigin else { return }
       parent.loadFailed(failedURL, error.localizedDescription)
     }
 
@@ -538,7 +538,7 @@ struct OmnigentWebView: UIViewRepresentable {
 
     private func injectWorkspaceChromeCSS(_ webView: WKWebView) {
       let css = """
-        .omnigent-app {
+        .omnicraft-app {
           position: fixed !important;
           inset: 0 !important;
           z-index: 2147483647 !important;
@@ -546,9 +546,9 @@ struct OmnigentWebView: UIViewRepresentable {
         """
       let script = """
         (() => {
-          if (document.querySelector("style[data-omnigent-workspace-chrome]")) return;
+          if (document.querySelector("style[data-omnicraft-workspace-chrome]")) return;
           const style = document.createElement("style");
-          style.dataset.omnigentWorkspaceChrome = "true";
+          style.dataset.omnicraftWorkspaceChrome = "true";
           style.textContent = \(WebViewModel.javascriptString(css));
           document.documentElement.appendChild(style);
         })();
@@ -561,7 +561,7 @@ struct OmnigentWebView: UIViewRepresentable {
         .compactMap { $0 as? UIWindowScene }
         .first { $0.activationState == .foregroundActive }
       let root = scene?.windows.first { $0.isKeyWindow }?.rootViewController
-      return root?.omnigentTopViewController
+      return root?.omnicraftTopViewController
     }
   }
 }
@@ -573,19 +573,19 @@ private final class AccessoryFreeWebView: WKWebView {
 }
 
 extension UIViewController {
-  fileprivate var omnigentTopViewController: UIViewController {
+  fileprivate var omnicraftTopViewController: UIViewController {
     if let presentedViewController {
-      return presentedViewController.omnigentTopViewController
+      return presentedViewController.omnicraftTopViewController
     }
     if let navigation = self as? UINavigationController,
       let visible = navigation.visibleViewController
     {
-      return visible.omnigentTopViewController
+      return visible.omnicraftTopViewController
     }
     if let tab = self as? UITabBarController,
       let selected = tab.selectedViewController
     {
-      return selected.omnigentTopViewController
+      return selected.omnicraftTopViewController
     }
     return self
   }

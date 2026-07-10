@@ -1,4 +1,4 @@
-# Omnigent images: server (default target) + host (`--target host`).
+# OmniCraft images: server (default target) + host (`--target host`).
 #
 # The default/final target builds the server image (external-runner
 # mode): the FastAPI / WebSocket coordinator — HTTP + SSE routes, the
@@ -7,15 +7,15 @@
 # and dial in via WS /v1/runner/tunnel.
 #
 # As a consequence: no tmux, no git, no harness SDK runtime
-# requirements in the final image. The omnigent package is still
+# requirements in the final image. The omnicraft package is still
 # installed in full (its pyproject pulls claude-agent-sdk +
 # openai-agents transitively), so the bits are on disk; they are
 # simply never imported because HarnessProcessManager is never
 # invoked in this deployment mode.
 #
-# The `host` target is the inverse: a prebaked Omnigent HOST image for
-# remote sandboxes (e.g. `omnigent sandbox create --provider modal`)
-# and server-launched managed hosts. It bakes the full omnigent
+# The `host` target is the inverse: a prebaked OmniCraft HOST image for
+# remote sandboxes (e.g. `omnicraft sandbox create --provider modal`)
+# and server-launched managed hosts. It bakes the full omnicraft
 # install plus the tools a host needs at runtime — git (workspaces /
 # worktrees), tmux (terminal sessions spawned by native harnesses),
 # and the coding-harness CLIs (claude / codex / pi, via Node; kiro-cli via
@@ -35,16 +35,16 @@
 #
 # Build (from repo root):
 #
-#   docker build -t omnigent-server:latest \
+#   docker build -t omnicraft-server:latest \
 #                -f deploy/docker/Dockerfile .
 #
-#   docker build -t omnigent-host:latest --target host \
+#   docker build -t omnicraft-host:latest --target host \
 #                -f deploy/docker/Dockerfile .
 #
 # Behind corporate package proxies (the host target also installs the
 # harness CLIs from npm, so it needs the npm proxy too):
 #
-#   docker build -t omnigent-server:latest \
+#   docker build -t omnicraft-server:latest \
 #                -f deploy/docker/Dockerfile \
 #                --build-arg PYPI_INDEX_URL=https://pypi-proxy.example.com/simple \
 #                --build-arg NPM_CONFIG_REGISTRY=https://npm-proxy.example.com .
@@ -60,9 +60,9 @@ ARG NODE_VERSION=20
 # ── Web UI builder ──────────────────────────────────────
 # Builds the web SPA so `docker build` works from a clean checkout —
 # no separate `cd web && npm run build` step, no "SPA bundle missing"
-# hard-fail. vite.config emits to ../omnigent/server/static/web-ui
+# hard-fail. vite.config emits to ../omnicraft/server/static/web-ui
 # (relative to web/), so from /web/web the bundle lands at
-# /web/omnigent/server/static/web-ui, which the server builder overlays.
+# /web/omnicraft/server/static/web-ui, which the server builder overlays.
 # Server-only: the host target never reaches this stage.
 #
 # Behind a corporate npm proxy, pass it through:
@@ -106,8 +106,8 @@ COPY pyproject.toml setup.py ./
 # dependency bytes baked in by the install step.
 COPY LICENSE NOTICE ./
 COPY sdks/ ./sdks/
-COPY omnigent/ ./omnigent/
-# The built-in polly agent's packaged bundle (omnigent/resources/examples/
+COPY omnicraft/ ./omnicraft/
+# The built-in polly agent's packaged bundle (omnicraft/resources/examples/
 # polly) is a symlink into the top-level examples/ tree. Ship examples/ so the
 # symlink resolves at boot; without it the new-session picker silently drops
 # polly (the seeder skips it when its bundle is absent). ~120K of YAML.
@@ -121,7 +121,7 @@ RUN python -m venv /opt/venv
 ENV VIRTUAL_ENV=/opt/venv \
     PATH="/opt/venv/bin:${PATH}"
 
-# Install omnigent. Editable install (-e) is required because
+# Install omnicraft. Editable install (-e) is required because
 # pyproject.toml declares the sibling SDKs as editable path deps via
 # [tool.uv.sources]. The runtime stages preserve /build/ so the venv's
 # .pth references stay valid.
@@ -137,8 +137,8 @@ ARG PYPI_INDEX_URL=https://pypi.org/simple
 # Overlay the SPA bundle built in the web-builder stage, so a clean
 # checkout (with no prebuilt bundle on the host) still produces a
 # complete image. This replaces the old "prebuild or hard-fail" check.
-COPY --from=web-builder /web/omnigent/server/static/web-ui ./omnigent/server/static/web-ui
-RUN test -f ./omnigent/server/static/web-ui/index.html \
+COPY --from=web-builder /web/omnicraft/server/static/web-ui ./omnicraft/server/static/web-ui
+RUN test -f ./omnicraft/server/static/web-ui/index.html \
     || (echo "ERROR: SPA bundle missing after web-builder stage — check the web build." && exit 1)
 
 # psycopg[binary] is not a baseline dep — pulled in by the
@@ -148,10 +148,10 @@ RUN uv pip install --no-cache-dir --index-url ${PYPI_INDEX_URL} 'psycopg[binary]
 # Optional managed-sandbox provider extras for the SERVER (the launcher imports
 # the provider SDK — e.g. the kubernetes client for `sandbox.provider:
 # kubernetes`). Off by default; the runner host image needs none of these. Build
-# with `--build-arg OMNIGENT_EXTRAS=kubernetes` (comma-separate for several).
-ARG OMNIGENT_EXTRAS=
-RUN if [ -n "${OMNIGENT_EXTRAS}" ]; then \
-        uv pip install --no-cache-dir --index-url ${PYPI_INDEX_URL} -e ".[${OMNIGENT_EXTRAS}]"; \
+# with `--build-arg OMNICRAFT_EXTRAS=kubernetes` (comma-separate for several).
+ARG OMNICRAFT_EXTRAS=
+RUN if [ -n "${OMNICRAFT_EXTRAS}" ]; then \
+        uv pip install --no-cache-dir --index-url ${PYPI_INDEX_URL} -e ".[${OMNICRAFT_EXTRAS}]"; \
     fi
 
 # ── Node alias stage ─────────────────────────────────────
@@ -160,7 +160,7 @@ RUN if [ -n "${OMNIGENT_EXTRAS}" ]; then \
 FROM node:${NODE_VERSION}-slim AS node-runtime
 
 # ── Host runtime (`--target host`) ──────────────────────
-# Prebaked Omnigent host for remote sandboxes: full omnigent install,
+# Prebaked OmniCraft host for remote sandboxes: full omnicraft install,
 # git + tmux for harness runtime needs, procps + lsof so the antigravity-native
 # executor can discover agy's connect-RPC port (antigravity_native_rpc.py uses
 # `pgrep` in _list_agy_pids to find agy processes — with a /proc-scan fallback if
@@ -192,7 +192,7 @@ ENV NPM_CONFIG_REGISTRY=${NPM_CONFIG_REGISTRY}
 # IS_SANDBOX: devcontainer-convention flag consulted by Claude Code —
 # it refuses --dangerously-skip-permissions under root without it, and
 # sandbox containers run as root. The host forwards it to runners (see
-# _RUNNER_ENV_ALLOWLIST in omnigent/host/connect.py) so the
+# _RUNNER_ENV_ALLOWLIST in omnicraft/host/connect.py) so the
 # claude-sdk harness can start. Only this image sets it; laptops never
 # have it.
 ENV PYTHONUNBUFFERED=1 \
@@ -236,8 +236,8 @@ COPY --from=node-runtime /usr/local/lib/node_modules /usr/local/lib/node_modules
 RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx
 
-# The harness CLI set mirrors omnigent/onboarding/harness_install.py
-# (the binary/package map `omnigent setup` installs from) — keep the
+# The harness CLI set mirrors omnicraft/onboarding/harness_install.py
+# (the binary/package map `omnicraft setup` installs from) — keep the
 # two in sync. Unpinned on purpose: the official image is rebuilt by
 # CI, so it tracks the same "latest" a laptop install would get.
 RUN npm install -g --no-audit --no-fund \
@@ -284,7 +284,7 @@ RUN set -eu; \
       echo "ERROR: kiro-cli reports '${installed:-<none>}', expected '$KIRO_CLI_VERSION'." >&2; exit 1; }; \
     echo "kiro-cli ${KIRO_CLI_VERSION} pinned (sha256 verified)"
 # Antigravity CLI (`agy`) — the antigravity-native harness shells out to `agy`
-# on the host, launching it in a tmux pane (see omnigent/antigravity_native*.py),
+# on the host, launching it in a tmux pane (see omnicraft/antigravity_native*.py),
 # so a managed host image must carry it. It is NOT an npm package
 # (harness_install.py lists agy as a non-npm, installer-script harness), so it
 # can't join the `npm install -g` set above. The tarball holds a single
@@ -295,7 +295,7 @@ RUN set -eu; \
 # Version + integrity pin: the native harness is behaviorally coupled to a
 # specific agy build (out-of-order transcript writes, connect-RPC quirks, and TUI
 # injection are all verified against 1.0.10 — grep ``agy 1.0.10`` under
-# omnigent/antigravity_native*). The official ``install.sh`` bootstrapper has NO
+# omnicraft/antigravity_native*). The official ``install.sh`` bootstrapper has NO
 # version flag — it always fetches the LATEST build from an auto-updater manifest
 # and old builds are not retained at any stable, reconstructable URL — so it
 # cannot pin anything. Instead we fetch the exact, immutable per-arch release
@@ -329,7 +329,7 @@ RUN set -eu; \
     echo "agy ${AGY_VERSION} pinned (sha256 verified)"
 
 # Copy the venv and source tree. The editable install's .pth files reference
-# /build/omnigent and /build/sdks/* -- both denied by the k8s Landlock LSM
+# /build/omnicraft and /build/sdks/* -- both denied by the k8s Landlock LSM
 # policy. Re-install without -e so the package bytes land in the venv's
 # site-packages and imports no longer require /build at runtime.
 COPY --from=builder /opt/venv /opt/venv
@@ -339,16 +339,16 @@ RUN pip install --no-cache-dir /build /build/sdks/python-client /build/sdks/ui \
 
 # Sandbox launchers exec commands through `bash -lc`, and Debian's
 # /etc/profile unconditionally resets PATH for login shells — the ENV
-# PATH above would silently drop off and `omnigent` / `pip` would
+# PATH above would silently drop off and `omnicraft` / `pip` would
 # resolve to the system Python instead of the venv. profile.d snippets
 # are sourced after that reset, so this puts the venv back in front.
-RUN echo 'export PATH="/opt/venv/bin:${PATH}"' > /etc/profile.d/omnigent-venv.sh
+RUN echo 'export PATH="/opt/venv/bin:${PATH}"' > /etc/profile.d/omnicraft-venv.sh
 
 WORKDIR /root
 
 # CMD only — Modal's `Image.from_registry` (and the sandbox launchers
 # generally) supply their own entrypoint command; an ENTRYPOINT here
-# would hijack it. The hold-open default mirrors what `omnigent
+# would hijack it. The hold-open default mirrors what `omnicraft
 # sandbox create` runs so a bare `docker run` behaves the same way.
 CMD ["sleep", "infinity"]
 
@@ -366,7 +366,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Preserve /build/ in the runtime stage — the venv's editable install
-# .pth files reference /build/omnigent and /build/sdks/* by absolute
+# .pth files reference /build/omnicraft and /build/sdks/* by absolute
 # path. Copying these to /app/ would break the import paths silently.
 COPY --from=server-builder /opt/venv /opt/venv
 COPY --from=server-builder /build /build

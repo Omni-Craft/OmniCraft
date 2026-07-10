@@ -1,11 +1,11 @@
-"""Tests for omnigent.onboarding.provider_selection — selection logic."""
+"""Tests for omnicraft.onboarding.provider_selection — selection logic."""
 
 from __future__ import annotations
 
 import pytest
 from click import ClickException
 
-from omnigent.onboarding.provider_selection import (
+from omnicraft.onboarding.provider_selection import (
     ProviderSelection,
     resolve_provider_from_model,
 )
@@ -33,12 +33,12 @@ def test_resolve_reads_api_key_from_env(
     assert selection.credentials["api_key"] == "sk-openai-test"
 
 
-def test_resolve_reads_api_key_from_omnigent_prefixed_env(
+def test_resolve_reads_api_key_from_omnicraft_prefixed_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Non-interactive provider selection accepts ``OMNIGENT_`` key aliases."""
+    """Non-interactive provider selection accepts ``OMNICRAFT_`` key aliases."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("OMNIGENT_ANTHROPIC_API_KEY", "sk-prefixed")
+    monkeypatch.setenv("OMNICRAFT_ANTHROPIC_API_KEY", "sk-prefixed")
 
     selection = resolve_provider_from_model("anthropic/claude-sonnet-4-20250514")
 

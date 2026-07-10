@@ -1,7 +1,7 @@
 """E2E test: list_comments and update_comment tools in claude-native mode.
 
 Verifies the full round-trip for native Claude Code sessions: the test
-starts Claude Code in a private tmux window with the Omnigent MCP
+starts Claude Code in a private tmux window with the OmniCraft MCP
 bridge, adds review comments via the REST API, sends a message
 (which triggers the runner to write ``tool_relay.json`` so the bridge
 exposes ``list_comments`` / ``update_comment`` to Claude), and then
@@ -9,7 +9,7 @@ confirms the server reflects the expected ``"addressed"`` status on
 all comments.
 
 The test uses the same ``claude-native-ui`` agent spec that
-``omnigent claude`` materialises at runtime — not a custom yaml.
+``omnicraft claude`` materialises at runtime — not a custom yaml.
 This ensures comment-relay behaviour is tested against the exact agent
 configuration end users encounter.
 
@@ -45,7 +45,7 @@ import httpx
 import pytest
 import yaml
 
-from omnigent.claude_native_bridge import (
+from omnicraft.claude_native_bridge import (
     augment_claude_args,
     bridge_dir_for_bridge_id,
     prepare_bridge_dir,
@@ -59,7 +59,7 @@ from tests.e2e.conftest import (
     upload_agent,
 )
 
-# Agent name written into the spec by ``omnigent claude``.
+# Agent name written into the spec by ``omnicraft claude``.
 _CLAUDE_NATIVE_UI_AGENT_NAME = "claude-native-ui"
 
 # How long to wait for the MCP bridge's serve-mcp process to start
@@ -81,7 +81,7 @@ _NESTED_SESSION_ENV = "CLAUDECODE"
 # wiring is covered deterministically by tests/runner/test_comment_relay.py and
 # tests/test_claude_native_bridge.py; this test is the full round-trip, run
 # on demand where an authenticated claude is available.
-_RUN_GATE_ENV = "OMNIGENT_E2E_CLAUDE_NATIVE_COMMENTS"
+_RUN_GATE_ENV = "OMNICRAFT_E2E_CLAUDE_NATIVE_COMMENTS"
 
 
 @pytest.fixture(scope="module")
@@ -91,14 +91,14 @@ def claude_native_ui_agent(
     """
     Upload the ``claude-native-ui`` agent spec and return its name.
 
-    The spec is identical to what ``omnigent claude`` materialises via
+    The spec is identical to what ``omnicraft claude`` materialises via
     ``_materialize_claude_agent_spec`` at runtime: harness
     ``claude-native``, no model rewriting (Claude CLI picks its own
     model), and ``os_env.type: caller_process`` with no sandbox.
 
     Using this spec — rather than a custom test-only yaml — ensures the
     test exercises the exact agent configuration that end users get when
-    they run ``omnigent claude``.
+    they run ``omnicraft claude``.
 
     :param http_client: HTTP client pointed at the live server.
     :returns: The agent name, ``"claude-native-ui"``.
@@ -142,20 +142,20 @@ def _claude_code_session(
     launch_env: dict[str, str],
 ) -> Iterator[None]:
     """
-    Start Claude Code in a private tmux window with the Omnigent MCP bridge.
+    Start Claude Code in a private tmux window with the OmniCraft MCP bridge.
 
     Sets up the bridge directory for *session_id*, launches ``claude``
     with the MCP config and hook settings injected via
     :func:`augment_claude_args` (``--allowedTools`` pre-authorizes the
-    omnigent relay tools so MCP permission dialogs don't block the
+    omnicraft relay tools so MCP permission dialogs don't block the
     test), writes ``tmux.json`` so the runner's harness can inject
     messages via ``inject_user_message``, and waits for the MCP bridge
     subprocess (``serve-mcp``) to write ``server.json`` before yielding.
 
-    This mirrors what ``omnigent claude`` does when a user runs it,
+    This mirrors what ``omnicraft claude`` does when a user runs it,
     so the relay feature is tested against the real code path.
 
-    :param session_id: Omnigent session id, e.g. ``"conv_abc123"``.
+    :param session_id: OmniCraft session id, e.g. ``"conv_abc123"``.
     :param model: Claude model id to pin via ``--model``, e.g.
         ``"databricks-claude-sonnet-4-6"``. ``None`` lets the CLI choose.
     :param launch_env: Extra environment for the launched ``claude``
@@ -170,20 +170,20 @@ def _claude_code_session(
     bridge_dir = bridge_dir_for_bridge_id(session_id)
     prepare_bridge_dir(session_id, workspace=Path.cwd())
 
-    tmp = tempfile.mkdtemp(prefix="omnigent-e2e-")
+    tmp = tempfile.mkdtemp(prefix="omnicraft-e2e-")
     tmux_socket = Path(tmp) / "tmux.sock"
     tmux_session = f"cne-{session_id[:8]}"
     tmux_target = f"{tmux_session}:0.0"
 
-    # Build Claude Code args with Omnigent MCP bridge and hooks injected.
-    # --allowedTools pre-authorizes the omnigent relay tools so Claude does
+    # Build Claude Code args with OmniCraft MCP bridge and hooks injected.
+    # --allowedTools pre-authorizes the omnicraft relay tools so Claude does
     # not show an interactive permission dialog when it calls list_comments or
-    # update_comment.  The MCP server is always named "omnigent" (_MCP_SERVER_NAME),
+    # update_comment.  The MCP server is always named "omnicraft" (_MCP_SERVER_NAME),
     # so the tool identifiers are stable regardless of session.
     base_args: tuple[str, ...] = (
         "--dangerously-skip-permissions",
         "--allowedTools",
-        "mcp__omnigent__list_comments,mcp__omnigent__update_comment",
+        "mcp__omnicraft__list_comments,mcp__omnicraft__update_comment",
     )
     # Pin the model so the Databricks Anthropic gateway receives a served model
     # id rather than a canonical Anthropic name it would reject.
@@ -214,7 +214,7 @@ def _claude_code_session(
     # ANTHROPIC_API_KEY: its mere presence makes Claude Code's interactive
     # "use this API key?" gate block TUI startup (so serve-mcp never spawns).
     # ANTHROPIC_AUTH_TOKEN provides auth without tripping that gate. Mirrors
-    # how ``omnigent claude`` unsets ANTHROPIC_API_KEY on launch.
+    # how ``omnicraft claude`` unsets ANTHROPIC_API_KEY on launch.
     if "ANTHROPIC_AUTH_TOKEN" in launch_env:
         tmux_env.pop("ANTHROPIC_API_KEY", None)
     tmux_env.update(launch_env)
@@ -324,11 +324,11 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
     Claude Code addresses review comments without being told which tools to use.
 
     Flow:
-    1. Skip unless opted in via ``OMNIGENT_E2E_CLAUDE_NATIVE_COMMENTS`` and
+    1. Skip unless opted in via ``OMNICRAFT_E2E_CLAUDE_NATIVE_COMMENTS`` and
        the ``claude`` / ``tmux`` binaries are available.
     2. Create a runner-bound session with the ``claude-native-ui`` agent.
-    3. Start Claude Code in a private tmux window with the Omnigent
-       MCP bridge (same as ``omnigent claude`` does).
+    3. Start Claude Code in a private tmux window with the OmniCraft
+       MCP bridge (same as ``omnicraft claude`` does).
     4. POST two draft comments on ``app.py`` via the REST API.
     5. Pre-configure the mock LLM with tool-call responses that call
        ``list_comments`` then ``update_comment`` for both comment IDs so the
@@ -355,7 +355,7 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
     - The relay HTTP server is not running or not callable from the bridge,
       so Claude's tool call returns an error.
     - ``_execute_comment_tool`` call path broken (server_client / session
-      scoping), so the Omnigent server ``PATCH /v1/sessions/{id}/comments`` is
+      scoping), so the OmniCraft server ``PATCH /v1/sessions/{id}/comments`` is
       never hit.
     - Comments still ``"draft"`` → update path didn't persist.
 
@@ -425,7 +425,7 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
     # ── 3. Pre-configure mock LLM with tool-call responses ─────────────────
     # The mock server returns these responses in order for any model key.
     # The Claude CLI executes the tool_use blocks as real MCP calls against
-    # the relay, so comment status changes reach the Omnigent server even
+    # the relay, so comment status changes reach the OmniCraft server even
     # though the LLM itself is a mock.  We configure with the actual IDs
     # now (after posting) so update_comment receives the right targets.
     reset_mock_llm(mock_llm_server_url)
@@ -508,7 +508,7 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
         # Claude processes the injected message, calls list_comments to find
         # the draft comments, then calls update_comment on each. These tool
         # calls go through the relay HTTP server running in the runner process
-        # and hit the Omnigent server directly, so the comment status changes appear
+        # and hit the OmniCraft server directly, so the comment status changes appear
         # in the REST API without needing to observe the forwarder stream.
         deadline = time.monotonic() + _COMMENT_POLL_TIMEOUT_S
         while time.monotonic() < deadline:
@@ -558,10 +558,10 @@ def test_claude_native_agent_addresses_comments_without_tool_guidance(
         assert post_statuses.get(comment1_id) == "addressed", (
             f"Comment 1 still has status {post_statuses.get(comment1_id)!r} "
             f"after {_COMMENT_POLL_TIMEOUT_S}s; expected 'addressed'. "
-            f"If 'draft', the update_comment relay call did not reach the Omnigent server."
+            f"If 'draft', the update_comment relay call did not reach the OmniCraft server."
         )
         assert post_statuses.get(comment2_id) == "addressed", (
             f"Comment 2 still has status {post_statuses.get(comment2_id)!r} "
             f"after {_COMMENT_POLL_TIMEOUT_S}s; expected 'addressed'. "
-            f"If 'draft', the update_comment relay call did not reach the Omnigent server."
+            f"If 'draft', the update_comment relay call did not reach the OmniCraft server."
         )

@@ -1,8 +1,8 @@
-"""Tests for the persistent background local Omnigent server helpers.
+"""Tests for the persistent background local OmniCraft server helpers.
 
-Covers ``omnigent.host.local_server``: reuse-vs-respawn detection
+Covers ``omnicraft.host.local_server``: reuse-vs-respawn detection
 (:func:`local_server_url_if_healthy`) and the spawn wiring
-(:func:`ensure_local_omnigent_server`). The connect daemon owns this server in
+(:func:`ensure_local_omnicraft_server`). The connect daemon owns this server in
 ``--local`` mode; the CLI discovers it via the pidfile these helpers write.
 """
 
@@ -14,7 +14,7 @@ from typing import Any
 import click
 import pytest
 
-from omnigent.host import local_server
+from omnicraft.host import local_server
 
 
 def test_local_server_url_if_healthy_returns_url_when_alive_and_healthy(
@@ -81,14 +81,14 @@ def test_local_server_url_if_healthy_none_when_no_pidfile(
     assert local_server.local_server_url_if_healthy() is None
 
 
-def test_ensure_local_omnigent_server_reuses_without_spawning(
+def test_ensure_local_omnicraft_server_reuses_without_spawning(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """A healthy existing server with a matching config sig is reused.
 
     Reuse requires both health AND a config signature matching this
-    invocation's. With the matching sig stamped, ``ensure_local_omnigent_server``
+    invocation's. With the matching sig stamped, ``ensure_local_omnicraft_server``
     must return the healthy URL without falling through to
     ``subprocess.Popen`` (the stub below fails the test if it spawns).
     """
@@ -109,13 +109,13 @@ def test_ensure_local_omnigent_server_reuses_without_spawning(
 
     monkeypatch.setattr(local_server.subprocess, "Popen", _must_not_popen)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
     assert result.url == "http://127.0.0.1:8123"
     # Reused an existing healthy server — did not start a new process.
     assert result.spawned is False
 
 
-def test_ensure_local_omnigent_server_respawns_on_config_drift(
+def test_ensure_local_omnicraft_server_respawns_on_config_drift(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -141,7 +141,7 @@ def test_ensure_local_omnigent_server_respawns_on_config_drift(
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
 
     stopped: list[bool] = []
-    monkeypatch.setattr(local_server, "stop_local_omnigent_server", lambda: stopped.append(True))
+    monkeypatch.setattr(local_server, "stop_local_omnicraft_server", lambda: stopped.append(True))
 
     spawned: list[bool] = []
 
@@ -157,13 +157,13 @@ def test_ensure_local_omnigent_server_respawns_on_config_drift(
     monkeypatch.setattr(local_server.subprocess, "Popen", _Proc)
     monkeypatch.setattr(
         local_server,
-        "_wait_for_local_omnigent_server",
+        "_wait_for_local_omnicraft_server",
         lambda base_url, proc, log_path, timeout=45.0: None,
     )
     # Ownership probe confirms our own child holds the port (no contention).
     monkeypatch.setattr(local_server, "_pid_listening_on_port", lambda port: 9100)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
 
     assert result.url == "http://127.0.0.1:8766"
     # A config-drift respawn started a fresh server, so it is ours.
@@ -184,12 +184,12 @@ def test_server_config_signature_changes_with_version(
 
     This is what makes ``omni upgrade`` (and a manual ``uv tool upgrade``)
     cycle a running local server: the recorded signature no longer matches
-    the upgraded CLI's, so ``ensure_local_omnigent_server`` respawns it on
+    the upgraded CLI's, so ``ensure_local_omnicraft_server`` respawns it on
     the new code through the existing config-drift path.
     """
     import importlib.metadata
 
-    from omnigent.server import auth as auth_mod
+    from omnicraft.server import auth as auth_mod
 
     # Pin auth so only the version varies between the two signatures.
     monkeypatch.setattr(auth_mod, "resolve_auth_source", lambda: "noauth")
@@ -205,19 +205,19 @@ def test_server_config_signature_changes_with_version(
     assert sig_new == local_server.server_config_signature()
 
 
-def test_ensure_local_omnigent_server_spawns_when_none_healthy(
+def test_ensure_local_omnicraft_server_spawns_when_none_healthy(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """With no healthy server, spawn one on a loopback port and record it.
 
     Verifies the spawn path: a free port is bound, the server subprocess is
-    launched as ``omnigent server`` on 127.0.0.1, the pidfile records
+    launched as ``omnicraft server`` on 127.0.0.1, the pidfile records
     ``pid\\nport``, and the chosen port is returned.
     The readiness poll is stubbed so the test does not depend on a real boot.
     """
     monkeypatch.setattr(local_server, "local_server_url_if_healthy", lambda: None)
-    # ensure_local_omnigent_server picks the port via pick_local_port (prefers :8000,
+    # ensure_local_omnicraft_server picks the port via pick_local_port (prefers :8000,
     # falls back to a free one). Stub it to a fixed port so the assertion is
     # deterministic regardless of whether :8000 happens to be free on the box.
     monkeypatch.setattr(local_server, "pick_local_port", lambda preferred=8000: 8765)
@@ -229,7 +229,7 @@ def test_ensure_local_omnigent_server_spawns_when_none_healthy(
         local_server, "_LOCAL_SERVER_LOG_REF_PATH", tmp_path / "local_server.logpath"
     )
     # Point the persistent data dir at tmp so the test does not write to the
-    # developer's real ~/.omnigent.
+    # developer's real ~/.omnicraft.
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
     # The spawned server inherits the parent env unmodified — there is no
     # profile flag anymore, so an ambient DATABRICKS_CONFIG_PROFILE must
@@ -252,13 +252,13 @@ def test_ensure_local_omnigent_server_spawns_when_none_healthy(
     # Skip the real health poll; we assert on spawn wiring, not boot.
     monkeypatch.setattr(
         local_server,
-        "_wait_for_local_omnigent_server",
+        "_wait_for_local_omnicraft_server",
         lambda base_url, proc, log_path, timeout=45.0: None,
     )
     # Ownership probe confirms our own child holds the port (no contention).
     monkeypatch.setattr(local_server, "_pid_listening_on_port", lambda port: 9001)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
 
     assert result.url == "http://127.0.0.1:8765"
     # Spawned a fresh server (none was healthy) — reported as ours.
@@ -281,15 +281,15 @@ def test_ensure_local_omnigent_server_spawns_when_none_healthy(
     assert env["DATABRICKS_CONFIG_PROFILE"] == "ambient"
 
 
-def test_stop_local_omnigent_server_waits_for_process_exit(
+def test_stop_local_omnicraft_server_waits_for_process_exit(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    """``stop_local_omnigent_server`` blocks until the server process dies.
+    """``stop_local_omnicraft_server`` blocks until the server process dies.
 
     The bug: fire-and-forget SIGTERM left the port bound until the OS
-    reaped the process, so the next ``ensure_local_omnigent_server`` or
-    ``omnigent server`` failed to bind. The fix polls ``_pid_alive``
+    reaped the process, so the next ``ensure_local_omnicraft_server`` or
+    ``omnicraft server`` failed to bind. The fix polls ``_pid_alive``
     until the process exits. This test verifies the poll loop runs and
     that both the pidfile and sig sidecar are cleaned up.
     """
@@ -324,7 +324,7 @@ def test_stop_local_omnigent_server_waits_for_process_exit(
     # Eliminate real sleeps — the poll interval is irrelevant in the test.
     monkeypatch.setattr(local_server.time, "sleep", lambda _s: None)
 
-    local_server.stop_local_omnigent_server()
+    local_server.stop_local_omnicraft_server()
 
     import signal as signal_mod
 
@@ -344,7 +344,7 @@ def test_stop_local_omnigent_server_waits_for_process_exit(
     assert not sig_file.exists()
 
 
-def test_stop_local_omnigent_server_escalates_to_sigkill(
+def test_stop_local_omnicraft_server_escalates_to_sigkill(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -390,7 +390,7 @@ def test_stop_local_omnigent_server_escalates_to_sigkill(
     monkeypatch.setattr(local_server.time, "monotonic", _fake_monotonic)
     monkeypatch.setattr(local_server.time, "sleep", lambda _s: None)
 
-    local_server.stop_local_omnigent_server()
+    local_server.stop_local_omnicraft_server()
 
     import signal as signal_mod
 
@@ -409,25 +409,25 @@ def test_stop_local_omnigent_server_escalates_to_sigkill(
 def test_local_data_dir_honors_data_dir_not_config_home(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """``_local_data_dir`` isolates the runtime DB via ``OMNIGENT_DATA_DIR`` only.
+    """``_local_data_dir`` isolates the runtime DB via ``OMNICRAFT_DATA_DIR`` only.
 
-    Two worktrees sharing ``~/.omnigent/chat.db`` with divergent Alembic
+    Two worktrees sharing ``~/.omnicraft/chat.db`` with divergent Alembic
     heads can't migrate the shared DB, so the daemon-backed server fails to
-    boot. ``OMNIGENT_DATA_DIR`` is the purpose-built data-isolation knob.
-    ``OMNIGENT_CONFIG_HOME`` MUST NOT move the DB — it isolates config only;
+    boot. ``OMNICRAFT_DATA_DIR`` is the purpose-built data-isolation knob.
+    ``OMNICRAFT_CONFIG_HOME`` MUST NOT move the DB — it isolates config only;
     overloading it broke HOME-based data isolation (the resumption e2e tests
     set ``HOME`` to control the DB while inheriting a shared CONFIG_HOME).
     """
-    monkeypatch.delenv("OMNIGENT_DATA_DIR", raising=False)
-    monkeypatch.delenv("OMNIGENT_CONFIG_HOME", raising=False)
-    # Default: ~/.omnigent.
-    assert local_server._local_data_dir() == Path.home() / ".omnigent"
+    monkeypatch.delenv("OMNICRAFT_DATA_DIR", raising=False)
+    monkeypatch.delenv("OMNICRAFT_CONFIG_HOME", raising=False)
+    # Default: ~/.omnicraft.
+    assert local_server._local_data_dir() == Path.home() / ".omnicraft"
     # CONFIG_HOME does NOT move the data dir — a failure here means config
     # isolation is leaking back into data-dir selection.
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "cfg"))
-    assert local_server._local_data_dir() == Path.home() / ".omnigent"
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "cfg"))
+    assert local_server._local_data_dir() == Path.home() / ".omnicraft"
     # DATA_DIR is the data-isolation knob.
-    monkeypatch.setenv("OMNIGENT_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("OMNICRAFT_DATA_DIR", str(tmp_path / "data"))
     assert local_server._local_data_dir() == tmp_path / "data"
 
 
@@ -435,7 +435,7 @@ def test_pick_local_port_returns_preferred_when_free() -> None:
     """``pick_local_port`` returns the preferred port when it's bindable.
 
     The local server prefers a stable port (8000) so its URL is identical
-    across ``omnigent server`` and daemon spawns. We use an
+    across ``omnicraft server`` and daemon spawns. We use an
     OS-assigned free port as ``preferred`` here so the assertion is
     deterministic regardless of what's already bound on the host (8000
     is often busy on shared CI boxes).
@@ -479,7 +479,7 @@ def test_register_then_clear_local_server_round_trip(
 ) -> None:
     """``register_local_server`` writes our pid+port; ``clear`` removes it.
 
-    This is the handshake that lets a foreground ``omnigent server``
+    This is the handshake that lets a foreground ``omnicraft server``
     advertise itself to the daemon: register writes ``<pid>\\n<port>\\n``
     so :func:`local_server_url_if_healthy` can discover it, and the
     shutdown clear leaves no stale record behind.
@@ -512,9 +512,9 @@ def test_register_local_server_stamps_matching_sig(
     """A foreground server's sidecar matches what connect/run compute.
 
     The regression this guards against: ``register_local_server`` wrote only the
-    pidfile, so a foreground ``omnigent server`` presented no sig and the
+    pidfile, so a foreground ``omnicraft server`` presented no sig and the
     next ``connect``/``run`` saw ``None != desired`` and stopped + respawned
-    it. With the sig stamped, the reuse path in ``ensure_local_omnigent_server``
+    it. With the sig stamped, the reuse path in ``ensure_local_omnicraft_server``
     short-circuits to the healthy URL WITHOUT spawning — proving the
     foreground server is now reusable. Both sides compute the signature
     from the same resolved auth source, so the two signatures agree.
@@ -527,7 +527,7 @@ def test_register_local_server_stamps_matching_sig(
         local_server, "_LOCAL_SERVER_LOG_REF_PATH", tmp_path / "local_server.logpath"
     )
 
-    # Foreground `omnigent server` advertises itself in the pidfile + sig.
+    # Foreground `omnicraft server` advertises itself in the pidfile + sig.
     local_server.register_local_server(8000)
     assert sig_file.read_text().strip() == local_server.server_config_signature()
 
@@ -542,7 +542,7 @@ def test_register_local_server_stamps_matching_sig(
 
     monkeypatch.setattr(local_server.subprocess, "Popen", _must_not_popen)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
     assert result.url == "http://127.0.0.1:8000"
     # Reused the foreground server — no respawn (the prior respawn regression).
     assert result.spawned is False
@@ -577,13 +577,13 @@ def test_clear_local_server_record_leaves_other_pids_alone(
 # ---------------------------------------------------------------------------
 
 
-def test_ensure_local_omnigent_server_spawn_records_and_returns_log_path(
+def test_ensure_local_omnicraft_server_spawn_records_and_returns_log_path(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     """A spawned server returns its captured-log path and records it for status.
 
-    ``omnigent server start`` used to be a black box — it printed only the
+    ``omnicraft server start`` used to be a black box — it printed only the
     URL. The spawn now threads the captured stdout/stderr log file out via
     ``LocalServerStartup.log_path`` AND into the log-path sidecar, so both
     the spawning call and a later ``server status`` can name the exact file.
@@ -610,18 +610,18 @@ def test_ensure_local_omnigent_server_spawn_records_and_returns_log_path(
     monkeypatch.setattr(local_server.subprocess, "Popen", _Proc)
     monkeypatch.setattr(
         local_server,
-        "_wait_for_local_omnigent_server",
+        "_wait_for_local_omnicraft_server",
         lambda base_url, proc, log_path, timeout=45.0: None,
     )
     # Ownership probe confirms our own child holds the port (no contention).
     monkeypatch.setattr(local_server, "_pid_listening_on_port", lambda port: 9001)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
 
     assert result.spawned is True
     assert result.log_path is not None
     # The captured log lives under the per-user server log dir as a .log file.
-    assert result.log_path.parent == tmp_path / ".omnigent" / "logs" / "server"
+    assert result.log_path.parent == tmp_path / ".omnicraft" / "logs" / "server"
     assert result.log_path.suffix == ".log"
     assert result.log_path.name.startswith("local-server-")
     # Recorded in the sidecar so a later status/reuse names the same file.
@@ -637,7 +637,7 @@ def test_ensure_local_omnigent_server_spawn_records_and_returns_log_path(
     assert info.log_path == result.log_path
 
 
-def test_ensure_local_omnigent_server_reuse_reads_log_path_sidecar(
+def test_ensure_local_omnicraft_server_reuse_reads_log_path_sidecar(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
@@ -654,7 +654,7 @@ def test_ensure_local_omnigent_server_reuse_reads_log_path_sidecar(
     sig_file = tmp_path / "local_server.sig"
     sig_file.write_text(local_server.server_config_signature() + "\n")
     log_ref = tmp_path / "local_server.logpath"
-    recorded = tmp_path / ".omnigent" / "logs" / "server" / "local-server-cd34.log"
+    recorded = tmp_path / ".omnicraft" / "logs" / "server" / "local-server-cd34.log"
     log_ref.write_text(str(recorded) + "\n")
     monkeypatch.setattr(local_server, "_LOCAL_SERVER_SIG_PATH", sig_file)
     monkeypatch.setattr(local_server, "_LOCAL_SERVER_LOG_REF_PATH", log_ref)
@@ -664,7 +664,7 @@ def test_ensure_local_omnigent_server_reuse_reads_log_path_sidecar(
 
     monkeypatch.setattr(local_server.subprocess, "Popen", _must_not_popen)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
 
     assert result.spawned is False
     assert result.log_path == recorded
@@ -676,7 +676,7 @@ def test_register_local_server_clears_stale_log_ref(
 ) -> None:
     """A foreground server clears any stale background log-path sidecar.
 
-    A foreground ``omnigent server`` streams logs to its own terminal, not a
+    A foreground ``omnicraft server`` streams logs to its own terminal, not a
     file. If a prior background server left a log-ref sidecar behind, a later
     ``server status`` for the foreground one must NOT report that defunct
     file — register clears it so the log path resolves to ``None``.
@@ -745,10 +745,10 @@ def _fake_subprocess(stdout: str | None = None, raises: BaseException | None = N
 def test_stop_untracked_local_server_kills_orphan_on_default_port(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A live Omnigent server on :8000 with no pidfile entry is found and stopped.
+    """A live OmniCraft server on :8000 with no pidfile entry is found and stopped.
 
     This is the reported bug: the pidfile was lost while the server lived, so
-    ``stop_local_omnigent_server`` (pidfile-scoped) couldn't see it. The sweep must
+    ``stop_local_omnicraft_server`` (pidfile-scoped) couldn't see it. The sweep must
     confirm it's our server via ``/health``, resolve its PID via lsof, and
     terminate it — returning the PID so the off-switch can report it.
     """
@@ -773,7 +773,7 @@ def test_stop_untracked_local_server_noop_when_nothing_listening(
     """No ``/health`` responder → nothing killed, and lsof is never consulted.
 
     Guards against the off-switch killing whatever happens to hold the port:
-    if there's no Omnigent server answering, we must not even look up a PID.
+    if there's no OmniCraft server answering, we must not even look up a PID.
     """
     import httpx
 
@@ -784,14 +784,14 @@ def test_stop_untracked_local_server_noop_when_nothing_listening(
     monkeypatch.setattr(
         local_server,
         "subprocess",
-        _fake_subprocess(raises=AssertionError("lsof consulted despite no Omnigent server")),
+        _fake_subprocess(raises=AssertionError("lsof consulted despite no OmniCraft server")),
     )
     monkeypatch.setattr(local_server, "_terminate_pid", _raise_if_called)
 
     assert local_server.stop_untracked_local_server(port=8000) is None
 
 
-def test_stop_untracked_local_server_noop_on_non_omnigent_listener(
+def test_stop_untracked_local_server_noop_on_non_omnicraft_listener(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A 200 that isn't ``{"status": "ok"}`` is some other app — never killed."""
@@ -806,7 +806,7 @@ def test_stop_untracked_local_server_noop_on_non_omnigent_listener(
 def test_stop_untracked_local_server_noop_when_lsof_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A live Omnigent server but no resolvable PID (lsof missing) → degrade, no kill.
+    """A live OmniCraft server but no resolvable PID (lsof missing) → degrade, no kill.
 
     Without a PID we can't terminate, so the sweep returns ``None`` rather
     than crashing — the off-switch then leaves a manual hint to the user.
@@ -845,7 +845,7 @@ def _patch_spawn_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
     monkeypatch.setattr(
         local_server,
-        "_wait_for_local_omnigent_server",
+        "_wait_for_local_omnicraft_server",
         lambda base_url, proc, log_path, timeout=45.0: None,
     )
 
@@ -902,7 +902,7 @@ def test_ensure_respawns_on_free_port_when_foreign_server_owns_preferred_port(
     # the half-migrated-DB bug this flow exists to avoid.
     monkeypatch.setattr(local_server, "_terminate_pid", _raise_if_called)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
 
     # The returned URL is the respawn's free port, NOT the contended one —
     # the preferred-port spawn was never adopted.
@@ -942,9 +942,9 @@ def test_ensure_retries_when_child_dies_and_foreign_owner_holds_port(
         if "6767" in base_url:
             raise click.ClickException("Background local server failed to start")
 
-    monkeypatch.setattr(local_server, "_wait_for_local_omnigent_server", _wait)
+    monkeypatch.setattr(local_server, "_wait_for_local_omnicraft_server", _wait)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
 
     assert result.url == "http://127.0.0.1:9111"
     # Both spawns were awaited: the contended one (raised), then the retry.
@@ -981,10 +981,10 @@ def test_ensure_startup_failure_without_contention_raises(
         """Simulate the child dying before ever answering /health."""
         raise click.ClickException("Background local server failed to start")
 
-    monkeypatch.setattr(local_server, "_wait_for_local_omnigent_server", _wait)
+    monkeypatch.setattr(local_server, "_wait_for_local_omnicraft_server", _wait)
 
     with pytest.raises(click.ClickException) as excinfo:
-        local_server.ensure_local_omnigent_server()
+        local_server.ensure_local_omnicraft_server()
 
     assert "failed to start" in str(excinfo.value)
     # Exactly one spawn: a non-contention failure must not retry.
@@ -1011,7 +1011,7 @@ def test_ensure_fails_loud_when_port_contention_persists(
     monkeypatch.setattr(local_server, "_terminate_pid", _raise_if_called)
 
     with pytest.raises(click.ClickException) as excinfo:
-        local_server.ensure_local_omnigent_server()
+        local_server.ensure_local_omnicraft_server()
 
     assert "contention persists" in str(excinfo.value)
     assert "4242" in str(excinfo.value)
@@ -1044,7 +1044,7 @@ def test_ensure_backstop_terminates_doomed_child_that_never_exits(
     terminated: list[int] = []
     monkeypatch.setattr(local_server, "_terminate_pid", terminated.append)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
 
     assert result.url == "http://127.0.0.1:9111"
     # Exactly the wedged first child was backstop-killed; the respawn
@@ -1078,9 +1078,9 @@ def test_ensure_does_not_advertise_pidfile_before_ownership_confirmed(
             "discoverer could adopt a contended port the spawn later abandons"
         )
 
-    monkeypatch.setattr(local_server, "_wait_for_local_omnigent_server", _wait)
+    monkeypatch.setattr(local_server, "_wait_for_local_omnicraft_server", _wait)
 
-    result = local_server.ensure_local_omnigent_server()
+    result = local_server.ensure_local_omnicraft_server()
 
     assert result.url == "http://127.0.0.1:6767"
     # Once confirmed, the record IS advertised for reuse/discovery.

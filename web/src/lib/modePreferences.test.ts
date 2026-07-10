@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { readHarnessOptions, writeHarnessOption } from "./modePreferences";
 
-const KEY = "omnigent:last-mode-by-harness";
+const KEY = "omnicraft:last-mode-by-harness";
 
 afterEach(() => {
   localStorage.clear();

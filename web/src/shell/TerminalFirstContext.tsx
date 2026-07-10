@@ -8,9 +8,9 @@
 // `isClaudeNative`, `isNativeWrapper`, and `isTerminalFirst` are derived
 // from different conversation labels:
 //
-//   - `omnigent.wrapper === "claude-code-native-ui"` → `isClaudeNative`
-//   - registered `omnigent.wrapper` native value    → `isNativeWrapper`
-//   - `omnigent.ui === "terminal"`                  → `isTerminalFirst`
+//   - `omnicraft.wrapper === "claude-code-native-ui"` → `isClaudeNative`
+//   - registered `omnicraft.wrapper` native value    → `isNativeWrapper`
+//   - `omnicraft.ui === "terminal"`                  → `isTerminalFirst`
 //
 // `isTerminalFirst` is purely presentational (the Chat/Terminal pill and
 // the inline terminal surface); `isNativeWrapper` keys the behavior
@@ -18,8 +18,8 @@
 // `/model` is only exposed when a picker-backed propagation path exists).
 // The flags used to coincide when the
 // native wrappers were the only sessions stamping the terminal UI
-// label; runner-hosted SDK sessions now stamp `omnigent.ui` WITHOUT a
-// wrapper label (their embedded terminal hosts the Omnigent REPL), so
+// label; runner-hosted SDK sessions now stamp `omnicraft.ui` WITHOUT a
+// wrapper label (their embedded terminal hosts the OmniCraft REPL), so
 // behavior gates must use `isNativeWrapper`, never `isTerminalFirst`.
 
 import { createContext, useContext } from "react";
@@ -27,16 +27,16 @@ import { createContext, useContext } from "react";
 export type TerminalFirstView = "chat" | "terminal";
 
 export interface TerminalFirstContextValue {
-  /** True when `omnigent.wrapper === "claude-code-native-ui"`. */
+  /** True when `omnicraft.wrapper === "claude-code-native-ui"`. */
   isClaudeNative: boolean;
   /**
    * True when the session runs a native-CLI wrapper. Keys harness *behavior* gates — composer slash
    * commands and the `/model` command — unlike `isTerminalFirst`,
    * which only gates presentation (SDK sessions with an embedded
-   * Omnigent REPL terminal are terminal-first but not native).
+   * OmniCraft REPL terminal are terminal-first but not native).
    */
   isNativeWrapper: boolean;
-  /** True when `omnigent.ui === "terminal"` — gates the toggle + sidebar card. */
+  /** True when `omnicraft.ui === "terminal"` — gates the toggle + sidebar card. */
   isTerminalFirst: boolean;
   /**
    * True while the open terminal view targets a user shell (any

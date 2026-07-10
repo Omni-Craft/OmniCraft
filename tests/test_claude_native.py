@@ -21,13 +21,13 @@ import yaml
 from websockets.exceptions import ConnectionClosedError
 from websockets.frames import Close
 
-from omnigent import claude_native
-from omnigent._runner_startup import RunnerStartupProgress
-from omnigent._startup_profile import StartupProfiler
-from omnigent._terminal_picker_theme import PICKER_ACCENT, PICKER_MUTED
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
-from omnigent.spec import load_omnigent_yaml
-from omnigent.terminals.ws_bridge import (
+from omnicraft import claude_native
+from omnicraft._runner_startup import RunnerStartupProgress
+from omnicraft._startup_profile import StartupProfiler
+from omnicraft._terminal_picker_theme import PICKER_ACCENT, PICKER_MUTED
+from omnicraft.runner.identity import OMNICRAFT_INTERNAL_WS_ORIGIN
+from omnicraft.spec import load_omnicraft_yaml
+from omnicraft.terminals.ws_bridge import (
     WS_CLOSE_TERMINAL_DETACHED,
     WS_CLOSE_TERMINAL_NOT_FOUND,
 )
@@ -55,7 +55,7 @@ def test_claude_terminal_request_pins_launch_cwd(tmp_path, monkeypatch) -> None:
     body = claude_native._claude_terminal_request(
         ("--resume", "claude-session", "-p", "hi"),
         command="claude",
-        bridge_dir=Path("/tmp/omnigent-test-bridge"),
+        bridge_dir=Path("/tmp/omnicraft-test-bridge"),
     )
 
     assert body["terminal"] == "claude"
@@ -83,13 +83,13 @@ def test_claude_terminal_request_pins_launch_cwd(tmp_path, monkeypatch) -> None:
     assert args[:4] == ["--resume", "claude-session", "-p", "hi"]
     mcp_index = args.index("--mcp-config")
     mcp_config = json.loads(args[mcp_index + 1])
-    assert mcp_config["mcpServers"]["omnigent"]["args"] == [
+    assert mcp_config["mcpServers"]["omnicraft"]["args"] == [
         "-I",
         "-m",
-        "omnigent.claude_native_bridge",
+        "omnicraft.claude_native_bridge",
         "serve-mcp",
         "--bridge-dir",
-        "/tmp/omnigent-test-bridge",
+        "/tmp/omnicraft-test-bridge",
     ]
     # The experimental Claude Channels flag is blocked at the org
     # policy layer — the wrapper must not pass it. Web-UI input now
@@ -110,13 +110,13 @@ def test_claude_terminal_request_pins_launch_cwd(tmp_path, monkeypatch) -> None:
 
 
 def test_claude_terminal_request_default_launch_is_unwrapped(tmp_path, monkeypatch) -> None:
-    """Without ``OMNIGENT_CLAUDE_LAUNCHER`` the command/args are unchanged."""
-    monkeypatch.delenv("OMNIGENT_CLAUDE_LAUNCHER", raising=False)
+    """Without ``OMNICRAFT_CLAUDE_LAUNCHER`` the command/args are unchanged."""
+    monkeypatch.delenv("OMNICRAFT_CLAUDE_LAUNCHER", raising=False)
     monkeypatch.chdir(tmp_path)
     body = claude_native._claude_terminal_request(
         ("--resume", "s"),
         command="claude",
-        bridge_dir=Path("/tmp/omnigent-test-bridge"),
+        bridge_dir=Path("/tmp/omnicraft-test-bridge"),
     )
     spec = body["spec"]
     assert spec["command"] == "claude"
@@ -129,12 +129,12 @@ def test_claude_terminal_request_launcher_plugin_wraps(tmp_path, monkeypatch) ->
 
     Exercises the local-CLI wiring of :func:`resolve_claude_launch`: with a
     launcher plugin selected, the terminal spec runs the wrapped command
-    (here ``isaac -- <augmented args>``) while the Omnigent bridge
+    (here ``isaac -- <augmented args>``) while the OmniCraft bridge
     (``--mcp-config`` / ``--settings``) survives intact in the passed-through
     argv.
     """
 
-    from omnigent.claude_launcher import ClaudeLauncher
+    from omnicraft.claude_launcher import ClaudeLauncher
 
     class _IsaacLauncher(ClaudeLauncher):
         def launch(self, command, args):
@@ -142,12 +142,12 @@ def test_claude_terminal_request_launcher_plugin_wraps(tmp_path, monkeypatch) ->
 
     entry_point = SimpleNamespace(name="isaac", load=lambda: _IsaacLauncher)
     monkeypatch.setattr(importlib.metadata, "entry_points", lambda *, group: [entry_point])
-    monkeypatch.setenv("OMNIGENT_CLAUDE_LAUNCHER", "isaac")
+    monkeypatch.setenv("OMNICRAFT_CLAUDE_LAUNCHER", "isaac")
     monkeypatch.chdir(tmp_path)
     body = claude_native._claude_terminal_request(
         ("--resume", "s"),
         command="claude",
-        bridge_dir=Path("/tmp/omnigent-test-bridge"),
+        bridge_dir=Path("/tmp/omnicraft-test-bridge"),
     )
     spec = body["spec"]
     assert spec["command"] == "isaac"
@@ -163,7 +163,7 @@ def test_claude_terminal_request_injects_claude_config() -> None:
     """
     Ucode config reaches the terminal env, settings, and model argv.
 
-    This test pins the native ``omnigent claude`` launch boundary:
+    This test pins the native ``omnicraft claude`` launch boundary:
     a regression that reads ucode but forgets to pass the resulting
     Databricks gateway values to the terminal resource would leave
     Claude Code on its default provider path.
@@ -181,7 +181,7 @@ def test_claude_terminal_request_injects_claude_config() -> None:
     body = claude_native._claude_terminal_request(
         ("--print", "hi"),
         command="claude",
-        bridge_dir=Path("/tmp/omnigent-test-bridge"),
+        bridge_dir=Path("/tmp/omnicraft-test-bridge"),
         claude_config=config,
     )
 
@@ -228,7 +228,7 @@ def test_claude_terminal_request_preserves_user_model_arg() -> None:
     body = claude_native._claude_terminal_request(
         ("--model", "user-model", "--print", "hi"),
         command="claude",
-        bridge_dir=Path("/tmp/omnigent-test-bridge"),
+        bridge_dir=Path("/tmp/omnicraft-test-bridge"),
         claude_config=config,
     )
 
@@ -257,7 +257,7 @@ def test_ucode_config_for_profile_reads_allowlisted_claude_state(
     the native wrapper must not blindly forward arbitrary state-file
     environment values into the terminal launch body.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from omnicraft.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -275,11 +275,11 @@ def test_ucode_config_for_profile_reads_allowlisted_claude_state(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "omnicraft.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "omnicraft.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -309,7 +309,7 @@ def test_ucode_config_for_profile_sets_model_tier_env_vars(
     picker natively shows Databricks gateway model IDs instead of normalising
     them to canonical Anthropic names.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from omnicraft.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -328,11 +328,11 @@ def test_ucode_config_for_profile_sets_model_tier_env_vars(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "omnicraft.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "omnicraft.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -354,7 +354,7 @@ def test_ucode_config_for_profile_sets_only_present_tier_env_vars(
     If ``claude_models`` only has one tier (e.g. ``"sonnet"``), only
     ``ANTHROPIC_DEFAULT_SONNET_MODEL`` is set — the other three are absent.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from omnicraft.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -368,11 +368,11 @@ def test_ucode_config_for_profile_sets_only_present_tier_env_vars(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "omnicraft.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "omnicraft.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -395,7 +395,7 @@ def test_ucode_config_for_profile_sets_custom_model_option_for_second_sonnet(
     on the workspace's existing default Sonnet (4.6). The default is
     unchanged; Sonnet 5 is an additional, explicit choice.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from omnicraft.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -412,11 +412,11 @@ def test_ucode_config_for_profile_sets_custom_model_option_for_second_sonnet(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "omnicraft.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "omnicraft.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -437,7 +437,7 @@ def test_ucode_config_for_profile_omits_model_tier_vars_when_no_claude_models(
     Older ucode state files may not include ``claude_models``.  In that
     case the env dict must not gain any spurious default model overrides.
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from omnicraft.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -451,11 +451,11 @@ def test_ucode_config_for_profile_omits_model_tier_vars_when_no_claude_models(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "omnicraft.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "omnicraft.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -480,7 +480,7 @@ def test_ucode_config_for_profile_defaults_model_when_ucode_omits_it(
     back to its host-config model (an Anthropic-direct id like ``opus[1m]``)
     that the Databricks gateway rejects with "model ... may not exist".
     """
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from omnicraft.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
@@ -494,11 +494,11 @@ def test_ucode_config_for_profile_defaults_model_when_ucode_omits_it(
         },
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "omnicraft.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "omnicraft.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -513,18 +513,18 @@ def test_ucode_config_for_profile_fails_loud_on_malformed_claude_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A selected malformed Claude ucode entry surfaces a setup error."""
-    from omnigent.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
+    from omnicraft.onboarding.ucode_state import UcodeAgentState, UcodeWorkspaceState
 
     workspace_state = UcodeWorkspaceState(
         workspace_url="https://example.databricks.com",
         agents={"claude": UcodeAgentState(auth_command="printf token")},
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.get_workspace_url_for_profile",
+        "omnicraft.onboarding.databricks_config.get_workspace_url_for_profile",
         lambda profile: "https://example.databricks.com",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_state.read_ucode_state",
+        "omnicraft.onboarding.ucode_state.read_ucode_state",
         lambda workspace_url: workspace_state,
     )
 
@@ -550,7 +550,7 @@ def test_materialized_session_spec_is_valid_terminal_metadata(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """
-    The generated bundled agent spec validates for Omnigent session creation.
+    The generated bundled agent spec validates for OmniCraft session creation.
 
     The session agent only exists so the Sessions API can create a
     normal session row; Claude itself is launched as a terminal
@@ -567,17 +567,17 @@ def test_materialized_session_spec_is_valid_terminal_metadata(
     assert raw["prompt"].startswith("Claude Code is running in the session terminal.")
     # ``context_window`` is the conservative pre-first-turn default;
     # the statusLine forwarder overrides it once the real number is
-    # observed (see ``omnigent.claude_native_status``).
+    # observed (see ``omnicraft.claude_native_status``).
     assert raw["executor"] == {"harness": "claude-native", "context_window": 200_000}
     # os_env block is required for the runner's filesystem APIs not
-    # to 404 (see _require_os_env in omnigent/runner/app.py).
+    # to 404 (see _require_os_env in omnicraft/runner/app.py).
     assert raw["os_env"] == {
         "type": "caller_process",
         "cwd": ".",
         "sandbox": {"type": "none"},
     }
-    spec = load_omnigent_yaml(path)
-    assert spec.executor.type == "omnigent"
+    spec = load_omnicraft_yaml(path)
+    assert spec.executor.type == "omnicraft"
     assert spec.executor.config["harness"] == "claude-native"
     assert spec.os_env is not None
     # The native wrapper opts into the spawn-write surface so the
@@ -661,7 +661,7 @@ def test_local_run_preflights_local_claude_binary(
     """
     Local-server mode also requires a local Claude executable.
 
-    The Omnigent server and web UI are local in this mode, but Claude is
+    The OmniCraft server and web UI are local in this mode, but Claude is
     still launched by a local runner-owned terminal resource.
     """
     called_local = False
@@ -759,7 +759,7 @@ def test_local_run_persists_launch_state_on_fresh_session(
     the call there would surface here without affecting the remote
     test (and vice versa).
     """
-    from omnigent.claude_native_state import read_launch_state
+    from omnicraft.claude_native_state import read_launch_state
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -803,11 +803,11 @@ def test_local_run_persists_launch_state_on_fresh_session(
         return True
 
     monkeypatch.chdir(workspace)
-    monkeypatch.setattr("omnigent.chat._find_free_port", lambda: 12345)
-    monkeypatch.setattr("omnigent.chat._start_local_server", fake_start_server)
-    monkeypatch.setattr("omnigent.chat._stop_local_server", lambda server: None)
-    monkeypatch.setattr("omnigent.chat._wait_for_server", lambda *a, **k: None)
-    monkeypatch.setattr("omnigent.chat._bundle_agent", lambda path: b"bundle")
+    monkeypatch.setattr("omnicraft.chat._find_free_port", lambda: 12345)
+    monkeypatch.setattr("omnicraft.chat._start_local_server", fake_start_server)
+    monkeypatch.setattr("omnicraft.chat._stop_local_server", lambda server: None)
+    monkeypatch.setattr("omnicraft.chat._wait_for_server", lambda *a, **k: None)
+    monkeypatch.setattr("omnicraft.chat._bundle_agent", lambda path: b"bundle")
     monkeypatch.setattr(claude_native, "_prepare_claude_terminal", fake_prepare)
     monkeypatch.setattr(claude_native, "attach_local_terminal", fake_attach)
     monkeypatch.setattr(
@@ -844,7 +844,7 @@ def test_local_run_persists_launch_state_on_fresh_session(
     )
     captured = capsys.readouterr()
     web_ui = "Web UI: http://127.0.0.1:12345/c/conv_local_fresh"
-    resume_hint = "Resume with: omnigent claude --resume conv_local_fresh"
+    resume_hint = "Resume with: omnicraft claude --resume conv_local_fresh"
     assert web_ui in captured.err
     assert resume_hint in captured.err
     assert captured.err.index(web_ui) < captured.err.index(resume_hint)
@@ -857,7 +857,7 @@ def test_local_resume_does_not_print_redundant_resume_hint(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    ``omnigent claude --resume`` does not echo another resume prompt.
+    ``omnicraft claude --resume`` does not echo another resume prompt.
 
     The final hint is useful when a fresh launch creates a new
     conversation id. On an explicit resume, the user already supplied
@@ -919,10 +919,10 @@ def test_local_resume_does_not_print_redundant_resume_hint(
         del attach_url, headers, terminal_gone_probe
         return True
 
-    monkeypatch.setattr("omnigent.chat._find_free_port", lambda: 12346)
-    monkeypatch.setattr("omnigent.chat._start_local_server", fake_start_server)
-    monkeypatch.setattr("omnigent.chat._stop_local_server", lambda server: None)
-    monkeypatch.setattr("omnigent.chat._wait_for_server", lambda *a, **k: None)
+    monkeypatch.setattr("omnicraft.chat._find_free_port", lambda: 12346)
+    monkeypatch.setattr("omnicraft.chat._start_local_server", fake_start_server)
+    monkeypatch.setattr("omnicraft.chat._stop_local_server", lambda server: None)
+    monkeypatch.setattr("omnicraft.chat._wait_for_server", lambda *a, **k: None)
     monkeypatch.setattr(claude_native, "_prepare_claude_terminal", fake_prepare)
     monkeypatch.setattr(claude_native, "attach_local_terminal", fake_attach)
 
@@ -944,14 +944,14 @@ def test_remote_daemon_run_attaches_without_cli_forwarder(
     tmp_path: Path,
 ) -> None:
     """
-    Daemon-routed ``omnigent claude`` leaves forwarding to the runner.
+    Daemon-routed ``omnicraft claude`` leaves forwarding to the runner.
 
     The daemon path launches a runner, the runner auto-creates the
     Claude terminal, and that auto-create starts the transcript
     forwarder. The CLI should only attach to tmux/WebSocket. If this
     call site omits ``run_transcript_forwarder=False``, the CLI starts a
     second forwarder on the same bridge and every transcript item is
-    posted to Omnigent twice.
+    posted to OmniCraft twice.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Temporary directory for the generated spec and bridge.
@@ -992,15 +992,15 @@ def test_remote_daemon_run_attaches_without_cli_forwarder(
         captured_attach.update(kwargs)
         return claude_native._AttachOutcome.EXITED
 
-    monkeypatch.setattr("omnigent.chat._bundle_agent", lambda path: b"bundle")
+    monkeypatch.setattr("omnicraft.chat._bundle_agent", lambda path: b"bundle")
     monkeypatch.setattr(
-        "omnigent.chat._remote_headers",
+        "omnicraft.chat._remote_headers",
         lambda server_url=None: {"Authorization": "Bearer tok"},
     )
-    monkeypatch.setattr("omnigent.chat._server_auth", lambda server_url=None: None)
-    monkeypatch.setattr("omnigent.cli._ensure_host_daemon", lambda base_url: None)
+    monkeypatch.setattr("omnicraft.chat._server_auth", lambda server_url=None: None)
+    monkeypatch.setattr("omnicraft.cli._ensure_host_daemon", lambda base_url: None)
     monkeypatch.setattr(
-        "omnigent.host.identity.load_or_create_host_identity",
+        "omnicraft.host.identity.load_or_create_host_identity",
         lambda: SimpleNamespace(host_id="host_test"),
     )
     monkeypatch.setattr(claude_native, "_prepare_claude_terminal_via_daemon", fake_prepare)
@@ -1233,7 +1233,7 @@ async def test_attach_profiles_direct_tmux_handoff(
     stream = io.StringIO()
     clock_values = iter([0.0, 0.1, 0.3])
     profiler = StartupProfiler(
-        name="omnigent claude",
+        name="omnicraft claude",
         enabled=True,
         clock=lambda: next(clock_values),
         stream=stream,
@@ -1312,7 +1312,7 @@ async def test_attach_marks_terminal_stopped_on_exit_when_launched(
         """
         Record cleanup args without issuing a real DELETE.
 
-        :param base_url: Omnigent base URL passed to the cleanup helper.
+        :param base_url: OmniCraft base URL passed to the cleanup helper.
         :param headers: Auth headers passed to the cleanup helper.
         :param session_id: Session id being cleaned up.
         :param terminal_id: Terminal resource id being closed.
@@ -1400,7 +1400,7 @@ async def test_attach_runs_cleanup_even_when_forwarder_raises(
         """
         Record that cleanup ran despite the forwarder fault.
 
-        :param base_url: Omnigent base URL.
+        :param base_url: OmniCraft base URL.
         :param headers: Auth headers.
         :param session_id: Session id being cleaned up.
         :param terminal_id: Terminal resource id being closed.
@@ -1590,7 +1590,7 @@ async def test_prepare_reattaches_existing_claude_terminal(
     """
     Existing running ``claude/main`` terminals are reused before bind.
 
-    If this regresses, a second ``omnigent claude --session`` can
+    If this regresses, a second ``omnicraft claude --session`` can
     rebind the session to a new local runner and launch a duplicate
     terminal instead of attaching to the live one.
     """
@@ -1649,7 +1649,7 @@ async def test_prepare_reattaches_existing_claude_terminal(
         :param _session_id: Existing session id.
         :returns: Labels containing the bridge id.
         """
-        return {"omnigent.claude_native.bridge_id": "bridge_abc"}
+        return {"omnicraft.claude_native.bridge_id": "bridge_abc"}
 
     monkeypatch.setattr(claude_native, "_find_running_claude_terminal", fake_find)
     monkeypatch.setattr(claude_native, "_bind_session_runner", fail_bind)
@@ -1692,7 +1692,7 @@ async def test_find_running_claude_terminal_reads_resource_endpoint() -> None:
         Return one running Claude terminal resource.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock OmniCraft response.
         """
         requested_urls.append(str(request.url))
         return httpx.Response(
@@ -1723,7 +1723,7 @@ async def test_find_running_claude_terminal_miss_statuses_relaunch(
     """
     Missing or unavailable prior runners cause a deterministic relaunch.
 
-    :param status_code: HTTP status returned by the Omnigent resource lookup.
+    :param status_code: HTTP status returned by the OmniCraft resource lookup.
     """
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -1731,7 +1731,7 @@ async def test_find_running_claude_terminal_miss_statuses_relaunch(
         Return a reattach miss response.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock OmniCraft response.
         """
         del request
         return httpx.Response(status_code, json={"error": {"message": "not attachable"}})
@@ -1786,7 +1786,7 @@ async def test_read_claude_terminal_tmux_parses_metadata() -> None:
                 "type": "terminal",
                 "metadata": {
                     "running": True,
-                    "tmux_socket": "/tmp/omnigent-501/claude/tmux.sock",
+                    "tmux_socket": "/tmp/omnicraft-501/claude/tmux.sock",
                     "tmux_target": "main",
                 },
             },
@@ -1796,7 +1796,7 @@ async def test_read_claude_terminal_tmux_parses_metadata() -> None:
     async with httpx.AsyncClient(transport=transport, base_url="https://example.com") as client:
         result = await claude_native._read_claude_terminal_tmux(client, "conv_abc")
 
-    assert result.socket == Path("/tmp/omnigent-501/claude/tmux.sock")
+    assert result.socket == Path("/tmp/omnicraft-501/claude/tmux.sock")
     assert result.target == "main"
 
 
@@ -1945,7 +1945,7 @@ async def test_ensure_local_claude_resume_transcript_uses_workspace_dir(
     the process cwd.
 
     This is what lets a runner-side cold resume work: the runner passes
-    its ``OMNIGENT_RUNNER_WORKSPACE`` (not the runner process's actual
+    its ``OMNICRAFT_RUNNER_WORKSPACE`` (not the runner process's actual
     cwd), so the synthesized transcript sits where the ``claude``
     process — launched with that workspace as cwd — will look for it. If
     the helper ignored ``workspace`` and used ``Path.cwd()``, the file
@@ -1998,7 +1998,7 @@ async def test_ensure_local_claude_resume_transcript_returns_none_when_no_record
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Empty Omnigent history → ``None`` and no transcript file written.
+    Empty OmniCraft history → ``None`` and no transcript file written.
 
     ``claude --resume`` against a zero-record transcript exits with "No
     conversation found with session ID" instead of starting; for claude-
@@ -2044,7 +2044,7 @@ async def test_create_claude_session_omits_title_for_generic_seed_path() -> None
     ``_seed_missing_title_from_user_message`` on the first forwarded
     user message. The sidebar fills the create-to-first-message gap
     by rendering a default label off the
-    ``omnigent.wrapper = claude-code-native-ui`` label
+    ``omnicraft.wrapper = claude-code-native-ui`` label
     (see ``web/src/shell/sidebarNav.ts::conversationDisplayLabel``).
     The labels must still reach the server unchanged because that
     sidebar fallback keys off the wrapper label.
@@ -2057,7 +2057,7 @@ async def test_create_claude_session_omits_title_for_generic_seed_path() -> None
         Mock POST /v1/sessions (create). PATCH must not be issued.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock OmniCraft response.
         """
         if request.method == "POST":
             body = request.content.decode("utf-8")
@@ -2106,7 +2106,7 @@ async def test_create_claude_session_omits_title_for_generic_seed_path() -> None
 # ---------------------------------------------------------------------------
 # Reconnect tests
 #
-# These tests cover the reconnect loop that lets ``omnigent claude``
+# These tests cover the reconnect loop that lets ``omnicraft claude``
 # survive a remote-server bounce. The bug they guard against:
 # previously, a single transient WebSocket close took down the entire
 # TUI session — the user had to relaunch and lost their live Claude
@@ -2226,7 +2226,7 @@ async def test_attach_with_reconnect_passes_terminal_gone_probe_to_attach(
     """
     Reconnect wiring enables the client-side terminal-gone watcher.
 
-    The production ``omnigent claude`` path passes
+    The production ``omnicraft claude`` path passes
     :func:`attach_local_terminal` through ``_attach_with_reconnect``.
     This test pins the handoff: when client-side close-on-gone is
     enabled, the attach callable receives a probe that checks the
@@ -2249,7 +2249,7 @@ async def test_attach_with_reconnect_passes_terminal_gone_probe_to_attach(
         """
         Capture probe arguments and report the terminal gone.
 
-        :param base_url: Omnigent base URL.
+        :param base_url: OmniCraft base URL.
         :param headers: HTTP headers.
         :param session_id: Session id.
         :param terminal_id: Terminal resource id.
@@ -2797,7 +2797,7 @@ async def test_attach_with_reconnect_exits_when_probe_says_terminal_is_gone(
     attach = _ScriptedAttach(script=[False, False])
 
     async def _gone_probe(**kwargs: Any) -> bool:
-        """Pretend the Omnigent reports the terminal stopped."""
+        """Pretend the OmniCraft reports the terminal stopped."""
         del kwargs
         return True
 
@@ -2840,7 +2840,7 @@ async def test_attach_with_reconnect_reconnects_when_probe_says_terminal_alive(
     attach = _ScriptedAttach(script=[False, True])
 
     async def _alive_probe(**kwargs: Any) -> bool:
-        """Pretend the Omnigent reports the terminal still running."""
+        """Pretend the OmniCraft reports the terminal still running."""
         del kwargs
         return False
 
@@ -2998,7 +2998,7 @@ async def test_is_terminal_resource_gone_treats_transport_errors_as_not_gone(
 @dataclass
 class _FakeTerminalServer:
     """
-    Minimal echo WebSocket server stand-in for the Omnigent terminal-attach
+    Minimal echo WebSocket server stand-in for the OmniCraft terminal-attach
     route. Tracks accept counts and supports a coordinated "bounce".
 
     :param accept_count: Number of WS connections accepted so far.
@@ -3081,7 +3081,7 @@ async def test_attach_reconnects_through_real_websocket_bounce(
     server closes its WebSocket mid-session.
 
     This is the regression test for the reconnect loop. The bug:
-    ``omnigent claude`` exited after the first WebSocket close, so
+    ``omnicraft claude`` exited after the first WebSocket close, so
     a server redeploy ended the user's Claude session. The fix wraps
     the attach in a reconnect loop guarded by a recovery callback;
     this test drives that loop against a real websockets server that
@@ -3601,7 +3601,7 @@ def test_websocket_connect_sets_short_close_timeout(monkeypatch: pytest.MonkeyPa
         "url": "wss://example.com/attach",
         "additional_headers": {
             "Authorization": "Bearer tok",
-            "Origin": OMNIGENT_INTERNAL_WS_ORIGIN,
+            "Origin": OMNICRAFT_INTERNAL_WS_ORIGIN,
         },
         "close_timeout": claude_native._CLAUDE_ATTACH_WS_CLOSE_TIMEOUT_S,
     }
@@ -3665,7 +3665,7 @@ def test_strip_resume_from_claude_args_removes_recognized_forms(
     a user could route past Click. Names that merely contain the
     word ``resume`` (e.g. ``--no-resume-here``) MUST survive so we
     don't break unrelated upstream Claude flags. If this parametrize
-    case fails, upstream Claude will see the Omnigent conv id and
+    case fails, upstream Claude will see the OmniCraft conv id and
     open its own picker against its native session-id namespace
     (the misroute's root cause).
     """
@@ -3681,14 +3681,14 @@ def _conversation_response_body(
     external_session_id: str | None,
 ) -> dict[str, Any]:
     """
-    Build a minimal Omnigent ``GET /v1/sessions/{id}`` response body.
+    Build a minimal OmniCraft ``GET /v1/sessions/{id}`` response body.
 
     The route returns the full ``SessionResponse`` shape; the
     cold-resume helper only reads two fields — ``labels`` and
     ``external_session_id`` — so the fixture stays small.
 
     :param labels: ``labels`` field for the response payload, e.g.
-        ``{"omnigent.wrapper": "claude-code-native-ui"}``.
+        ``{"omnicraft.wrapper": "claude-code-native-ui"}``.
     :param external_session_id: ``external_session_id`` field or
         ``None``.
     :returns: JSON-encodable response dict.
@@ -3710,7 +3710,7 @@ def _items_response_body(
     last_id: str | None = None,
 ) -> dict[str, Any]:
     """
-    Build a minimal Omnigent item-list response body.
+    Build a minimal OmniCraft item-list response body.
 
     :param items: Session item dicts returned in ``data``.
     :param has_more: Whether a following page exists.
@@ -3789,7 +3789,7 @@ async def test_resolve_cold_resume_args_injects_external_session_id(
     ``("--resume", "<sid>")`` so the spawned terminal launches
     ``claude --resume <sid>`` and reattaches to the prior transcript.
     Without this, cold resume would launch fresh claude — the user
-    would keep the Omnigent conv id but lose claude-side context.
+    would keep the OmniCraft conv id but lose claude-side context.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :param tmp_path: Temporary directory used to isolate Claude
@@ -3798,7 +3798,7 @@ async def test_resolve_cold_resume_args_injects_external_session_id(
     monkeypatch.setattr(claude_native, "_CLAUDE_PROJECTS_DIR", tmp_path / "projects")
     client = await _httpx_client_with_canned_response(
         _conversation_response_body(
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"omnicraft.wrapper": "claude-code-native-ui"},
             external_session_id="claude-uuid-abc",
         ),
         200,
@@ -3814,7 +3814,7 @@ async def test_resolve_cold_resume_args_declines_resume_when_no_history(
     tmp_path: Path,
 ) -> None:
     """
-    Empty Omnigent history → ``()`` (launch fresh), not ``("--resume", sid)``.
+    Empty OmniCraft history → ``()`` (launch fresh), not ``("--resume", sid)``.
 
     An ``external_session_id`` is set, but the conversation has no
     convertible items, so the synthesized transcript would be empty.
@@ -3831,7 +3831,7 @@ async def test_resolve_cold_resume_args_declines_resume_when_no_history(
     monkeypatch.setattr(claude_native, "_CLAUDE_PROJECTS_DIR", tmp_path / "projects")
     client = await _httpx_client_with_canned_response(
         _conversation_response_body(
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"omnicraft.wrapper": "claude-code-native-ui"},
             external_session_id="claude-uuid-abc",
         ),
         200,
@@ -3850,12 +3850,12 @@ async def test_resolve_cold_resume_args_bootstraps_missing_local_claude_transcri
     tmp_path: Path,
 ) -> None:
     """
-    Cross-machine cold resume downloads Omnigent history into Claude JSONL.
+    Cross-machine cold resume downloads OmniCraft history into Claude JSONL.
 
     This is the regression case behind the feature: the server knows
-    the Omnigent conversation and Claude external session id, but the local
+    the OmniCraft conversation and Claude external session id, but the local
     machine has no ``~/.claude/projects/<cwd>/<sid>.jsonl``. The
-    helper must fetch committed Omnigent items and write a transcript before
+    helper must fetch committed OmniCraft items and write a transcript before
     returning ``--resume <sid>``; otherwise Claude starts with no
     local context.
     """
@@ -3908,14 +3908,14 @@ async def test_resolve_cold_resume_args_bootstraps_missing_local_claude_transcri
         Serve the session snapshot and two chronological item pages.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock OmniCraft response.
         """
         requested_paths.append(str(request.url))
         if request.url.path == "/v1/sessions/conv_abc":
             return httpx.Response(
                 200,
                 json=_conversation_response_body(
-                    labels={"omnigent.wrapper": "claude-code-native-ui"},
+                    labels={"omnicraft.wrapper": "claude-code-native-ui"},
                     external_session_id="claude-uuid-abc",
                 ),
             )
@@ -3987,11 +3987,11 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
     tmp_path: Path,
 ) -> None:
     """
-    Cold resume treats Omnigent history as source of truth over local JSONL.
+    Cold resume treats OmniCraft history as source of truth over local JSONL.
 
     Claude can leave a local ``~/.claude/projects/<cwd>/<sid>.jsonl``
-    that diverges from the Omnigent transcript we have persisted. The resume
-    path must still fetch Omnigent items and overwrite that stale file before
+    that diverges from the OmniCraft transcript we have persisted. The resume
+    path must still fetch OmniCraft items and overwrite that stale file before
     returning ``--resume <sid>``. If the helper reintroduces an early
     return when the local target exists, this test keeps the stale line
     and fails.
@@ -4022,7 +4022,7 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
         "type": "message",
         "status": "completed",
         "role": "user",
-        "content": [{"type": "input_text", "text": "fresh Omnigent text"}],
+        "content": [{"type": "input_text", "text": "fresh OmniCraft text"}],
     }
     item_requests = 0
 
@@ -4031,14 +4031,14 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
         Serve the session snapshot and AP-authoritative item page.
 
         :param request: Incoming mock HTTP request.
-        :returns: Mock Omnigent response.
+        :returns: Mock OmniCraft response.
         """
         nonlocal item_requests
         if request.url.path == "/v1/sessions/conv_abc":
             return httpx.Response(
                 200,
                 json=_conversation_response_body(
-                    labels={"omnigent.wrapper": "claude-code-native-ui"},
+                    labels={"omnicraft.wrapper": "claude-code-native-ui"},
                     external_session_id="claude-uuid-abc",
                 ),
             )
@@ -4054,13 +4054,13 @@ async def test_resolve_cold_resume_args_replaces_existing_local_claude_transcrip
         args = await claude_native._resolve_cold_resume_args(client, "conv_abc")
 
     assert args == ("--resume", "claude-uuid-abc")
-    assert item_requests == 1, "cold resume must fetch Omnigent items even when local JSONL exists"
+    assert item_requests == 1, "cold resume must fetch OmniCraft items even when local JSONL exists"
     records = [
         json.loads(line)
         for line in transcript_path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    assert [record["message"]["content"] for record in records] == ["fresh Omnigent text"]
+    assert [record["message"]["content"] for record in records] == ["fresh OmniCraft text"]
 
 
 @pytest.mark.asyncio
@@ -4070,14 +4070,14 @@ async def test_resolve_cold_resume_args_warns_when_external_session_id_missing(
     """
     Claude-native conv with no captured external_session_id (crashed
     before first hook, etc.) returns ``()`` and prints a warning.
-    The Omnigent conv id still survives — the new terminal binds
+    The OmniCraft conv id still survives — the new terminal binds
     to the same row — but Claude starts fresh. Critical: this
     branch MUST NOT raise so the user can recover the conv even
     when the prior claude side is unrecoverable.
     """
     client = await _httpx_client_with_canned_response(
         _conversation_response_body(
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"omnicraft.wrapper": "claude-code-native-ui"},
             external_session_id=None,
         ),
         200,
@@ -4094,7 +4094,7 @@ async def test_resolve_cold_resume_args_warns_when_external_session_id_missing(
 async def test_resolve_cold_resume_args_rejects_non_claude_native_conv() -> None:
     """
     A conv whose wrapper label is NOT claude-native is an
-    ``omnigent claude --resume <run-conv-id>`` programmer error.
+    ``omnicraft claude --resume <run-conv-id>`` programmer error.
     Fail loud with a redirect hint rather than silently launching
     claude over a chat session whose state the wrapper doesn't
     own.
@@ -4114,7 +4114,7 @@ async def test_resolve_cold_resume_args_rejects_non_claude_native_conv() -> None
     # Redirect hint includes the right command and conv id so the
     # user can copy-paste to recover. If this assertion fails, the
     # error becomes a dead-end.
-    assert "omnigent run --resume conv_abc" in excinfo.value.message
+    assert "omnicraft run --resume conv_abc" in excinfo.value.message
 
 
 @pytest.mark.asyncio
@@ -4162,7 +4162,7 @@ async def test_resolve_cold_resume_args_warning_lands_in_logger(
 
     client = await _httpx_client_with_canned_response(
         _conversation_response_body(
-            labels={"omnigent.wrapper": "claude-code-native-ui"},
+            labels={"omnicraft.wrapper": "claude-code-native-ui"},
             external_session_id=None,
         ),
         200,
@@ -4190,12 +4190,12 @@ async def test_prepare_claude_terminal_cold_resume_injects_external_session_id(
     Cold-resume threads ``--resume <claude_sid>`` into the args
     passed to ``_launch_claude_terminal``.
 
-    Load-bearing assertion: the conv id stays the SAME Omnigent
+    Load-bearing assertion: the conv id stays the SAME OmniCraft
     id end-to-end (no new id minted), AND the spawned terminal
     receives Claude's prior session id as the first two args. A
     regression that dropped the cold-resume args at the launch
     seam would silently lose Claude-side context — the user keeps
-    the Omnigent conv id but Claude starts fresh. Tests
+    the OmniCraft conv id but Claude starts fresh. Tests
     ``_resolve_cold_resume_args`` in isolation cannot catch this.
     """
     captured_terminal_args: dict[str, Any] = {}
@@ -4255,7 +4255,7 @@ async def test_prepare_claude_terminal_cold_resume_injects_external_session_id(
         Capture the launch args without invoking the real runner.
 
         :param _client: HTTP client (ignored).
-        :param session_id: Omnigent conversation id — captured
+        :param session_id: OmniCraft conversation id — captured
             for the end-to-end assertion.
         :param claude_args: Args the launch will pass to claude —
             this is the load-bearing capture.
@@ -4319,7 +4319,7 @@ async def test_prepare_claude_terminal_cold_resume_injects_external_session_id(
         )
         del http_client  # context-managed by the with block
 
-    # Omnigent conv id survives end-to-end. If this assertion
+    # OmniCraft conv id survives end-to-end. If this assertion
     # fails, the wrapper minted a new session id on cold resume —
     # exactly what the user told us NOT to do.
     assert prepared.session_id == "conv_abc"
@@ -4454,7 +4454,7 @@ async def test_attach_passes_start_at_end_true_on_cold_resume(
     to pass ``prepared.reattached`` again (the original buggy
     behavior), this test would fail: cold resume's ``reattached``
     is ``False`` by construction, so the forwarder would still
-    walk the prior transcript from offset 0 and Omnigent would broadcast
+    walk the prior transcript from offset 0 and OmniCraft would broadcast
     every prior turn as new.
     """
     captured: dict[str, Any] = {}
@@ -4514,7 +4514,7 @@ async def test_attach_passes_start_at_end_true_on_cold_resume(
         f"cold_resumed=True must force start_at_end=True; got "
         f"start_at_end={captured.get('start_at_end')!r}. Without this, "
         f"every prior turn in the reopened claude transcript is "
-        f"re-POSTed to Omnigent on resume and broadcast to live clients."
+        f"re-POSTed to OmniCraft on resume and broadcast to live clients."
     )
 
 
@@ -4592,14 +4592,14 @@ def test_is_claude_native_conversation_returns_true_on_matching_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    200 + ``omnigent.wrapper=claude-code-native-ui`` → True.
+    200 + ``omnicraft.wrapper=claude-code-native-ui`` → True.
 
     This is the load-bearing decision for the chat-redirect path
     (``_chat_with_server`` calls this to decide whether to redirect
     a resume into the claude wrapper). A False negative here is
     exactly the resume misroute.
     """
-    from omnigent import chat
+    from omnicraft import chat
 
     def _fake_get(url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
         """Canned 200 response with the claude-native wrapper label."""
@@ -4607,7 +4607,7 @@ def test_is_claude_native_conversation_returns_true_on_matching_label(
         return httpx.Response(
             200,
             json={
-                "labels": {"omnigent.wrapper": "claude-code-native-ui"},
+                "labels": {"omnicraft.wrapper": "claude-code-native-ui"},
             },
         )
 
@@ -4627,7 +4627,7 @@ def test_is_claude_native_conversation_returns_true_on_matching_label(
     "labels",
     [
         {},
-        {"omnigent.wrapper": "some-other-wrapper"},
+        {"omnicraft.wrapper": "some-other-wrapper"},
         {"unrelated": "x"},
     ],
 )
@@ -4641,7 +4641,7 @@ def test_is_claude_native_conversation_returns_false_on_non_matching_label(
     The chat REPL stays on its normal AP-REPL path for these
     conversations.
     """
-    from omnigent import chat
+    from omnicraft import chat
 
     def _fake_get(_url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
         """Canned 200 response with the parametrized labels."""
@@ -4667,7 +4667,7 @@ def test_is_claude_native_conversation_logs_warning_on_non_200(
 ) -> None:
     """
     Non-200 returns False but ALSO logs a warning. Without the
-    warning a misrouted resume (auth failure → silent Omnigent REPL on
+    warning a misrouted resume (auth failure → silent OmniCraft REPL on
     top of a tmux session) would have zero breadcrumbs in logs.
 
     Patches ``logger.warning`` directly (not caplog) to keep the
@@ -4675,7 +4675,7 @@ def test_is_claude_native_conversation_logs_warning_on_non_200(
     requires the right handler / propagation, which other tests'
     logging setup can disturb.
     """
-    from omnigent import chat
+    from omnicraft import chat
 
     def _fake_get(_url: str, *, headers: dict[str, str], timeout: float) -> httpx.Response:
         """Canned error response at the parametrized status code."""
@@ -4712,11 +4712,11 @@ def test_is_claude_native_conversation_returns_false_on_transport_error(
     """
     Connection / DNS / TLS failure → False, with a warning logged.
 
-    The caller falls back to the Omnigent REPL path, which surfaces its
+    The caller falls back to the OmniCraft REPL path, which surfaces its
     own connect-fail error; we just record what we saw so a flaky
     server doesn't cause a silent misroute.
     """
-    from omnigent import chat
+    from omnicraft import chat
 
     def _raises(*_args: object, **_kwargs: object) -> httpx.Response:
         """Pretend the connect fails."""
@@ -4757,7 +4757,7 @@ def test_is_claude_native_conversation_returns_false_on_transport_error(
 # real state module, then drives the helper. The autouse
 # ``_isolate_claude_native_state`` fixture in ``tests/conftest.py``
 # redirects the state root to a per-test tmp dir so writes never
-# touch the developer's real ``~/.omnigent/``.
+# touch the developer's real ``~/.omnicraft/``.
 
 
 @dataclass(frozen=True)
@@ -4920,7 +4920,7 @@ def test_align_working_directory_matching_cwd_silent_skip(
     ``/home/me/repo``) would prompt to chdir on every resume,
     which is noise the user has to dismiss every time.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from omnicraft.claude_native_state import write_launch_state
 
     monkeypatch.chdir(tmp_path)
     starting_cwd = Path.cwd().resolve()
@@ -4949,14 +4949,14 @@ def test_align_working_directory_switch_action_chdirs(
     Mismatched cwd, recorded path exists, user chooses switch → chdir.
 
     This is the happy-path fix for the bug the user reported:
-    ``omnigent claude --resume`` invoked from a different
+    ``omnicraft claude --resume`` invoked from a different
     directory than the session was started in must offer to
     switch, and on switch must actually mutate the process cwd so
     subsequent ``Path.cwd()`` reads in the launch flow see the
     new value. If chdir is missing or points elsewhere, Claude
     will still exit on launch.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from omnicraft.claude_native_state import write_launch_state
 
     recorded = tmp_path / "recorded-ws"
     recorded.mkdir()
@@ -5119,7 +5119,7 @@ def test_fetch_external_session_id_for_redirect_uses_session_endpoint(
         """
         Minimal context-manager stand-in for :class:`httpx.Client`.
 
-        :param base_url: Omnigent server base URL.
+        :param base_url: OmniCraft server base URL.
         :param headers: HTTP headers passed by the wrapper.
         :param timeout: Request timeout in seconds.
         """
@@ -5134,7 +5134,7 @@ def test_fetch_external_session_id_for_redirect_uses_session_endpoint(
             """
             Capture construction arguments for later assertions.
 
-            :param base_url: Omnigent server base URL.
+            :param base_url: OmniCraft server base URL.
             :param headers: HTTP headers passed by the wrapper.
             :param timeout: Request timeout in seconds.
             :returns: None.
@@ -5177,7 +5177,7 @@ def test_fetch_external_session_id_for_redirect_uses_session_endpoint(
             """
             Return a session response for the requested URL.
 
-            :param url: Relative Omnigent session path, e.g.
+            :param url: Relative OmniCraft session path, e.g.
                 ``"/v1/sessions/conv%20with%20space"``.
             :returns: HTTP response with ``external_session_id``.
             """
@@ -5217,7 +5217,7 @@ def test_align_working_directory_leave_action_cancels_resume(
     third action exits before launch instead. The wrapper must not
     mutate cwd when the user chooses to leave.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from omnicraft.claude_native_state import write_launch_state
 
     recorded = tmp_path / "recorded-leave"
     recorded.mkdir()
@@ -5253,7 +5253,7 @@ def test_align_working_directory_move_without_external_id_fails_loud(
     but this runtime invariant must not rely on ``assert`` because
     Python strips asserts under ``-O``.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from omnicraft.claude_native_state import write_launch_state
 
     recorded = tmp_path / "recorded-no-external"
     recorded.mkdir()
@@ -5293,7 +5293,7 @@ def test_align_working_directory_raises_when_recorded_path_missing(
     can choose to recreate it, move the project back, or start a
     fresh session.
     """
-    from omnigent.claude_native_state import write_launch_state
+    from omnicraft.claude_native_state import write_launch_state
 
     monkeypatch.chdir(tmp_path)
     missing = "/this/path/should/not/exist/anywhere/nope-abcxyz"
@@ -5332,10 +5332,10 @@ def test_align_working_directory_redirect_moves_transcript_and_updates_state(
     real ``~/.claude`` state: find the old transcript by external
     session id, write it into the current cwd's Claude project dir,
     rewrite top-level ``cwd`` values, remove the original transcript,
-    and update Omnigent launch state so future resumes treat the
+    and update OmniCraft launch state so future resumes treat the
     current cwd as the session home.
     """
-    from omnigent.claude_native_state import read_launch_state, write_launch_state
+    from omnicraft.claude_native_state import read_launch_state, write_launch_state
 
     projects_dir = tmp_path / ".claude" / "projects"
     old_workspace = tmp_path / "old workspace"
@@ -5414,7 +5414,7 @@ def test_align_working_directory_redirect_replaces_stale_target(
     fail on the stale target; it should make the current project the
     only owner of the Claude session id.
     """
-    from omnigent.claude_native_state import read_launch_state, write_launch_state
+    from omnicraft.claude_native_state import read_launch_state, write_launch_state
 
     projects_dir = tmp_path / ".claude" / "projects"
     old_workspace = tmp_path / "old"
@@ -5480,7 +5480,7 @@ def test_align_working_directory_redirect_works_when_recorded_path_missing(
     should offer redirect as the default and the helper should move
     the transcript instead of failing early.
     """
-    from omnigent.claude_native_state import read_launch_state, write_launch_state
+    from omnicraft.claude_native_state import read_launch_state, write_launch_state
 
     projects_dir = tmp_path / ".claude" / "projects"
     current_workspace = tmp_path / "current"
@@ -5708,7 +5708,7 @@ def test_record_launch_for_fresh_session_writes_resolved_cwd(
     in ``/home/me/repo`` (a symlink) and resumed from
     ``/repo`` (the canonical) won't falsely flag as mismatched.
     """
-    from omnigent.claude_native_state import read_launch_state
+    from omnicraft.claude_native_state import read_launch_state
 
     workspace = tmp_path / "workspace"
     workspace.mkdir()
@@ -5763,16 +5763,16 @@ def _seed_config(config_home: Path, providers: dict[str, object]) -> None:
 @pytest.fixture()
 def _isolated_provider_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Isolate config + ambient so provider resolution is deterministic."""
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     monkeypatch.setenv("HOME", str(tmp_path))
     for var in (
         "ANTHROPIC_API_KEY",
-        "OMNIGENT_ANTHROPIC_API_KEY",
+        "OMNICRAFT_ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
-        "OMNIGENT_OPENAI_API_KEY",
+        "OMNICRAFT_OPENAI_API_KEY",
         "OPENROUTER_API_KEY",
-        "OMNIGENT_OPENROUTER_API_KEY",
+        "OMNICRAFT_OPENROUTER_API_KEY",
     ):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
@@ -5781,13 +5781,13 @@ def _isolated_provider_config(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -
 
 def _no_auth_claude_spec() -> Any:
     """A minimal claude-sdk spec with no executor.auth/profile."""
-    from omnigent.spec.types import AgentSpec, ExecutorSpec
+    from omnicraft.spec.types import AgentSpec, ExecutorSpec
 
     return AgentSpec(
         spec_version=1,
         name="t",
         instructions="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-sdk"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-sdk"}),
     )
 
 
@@ -5800,7 +5800,7 @@ def test_provider_config_for_native_claude_key_injects_base_url_and_helper() -> 
     the base_url + default model carried through. Failure means a native
     launch would ignore the configured provider.
     """
-    from omnigent.onboarding.provider_config import load_providers
+    from omnicraft.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5832,7 +5832,7 @@ def test_provider_config_for_native_claude_key_injects_base_url_and_helper() -> 
 
 def test_provider_config_for_native_claude_uses_auth_command_verbatim() -> None:
     """A provider ``auth_command`` is used as the apiKeyHelper verbatim."""
-    from omnigent.onboarding.provider_config import load_providers
+    from omnicraft.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5864,7 +5864,7 @@ def test_bedrock_config_for_native_claude_static_key() -> None:
     ignores ``apiKeyHelper``, so a static key must land in the env (never a
     helper) and the base_url maps to ``ANTHROPIC_BEDROCK_BASE_URL``.
     """
-    from omnigent.onboarding.provider_config import load_providers
+    from omnicraft.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5902,7 +5902,7 @@ def test_bedrock_config_for_native_claude_resolves_auth_command() -> None:
     tokens) silently fell back to Claude's own login. The command's stdout must
     become ``AWS_BEARER_TOKEN_BEDROCK`` since Bedrock mode ignores apiKeyHelper.
     """
-    from omnigent.onboarding.provider_config import load_providers
+    from omnicraft.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -5931,7 +5931,7 @@ def test_bedrock_config_for_native_claude_non_anthropic_returns_none() -> None:
     The native Claude path only routes anthropic-surface providers; anything
     else falls back to Claude Code's own login.
     """
-    from omnigent.onboarding.provider_config import load_providers
+    from omnicraft.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -6006,8 +6006,8 @@ def test_resolve_native_claude_config_global_databricks_auth_uses_ucode(
 
     Preserves the Databricks behavior after the ``--profile`` flag removal:
     a databricks user (no OSS provider configured) who set up a global
-    ``auth:`` block via ``omnigent setup`` still routes a bare
-    ``omnigent claude`` launch through ucode, keyed on the auth block's
+    ``auth:`` block via ``omnicraft setup`` still routes a bare
+    ``omnicraft claude`` launch through ucode, keyed on the auth block's
     own profile. We assert the resolver delegates to
     `_ucode_config_for_profile` with that profile.
     """
@@ -6058,7 +6058,7 @@ def test_resolve_native_claude_config_ambient_key(
 ) -> None:
     """Spec-less with only an ambient ANTHROPIC_API_KEY → provider config.
 
-    First run without configure: a native `omnigent claude` launch still
+    First run without configure: a native `omnicraft claude` launch still
     routes through the detected env key. Failure means a fresh machine's
     native Claude would ignore the ambient credential.
     """
@@ -6076,7 +6076,7 @@ def test_resolve_native_claude_config_ambient_prefixed_key(
 ) -> None:
     """A prefixed Anthropic key routes native Claude without raw env exposure."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
-    monkeypatch.setenv("OMNIGENT_ANTHROPIC_API_KEY", "sk-ant-prefixed")
+    monkeypatch.setenv("OMNICRAFT_ANTHROPIC_API_KEY", "sk-ant-prefixed")
 
     cfg = claude_native.resolve_native_claude_config(spec=None)
 
@@ -6090,7 +6090,7 @@ def test_resolve_native_claude_config_ambient_prefixed_key(
 
 def test_bedrock_config_auth_command_failure_returns_none() -> None:
     """A failing bedrock auth_command falls back to Claude's own login (None)."""
-    from omnigent.onboarding.provider_config import load_providers
+    from omnicraft.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {
@@ -6117,7 +6117,7 @@ def test_bedrock_config_no_model_default_leaves_model_none() -> None:
     """
     import logging
 
-    from omnigent.onboarding.provider_config import load_providers
+    from omnicraft.onboarding.provider_config import load_providers
 
     entry = load_providers(
         {

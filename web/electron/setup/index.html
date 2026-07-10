@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Omnigents — Connect</title>
+    <title>OmniCrafts — Connect</title>
     <style>
       /* Design tokens lifted from web/src/index.css (:root and .dark) so
          this bundled page matches the web UI it hands off to. */
@@ -178,7 +178,7 @@
       #start-local:hover:not(:disabled) {
         background: color-mix(in srgb, var(--primary) 90%, transparent);
       }
-      /* Settings gear (top-right) — opens the Omnigent CLI modal. no-drag so it's
+      /* Settings gear (top-right) — opens the OmniCraft CLI modal. no-drag so it's
          clickable over the drag strip. */
       .gear-btn {
         position: fixed;
@@ -319,8 +319,8 @@
       type="button"
       id="cli-gear"
       class="gear-btn"
-      aria-label="Configure the Omnigent CLI"
-      title="Configure the Omnigent CLI"
+      aria-label="Configure the OmniCraft CLI"
+      title="Configure the OmniCraft CLI"
       hidden
     >
       <svg
@@ -344,12 +344,12 @@
     <div class="card">
       <picture>
         <source
-          srcset="../../platform-assets/logos/omnigents-logo-reverse.svg"
+          srcset="../../platform-assets/logos/omnicrafts-logo-reverse.svg"
           media="(prefers-color-scheme: dark)"
         />
-        <img class="logo" src="../../platform-assets/logos/omnigents-logo.svg" alt="Omnigents" />
+        <img class="logo" src="../../platform-assets/logos/omnicrafts-logo.svg" alt="OmniCrafts" />
       </picture>
-      <p class="sub">Run an Omnigents server on this machine, or connect to an existing one.</p>
+      <p class="sub">Run an OmniCrafts server on this machine, or connect to an existing one.</p>
       <div id="local-section">
         <!-- Always enabled: when the CLI is missing this opens the settings
              modal (install / set path) instead of failing to start. -->
@@ -374,24 +374,24 @@
       </div>
     </div>
 
-    <!-- Omnigent CLI settings, opened from the gear. Hidden by default. -->
+    <!-- OmniCraft CLI settings, opened from the gear. Hidden by default. -->
     <div class="modal-overlay" id="cli-modal" hidden>
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Omnigent CLI settings">
-        <p class="modal-title">Omnigent CLI</p>
+      <div class="modal" role="dialog" aria-modal="true" aria-label="OmniCraft CLI settings">
+        <p class="modal-title">OmniCraft CLI</p>
         <p class="cli-note" id="cli-status"></p>
         <div id="cli-install" hidden>
           <p>
             <a
-              href="https://omnigent.ai/quickstart/install#install-omnigent"
+              href="https://omnicraft.ai/quickstart/install#install-omnicraft"
               target="_blank"
               rel="noreferrer"
-              >Install the Omnigent CLI ↗</a
+              >Install the OmniCraft CLI ↗</a
             >
           </p>
           <p>Already installed it? Re-detect, or set the path below.</p>
           <button type="button" id="cli-redetect">Re-detect</button>
         </div>
-        <p id="cli-path-label">Path to the Omnigent CLI</p>
+        <p id="cli-path-label">Path to the OmniCraft CLI</p>
         <div class="path-row">
           <input
             id="cli-path"
@@ -408,11 +408,11 @@
     </div>
     <script src="../src/url.js"></script>
     <script>
-      // Shared URL helpers (electron/src/url.js), exposed as window.omnigentUrl
+      // Shared URL helpers (electron/src/url.js), exposed as window.omnicraftUrl
       // — the same module the main process uses, so the two never drift.
-      const { isPlainHttpRemote } = window.omnigentUrl;
+      const { isPlainHttpRemote } = window.omnicraftUrl;
       // Uses the Electron preload bridge (electron/src/preload.js).
-      const setup = window.omnigentSetup;
+      const setup = window.omnicraftSetup;
       const input = document.getElementById("url");
       const button = document.getElementById("connect");
       const err = document.getElementById("err");
@@ -513,10 +513,10 @@
         if (e.key === "Enter") connect();
       });
 
-      // --- Start locally + omnigent CLI detection ---------------------------
-      // "Start locally" runs `omnigent server` via the main process, then
+      // --- Start locally + omnicraft CLI detection ---------------------------
+      // "Start locally" runs `omnicraft server` via the main process, then
       // connects this window to it through the normal flow. It
-      // needs the local omnigent CLI, so we detect the CLI on load and, when
+      // needs the local omnicraft CLI, so we detect the CLI on load and, when
       // it's missing, show install instructions plus a way to point at the
       // binary. Remote Connect never depends on the CLI.
       const startLocalBtn = document.getElementById("start-local");
@@ -551,8 +551,8 @@
         cliStatus.textContent = installed
           ? status.version
             ? `Found: ${status.version}`
-            : "Omnigent CLI found."
-          : "Omnigent CLI not found.";
+            : "OmniCraft CLI found."
+          : "OmniCraft CLI not found.";
         cliPathInput.placeholder = status.path || "/path/to/omni";
         // Draw the eye to the (otherwise quiet) gear when the CLI is missing.
         cliGear.classList.toggle("attention", !installed);
@@ -576,7 +576,7 @@
         if (result && result.accepted) {
           cliPathNote.textContent = result.version
             ? `Found: ${result.version}`
-            : "Found the Omnigent CLI.";
+            : "Found the OmniCraft CLI.";
           // Clear the value so the field reverts to showing the (now-updated)
           // resolved path as its placeholder.
           cliPathInput.value = "";
@@ -584,7 +584,7 @@
           return true;
         }
         cliPathNote.className = "cli-note bad";
-        cliPathNote.textContent = "That path is not a runnable Omnigent CLI.";
+        cliPathNote.textContent = "That path is not a runnable OmniCraft CLI.";
         return false;
       }
 

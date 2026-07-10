@@ -16,7 +16,7 @@
 // `var(--ui-font-family, var(--font-sans))`, so an unset family falls back to
 // the system stack and any value we set on documentElement wins.
 
-const STORAGE_KEY = "omnigent:ui-font-size";
+const STORAGE_KEY = "omnicraft:ui-font-size";
 
 /** Reference size that a scale of 1 corresponds to (Tailwind/browser default). */
 const BASE_FONT_SIZE_PX = 16;
@@ -83,7 +83,7 @@ export function applyUiFontScale(px: number): void {
 
 // ---- Font family ---------------------------------------------------------
 
-const FONT_FAMILY_STORAGE_KEY = "omnigent:ui-font-family";
+const FONT_FAMILY_STORAGE_KEY = "omnicraft:ui-font-family";
 
 /** Empty string = "System default": no override, falls back to `--font-sans`. */
 export const UI_FONT_FAMILY_DEFAULT = "";

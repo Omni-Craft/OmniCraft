@@ -2,7 +2,7 @@
 
 Under the daemon model every ``run`` / ``claude`` invocation
 ensures the host daemon and targets either the given ``--server`` URL or
-a daemon-started local Omnigent server. Covers ``_ensure_host_daemon`` (local vs
+a daemon-started local OmniCraft server. Covers ``_ensure_host_daemon`` (local vs
 remote spawn + reuse), ``_ensure_backend`` (the single resolver), and
 ``_discover_local_server_url`` (the CLI-side handshake), plus the command
 wiring that routes ``--server`` through them.
@@ -22,13 +22,13 @@ from click.testing import CliRunner
 from rich.console import Console
 
 # Import the daemon's module chain eagerly: ``_ensure_host_daemon`` imports
-# ``omnigent.host.connect`` lazily, and the daemon-spawn tests below patch
+# ``omnicraft.host.connect`` lazily, and the daemon-spawn tests below patch
 # the process-wide ``subprocess.Popen``. Running that import for the first
 # time *while* Popen is patched would evaluate ``subprocess.Popen[...]``
 # generic aliases in the import chain against the stub (not subscriptable).
-import omnigent.host.connect  # noqa: F401
-from omnigent import cli
-from omnigent.cli import (
+import omnicraft.host.connect  # noqa: F401
+from omnicraft import cli
+from omnicraft.cli import (
     _build_host_daemon_env,
     _discover_local_server_url,
     _ensure_backend,
@@ -36,10 +36,10 @@ from omnigent.cli import (
     _resolve_attach_server,
     _resolve_host_server,
 )
-from omnigent.cli import (
+from omnicraft.cli import (
     cli as cli_group,
 )
-from omnigent.host.local_server import LocalServerStartup
+from omnicraft.host.local_server import LocalServerStartup
 
 
 @pytest.fixture(autouse=True)
@@ -186,38 +186,38 @@ def test_ensure_host_daemon_local_inherits_data_dir_and_db_uri(
 ) -> None:
     """The local daemon inherits the runtime data-dir + DB URI vars.
 
-    In local mode the daemon owns the local Omnigent server, so it must resolve the
+    In local mode the daemon owns the local OmniCraft server, so it must resolve the
     same config home, data dir, and DB URI the CLI assumes — otherwise the CLI
     reads the local-server pidfile from one dir while the daemon writes it to
     another and discovery times out.
     """
     captured: dict[str, object] = {}
     _patch_daemon_spawn(monkeypatch, tmp_path, captured)
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "iso"))
-    monkeypatch.setenv("OMNIGENT_DATABASE_URI", "postgresql://u:pw@h/db")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "iso"))
+    monkeypatch.setenv("OMNICRAFT_DATABASE_URI", "postgresql://u:pw@h/db")
 
     _ensure_host_daemon(None)
 
     env = captured["env"]
     assert isinstance(env, dict)
-    assert env["OMNIGENT_CONFIG_HOME"] == str(tmp_path / "iso")
-    assert env["OMNIGENT_DATABASE_URI"] == "postgresql://u:pw@h/db"
+    assert env["OMNICRAFT_CONFIG_HOME"] == str(tmp_path / "iso")
+    assert env["OMNICRAFT_DATABASE_URI"] == "postgresql://u:pw@h/db"
 
 
 def test_build_host_daemon_env_local_preserves_server_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Local daemon env carries credentials needed by its Omnigent server.
+    """Local daemon env carries credentials needed by its OmniCraft server.
 
     The daemon's local server is the process that performs LLM calls, so
-    stripping ``OPENAI_*`` here makes default persistent ``omnigent run``
+    stripping ``OPENAI_*`` here makes default persistent ``omnicraft run``
     invocations hang or fail after booting a credential-less server.
     """
     monkeypatch.setenv("PATH", "/usr/bin")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://example.databricks.com/serving-endpoints")
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-anthropic-key")
-    monkeypatch.setenv("OMNIGENT_DATABASE_URI", "postgresql://u:pw@h/db")
+    monkeypatch.setenv("OMNICRAFT_DATABASE_URI", "postgresql://u:pw@h/db")
     monkeypatch.setenv("GITHUB_TOKEN", "unrelated-github-secret")
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "unrelated-aws-secret")
 
@@ -227,7 +227,7 @@ def test_build_host_daemon_env_local_preserves_server_credentials(
     assert env["OPENAI_API_KEY"] == "test-key"
     assert env["OPENAI_BASE_URL"] == "https://example.databricks.com/serving-endpoints"
     assert env["ANTHROPIC_API_KEY"] == "test-anthropic-key"
-    assert env["OMNIGENT_DATABASE_URI"] == "postgresql://u:pw@h/db"
+    assert env["OMNICRAFT_DATABASE_URI"] == "postgresql://u:pw@h/db"
     assert "GITHUB_TOKEN" not in env
     assert "AWS_SECRET_ACCESS_KEY" not in env
     assert empty_string_env["OPENAI_API_KEY"] == "test-key"
@@ -414,7 +414,7 @@ def test_ensure_host_daemon_respawns_on_config_drift(
 
     The auth-drift fix at the daemon layer: when the running daemon's
     stamped config signature differs from this invocation's (e.g. the user
-    flipped ``OMNIGENT_AUTH_ENABLED``), the unit is torn down and a
+    flipped ``OMNICRAFT_AUTH_ENABLED``), the unit is torn down and a
     fresh daemon spawned so the new auth mode takes effect.
     """
     captured: dict[str, object] = {}
@@ -675,7 +675,7 @@ def test_foreground_connect_registers_status_record(
         observed.extend(cli._list_daemon_records(include_legacy=False))
         assert server_url == "https://server.example.com"
 
-    monkeypatch.setattr("omnigent.host.connect.run_host_process", _fake_run_host_process)
+    monkeypatch.setattr("omnicraft.host.connect.run_host_process", _fake_run_host_process)
 
     result = CliRunner().invoke(
         cli_group,
@@ -711,7 +711,7 @@ def test_foreground_connect_refuses_duplicate_live_daemon(
         raise AssertionError(f"unexpected foreground connect: {server_url}")
 
     monkeypatch.setattr(
-        "omnigent.host.connect.run_host_process",
+        "omnicraft.host.connect.run_host_process",
         _unexpected_run_host_process,
     )
 
@@ -739,7 +739,7 @@ def _patch_foreground_host_local(
     :param run_host_process: Stub for ``run_host_process`` controlling how
         the daemon "exits" (clean return, ``KeyboardInterrupt``, or
         ``SystemExit``).
-    :param spawned: Whether ``ensure_local_omnigent_server`` reports it spawned a
+    :param spawned: Whether ``ensure_local_omnicraft_server`` reports it spawned a
         new server (``True``) or reused an existing one (``False``). The
         Ctrl-C stop-server prompt only fires when ``True``.
     """
@@ -748,10 +748,10 @@ def _patch_foreground_host_local(
     monkeypatch.setattr(cli, "_load_or_create_host_id", lambda: "host_abc")
     monkeypatch.setattr(
         cli,
-        "ensure_local_omnigent_server",
+        "ensure_local_omnicraft_server",
         lambda: LocalServerStartup(url="http://127.0.0.1:8000", spawned=spawned),
     )
-    monkeypatch.setattr("omnigent.host.connect.run_host_process", run_host_process)
+    monkeypatch.setattr("omnicraft.host.connect.run_host_process", run_host_process)
 
 
 def test_foreground_connect_local_prompts_and_stops_server_on_yes(
@@ -761,7 +761,7 @@ def test_foreground_connect_local_prompts_and_stops_server_on_yes(
     _patch_foreground_host_local(monkeypatch, tmp_path, run_host_process=lambda server_url: None)
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: "http://127.0.0.1:8000")
     stopped: list[bool] = []
-    monkeypatch.setattr(cli, "stop_local_omnigent_server", lambda: stopped.append(True))
+    monkeypatch.setattr(cli, "stop_local_omnicraft_server", lambda: stopped.append(True))
 
     result = CliRunner().invoke(cli_group, ["host", ""], input="y\n")
 
@@ -779,7 +779,7 @@ def test_foreground_connect_local_prompt_declined_leaves_server(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: "http://127.0.0.1:8000")
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_omnicraft_server",
         lambda: pytest.fail("declining must not stop the server"),
     )
 
@@ -802,7 +802,7 @@ def test_foreground_connect_local_prompt_aborted_leaves_server(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: "http://127.0.0.1:8000")
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_omnicraft_server",
         lambda: pytest.fail("an aborted prompt must not stop the server"),
     )
 
@@ -835,7 +835,7 @@ def test_foreground_connect_local_prompts_after_keyboard_interrupt(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: "http://127.0.0.1:8000")
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_omnicraft_server",
         lambda: pytest.fail("declining must not stop the server"),
     )
 
@@ -853,7 +853,7 @@ def test_foreground_connect_local_no_prompt_when_server_absent(
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_omnicraft_server",
         lambda: pytest.fail("nothing to stop when no server is running"),
     )
 
@@ -866,7 +866,7 @@ def test_foreground_connect_local_no_prompt_when_server_absent(
 def test_foreground_connect_reused_server_omits_prompt(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Reusing a server we didn't spawn (e.g. ``omnigent server``) skips the prompt.
+    """Reusing a server we didn't spawn (e.g. ``omnicraft server``) skips the prompt.
 
     Local mode connecting to a server that was already running must NOT offer
     to stop it on Ctrl-C — the user started it independently, so killing it
@@ -887,7 +887,7 @@ def test_foreground_connect_reused_server_omits_prompt(
     )
     monkeypatch.setattr(
         cli,
-        "stop_local_omnigent_server",
+        "stop_local_omnicraft_server",
         lambda: pytest.fail("must never stop a server we did not spawn"),
     )
 
@@ -932,7 +932,7 @@ def test_foreground_connect_remote_omits_local_server_prompt(
         lambda: pytest.fail("remote mode must not probe the local server"),
     )
     monkeypatch.setattr(
-        "omnigent.host.connect.run_host_process",
+        "omnicraft.host.connect.run_host_process",
         lambda server_url: None,
     )
 
@@ -1087,7 +1087,7 @@ def test_host_stop_stops_sessions_before_daemon(
     events: list[tuple[str, str]] = []
 
     def _fake_http_json(**kwargs: object) -> cli._HostHttpResult:
-        """Record lifecycle requests and return minimal Omnigent responses."""
+        """Record lifecycle requests and return minimal OmniCraft responses."""
         method = str(kwargs["method"])
         path = str(kwargs["path"])
         events.append((method, path))
@@ -1239,11 +1239,11 @@ def test_ensure_backend_defaults_scheme_https(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
     monkeypatch.setattr(cli, "_ensure_databricks_server_auth", lambda server: None)
 
-    result = _ensure_backend("dbc-x.cloud.databricks.com/omnigent")
+    result = _ensure_backend("dbc-x.cloud.databricks.com/omnicraft")
 
     # Scheme defaulted to https before the workspace expansion ran.
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
-    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnigent")
+    assert seen == ["https://dbc-x.cloud.databricks.com/omnicraft"]
+    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnicraft")
 
 
 def test_discover_local_server_url_returns_when_healthy(
@@ -1280,19 +1280,19 @@ def _fake_run_claude_native_capture(captured: dict[str, object]) -> Any:
 def test_claude_command_routes_server_through_ensure_backend(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``omnigent claude --server ""`` resolves via ``_ensure_backend``.
+    """``omnicraft claude --server ""`` resolves via ``_ensure_backend``.
 
     The empty/local value must be turned into the concrete daemon-backed URL
     and passed to ``run_claude_native`` — never forwarded raw.
     """
-    monkeypatch.setattr("omnigent.cli._load_effective_config", dict)
+    monkeypatch.setattr("omnicraft.cli._load_effective_config", dict)
     monkeypatch.setattr(
-        "omnigent.cli._ensure_backend",
+        "omnicraft.cli._ensure_backend",
         lambda server: "http://127.0.0.1:8123",
     )
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.claude_native.run_claude_native",
+        "omnicraft.claude_native.run_claude_native",
         _fake_run_claude_native_capture(captured),
     )
 
@@ -1313,7 +1313,7 @@ def _capture_run_chat(monkeypatch: pytest.MonkeyPatch) -> dict[str, object]:
     def _stub(**kwargs: object) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.chat.run_chat", _stub)
+    monkeypatch.setattr("omnicraft.chat.run_chat", _stub)
     return captured
 
 
@@ -1326,7 +1326,7 @@ def test_run_reads_server_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
     reach ``run_chat`` as ``server_url``.
     """
     monkeypatch.setattr(
-        "omnigent.cli._load_effective_config",
+        "omnicraft.cli._load_effective_config",
         lambda: {
             "server": "https://config-default.example.com",
             "model": "databricks-claude-sonnet-4-6",
@@ -1344,7 +1344,7 @@ def test_run_reads_server_from_config(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run_explicit_server_overrides_config(monkeypatch: pytest.MonkeyPatch) -> None:
     """An explicit ``--server`` wins over the configured default."""
     monkeypatch.setattr(
-        "omnigent.cli._load_effective_config",
+        "omnicraft.cli._load_effective_config",
         lambda: {"server": "https://config-default.example.com"},
     )
     captured = _capture_run_chat(monkeypatch)
@@ -1405,7 +1405,7 @@ def _patch_auth_preflight(
     import httpx
 
     monkeypatch.setattr(
-        "omnigent.chat._remote_headers",
+        "omnicraft.chat._remote_headers",
         lambda server_url=None: {},
     )
     monkeypatch.setattr(httpx, "get", lambda url, **kw: _databricks_probe_response(probe_status))
@@ -1451,7 +1451,7 @@ def test_ensure_backend_databricks_preflight_hints_headless(
     with pytest.raises(click.ClickException) as exc:
         _ensure_backend("https://myapp-1234.aws.databricksapps.com")
 
-    assert "omnigent login https://myapp-1234.aws.databricksapps.com" in str(exc.value)
+    assert "omnicraft login https://myapp-1234.aws.databricksapps.com" in str(exc.value)
     # No browser flow attempted off-TTY.
     assert login_calls == []
 
@@ -1496,7 +1496,7 @@ def test_databricks_preflight_non_interactive_overrides_tty(
     with pytest.raises(click.ClickException) as exc:
         cli._ensure_databricks_server_auth(_HOST_DATABRICKS_SERVER, non_interactive=True)
 
-    assert f"omnigent login {_HOST_DATABRICKS_SERVER}" in str(exc.value)
+    assert f"omnicraft login {_HOST_DATABRICKS_SERVER}" in str(exc.value)
     # The browser login never ran despite the TTY.
     assert login_calls == []
 
@@ -1519,14 +1519,14 @@ def _patch_foreground_host(
     monkeypatch.setattr(cli, "_load_or_create_host_id", lambda: "host_abc")
     monkeypatch.setattr(
         cli,
-        "ensure_local_omnigent_server",
+        "ensure_local_omnicraft_server",
         lambda: LocalServerStartup(url="http://127.0.0.1:8000", spawned=True),
     )
     # No healthy local server after exit → the Ctrl-C stop prompt stays quiet.
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
     connected: list[str] = []
     monkeypatch.setattr(
-        "omnigent.host.connect.run_host_process",
+        "omnicraft.host.connect.run_host_process",
         lambda server_url: connected.append(server_url),
     )
     return connected
@@ -1579,7 +1579,7 @@ def test_host_non_interactive_flag_forwarded_to_preflight(
 def test_host_non_interactive_flag_positional_shorthand(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """``omnigent host <url> --non-interactive`` parses the flag with the shorthand."""
+    """``omnicraft host <url> --non-interactive`` parses the flag with the shorthand."""
     preflight = _capture_preflight(monkeypatch)
     _patch_foreground_host(monkeypatch, tmp_path)
 
@@ -1611,7 +1611,7 @@ def test_host_remote_preflight_hints_headless(
     result = CliRunner().invoke(cli_group, ["host", "--server", _HOST_DATABRICKS_SERVER])
 
     assert result.exit_code != 0
-    assert f"omnigent login {_HOST_DATABRICKS_SERVER}" in result.output
+    assert f"omnicraft login {_HOST_DATABRICKS_SERVER}" in result.output
     # Pre-flight bailed: no browser login and no connect.
     assert login_calls == []
     assert connected == []
@@ -1634,7 +1634,7 @@ def test_host_remote_preflight_skips_when_authenticated(
 # ── Workspace-URL expansion for attach / resume / host ──────────────
 #
 # ``run`` / ``claude`` / ``codex`` expand a bare Databricks workspace URL to
-# its ``/api/2.0/omnigent`` mount via ``_ensure_backend`` (covered above);
+# its ``/api/2.0/omnicraft`` mount via ``_ensure_backend`` (covered above);
 # ``attach``, ``resume``, and the ``host`` subcommands resolve ``--server``
 # on their own paths and must route through the same expansion. The
 # expansion itself probes the network and is tested in
@@ -1649,7 +1649,7 @@ def _expand_marker(server: str) -> str:
     :returns: ``server`` with the API mount appended, so a test can tell
         an expanded result apart from a passed-through one.
     """
-    return f"{server.rstrip('/')}/api/2.0/omnigent"
+    return f"{server.rstrip('/')}/api/2.0/omnicraft"
 
 
 def _recording_expander(seen: list[str]) -> Callable[[str], str]:
@@ -1673,14 +1673,14 @@ def test_resolve_attach_server_expands_explicit_workspace_url(
     """An explicit ``--server`` workspace URL is expanded to its API mount.
 
     Regression: ``attach`` returned the bare URL, so ``/v1/sessions/{id}``
-    hit the workspace web app and 404'd instead of the omnigent API.
+    hit the workspace web app and 404'd instead of the omnicraft API.
     """
     seen: list[str] = []
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
 
     result = _resolve_attach_server("https://ws.example.net/", configured_server=None)
 
-    assert result == "https://ws.example.net/api/2.0/omnigent"
+    assert result == "https://ws.example.net/api/2.0/omnicraft"
     assert seen == ["https://ws.example.net"]
 
 
@@ -1692,7 +1692,7 @@ def test_resolve_attach_server_expands_configured_workspace_url(
 
     result = _resolve_attach_server(None, configured_server="https://ws.example.net")
 
-    assert result == "https://ws.example.net/api/2.0/omnigent"
+    assert result == "https://ws.example.net/api/2.0/omnicraft"
 
 
 def test_resolve_attach_server_local_fallback_not_expanded(
@@ -1714,14 +1714,14 @@ def test_resolve_attach_server_local_fallback_not_expanded(
 
 
 def test_resolve_attach_server_defaults_scheme_https(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``attach --server <ws>/omnigent`` (no scheme) is defaulted to https."""
+    """``attach --server <ws>/omnicraft`` (no scheme) is defaulted to https."""
     seen: list[str] = []
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
 
-    result = _resolve_attach_server("dbc-x.cloud.databricks.com/omnigent", configured_server=None)
+    result = _resolve_attach_server("dbc-x.cloud.databricks.com/omnicraft", configured_server=None)
 
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
-    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnigent")
+    assert seen == ["https://dbc-x.cloud.databricks.com/omnicraft"]
+    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnicraft")
 
 
 def test_resolve_host_server_expands_explicit_workspace_url(
@@ -1729,7 +1729,7 @@ def test_resolve_host_server_expands_explicit_workspace_url(
 ) -> None:
     """``host`` subcommands expand a bare ``--server`` workspace URL.
 
-    The daemon is registered under the expanded ``/api/2.0/omnigent`` URL,
+    The daemon is registered under the expanded ``/api/2.0/omnicraft`` URL,
     so the registry lookup must expand too or it never matches a daemon
     that ``run`` / ``host`` started.
     """
@@ -1738,7 +1738,7 @@ def test_resolve_host_server_expands_explicit_workspace_url(
 
     result = _resolve_host_server("https://ws.example.net/")
 
-    assert result == "https://ws.example.net/api/2.0/omnigent"
+    assert result == "https://ws.example.net/api/2.0/omnicraft"
     assert seen == ["https://ws.example.net"]
 
 
@@ -1751,7 +1751,7 @@ def test_resolve_host_server_reads_config_and_expands(
     )
     monkeypatch.setattr(cli, "_workspace_api_server_url", _expand_marker)
 
-    assert _resolve_host_server(None) == "https://ws.example.net/api/2.0/omnigent"
+    assert _resolve_host_server(None) == "https://ws.example.net/api/2.0/omnicraft"
 
 
 def test_resolve_host_server_none_stays_local(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1764,31 +1764,31 @@ def test_resolve_host_server_none_stays_local(monkeypatch: pytest.MonkeyPatch) -
     assert _resolve_host_server(None) is None
 
 
-def test_resolve_host_server_defaults_scheme_and_accepts_omnigent(
+def test_resolve_host_server_defaults_scheme_and_accepts_omnicraft(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``host`` subcommands accept a schemeless ``/omnigent`` workspace URL.
+    """``host`` subcommands accept a schemeless ``/omnicraft`` workspace URL.
 
     The internal user guide's web URL omits the scheme and ends in
-    ``/omnigent``; host must default it to https before expansion, just
-    like ``omnigent login``.
+    ``/omnicraft``; host must default it to https before expansion, just
+    like ``omnicraft login``.
     """
     seen: list[str] = []
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
 
-    result = _resolve_host_server("dbc-x.cloud.databricks.com/omnigent")
+    result = _resolve_host_server("dbc-x.cloud.databricks.com/omnicraft")
 
     # Scheme defaulted to https before the expansion saw the URL.
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
-    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnigent")
+    assert seen == ["https://dbc-x.cloud.databricks.com/omnicraft"]
+    assert result == _expand_marker("https://dbc-x.cloud.databricks.com/omnicraft")
 
 
-def test_host_command_defaults_scheme_and_accepts_omnigent_web_url(
+def test_host_command_defaults_scheme_and_accepts_omnicraft_web_url(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """``omnigent host --server <ws>/omnigent`` (no scheme) normalizes before connect.
+    """``omnicraft host --server <ws>/omnicraft`` (no scheme) normalizes before connect.
 
-    Pasting the guide's web URL (schemeless, ``/omnigent`` suffix) must
+    Pasting the guide's web URL (schemeless, ``/omnicraft`` suffix) must
     default to https and expand to the API mount, not connect to the raw
     input.
     """
@@ -1800,23 +1800,23 @@ def test_host_command_defaults_scheme_and_accepts_omnigent_web_url(
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
     observed: list[str] = []
     monkeypatch.setattr(
-        "omnigent.host.connect.run_host_process",
+        "omnicraft.host.connect.run_host_process",
         lambda server_url: observed.append(server_url),
     )
 
     result = CliRunner().invoke(
-        cli_group, ["host", "--server", "dbc-x.cloud.databricks.com/omnigent"]
+        cli_group, ["host", "--server", "dbc-x.cloud.databricks.com/omnicraft"]
     )
 
     assert result.exit_code == 0, result.output
     # Scheme defaulted to https before the workspace expansion ran.
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
+    assert seen == ["https://dbc-x.cloud.databricks.com/omnicraft"]
     # The foreground connect targeted the expanded API-mount URL.
-    assert observed == [_expand_marker("https://dbc-x.cloud.databricks.com/omnigent")]
+    assert observed == [_expand_marker("https://dbc-x.cloud.databricks.com/omnicraft")]
 
 
 def test_resume_command_expands_server_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``omnigent resume <id> --server <workspace>`` expands before dispatch.
+    """``omnicraft resume <id> --server <workspace>`` expands before dispatch.
 
     Regression: ``resume`` forwarded the bare URL, so its remote picker
     and wrapper-label lookups 404'd against the workspace web app.
@@ -1824,7 +1824,7 @@ def test_resume_command_expands_server_url(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(cli, "_workspace_api_server_url", _expand_marker)
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.resume_dispatch.run_resume",
+        "omnicraft.resume_dispatch.run_resume",
         lambda **kwargs: captured.update(kwargs),
     )
 
@@ -1835,7 +1835,7 @@ def test_resume_command_expands_server_url(monkeypatch: pytest.MonkeyPatch) -> N
     assert result.exit_code == 0, result.output
     assert captured == {
         "target": "conv_abc123",
-        "server": "https://ws.example.net/api/2.0/omnigent",
+        "server": "https://ws.example.net/api/2.0/omnicraft",
     }
 
 
@@ -1848,7 +1848,7 @@ def test_resume_command_without_server_skips_expansion(
     )
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.resume_dispatch.run_resume",
+        "omnicraft.resume_dispatch.run_resume",
         lambda **kwargs: captured.update(kwargs),
     )
 
@@ -1859,20 +1859,20 @@ def test_resume_command_without_server_skips_expansion(
 
 
 def test_resume_command_defaults_scheme_https(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``omnigent resume --server <ws>/omnigent`` (no scheme) is defaulted to https."""
+    """``omnicraft resume --server <ws>/omnicraft`` (no scheme) is defaulted to https."""
     seen: list[str] = []
     monkeypatch.setattr(cli, "_workspace_api_server_url", _recording_expander(seen))
     captured: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.resume_dispatch.run_resume",
+        "omnicraft.resume_dispatch.run_resume",
         lambda **kwargs: captured.update(kwargs),
     )
 
     result = CliRunner().invoke(
         cli_group,
-        ["resume", "conv_abc123", "--server", "dbc-x.cloud.databricks.com/omnigent"],
+        ["resume", "conv_abc123", "--server", "dbc-x.cloud.databricks.com/omnicraft"],
     )
 
     assert result.exit_code == 0, result.output
-    assert seen == ["https://dbc-x.cloud.databricks.com/omnigent"]
-    assert captured["server"] == _expand_marker("https://dbc-x.cloud.databricks.com/omnigent")
+    assert seen == ["https://dbc-x.cloud.databricks.com/omnicraft"]
+    assert captured["server"] == _expand_marker("https://dbc-x.cloud.databricks.com/omnicraft")

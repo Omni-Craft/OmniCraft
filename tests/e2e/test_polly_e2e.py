@@ -1,21 +1,21 @@
 """Small mock-LLM e2e smoke for the polly coding orchestrator (examples/polly).
 
 Mock mode: boots a throwaway LOCAL server from this working tree (which carries
-the in-tree ``omnigent.inner.nessie.policies`` module that polly's guardrails
+the in-tree ``omnicraft.inner.nessie.policies`` module that polly's guardrails
 resolve server-side), rewrites the polly bundle's executor to use
 ``openai-agents`` harness wired to the mock LLM server, and runs a one-shot
-``omnigent run`` subprocess against it. This exercises the parts a structural
+``omnicraft run`` subprocess against it. This exercises the parts a structural
 spec-load test can't — bundle load, server-side guardrail policy resolution,
 and a turn streaming back through the run path — without requiring real OAuth
 credentials or proprietary model access.
 
-Why a local server (not bare ``omnigent run``): polly's guardrail policies
-(``omnigent.inner.nessie.policies`` — the package keeps its historical
-name) are resolved SERVER-SIDE when the workflow executes. Bare ``omnigent
+Why a local server (not bare ``omnicraft run``): polly's guardrail policies
+(``omnicraft.inner.nessie.policies`` — the package keeps its historical
+name) are resolved SERVER-SIDE when the workflow executes. Bare ``omnicraft
 run`` routes to the developer's configured default server (the shared
-``omnigent`` prod app), which may not carry the in-tree policy module, so
+``omnicraft`` prod app), which may not carry the in-tree policy module, so
 the turn 500s at event-execution. We therefore stand up a throwaway local
-``omnigent server`` from this working tree - which DOES carry the polly
+``omnicraft server`` from this working tree - which DOES carry the polly
 code - and point ``run --server`` at it.
 
 Mock helpers and fixture names are exported from this module so the sibling
@@ -104,8 +104,8 @@ def _mock_env(mock_llm_server_url: str) -> dict[str, str]:
     Strips real credential env vars (Databricks, Anthropic, Claude/Codex
     binaries) and injects ``OPENAI_BASE_URL`` and ``OPENAI_API_KEY`` so the
     ``openai-agents`` harness routes to the mock LLM server. An isolated
-    ``OMNIGENT_CONFIG_HOME`` prevents the spawned process from touching
-    the developer's real omnigent state.
+    ``OMNICRAFT_CONFIG_HOME`` prevents the spawned process from touching
+    the developer's real omnicraft state.
 
     :param mock_llm_server_url: The mock LLM server base URL, e.g.
         ``"http://127.0.0.1:12345"``.  The function appends ``/v1`` so the
@@ -114,13 +114,13 @@ def _mock_env(mock_llm_server_url: str) -> dict[str, str]:
         overrides set.
     """
     env = dict(__import__("os").environ)
-    env["OMNIGENT_SKIP_ONBOARD"] = "1"
-    env["OMNIGENT_NO_UPDATE_CHECK"] = "1"
+    env["OMNICRAFT_SKIP_ONBOARD"] = "1"
+    env["OMNICRAFT_NO_UPDATE_CHECK"] = "1"
     # Write an isolated config home so the spawned process doesn't inherit the
     # developer's real auth config.
-    config_home = Path(tempfile.mkdtemp(prefix="omnigent-polly-mock-config-"))
+    config_home = Path(tempfile.mkdtemp(prefix="omnicraft-polly-mock-config-"))
     (config_home / "config.yaml").write_text("", encoding="utf-8")
-    env["OMNIGENT_CONFIG_HOME"] = str(config_home)
+    env["OMNICRAFT_CONFIG_HOME"] = str(config_home)
     # Strip credentials that would shadow or conflict with mock access.
     # Covers Databricks, Anthropic/Claude, OpenAI, AWS, GCP, Azure, GitHub,
     # and any other credential vars that should not leak into mock subprocesses.
@@ -277,9 +277,9 @@ def _mock_polly_spec_dir(
 @pytest.fixture
 def local_polly_server(tmp_path: Path) -> Iterator[str]:
     """
-    Start a throwaway local ``omnigent server`` from this working tree.
+    Start a throwaway local ``omnicraft server`` from this working tree.
 
-    The server carries the in-tree ``omnigent.inner.nessie.policies`` module
+    The server carries the in-tree ``omnicraft.inner.nessie.policies`` module
     that polly's guardrails resolve server-side, so the workflow doesn't 500
     the way it does against the shared prod app. Own sqlite DB + artifact dir
     under ``tmp_path`` keep it isolated from the developer's real state.
@@ -295,14 +295,14 @@ def local_polly_server(tmp_path: Path) -> Iterator[str]:
 
     env = {
         **os.environ,
-        "OMNIGENT_SKIP_ONBOARD": "1",
-        "OMNIGENT_NO_UPDATE_CHECK": "1",
+        "OMNICRAFT_SKIP_ONBOARD": "1",
+        "OMNICRAFT_NO_UPDATE_CHECK": "1",
     }
     proc = subprocess.Popen(
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "omnicraft",
             "server",
             "--host",
             "127.0.0.1",
@@ -336,7 +336,7 @@ def test_polly_orchestrator_boots_and_responds(
     tmp_path: Path,
 ) -> None:
     """
-    ``omnigent run <mock-polly> --server <local> -p <prompt>``
+    ``omnicraft run <mock-polly> --server <local> -p <prompt>``
     exits 0 and emits a non-trivial reply via the mock LLM server.
 
     Proves the bundle loads end-to-end against a server that carries polly's
@@ -372,7 +372,7 @@ def test_polly_orchestrator_boots_and_responds(
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "omnicraft",
             "run",
             str(polly_dir),
             "--server",

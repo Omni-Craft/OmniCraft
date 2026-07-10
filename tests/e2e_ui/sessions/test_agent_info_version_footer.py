@@ -3,7 +3,7 @@
 The top-right agent-info popover ends with a small version footer:
 ``server <version>``, plus ``· host <version>`` when the session is bound to
 a connected host. This e2e proves the footer renders in the real UI and
-surfaces the omnigent server version (from the boot capabilities probe).
+surfaces the omnicraft server version (from the boot capabilities probe).
 
 The host segment is intentionally not asserted here: the e2e harness binds a
 runner but no host tunnel, so the session is not host-bound and the footer

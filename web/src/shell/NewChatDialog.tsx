@@ -60,7 +60,7 @@ import { useIsMobileViewport } from "@/hooks/useIsMobileViewport";
 import { CliCommandBlock } from "./CliCommandBlock";
 import { WorkspacePicker, isNavigablePath } from "./WorkspacePicker";
 import { getCliServerUrl } from "@/lib/host";
-import { getOmnigentHostConfig } from "@/lib/host";
+import { getOmniCraftHostConfig } from "@/lib/host";
 import { readLastAgentId, writeLastAgentId } from "@/lib/agentPreferences";
 import {
   readLastHostChoice,
@@ -272,12 +272,12 @@ const CODEX_NATIVE_APPROVAL_MODES: {
 // Conversation-label key for the DANGEROUS codex full-bypass opt-in. When
 // set to "1" the runner launches Codex with
 // `--dangerously-bypass-approvals-and-sandbox` (no approval prompts, no
-// command sandbox) — see omnigent.stores.conversation_store
+// command sandbox) — see omnicraft.stores.conversation_store
 // CODEX_NATIVE_BYPASS_SANDBOX_LABEL_KEY. Stored as a label (cheap thread
 // metadata) so it survives reload. Mutually exclusive in spirit with the
 // approval-mode presets above: when bypass is on the runner strips any
 // `--sandbox` / `--ask-for-approval` flags those presets would emit.
-const CODEX_NATIVE_BYPASS_SANDBOX_LABEL_KEY = "omnigent.codex_native.bypass_sandbox";
+const CODEX_NATIVE_BYPASS_SANDBOX_LABEL_KEY = "omnicraft.codex_native.bypass_sandbox";
 // The exact phrase a user must TYPE (not just click) to arm full bypass.
 // A typed confirmation makes the dangerous mode impossible to enable by an
 // accidental click; the toggle stays off until this is entered verbatim.
@@ -474,7 +474,7 @@ export function sessionsSharingDirectory(
 /**
  * Best-effort human-readable message for a failed POST /v1/sessions.
  *
- * Recognizes the OmnigentError shape (``{error: {message}}``) and
+ * Recognizes the OmniCraftError shape (``{error: {message}}``) and
  * FastAPI's ``{detail}``; falls back to the status code otherwise.
  *
  * @param res Non-OK response from the session-create call.
@@ -517,7 +517,7 @@ export async function describeCreateError(res: Response): Promise<string> {
  *
  * Warning-only signal for the agent picker: `true` only when the host
  * explicitly reported the harness as not ready (CLI missing or no
- * default credential — see `omnigent setup`). A missing readiness map
+ * default credential — see `omnicraft setup`). A missing readiness map
  * (older host build) or an unknown harness yields `false`, so unknown
  * never warns; the host re-checks authoritatively at launch time.
  *
@@ -571,9 +571,9 @@ export function harnessWarningMessageText(
     return `${agentName} precisa de autenticação do Codex em ${hostName} — rode codex login naquela máquina.`;
   }
   if (reason === "binary-missing") {
-    return `${agentName} está sem o binário do Codex em ${hostName} — rode omnigent setup naquela máquina.`;
+    return `${agentName} está sem o binário do Codex em ${hostName} — rode omnicraft setup naquela máquina.`;
   }
-  return `${agentName} não está configurado em ${hostName} — rode omnigent setup naquela máquina.`;
+  return `${agentName} não está configurado em ${hostName} — rode omnicraft setup naquela máquina.`;
 }
 
 function harnessWarningMessage(
@@ -592,14 +592,14 @@ function harnessWarningMessage(
   if (reason === "binary-missing") {
     return (
       <>
-        {agentName} está sem o binário do Codex em {hostName} — rode <code>omnigent setup</code> naquela
+        {agentName} está sem o binário do Codex em {hostName} — rode <code>omnicraft setup</code> naquela
         máquina.
       </>
     );
   }
   return (
     <>
-      {agentName} não está configurado em {hostName} — rode <code>omnigent setup</code> naquela
+      {agentName} não está configurado em {hostName} — rode <code>omnicraft setup</code> naquela
       máquina.
     </>
   );
@@ -1826,7 +1826,7 @@ export function NewChatLandingScreen() {
   // Embed-only docs seam: when the host passes additional docs and managed
   // sandboxes are unavailable, keep the sandbox row visible but disabled and
   // attach a help tooltip with a clickable link.
-  const docsLinks = getOmnigentHostConfig().docsLinks;
+  const docsLinks = getOmniCraftHostConfig().docsLinks;
   const newSandboxTooltipContent = docsLinks?.newSandbox;
   // Embed-only docs seam for Databricks git auth setup. Standalone leaves this
   // undefined, so no tooltip is rendered.
@@ -2671,9 +2671,9 @@ export function NewChatLandingScreen() {
                       ? { branch_name: trimmedBranch, existing_worktree: true }
                       : undefined,
                 }),
-            // Native terminal agents open terminal-first: `omnigent.ui:
+            // Native terminal agents open terminal-first: `omnicraft.ui:
             // terminal` tells the UI to render the terminal wrapper, and
-            // `omnigent.wrapper` selects which CLI bridge the runner launches.
+            // `omnicraft.wrapper` selects which CLI bridge the runner launches.
             // The values are the registered wrapper ids the runner keys off —
             // they must match the wrapper registry, not the agent display name.
             // The DANGEROUS codex full-bypass opt-in rides along as an extra
@@ -3507,7 +3507,7 @@ export function NewChatLandingScreen() {
                           autoCorrect="off"
                           autoCapitalize="off"
                           spellCheck={false}
-                          name="omnigent-worktree-branch"
+                          name="omnicraft-worktree-branch"
                           // pr-9 leaves room for the generate button overlaid at
                           // the right edge.
                           className="rounded-md border border-input bg-background py-2 pr-9 pl-3 text-xs outline-none transition-colors focus-visible:border-ring"

@@ -31,7 +31,7 @@ import { useHostWorktrees } from "@/hooks/useHostWorktrees";
 import { useDirectorySessions } from "@/hooks/useDirectorySessions";
 import { useRunnerHealthRegistration } from "@/hooks/RunnerHealthProvider";
 import type { Conversation } from "@/hooks/useConversations";
-import { setOmnigentHostConfig } from "@/lib/host";
+import { setOmniCraftHostConfig } from "@/lib/host";
 import { setPendingInitialPrompt } from "@/store/chatStore";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -95,7 +95,7 @@ const useDirectorySessionsMock = vi.mocked(useDirectorySessions);
 const useRunnerHealthMock = vi.mocked(useRunnerHealthRegistration);
 const setPendingInitialPromptMock = vi.mocked(setPendingInitialPrompt);
 
-const RECENT_KEY = "omnigent:recent-workspaces";
+const RECENT_KEY = "omnicraft:recent-workspaces";
 
 /**
  * Build a minimal Conversation for the directory-conflict helpers/warning.
@@ -448,7 +448,7 @@ describe("harnessUnconfiguredOnHost", () => {
     expect(reason).toBe("unconfigured");
     expect(harnessWarningBadgeText(reason)).toBe("requer configuração");
     expect(harnessWarningMessageText("Claude Code", "laptop", reason)).toBe(
-      "Claude Code não está configurado em laptop — rode omnigent setup naquela máquina.",
+      "Claude Code não está configurado em laptop — rode omnicraft setup naquela máquina.",
     );
   });
 
@@ -463,7 +463,7 @@ describe("harnessUnconfiguredOnHost", () => {
     );
     expect(harnessWarningBadgeText("binary-missing")).toBe("binário ausente");
     expect(harnessWarningMessageText("Codex", "laptop", "binary-missing")).toBe(
-      "Codex está sem o binário do Codex em laptop — rode omnigent setup naquela máquina.",
+      "Codex está sem o binário do Codex em laptop — rode omnicraft setup naquela máquina.",
     );
   });
 
@@ -580,7 +580,7 @@ function setupLandingMocks() {
   useHostWorktreesMock.mockReset();
   useDirectorySessionsMock.mockReset();
   useRunnerHealthMock.mockReset();
-  setOmnigentHostConfig({});
+  setOmniCraftHostConfig({});
   resetLandingDraft();
   localStorage.clear();
   // host_1's most-recent workspace seeds the field (so submit can enable
@@ -988,9 +988,9 @@ describe("NewChatLandingScreen", () => {
     const body = JSON.parse((init as RequestInit).body as string) as Record<string, unknown>;
     const labels = body.labels as Record<string, string>;
     // The label is what the runner reads to launch with the bypass flag.
-    expect(labels["omnigent.codex_native.bypass_sandbox"]).toBe("1");
+    expect(labels["omnicraft.codex_native.bypass_sandbox"]).toBe("1");
     // The native wrapper labels still ride alongside it.
-    expect(labels["omnigent.wrapper"]).toBe("codex-native-ui");
+    expect(labels["omnicraft.wrapper"]).toBe("codex-native-ui");
   });
 
   it("shows a conflict banner in the file browser for an occupied directory", async () => {
@@ -1305,7 +1305,7 @@ describe("NewChatLandingScreen", () => {
   });
 
   it("shows a disabled sandbox row with host-provided tooltip content when managed sandboxes are unavailable", async () => {
-    setOmnigentHostConfig({
+    setOmniCraftHostConfig({
       docsLinks: { newSandbox: "Managed sandboxes are disabled in this workspace." },
     });
     renderLanding();
@@ -1545,7 +1545,7 @@ describe("NewChatLandingScreen", () => {
 
   it.each([
     {
-      name: "not-configured OmnigentError",
+      name: "not-configured OmniCraftError",
       status: 400,
       body: { error: { message: "managed hosts are not configured on this server" } },
       expected: "managed hosts are not configured on this server",
@@ -1615,7 +1615,7 @@ describe("NewChatLandingScreen", () => {
   });
 
   it("shows host-provided git credentials tooltip content in the sandbox repo popover", async () => {
-    setOmnigentHostConfig({
+    setOmniCraftHostConfig({
       docsLinks: { databricksGitCredentials: "Use Databricks Git credentials before cloning." },
     });
     renderLanding({ managed_sandboxes_enabled: true });
@@ -1951,16 +1951,16 @@ describe("NewChatLandingScreen @-file-mention", () => {
   function file(path: string): HostFilesystemEntry {
     return { name: path.split("/").pop() ?? "", path, type: "file", bytes: 10, modified_at: 0 };
   }
-  // Path-aware listing: the workspace root holds an "omnigent" folder + a
-  // README; drilling into "omnigent" reveals a nested folder + a file. Keyed by
+  // Path-aware listing: the workspace root holds an "omnicraft" folder + a
+  // README; drilling into "omnicraft" reveals a nested folder + a file. Keyed by
   // the absolute path so drill-down and relative-path mapping are exercised for
   // real (a fixed stub couldn't distinguish the two levels).
   function mockFsByPath() {
     useHostFilesystemMock.mockImplementation(((_hostId: string | null, path: string | null) => {
       let entries: HostFilesystemEntry[] = [];
-      if (path === ROOT) entries = [dir(`${ROOT}/omnigent`), file(`${ROOT}/README.md`)];
-      else if (path === `${ROOT}/omnigent`)
-        entries = [dir(`${ROOT}/omnigent/inner`), file(`${ROOT}/omnigent/cli.py`)];
+      if (path === ROOT) entries = [dir(`${ROOT}/omnicraft`), file(`${ROOT}/README.md`)];
+      else if (path === `${ROOT}/omnicraft`)
+        entries = [dir(`${ROOT}/omnicraft/inner`), file(`${ROOT}/omnicraft/cli.py`)];
       return {
         data: { entries, truncated: false },
         isLoading: false,
@@ -1991,7 +1991,7 @@ describe("NewChatLandingScreen @-file-mention", () => {
     );
     fireEvent.change(input(), { target: { value: "@", selectionStart: 1 } });
     // Host absolute paths are shown as workspace-relative rows (folders first).
-    expect(screen.getByTitle("Abrir omnigent")).toBeInTheDocument();
+    expect(screen.getByTitle("Abrir omnicraft")).toBeInTheDocument();
     expect(screen.getByTitle("Anexar README.md")).toBeInTheDocument();
   });
 
@@ -2009,7 +2009,7 @@ describe("NewChatLandingScreen @-file-mention", () => {
     ]);
     renderLanding();
     fireEvent.change(input(), { target: { value: "@", selectionStart: 1 } });
-    expect(screen.queryByTitle("Abrir omnigent")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Abrir omnicraft")).not.toBeInTheDocument();
   });
 
   it("drills into a folder and delivers the chosen file as a workspace-relative marker", async () => {
@@ -2025,10 +2025,10 @@ describe("NewChatLandingScreen @-file-mention", () => {
     fireEvent.change(input(), { target: { value: "@", selectionStart: 1 } });
     // Nested files are hidden until the folder is opened (drill-down).
     expect(screen.queryByTitle("Anexar cli.py")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Abrir omnigent"));
+    fireEvent.click(screen.getByTitle("Abrir omnicraft"));
     fireEvent.click(screen.getByTitle("Anexar cli.py"));
     // The chip shows the workspace-relative path, not the host-absolute one.
-    expect(screen.getByText("@omnigent/cli.py")).toBeInTheDocument();
+    expect(screen.getByText("@omnicraft/cli.py")).toBeInTheDocument();
 
     fireEvent.change(input(), { target: { value: "explain this", selectionStart: 12 } });
     fireEvent.click(screen.getByTestId("new-chat-landing-submit"));
@@ -2038,7 +2038,7 @@ describe("NewChatLandingScreen @-file-mention", () => {
     // the "/Users/corey/repo/…" absolute path the host filesystem returned.
     await waitFor(() => expect(setPendingInitialPromptMock).toHaveBeenCalled());
     const [, payload] = setPendingInitialPromptMock.mock.calls[0]!;
-    expect((payload as { text: string }).text).toBe("[Attached: omnigent/cli.py]\n\nexplain this");
+    expect((payload as { text: string }).text).toBe("[Attached: omnicraft/cli.py]\n\nexplain this");
   });
 
   it("suppresses stale parent rows while a drilled directory is still loading", async () => {
@@ -2049,7 +2049,7 @@ describe("NewChatLandingScreen @-file-mention", () => {
     // they lived inside the drilled child, and a click/Enter would attach the
     // wrong entry. The menu must collapse to "Loading…" until the child's own
     // listing arrives.
-    const rootEntries = [dir(`${ROOT}/omnigent`), file(`${ROOT}/README.md`)];
+    const rootEntries = [dir(`${ROOT}/omnicraft`), file(`${ROOT}/README.md`)];
     useHostFilesystemMock.mockImplementation(((_hostId: string | null, path: string | null) => {
       // Root resolves normally; the drilled path is still serving the parent's
       // rows as placeholder data (the mid-fetch window we're regression-testing).
@@ -2069,14 +2069,14 @@ describe("NewChatLandingScreen @-file-mention", () => {
 
     fireEvent.change(input(), { target: { value: "@", selectionStart: 1 } });
     // Root listing renders its rows.
-    expect(screen.getByTitle("Abrir omnigent")).toBeInTheDocument();
-    fireEvent.click(screen.getByTitle("Abrir omnigent"));
+    expect(screen.getByTitle("Abrir omnicraft")).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle("Abrir omnicraft"));
 
     // Drilled-but-loading: the loading row shows and the parent's stale rows are
     // gone (without the isPlaceholderData guard they'd appear as the child's).
     expect(screen.getByText("Carregando…")).toBeInTheDocument();
     expect(screen.queryByTitle("Anexar README.md")).not.toBeInTheDocument();
-    expect(screen.queryByTitle("Abrir omnigent")).not.toBeInTheDocument();
+    expect(screen.queryByTitle("Abrir omnicraft")).not.toBeInTheDocument();
   });
 
   it("attaches a whole folder with a trailing-slash marker", async () => {
@@ -2091,15 +2091,15 @@ describe("NewChatLandingScreen @-file-mention", () => {
 
     fireEvent.change(input(), { target: { value: "@", selectionStart: 1 } });
     // The folder row's "+" button attaches the directory as a unit.
-    fireEvent.click(screen.getByLabelText("Anexar pasta inteira omnigent"));
-    expect(screen.getByText("@omnigent/")).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText("Anexar pasta inteira omnicraft"));
+    expect(screen.getByText("@omnicraft/")).toBeInTheDocument();
 
     fireEvent.change(input(), { target: { value: "review it", selectionStart: 9 } });
     fireEvent.click(screen.getByTestId("new-chat-landing-submit"));
 
     await waitFor(() => expect(setPendingInitialPromptMock).toHaveBeenCalled());
     const [, payload] = setPendingInitialPromptMock.mock.calls[0]!;
-    expect((payload as { text: string }).text).toBe("[Attached: omnigent/]\n\nreview it");
+    expect((payload as { text: string }).text).toBe("[Attached: omnicraft/]\n\nreview it");
   });
 
   it("removes a tagged chip when its ✕ is clicked", () => {

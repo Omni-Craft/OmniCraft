@@ -9,7 +9,7 @@ import {
   writeThemePalette,
 } from "./themePalette";
 
-const STORAGE_KEY = "omnigent:ui-theme-palette";
+const STORAGE_KEY = "omnicraft:ui-theme-palette";
 
 afterEach(() => {
   localStorage.clear();

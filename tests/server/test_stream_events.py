@@ -3,7 +3,7 @@
 Two flavors live here:
 
 1. **Direct unit tests on the union (Part 1)** — fast, pure-Python
-   invariants over :data:`omnigent.server.schemas.ServerStreamEvent`.
+   invariants over :data:`omnicraft.server.schemas.ServerStreamEvent`.
    They guard the structural shape of the SoT (uniqueness of wire
    types, predicate correctness, every emit-site wire name is in the
    union).
@@ -23,7 +23,7 @@ from typing import Any
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from omnigent.server.schemas import (
+from omnicraft.server.schemas import (
     PolicyDeniedEvent,
     ServerStreamEvent,
     SessionCreatedEvent,
@@ -116,12 +116,12 @@ def test_emit_sites_referenced_by_grep_are_all_in_the_union() -> None:
     # routes/sessions.py.
     repo_root = Path(__file__).resolve().parent.parent.parent
     paths = [
-        repo_root / "omnigent/runtime/workflow.py",
-        repo_root / "omnigent/runtime/compaction.py",
-        repo_root / "omnigent/runtime/policies/approval.py",
-        repo_root / "omnigent/runtime/llm_retry.py",
-        repo_root / "omnigent/runtime/tool_retry.py",
-        repo_root / "omnigent/server/routes/sessions.py",
+        repo_root / "omnicraft/runtime/workflow.py",
+        repo_root / "omnicraft/runtime/compaction.py",
+        repo_root / "omnicraft/runtime/policies/approval.py",
+        repo_root / "omnicraft/runtime/llm_retry.py",
+        repo_root / "omnicraft/runtime/tool_retry.py",
+        repo_root / "omnicraft/server/routes/sessions.py",
     ]
     pattern = re.compile(r'"type":\s*"(response\.[^"]+|session\.[^"]+)"')
     found: set[str] = set()
@@ -136,7 +136,7 @@ def test_emit_sites_referenced_by_grep_are_all_in_the_union() -> None:
         f"Wire-name string literals emitted by the runtime/server "
         f"that are NOT registered in ServerStreamEvent: "
         f"{sorted(unknown)}. Either add a typed event subclass to "
-        f"omnigent.server.schemas and include it in the "
+        f"omnicraft.server.schemas and include it in the "
         f"union, or remove the offending emit site."
     )
 
@@ -374,7 +374,7 @@ def test_session_created_event_optional_agent_id() -> None:
     field is optional on the wire so older runners that haven't
     been updated do not fail validation against the typed union.
     Production code in
-    :func:`omnigent.tools.builtins.spawn._publish_session_created_on_parent`
+    :func:`omnicraft.tools.builtins.spawn._publish_session_created_on_parent`
     raises ``ValueError`` when ``agent_id`` is empty — that's the
     fail-loud check at the emit site, not on the schema.
     """
@@ -427,8 +427,8 @@ def test_publish_policy_denied_helper_emits_typed_event() -> None:
     as the status helper test) and asserts the wire name / fields, plus that
     the dict round-trips the union adapter — the wire-validation gate.
     """
-    from omnigent.runtime import session_stream as cs
-    from omnigent.server.routes.sessions import _publish_policy_denied
+    from omnicraft.runtime import session_stream as cs
+    from omnicraft.server.routes.sessions import _publish_policy_denied
 
     captured: list[tuple[str, dict[str, Any]]] = []
     real_publish = cs.publish
@@ -460,7 +460,7 @@ def test_policy_denied_format_sse_uses_response_prefixed_wire_name() -> None:
     native driver key on — a rename to ``policy_denied`` would silently break
     both (the web UI drops the frame, the driver's key misses).
     """
-    from omnigent.server.routes.sessions import _format_sse
+    from omnicraft.server.routes.sessions import _format_sse
 
     sse = _format_sse("response.policy_denied", {"type": "response.policy_denied"})
     assert sse.startswith("event: response.policy_denied\ndata: {")
@@ -475,8 +475,8 @@ def test_publish_session_status_helper_uses_waiting_literal() -> None:
     Pydantic model. We capture published payloads via the live
     publish hook on the session_stream module.
     """
-    from omnigent.runtime import session_stream as cs
-    from omnigent.server.routes.sessions import _publish_status as _publish_session_status
+    from omnicraft.runtime import session_stream as cs
+    from omnicraft.server.routes.sessions import _publish_status as _publish_session_status
 
     captured: list[tuple[str, dict[str, Any]]] = []
     real_publish = cs.publish
@@ -510,7 +510,7 @@ def test_publish_session_status_helper_uses_waiting_literal() -> None:
 
 def test_publish_session_status_rejects_unknown_status() -> None:
     """The helper fails loud on out-of-set status values (rule 15)."""
-    from omnigent.server.routes.sessions import _publish_status as _publish_session_status
+    from omnicraft.server.routes.sessions import _publish_status as _publish_session_status
 
     with pytest.raises(ValidationError):
         _publish_session_status("conv_abc", "bogus")
@@ -522,7 +522,7 @@ def test_session_created_event_payload_shape() -> None:
     The DBOS-removal cutover folded the standalone
     ``_publish_session_created_on_parent`` helper from
     ``spawn.py`` into the runner's sub-agent dispatch (see
-    ``omnigent/runner/tool_dispatch.py::_execute_subagent_tool``).
+    ``omnicraft/runner/tool_dispatch.py::_execute_subagent_tool``).
     The wire-level invariants the helper used to encode are still
     enforced by the model itself — that the event identifies a
     parent-side ``conversation_id``, a ``child_session_id``, the

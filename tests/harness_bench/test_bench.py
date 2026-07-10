@@ -17,7 +17,7 @@ import json
 
 import pytest
 
-from omnigent.runtime.harnesses import _HARNESS_MODULES
+from omnicraft.runtime.harnesses import _HARNESS_MODULES
 from tests.harness_bench.bench import run_bench, run_harness
 from tests.harness_bench.driver import SdkInprocDriver
 from tests.harness_bench.manifest import OFFICIAL_PROFILES
@@ -61,7 +61,7 @@ def test_declared_covers_every_p0_dimension(profile: BenchProfile) -> None:
 
 
 def test_streaming_capability_declares_binary_verdict() -> None:
-    from omnigent.harness_plugins import harness_capabilities
+    from omnicraft.harness_plugins import harness_capabilities
     from tests.harness_bench.manifest import _declared_from_capabilities
 
     caps = harness_capabilities()
@@ -105,7 +105,7 @@ def test_resolve_registered_harness_by_name() -> None:
     ACP_SUBPROCESS harness, so it lands on the SDK-wrap driver family
     (transport "sdk-inproc"), not native-tui.
     """
-    from omnigent.harness_plugins import harness_modules
+    from omnicraft.harness_plugins import harness_modules
 
     if "acp" not in harness_modules():
         pytest.skip("acp harness not registered in this build")
@@ -124,17 +124,17 @@ def test_resolve_registered_harness_by_name() -> None:
 def test_resolve_entry_point_plugin_and_alias() -> None:
     """An entry-point community plugin resolves by name AND by alias.
 
-    ``omnigent-rovo`` registers ``rovo-cli`` (alias ``rovo``) via the
-    ``omnigent.community.harness`` entry point and declares no capabilities
+    ``omnicraft-rovo`` registers ``rovo-cli`` (alias ``rovo``) via the
+    ``omnicraft.community.harness`` entry point and declares no capabilities
     entry — only a harness module + install spec. The registry fallback still
     binds it (keying off harness_modules, defaulting to the SDK family) and
     skip-gates on its install-spec binary. Gated on the plugin being installed
     so a build without it still passes.
     """
-    from omnigent.harness_plugins import harness_aliases
+    from omnicraft.harness_plugins import harness_aliases
 
     if harness_aliases().get("rovo") != "rovo-cli":
-        pytest.skip("omnigent-rovo plugin not installed")
+        pytest.skip("omnicraft-rovo plugin not installed")
     by_alias = resolve_profile("rovo")
     by_name = resolve_profile("rovo-cli")
     assert by_alias.harness == "rovo-cli" == by_name.harness
@@ -149,12 +149,12 @@ def test_registry_profile_happy_path_no_plugin(monkeypatch: pytest.MonkeyPatch) 
     Fakes a registered CLI-subprocess harness (+ alias + install-spec binary) so
     the name/alias resolution, the integration_mode -> sdk-inproc mapping, and
     the install-spec skip-gate are exercised even in a build without
-    omnigent-rovo. Guards the coverage the plugin tests skip-gate away.
+    omnicraft-rovo. Guards the coverage the plugin tests skip-gate away.
     """
     from types import SimpleNamespace
 
     import tests.harness_bench.manifest as man
-    from omnigent.harness_capabilities import AuthModel, IntegrationMode
+    from omnicraft.harness_capabilities import AuthModel, IntegrationMode
 
     class _Spec:
         binary = "fakebin"
@@ -190,7 +190,7 @@ def test_registry_refuses_native_server_mode(monkeypatch: pytest.MonkeyPatch) ->
     from types import SimpleNamespace
 
     import tests.harness_bench.manifest as man
-    from omnigent.harness_capabilities import AuthModel, IntegrationMode
+    from omnicraft.harness_capabilities import AuthModel, IntegrationMode
 
     caps = SimpleNamespace(
         integration_mode=IntegrationMode.NATIVE_SERVER,

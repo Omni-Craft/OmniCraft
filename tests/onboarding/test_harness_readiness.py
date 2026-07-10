@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-import omnigent.onboarding.harness_install as hi
-from omnigent.onboarding.harness_readiness import (
+import omnicraft.onboarding.harness_install as hi
+from omnicraft.onboarding.harness_readiness import (
     configured_harness_map,
     harness_is_configured,
 )
@@ -25,7 +25,7 @@ def _isolate_cursor_credential(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) 
     ``GITHUB_TOKEN`` — otherwise a developer's real key would flip their verdict
     under these tests.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
     monkeypatch.delenv("CURSOR_API_KEY", raising=False)
     for var in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         monkeypatch.delenv(var, raising=False)
@@ -164,7 +164,7 @@ def test_configured_harness_map_covers_all_spellings(
         # Kimi Code CLI + alias.
         "kimi",
         "kimi-code",
-        # Native Kimi (``omnigent kimi``) — gates on the kimi CLI.
+        # Native Kimi (``omnicraft kimi``) — gates on the kimi CLI.
         "kimi-native",
         "native-kimi",
         # Native Antigravity (agy) CLI-wrapping harness, both spellings.
@@ -258,11 +258,11 @@ def test_configured_harness_map_all_true_with_clis(
     gated) by a detected Gemini OAuth credential, and the generic ACP harness
     (config-gated) by a registered agent — so nothing is reported unconfigured.
     """
-    import omnigent.onboarding.gemini_auth as _ga
+    import omnicraft.onboarding.gemini_auth as _ga
 
     _all_clis_installed(monkeypatch)
     monkeypatch.setattr(
-        "omnigent.codex_native._codex_auth_unavailable_reason",
+        "omnicraft.codex_native._codex_auth_unavailable_reason",
         lambda: None,
     )
     monkeypatch.setenv("CURSOR_API_KEY", "crsr_ready")
@@ -271,7 +271,7 @@ def test_configured_harness_map_all_true_with_clis(
     monkeypatch.setenv("GH_TOKEN", "gho_ready")
     # The generic ACP harness is config-gated (≥1 registered agent), not
     # CLI-gated — satisfy it so it isn't the lone unconfigured entry here.
-    monkeypatch.setattr("omnigent.onboarding.acp_auth.acp_agents", lambda config=None: [object()])
+    monkeypatch.setattr("omnicraft.onboarding.acp_auth.acp_agents", lambda config=None: [object()])
     result = configured_harness_map()
     assert all(result.values())
 

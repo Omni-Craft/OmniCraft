@@ -1,4 +1,4 @@
-"""Tests for ``omnigent/onboarding/antigravity_auth.py`` — the Gemini key store.
+"""Tests for ``omnicraft/onboarding/antigravity_auth.py`` — the Gemini key store.
 
 Isolate config + secret store to a tmp dir (file backend) and assert the
 read/resolve/configured helpers — including the soft resolution that returns
@@ -12,9 +12,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.onboarding import antigravity_auth, extra_install
-from omnigent.onboarding import secrets as secret_store
-from omnigent.onboarding.antigravity_auth import (
+from omnicraft.onboarding import antigravity_auth, extra_install
+from omnicraft.onboarding import secrets as secret_store
+from omnicraft.onboarding.antigravity_auth import (
     ANTIGRAVITY_SECRET_NAME,
     antigravity_api_key_configured,
     antigravity_api_key_ref,
@@ -33,8 +33,8 @@ def _isolate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
     :returns: The tmp config-home dir, so a test can write a ``config.yaml``.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)
     monkeypatch.delenv("ANTIGRAVITY_API_KEY", raising=False)
     return tmp_path
@@ -87,7 +87,7 @@ def test_inline_api_key_field_accepted(_isolate: Path, monkeypatch: pytest.Monke
 def test_dangling_keychain_ref_is_soft_none(_isolate: Path) -> None:
     """A reference to a never-stored keychain entry resolves softly to ``None``.
 
-    Failure (an ``OmnigentError`` escaping) would crash an antigravity run / the
+    Failure (an ``OmniCraftError`` escaping) would crash an antigravity run / the
     setup readout on a deleted secret instead of falling back to the SDK's
     ambient / Vertex credentials.
     """
@@ -152,7 +152,7 @@ def test_antigravity_install_command_prefers_uv(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr(extra_install, "_is_uv_tool_install", lambda: False)
     monkeypatch.setattr(extra_install.shutil, "which", lambda name: "/usr/bin/uv")
     cmd = antigravity_install_command()
-    assert cmd == ["uv", "pip", "install", "omnigent[antigravity]"]
+    assert cmd == ["uv", "pip", "install", "omnicraft[antigravity]"]
     assert not any("index" in part or "://" in part for part in cmd)
 
 
@@ -166,7 +166,7 @@ def test_antigravity_install_command_falls_back_to_pip(monkeypatch: pytest.Monke
         "-m",
         "pip",
         "install",
-        "omnigent[antigravity]",
+        "omnicraft[antigravity]",
     ]
     assert not any("index" in part or "://" in part for part in cmd)
 
@@ -181,8 +181,8 @@ def test_antigravity_install_command_uv_tool(monkeypatch: pytest.MonkeyPatch) ->
         "tool",
         "install",
         "--with",
-        "omnigent[antigravity]",
-        "omnigent",
+        "omnicraft[antigravity]",
+        "omnicraft",
         "--force",
     ]
 
@@ -212,7 +212,7 @@ def test_install_antigravity_sdk_runs_command_then_rechecks(
 
     assert install_antigravity_sdk() is True
     assert calls == [
-        [extra_install.sys.executable, "-m", "pip", "install", "omnigent[antigravity]"]
+        [extra_install.sys.executable, "-m", "pip", "install", "omnicraft[antigravity]"]
     ]
 
 

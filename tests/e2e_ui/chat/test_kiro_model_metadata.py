@@ -15,7 +15,7 @@ def _patch_session_as_kiro_native(page: Page, session_id: str) -> list[dict]:
     app/server. This route patch rewrites only ``GET``/``PATCH
     /v1/sessions/{session_id}`` as seen by the browser into a kiro-native
     snapshot carrying the curated kiro ``model_options`` (the shape
-    :func:`omnigent.kiro_native.kiro_base_model_options` serves) and a persisted
+    :func:`omnicraft.kiro_native.kiro_base_model_options` serves) and a persisted
     ``model_override``.
 
     :param page: Playwright page before navigation.
@@ -50,7 +50,7 @@ def _patch_session_as_kiro_native(page: Page, session_id: str) -> list[dict]:
 
         payload["labels"] = {
             **payload.get("labels", {}),
-            "omnigent.wrapper": "kiro-native-ui",
+            "omnicraft.wrapper": "kiro-native-ui",
         }
         payload["harness"] = "kiro-native"
         payload["model_options"] = [

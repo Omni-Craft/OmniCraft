@@ -5,10 +5,10 @@ from __future__ import annotations
 import httpx
 import pytest_asyncio
 
-from omnigent.db.utils import generate_agent_id
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.db.utils import generate_agent_id
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 

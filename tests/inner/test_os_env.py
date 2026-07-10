@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.inner.os_env` helper-env construction."""
+"""Unit tests for :mod:`omnicraft.inner.os_env` helper-env construction."""
 
 from __future__ import annotations
 
@@ -7,11 +7,11 @@ import shutil
 import tracemalloc
 from pathlib import Path
 
-from omnigent.inner.os_env import _read_impl, _shell_impl, build_helper_env
-from omnigent.inner.sandbox import SandboxPolicy
-from omnigent.runner.identity import (
-    OMNIGENT_SESSION_ENV_VALUE,
-    OMNIGENT_SESSION_ENV_VAR,
+from omnicraft.inner.os_env import _read_impl, _shell_impl, build_helper_env
+from omnicraft.inner.sandbox import SandboxPolicy
+from omnicraft.runner.identity import (
+    OMNICRAFT_SESSION_ENV_VALUE,
+    OMNICRAFT_SESSION_ENV_VAR,
     RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR,
 )
 
@@ -92,24 +92,24 @@ def test_build_helper_env_active_drops_binding_token() -> None:
     assert env["PATH"] == "/usr/bin"  # PATH is in the default allowlist
 
 
-def test_build_helper_env_active_passes_omnigent_session_marker() -> None:
-    """The ``OMNIGENT`` session marker survives the active allowlist.
+def test_build_helper_env_active_passes_omnicraft_session_marker() -> None:
+    """The ``OMNICRAFT`` session marker survives the active allowlist.
 
     The marker (set once on the runner process) must reach an agent's
     sandboxed shell so code running there can detect it is inside an
-    Omnigent session, the way ``CLAUDE_CODE`` / ``CODEX`` are visible in
+    OmniCraft session, the way ``CLAUDE_CODE`` / ``CODEX`` are visible in
     their own agents' shells.
 
     :returns: None.
     """
     parent = {
         "PATH": "/usr/bin",
-        OMNIGENT_SESSION_ENV_VAR: OMNIGENT_SESSION_ENV_VALUE,
+        OMNICRAFT_SESSION_ENV_VAR: OMNICRAFT_SESSION_ENV_VALUE,
     }
 
     env = build_helper_env(parent, _active_policy())
 
-    assert env[OMNIGENT_SESSION_ENV_VAR] == OMNIGENT_SESSION_ENV_VALUE
+    assert env[OMNICRAFT_SESSION_ENV_VAR] == OMNICRAFT_SESSION_ENV_VALUE
 
 
 # ---------------------------------------------------------------------------

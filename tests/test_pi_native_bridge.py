@@ -1,4 +1,4 @@
-"""Tests for omnigent.pi_native_bridge inbox enqueue contract."""
+"""Tests for omnicraft.pi_native_bridge inbox enqueue contract."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import json
 import stat
 from pathlib import Path
 
-from omnigent import pi_native_bridge
+from omnicraft import pi_native_bridge
 
 
 def _inbox_files(bridge_dir: Path) -> list[str]:
@@ -135,7 +135,7 @@ def test_prepare_bridge_dir_is_owner_only(tmp_path: Path, monkeypatch) -> None:
     """The bridge dir and its inbox are created 0o700 (per-session isolation).
 
     The bearer token written alongside the inbox makes owner-only perms the
-    isolation boundary between sessions sharing ``~/.omnigent/pi-native``.
+    isolation boundary between sessions sharing ``~/.omnicraft/pi-native``.
     """
     monkeypatch.setattr(pi_native_bridge, "_BRIDGE_ROOT", tmp_path / "pi-native")
 
@@ -172,7 +172,7 @@ def test_clear_inbox_is_a_noop_without_an_inbox(tmp_path: Path) -> None:
 def test_write_extension_files_embeds_tools(tmp_path: Path) -> None:
     """write_extension_files embeds the tool list so the extension can register it.
 
-    The runner builds the session's Omnigent tool surface (sys_* tools) and
+    The runner builds the session's OmniCraft tool surface (sys_* tools) and
     passes it to write_extension_files; the extension reads ``config.tools`` and
     registers each via ``pi.registerTool``. The config must round-trip the list
     verbatim so the schemas reach the Pi agent unchanged.
@@ -194,8 +194,8 @@ def test_write_extension_files_embeds_tools(tmp_path: Path) -> None:
     _ext, cfg = pi_native_bridge.write_extension_files(
         bridge_dir,
         session_id="conv_abc",
-        server_url="http://omnigent.test/",
-        conversation_url="http://omnigent.test/c/conv_abc",
+        server_url="http://omnicraft.test/",
+        conversation_url="http://omnicraft.test/c/conv_abc",
         auth_headers={"Authorization": "Bearer t"},
         tools=tools,
     )
@@ -203,7 +203,7 @@ def test_write_extension_files_embeds_tools(tmp_path: Path) -> None:
     payload = json.loads(cfg.read_text(encoding="utf-8"))
     assert payload["sessionId"] == "conv_abc"
     # serverUrl trailing slash is stripped so the extension can append paths.
-    assert payload["serverUrl"] == "http://omnigent.test"
+    assert payload["serverUrl"] == "http://omnicraft.test"
     assert payload["tools"] == tools
 
 
@@ -214,8 +214,8 @@ def test_write_extension_files_defaults_tools_to_empty(tmp_path: Path) -> None:
     _ext, cfg = pi_native_bridge.write_extension_files(
         bridge_dir,
         session_id="conv_abc",
-        server_url="http://omnigent.test",
-        conversation_url="http://omnigent.test/c/conv_abc",
+        server_url="http://omnicraft.test",
+        conversation_url="http://omnicraft.test/c/conv_abc",
     )
 
     payload = json.loads(cfg.read_text(encoding="utf-8"))
@@ -234,8 +234,8 @@ def test_refresh_config_auth_headers_replaces_only_auth(tmp_path: Path) -> None:
     pi_native_bridge.write_extension_files(
         bridge_dir,
         session_id="conv_abc",
-        server_url="http://omnigent.test",
-        conversation_url="http://omnigent.test/c/conv_abc",
+        server_url="http://omnicraft.test",
+        conversation_url="http://omnicraft.test/c/conv_abc",
         auth_headers={"Authorization": "Bearer stale"},
         tools=[{"name": "t"}],
     )
@@ -247,7 +247,7 @@ def test_refresh_config_auth_headers_replaces_only_auth(tmp_path: Path) -> None:
     payload = json.loads(pi_native_bridge.config_path(bridge_dir).read_text(encoding="utf-8"))
     assert payload["authHeaders"] == {"Authorization": "Bearer fresh"}
     # Untouched: the static fields the extension reads once at startup.
-    assert payload["serverUrl"] == "http://omnigent.test"
+    assert payload["serverUrl"] == "http://omnicraft.test"
     assert payload["tools"] == [{"name": "t"}]
 
 
@@ -260,8 +260,8 @@ def test_refresh_config_auth_headers_noops(tmp_path: Path) -> None:
     pi_native_bridge.write_extension_files(
         bridge_dir,
         session_id="conv_abc",
-        server_url="http://omnigent.test",
-        conversation_url="http://omnigent.test/c/conv_abc",
+        server_url="http://omnicraft.test",
+        conversation_url="http://omnicraft.test/c/conv_abc",
         auth_headers={"Authorization": "Bearer x"},
     )
     # Empty headers (local/unauthenticated) must never blank out a live token.

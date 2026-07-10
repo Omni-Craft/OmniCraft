@@ -1,9 +1,9 @@
-"""Tests for omnigent.onboarding.detected — ambient → provider bridge.
+"""Tests for omnicraft.onboarding.detected — ambient → provider bridge.
 
 Covers synthesizing config-shape provider entries from ambient detections,
 the read-time merge (explicit wins; detected auto-default per family), and
 the adopt set ``configure harnesses`` persists. Detections are constructed as
-real :class:`~omnigent.onboarding.ambient.DetectedProvider` objects (not
+real :class:`~omnicraft.onboarding.ambient.DetectedProvider` objects (not
 mocks) so a regression in field handling surfaces here.
 """
 
@@ -11,13 +11,13 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.onboarding.ambient import DetectedProvider
-from omnigent.onboarding.detected import (
+from omnicraft.onboarding.ambient import DetectedProvider
+from omnicraft.onboarding.detected import (
     effective_config_with_detected,
     providers_to_adopt,
     synthesize_detected_entries,
 )
-from omnigent.onboarding.provider_config import (
+from omnicraft.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
     GEMINI_FAMILY,
     OPENAI_FAMILY,
@@ -64,17 +64,17 @@ def test_synthesize_env_key_anthropic() -> None:
     assert entries["anthropic"]["anthropic"]["base_url"] == "https://api.anthropic.com"
 
 
-def test_synthesize_env_key_preserves_omnigent_prefixed_source() -> None:
+def test_synthesize_env_key_preserves_omnicraft_prefixed_source() -> None:
     """A prefixed detection keeps the prefixed env ref in provider config."""
     det = DetectedProvider(
         name="anthropic",
         kind="key",
         family=ANTHROPIC_FAMILY,
-        source="$OMNIGENT_ANTHROPIC_API_KEY",
+        source="$OMNICRAFT_ANTHROPIC_API_KEY",
     )
     entries = synthesize_detected_entries([det])
 
-    assert entries["anthropic"]["anthropic"]["api_key_ref"] == ("env:OMNIGENT_ANTHROPIC_API_KEY")
+    assert entries["anthropic"]["anthropic"]["api_key_ref"] == ("env:OMNICRAFT_ANTHROPIC_API_KEY")
 
 
 def test_synthesize_env_key_openrouter_uses_vendor_endpoint_and_chat_wire() -> None:
@@ -371,7 +371,7 @@ def test_cli_config_detection_wins_codex_default_over_login() -> None:
     Detection priority (config provider first) mirrors codex's own
     resolution — config.toml's default provider beats auth.json. Failure
     means an isaac-configured machine with a stray auth.json would default
-    omnigents to the ChatGPT login while plain ``codex`` uses the gateway.
+    omnicrafts to the ChatGPT login while plain ``codex`` uses the gateway.
     """
     merged = effective_config_with_detected({}, [_codex_config_det(), _codex_login()])
     default = default_provider_for_harness(merged, "codex")
@@ -450,7 +450,7 @@ def test_malformed_dismissed_detections_treated_as_empty() -> None:
     accidentally dismiss everything; the next dismissal write self-heals
     the key into a proper list.
     """
-    from omnigent.onboarding.detected import dismissed_detection_names
+    from omnicraft.onboarding.detected import dismissed_detection_names
 
     assert dismissed_detection_names({"dismissed_detections": "oops"}) == frozenset()
     # Non-string members are ignored; string members still count.

@@ -314,7 +314,7 @@ export interface ChatState {
   backgroundTaskCount: number;
   /**
    * Whether the active session is a native-terminal wrapper
-   * (claude-native / codex-native), derived from the `omnigent.wrapper`
+   * (claude-native / codex-native), derived from the `omnicraft.wrapper`
    * label on bind. Web messages on these sessions are NOT persisted at
    * POST time — they round-trip through the vendor TUI and reconcile via
    * the transcript forwarder's `session.input.consumed` event, which can
@@ -326,11 +326,11 @@ export interface ChatState {
   isNativeTerminalSession: boolean;
   /**
    * Whether this is a native-terminal wrapper whose model is chosen inside the
-   * vendor TUI (qwen/goose/cursor/pi/opencode) rather than through an Omnigent
+   * vendor TUI (qwen/goose/cursor/pi/opencode) rather than through an OmniCraft
    * model picker. The composer status line hides its model/effort label for
-   * these — Omnigent's bound `llmModel` is just an unused default (it would
+   * these — OmniCraft's bound `llmModel` is just an unused default (it would
    * otherwise read e.g. "claude-sonnet-4-6" on a Qwen session). claude-/codex-
-   * native DO expose an Omnigent picker, so they keep the label. `false` on
+   * native DO expose an OmniCraft picker, so they keep the label. `false` on
    * `/`, before the snapshot resolves, and for non-native sessions.
    */
   nativeVendorOwnsModel: boolean;
@@ -383,7 +383,7 @@ export interface ChatState {
   costControlModeOverride: "on" | "off" | null;
   /**
    * Per-session Codex collaboration-mode flag. Hydrated from
-   * ``omnigent.codex_native.collaboration_mode`` on bind and updated by the
+   * ``omnicraft.codex_native.collaboration_mode`` on bind and updated by the
    * web toggle or native Codex TUI events. False for non-Codex sessions.
    */
   codexPlanMode: boolean;
@@ -468,7 +468,7 @@ export interface ChatState {
    */
   gitBranch: string | null;
   /**
-   * Current Claude Code todo list for `omnigent claude` sessions.
+   * Current Claude Code todo list for `omnicraft claude` sessions.
    * Populated from the session snapshot on bind and updated by
    * `session.todos` SSE events. Empty array for non-claude-native
    * sessions or before the first poll tick from the forwarder.
@@ -736,8 +736,8 @@ const STREAM_RECONNECT_MAX_MS = 5_000;
 
 // Sticky picker prefs — persisted so a new chat inherits the user's
 // last pick across reloads and across sessions.
-const PICKER_PREF_EFFORT_KEY = "omnigent.picker.effort";
-const PICKER_PREF_MODEL_KEY = "omnigent.picker.model";
+const PICKER_PREF_EFFORT_KEY = "omnicraft.picker.effort";
+const PICKER_PREF_MODEL_KEY = "omnicraft.picker.model";
 
 function loadPickerPref(key: string): string | null {
   try {
@@ -1859,7 +1859,7 @@ type NativeModelFamily = "claude" | "codex";
  * :returns: ``"claude"`` / ``"codex"`` for native wrappers, else ``null``.
  */
 function nativeModelFamilyForSession(session: Pick<Session, "labels">): NativeModelFamily | null {
-  switch (session.labels?.["omnigent.wrapper"]) {
+  switch (session.labels?.["omnicraft.wrapper"]) {
     case "claude-code-native-ui":
       return "claude";
     case "codex-native-ui":
@@ -2083,10 +2083,10 @@ function sessionBindingPatch(
   | "sandboxStatus"
   | "mcpStartup"
 > {
-  const wrapper = session.labels?.["omnigent.wrapper"];
+  const wrapper = session.labels?.["omnicraft.wrapper"];
   return {
     isNativeTerminalSession: isNativeWrapper(wrapper),
-    // Native wrapper whose model lives in the vendor TUI (no Omnigent picker):
+    // Native wrapper whose model lives in the vendor TUI (no OmniCraft picker):
     // qwen/goose/cursor/pi/opencode. nativeModelFamilyForSession is non-null
     // only for claude-/codex-native, which keep the composer model label.
     nativeVendorOwnsModel:
@@ -4230,7 +4230,7 @@ export function handleSessionEvent(event: StreamEvent): void {
       // Claude-native: a `/skill-name` or surfaced CLI command typed
       // in the web composer round-trips through tmux → Claude TUI →
       // transcript → `external_conversation_item` (type=slash_command)
-      // → `response.output_item.done`. The Omnigent server bypasses
+      // → `response.output_item.done`. The OmniCraft server bypasses
       // persistence for these (no `session.input.consumed` fires),
       // so the optimistic bubble in `pendingUserMessages` would
       // otherwise linger next to the rendered SlashCommandBlock
@@ -4601,7 +4601,7 @@ function finalizeActive(
   });
 }
 
-// Mirrors the server's ErrorCode.RUNNER_UNAVAILABLE (omnigent/errors.py) —
+// Mirrors the server's ErrorCode.RUNNER_UNAVAILABLE (omnicraft/errors.py) —
 // the 503 returned by POST /events when a host-bound runner never connects
 // within the connect-grace + relaunch window.
 const RUNNER_UNAVAILABLE_CODE = "runner_unavailable";

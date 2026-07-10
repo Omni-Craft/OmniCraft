@@ -1,6 +1,6 @@
 """Tests for the shared onboarding interactive selectors.
 
-:mod:`omnigent.onboarding.interactive` provides the theme-picker-styled
+:mod:`omnicraft.onboarding.interactive` provides the theme-picker-styled
 ``select`` arrow-key menu and the ``prompt_text`` text input. The
 raw-termios TTY path cannot be exercised in a headless test runner (no
 controlling terminal), so these tests cover the **non-TTY numbered
@@ -19,7 +19,7 @@ import sys
 
 import pytest
 
-from omnigent.onboarding import interactive
+from omnicraft.onboarding import interactive
 
 
 @pytest.fixture()
@@ -394,7 +394,7 @@ def test_render_menu_without_max_visible_renders_all_rows() -> None:
 def test_render_menu_compact_uses_top_level_footer_and_no_title_gap() -> None:
     """Compact menus hug the title to the list and say Esc exits.
 
-    ``omnigent setup`` uses this for the top-level harness overview: there is
+    ``omnicraft setup`` uses this for the top-level harness overview: there is
     no blank spacer below the title, and the footer must read as a compact
     top-level action (``Esc exit``), not the nested-menu ``Esc back`` copy.
     """

@@ -1,4 +1,4 @@
-"""Tests for mirroring Kiro's persisted CLI session into Omnigent."""
+"""Tests for mirroring Kiro's persisted CLI session into OmniCraft."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from typing import Any
 import httpx
 import pytest
 
-import omnigent.kiro_native_session_forwarder as forwarder
+import omnicraft.kiro_native_session_forwarder as forwarder
 
 
 def _write_kiro_session(
@@ -329,7 +329,7 @@ async def test_forward_kiro_session_posts_conversation_messages(
     monkeypatch.setattr(forwarder.asyncio, "sleep", _cancel_sleep)
 
     with pytest.raises(asyncio.CancelledError):
-        await forwarder.forward_kiro_session_to_omnigent(
+        await forwarder.forward_kiro_session_to_omnicraft(
             base_url="http://127.0.0.1:6767",
             headers={},
             session_id="conv_kiro",
@@ -469,7 +469,7 @@ async def test_forward_kiro_session_posts_cumulative_cost_once(
     monkeypatch.setattr(forwarder.asyncio, "sleep", _cancel_after_two_polls)
 
     with pytest.raises(asyncio.CancelledError):
-        await forwarder.forward_kiro_session_to_omnigent(
+        await forwarder.forward_kiro_session_to_omnicraft(
             base_url="http://127.0.0.1:6767",
             headers={},
             session_id="conv_kiro",
@@ -578,7 +578,7 @@ async def test_forward_kiro_session_prefers_expected_resume_session(
     monkeypatch.setattr(forwarder.asyncio, "sleep", _cancel_sleep)
 
     with pytest.raises(asyncio.CancelledError):
-        await forwarder.forward_kiro_session_to_omnigent(
+        await forwarder.forward_kiro_session_to_omnicraft(
             base_url="http://127.0.0.1:6767",
             headers={},
             session_id="conv_kiro",
@@ -663,7 +663,7 @@ async def test_forward_kiro_session_waits_for_expected_resume_session(
     monkeypatch.setattr(forwarder.asyncio, "sleep", _cancel_sleep)
 
     with pytest.raises(asyncio.CancelledError):
-        await forwarder.forward_kiro_session_to_omnigent(
+        await forwarder.forward_kiro_session_to_omnicraft(
             base_url="http://127.0.0.1:6767",
             headers={},
             session_id="conv_kiro",
@@ -734,7 +734,7 @@ async def test_forward_kiro_session_does_not_post_session_status(
     monkeypatch.setattr(forwarder.asyncio, "sleep", _cancel_sleep)
 
     with pytest.raises(asyncio.CancelledError):
-        await forwarder.forward_kiro_session_to_omnigent(
+        await forwarder.forward_kiro_session_to_omnicraft(
             base_url="http://127.0.0.1:6767",
             headers={},
             session_id="conv_kiro",
@@ -819,7 +819,7 @@ async def test_forward_kiro_session_mirrors_current_model_once(
     monkeypatch.setattr(forwarder.asyncio, "sleep", _cancel_after_two_polls)
 
     with pytest.raises(asyncio.CancelledError):
-        await forwarder.forward_kiro_session_to_omnigent(
+        await forwarder.forward_kiro_session_to_omnicraft(
             base_url="http://127.0.0.1:6767",
             headers={},
             session_id="conv_kiro",

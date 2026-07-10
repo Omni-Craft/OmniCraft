@@ -1,4 +1,4 @@
-"""Tests for omnigent.tools.manager (ToolManager)."""
+"""Tests for omnicraft.tools.manager (ToolManager)."""
 
 from __future__ import annotations
 
@@ -9,8 +9,8 @@ from typing import Any
 
 import pytest
 
-from omnigent.errors import OmnigentError
-from omnigent.spec.types import (
+from omnicraft.errors import OmniCraftError
+from omnicraft.spec.types import (
     AgentSpec,
     BuiltinToolConfig,
     LLMConfig,
@@ -21,10 +21,10 @@ from omnigent.spec.types import (
     ToolRuntime,
     ToolsConfig,
 )
-from omnigent.tools import ToolManager
-from omnigent.tools.base import ToolContext
-from omnigent.tools.client_specified import ClientSideTool, ClientSideToolSpec
-from omnigent.tools.mcp import clear_discovery_cache
+from omnicraft.tools import ToolManager
+from omnicraft.tools.base import ToolContext
+from omnicraft.tools.client_specified import ClientSideTool, ClientSideToolSpec
+from omnicraft.tools.mcp import clear_discovery_cache
 
 _TEST_CTX = ToolContext(task_id="task_test", agent_id="agent_test")
 
@@ -320,7 +320,7 @@ def test_schemas_isolate_a_failing_tool(
 
     mgr._tools["boom"] = _BoomTool()  # type: ignore[assignment]
 
-    with caplog.at_level(logging.WARNING, logger="omnigent.tools.manager"):
+    with caplog.at_level(logging.WARNING, logger="omnicraft.tools.manager"):
         schemas = mgr.get_tool_schemas()
 
     names = {s["function"]["name"] for s in schemas}
@@ -359,7 +359,7 @@ def test_client_schemas_isolate_a_failing_tool(
 
     mgr._tools["boom"] = _BoomClientTool(ClientSideToolSpec(name="boom", schema={}))
 
-    with caplog.at_level(logging.WARNING, logger="omnigent.tools.manager"):
+    with caplog.at_level(logging.WARNING, logger="omnicraft.tools.manager"):
         schemas = mgr.get_client_tool_schemas()
 
     names = {s["function"]["name"] for s in schemas}
@@ -658,7 +658,7 @@ def test_shutdown_skips_pre_resolved_os_env() -> None:
 
 def test_shutdown_calls_tool_shutdown() -> None:
     """``shutdown()`` calls ``shutdown()`` on every registered tool."""
-    from omnigent.tools.base import Tool
+    from omnicraft.tools.base import Tool
 
     class _TrackingTool(Tool):
         shut_down = False
@@ -798,7 +798,7 @@ def test_client_tool_shadows_skill_tool(
     )
 
     # The registered tool is the client's ClientSideTool, not LoadSkillTool
-    from omnigent.tools.client_specified import ClientSideTool
+    from omnicraft.tools.client_specified import ClientSideTool
 
     assert isinstance(mgr._tools["load_skill"], ClientSideTool), (
         "Expected ClientSideTool after client override, "
@@ -1042,10 +1042,10 @@ def test_client_tool_invalid_name_raises(
 ) -> None:
     """
     Client-specified tools with invalid names raise
-    ``OmnigentError`` at registration time.
+    ``OmniCraftError`` at registration time.
     """
     spec = _make_spec()
-    with pytest.raises(OmnigentError, match="Invalid client tool name"):
+    with pytest.raises(OmniCraftError, match="Invalid client tool name"):
         ToolManager(
             spec,
             client_tool_specs=[_make_client_side_spec(name)],
@@ -1073,7 +1073,7 @@ def _write_local_tool(
     py_dir.mkdir(parents=True, exist_ok=True)
     code = (
         '"""Test tool."""\n'
-        "from omnigent_client import tool\n"
+        "from omnicraft_client import tool\n"
         "\n"
         "\n"
         "@tool\n"

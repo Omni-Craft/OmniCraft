@@ -8,7 +8,7 @@ import sys
 
 import pytest
 
-from omnigent.runner.identity import (
+from omnicraft.runner.identity import (
     RUNNER_AUTH_SECRET_ENV_VARS,
     RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR,
     strip_runner_auth_secrets,
@@ -103,7 +103,7 @@ def test_strip_runner_auth_secrets_does_not_mutate_input() -> None:
 
 
 def test_importing_identity_does_not_pull_in_fastapi() -> None:
-    """``import omnigent.runner.identity`` stays free of the FastAPI stack.
+    """``import omnicraft.runner.identity`` stays free of the FastAPI stack.
 
     The helper is imported at every runner→child spawn boundary —
     including the sandbox launcher, which re-execs a fresh interpreter
@@ -111,7 +111,7 @@ def test_importing_identity_does_not_pull_in_fastapi() -> None:
     ``create_runner_app`` lazily (PEP 562) precisely so this stdlib-only
     submodule import does not drag in ``runner.app`` and ~0.5s of
     FastAPI import on that hot path. If someone reinstates an eager
-    ``from omnigent.runner.app import create_runner_app`` in the package
+    ``from omnicraft.runner.app import create_runner_app`` in the package
     ``__init__``, this fails.
 
     Runs in a fresh subprocess so an unrelated test in the same session
@@ -121,13 +121,13 @@ def test_importing_identity_does_not_pull_in_fastapi() -> None:
     """
     probe = (
         "import sys\n"
-        "import omnigent.runner.identity\n"
+        "import omnicraft.runner.identity\n"
         "assert 'fastapi' not in sys.modules, 'fastapi loaded via identity import'\n"
-        "assert 'omnigent.runner.app' not in sys.modules, "
+        "assert 'omnicraft.runner.app' not in sys.modules, "
         "'runner.app loaded via identity import'\n"
     )
     # Hand the child the same import roots as this process so it resolves
-    # ``omnigent`` to the code under test (worktree or installed package).
+    # ``omnicraft`` to the code under test (worktree or installed package).
     child_env = {**os.environ, "PYTHONPATH": os.pathsep.join(p for p in sys.path if p)}
 
     result = subprocess.run(

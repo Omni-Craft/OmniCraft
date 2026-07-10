@@ -1,15 +1,15 @@
-# omnigent-ui-sdk
+# omnicraft-ui-sdk
 
 Terminal UI components (Rich + prompt_toolkit) for building
-[omnigent](https://github.com/omnigent-ai/omnigent) frontends.
+[omnicraft](https://github.com/omnicraft-ai/omnicraft) frontends.
 
-`omnigent-ui-sdk` provides the reusable rendering and input building blocks used
-by the omnigent CLI to display streaming agent output in the terminal. It is
-released in lockstep with the core `omnigent` package at a matching version:
+`omnicraft-ui-sdk` provides the reusable rendering and input building blocks used
+by the omnicraft CLI to display streaming agent output in the terminal. It is
+released in lockstep with the core `omnicraft` package at a matching version:
 
 ```bash
-pip install omnigent-ui-sdk
+pip install omnicraft-ui-sdk
 ```
 
-See the [omnigent repository](https://github.com/omnigent-ai/omnigent) for full
+See the [omnicraft repository](https://github.com/omnicraft-ai/omnicraft) for full
 documentation.

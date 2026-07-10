@@ -24,8 +24,8 @@ given capability:
 2. **The `Executor` capability flags** — `supports_streaming()`,
    `supports_live_message_queue()`, `supports_tool_boundary_interrupt()`,
    `supports_stepwise_internal_turns()`, `handles_tools_internally()` in
-   `omnigent/inner/executor.py:541`.
-3. **`omnigent/model_override.py`** — already encodes per-harness facts
+   `omnicraft/inner/executor.py:541`.
+3. **`omnicraft/model_override.py`** — already encodes per-harness facts
    declaratively (`_SDK_MODEL_OVERRIDE_HARNESSES`, the `_*_FAMILY_HARNESSES`
    sets, single- vs multi-model rules).
 
@@ -57,7 +57,7 @@ production surprise.
 ## Key constraint: registration is a hardcoded dict today
 
 Harnesses register via a literal `_HARNESS_MODULES: dict[str, str]` mapping
-harness name to module path in `omnigent/runtime/harnesses/__init__.py:34`.
+harness name to module path in `omnicraft/runtime/harnesses/__init__.py:34`.
 There is **no entry-point / plugin discovery** mechanism. An out-of-repo harness
 cannot even register without editing that file — the same shared-file conflict
 pain tracked in #899, whose proposed fix was per-harness self-registration.
@@ -68,7 +68,7 @@ on how a harness gets *discovered*.
 
 > **Update since this was written:** entry-point plugin discovery now exists —
 > `harness_capabilities()` merges contributions from the
-> `omnigent.community.harness` entry-point group, and the bench derives
+> `omnicraft.community.harness` entry-point group, and the bench derives
 > everything from it. So the bench side of option B is realized: a plugin's
 > harness flows in with no bench edit. The remaining hardcoded seam is *not*
 > here — it is the server's native-agent seeding (see "Plugin seamlessness").
@@ -148,7 +148,7 @@ tests/harness_bench/
 ```
 
 Reusable configuration and runtime primitives live in production modules such
-as `omnigent.config`, `find_free_port`, and the harness registry rather than
+as `omnicraft.config`, `find_free_port`, and the harness registry rather than
 being reimplemented under tests.
 
 - **Layer 0 — Profile / manifest.** Static facts and declared verdicts are
@@ -369,7 +369,7 @@ The original goal (option B) was that a *community* harness ships a
 plugins via entry points. A plugged-in harness needs zero bench code to be
 recognized.
 
-The seam is **one level down, in the omnigent server**. A native harness is
+The seam is **one level down, in the omnicraft server**. A native harness is
 only drivable once the server has seeded a built-in `<harness>-native-ui`
 agent, and that seeding is a **hardcoded list** in
 `server/app.py:_ensure_default_agents` — one `_ensure_default_<harness>_agent()`

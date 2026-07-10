@@ -9,7 +9,7 @@ import { authenticatedFetch } from "@/lib/identity";
 
 /**
  * Brain harnesses offered as a per-session override on bundle agents
- * (executor.type: omnigent — polly, debby, and other YAML agents). Keys
+ * (executor.type: omnicraft — polly, debby, and other YAML agents). Keys
  * are canonical server harness ids, values are picker labels. Native
  * terminal wrappers (claude-native / codex-native) are deliberately
  * absent: an agent whose declared harness isn't in this map gets no

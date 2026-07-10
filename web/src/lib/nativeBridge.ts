@@ -1,7 +1,7 @@
 // Bridge between the web app and the optional native shells.
 //
 // The SAME `web` bundle runs in two places:
-//   1. A normal browser tab (served by the Omnigent server).
+//   1. A normal browser tab (served by the OmniCraft server).
 //   2. Inside the Electron desktop wrapper (`web/electron`), which loads
 //      that exact server-served bundle in a Chromium BrowserWindow.
 //   3. Inside the iOS wrapper (`web/ios`), which loads the same bundle in
@@ -14,8 +14,8 @@
 // has.
 //
 // Design notes:
-//   * Detection is feature-based (an injected `window.omnigentNative` or the
-//     legacy Electron `window.omnigentDesktop` object), never a build flag —
+//   * Detection is feature-based (an injected `window.omnicraftNative` or the
+//     legacy Electron `window.omnicraftDesktop` object), never a build flag —
 //     one bundle, multiple runtimes, decided at runtime.
 //   * This module never throws: a broken/old shell must not take down
 //     notifications in the browser path.
@@ -29,7 +29,7 @@ export type SidebarDragPhase = "begin" | "move" | "open" | "close";
 
 /**
  * Minimal API surface exposed by native shells. Electron exposes the legacy
- * `window.omnigentDesktop`; newer shells expose `window.omnigentNative`.
+ * `window.omnicraftDesktop`; newer shells expose `window.omnicraftNative`.
  * Kept intentionally tiny and string/number only so it survives bridge
  * serialization.
  */
@@ -153,7 +153,7 @@ export interface CliStatus {
 
 /** This machine's identity, read from local config (fast — no subprocess). */
 export interface HostIdentity {
-  /** Whether the `omnigent` CLI was found and is runnable. */
+  /** Whether the `omnicraft` CLI was found and is runnable. */
   cliInstalled: boolean;
   /** This machine's host id, or null if it has none yet. */
   hostId: string | null;
@@ -176,14 +176,14 @@ export interface ServerPickerInfo {
 /** The Electron preload bridge, or undefined outside the Electron shell. */
 function electronApi(): ElectronDesktopApi | undefined {
   if (typeof window === "undefined") return undefined;
-  const api = (window as unknown as { omnigentDesktop?: ElectronDesktopApi }).omnigentDesktop;
+  const api = (window as unknown as { omnicraftDesktop?: ElectronDesktopApi }).omnicraftDesktop;
   return api?.kind === "electron" ? api : undefined;
 }
 
 /** The native shell bridge, or undefined outside any native shell. */
 function nativeApi(): NativeShellApi | undefined {
   if (typeof window === "undefined") return undefined;
-  const api = (window as unknown as { omnigentNative?: NativeShellApi }).omnigentNative;
+  const api = (window as unknown as { omnicraftNative?: NativeShellApi }).omnicraftNative;
   if (api?.kind === "ios" || api?.kind === "android" || api?.kind === "electron") return api;
   return electronApi();
 }
@@ -226,7 +226,7 @@ export function isAndroidShell(): boolean {
  * The shell loads the same server-served SPA in a Chromium webview, so the
  * web code can do better than the Web platform: OS notifications and a
  * dock/taskbar badge. Detection is feature-based — the Electron preload
- * exposes `window.omnigentDesktop` — never a build flag. In a plain browser
+ * exposes `window.omnicraftDesktop` — never a build flag. In a plain browser
  * this is false and every native call here degrades to a no-op / web fallback.
  */
 export function isNativeShell(): boolean {
@@ -337,9 +337,9 @@ export async function setBadgeCount(count: number): Promise<void> {
 /**
  * Set one of the inset-system CSS variables on the document root. Visibility of
  * the native bars is web-owned (the web app is what shows/hides them), so the
- * setters below fold it into `--omnigent-*-bar-visible`; the bars' size comes
+ * setters below fold it into `--omnicraft-*-bar-visible`; the bars' size comes
  * from the native bridge (see {@link onNativeInsets} / nativeInsets.ts). Both
- * combine in `--omnigent-inset-*` (index.css). Harmless off-shell — the size
+ * combine in `--omnicraft-inset-*` (index.css). Harmless off-shell — the size
  * vars stay 0 there, so a stray visibility flag contributes nothing.
  */
 function setInsetVar(name: string, value: string): void {
@@ -352,7 +352,7 @@ function setInsetVar(name: string, value: string): void {
  * simply lack this optional method, so this degrades to a no-op.
  */
 export function setNativeServerSwitcherHidden(hidden: boolean): void {
-  setInsetVar("--omnigent-top-bar-visible", hidden ? "0" : "1");
+  setInsetVar("--omnicraft-top-bar-visible", hidden ? "0" : "1");
   const native = nativeApi();
   const setter = native?.setServerSwitcherHidden ?? native?.setSidebarOpen;
   if (!setter) return;
@@ -376,7 +376,7 @@ export function setNativeSidebarOpen(open: boolean): void {
  * caller renders its own in-page pill there.
  */
 export function setNativeViewMode(params: NativeViewModeParams): void {
-  setInsetVar("--omnigent-bottom-bar-visible", params.visible ? "1" : "0");
+  setInsetVar("--omnicraft-bottom-bar-visible", params.visible ? "1" : "0");
   const native = nativeApi();
   if (!native?.setViewMode) return;
   try {

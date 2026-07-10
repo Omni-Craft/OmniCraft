@@ -1,7 +1,7 @@
-"""Tests for ``omnigent/onboarding/cursor_auth.py`` — the Cursor API-key store.
+"""Tests for ``omnicraft/onboarding/cursor_auth.py`` — the Cursor API-key store.
 
 Cursor's ``CURSOR_API_KEY`` lives in a dedicated top-level ``cursor:`` config
-block (not the shared global ``auth:``) and the omnigent secret store, resolved
+block (not the shared global ``auth:``) and the omnicraft secret store, resolved
 with the same ``resolve_secret`` resolver the provider families use. These
 tests isolate the config + secret store to a tmp dir (file backend, no OS
 keychain) and assert the read/resolve/configured helpers behave — including the
@@ -16,9 +16,9 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.onboarding import cursor_auth, extra_install
-from omnigent.onboarding import secrets as secret_store
-from omnigent.onboarding.cursor_auth import (
+from omnicraft.onboarding import cursor_auth, extra_install
+from omnicraft.onboarding import secrets as secret_store
+from omnicraft.onboarding.cursor_auth import (
     CURSOR_SECRET_NAME,
     cursor_api_key_configured,
     cursor_api_key_ref,
@@ -37,8 +37,8 @@ def _isolate(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 
     :returns: The tmp config-home dir, so a test can write a ``config.yaml``.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     monkeypatch.delenv("CURSOR_API_KEY", raising=False)
     return tmp_path
 
@@ -134,7 +134,7 @@ def test_inline_api_key_field_accepted(_isolate: Path, monkeypatch: pytest.Monke
 def test_dangling_keychain_ref_is_soft_none(_isolate: Path) -> None:
     """A reference to a never-stored keychain entry resolves softly to ``None``.
 
-    Failure (an ``OmnigentError`` escaping) would crash a cursor run / the
+    Failure (an ``OmniCraftError`` escaping) would crash a cursor run / the
     setup readout on a deleted secret instead of falling back to cursor's own
     login.
     """
@@ -199,7 +199,7 @@ def test_cursor_install_command_prefers_uv(monkeypatch: pytest.MonkeyPatch) -> N
     monkeypatch.setattr(extra_install, "_is_uv_tool_install", lambda: False)
     monkeypatch.setattr(extra_install.shutil, "which", lambda name: "/usr/bin/uv")
     cmd = cursor_install_command()
-    assert cmd == ["uv", "pip", "install", "omnigent[cursor]"]
+    assert cmd == ["uv", "pip", "install", "omnicraft[cursor]"]
     assert not any("index" in part or "://" in part for part in cmd)
 
 
@@ -213,7 +213,7 @@ def test_cursor_install_command_falls_back_to_pip(monkeypatch: pytest.MonkeyPatc
         "-m",
         "pip",
         "install",
-        "omnigent[cursor]",
+        "omnicraft[cursor]",
     ]
     assert not any("index" in part or "://" in part for part in cmd)
 
@@ -228,8 +228,8 @@ def test_cursor_install_command_uv_tool(monkeypatch: pytest.MonkeyPatch) -> None
         "tool",
         "install",
         "--with",
-        "omnigent[cursor]",
-        "omnigent",
+        "omnicraft[cursor]",
+        "omnicraft",
         "--force",
     ]
 
@@ -258,7 +258,7 @@ def test_install_cursor_sdk_runs_command_then_rechecks(
     monkeypatch.setattr(cursor_auth, "cursor_sdk_installed", lambda: state["installed"])
 
     assert install_cursor_sdk() is True
-    assert calls == [[extra_install.sys.executable, "-m", "pip", "install", "omnigent[cursor]"]]
+    assert calls == [[extra_install.sys.executable, "-m", "pip", "install", "omnicraft[cursor]"]]
 
 
 def test_install_cursor_sdk_false_on_spawn_failure(monkeypatch: pytest.MonkeyPatch) -> None:

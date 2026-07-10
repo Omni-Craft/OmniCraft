@@ -2,16 +2,16 @@
 
 Covers the four layers of the stack:
 
-1. ``omnigent.server.passwords`` — argon2 wrapper (hash / verify
+1. ``omnicraft.server.passwords`` — argon2 wrapper (hash / verify
    round-trip, constant-time-equalized failures).
-2. ``omnigent.server.accounts_config.AccountsConfig`` — env-var
+2. ``omnicraft.server.accounts_config.AccountsConfig`` — env-var
    parsing, fail-loud validation, secure-cookie derivation.
-3. ``omnigent.server.auth.UnifiedAuthProvider`` with
+3. ``omnicraft.server.auth.UnifiedAuthProvider`` with
    ``source='accounts'`` — cookie validation, reserved-name
    rejection, ``create_auth_provider`` factory gating.
-4. ``omnigent.server.accounts_bootstrap.bootstrap_admin`` matrix
+4. ``omnicraft.server.accounts_bootstrap.bootstrap_admin`` matrix
    (auto-gen / pre-seed / idempotent / loopback handoff).
-5. ``omnigent.server.routes.accounts_auth`` — login / logout /
+5. ``omnicraft.server.routes.accounts_auth`` — login / logout /
    me / invite / register / magic / members admin endpoints via
    FastAPI TestClient, including cross-user (Alice/Bob)
    permission isolation and reserved-name guards.
@@ -30,32 +30,32 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from omnigent.server.accounts_bootstrap import (
+from omnicraft.server.accounts_bootstrap import (
     bootstrap_admin,
     resolve_admin_username,
 )
-from omnigent.server.accounts_config import AccountsConfig
-from omnigent.server.accounts_store import SqlAlchemyAccountStore
-from omnigent.server.auth import (
+from omnicraft.server.accounts_config import AccountsConfig
+from omnicraft.server.accounts_store import SqlAlchemyAccountStore
+from omnicraft.server.auth import (
     AuthProvider,
     UnifiedAuthProvider,
     create_auth_provider,
     resolve_auth_source,
 )
-from omnigent.server.passwords import (
+from omnicraft.server.passwords import (
     InvalidPasswordError,
     hash_password,
     needs_rehash,
     verify_password,
 )
-from omnigent.stores.permission_store.sqlalchemy_store import (
+from omnicraft.stores.permission_store.sqlalchemy_store import (
     SqlAlchemyPermissionStore,
 )
 
 
 @pytest.fixture(autouse=True)
 def _clear_ambient_oidc_issuer(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Strip an ambient ``OMNIGENT_OIDC_ISSUER`` for the accounts suite.
+    """Strip an ambient ``OMNICRAFT_OIDC_ISSUER`` for the accounts suite.
 
     With auth enabled, the presence of an issuer selects ``oidc`` over
     ``accounts`` (see :func:`resolve_auth_source`). A developer who
@@ -65,7 +65,7 @@ def _clear_ambient_oidc_issuer(monkeypatch: pytest.MonkeyPatch) -> None:
     it is safe for every test in this file. Tests that need an issuer
     set it explicitly *after* this fixture runs.
     """
-    monkeypatch.delenv("OMNIGENT_OIDC_ISSUER", raising=False)
+    monkeypatch.delenv("OMNICRAFT_OIDC_ISSUER", raising=False)
 
 
 # ── Password helper (unit) ────────────────────────────────────────
@@ -133,11 +133,11 @@ def test_needs_rehash_false_on_fresh_hash() -> None:
 def _set_required_accounts_env(
     monkeypatch: pytest.MonkeyPatch,
     *,
-    base_url: str = "https://omnigent.example.com",
+    base_url: str = "https://omnicraft.example.com",
 ) -> None:
     """Populate every required env var so from_env() doesn't fail loud."""
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_COOKIE_SECRET", secrets.token_hex(32))
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_BASE_URL", base_url)
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_COOKIE_SECRET", secrets.token_hex(32))
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_BASE_URL", base_url)
 
 
 def test_accounts_config_round_trips_required_env(
@@ -145,13 +145,13 @@ def test_accounts_config_round_trips_required_env(
 ) -> None:
     """from_env() parses every required var into the dataclass."""
     secret_hex = secrets.token_hex(32)
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_COOKIE_SECRET", secret_hex)
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_BASE_URL", "https://omnigent.example.com")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_COOKIE_SECRET", secret_hex)
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_BASE_URL", "https://omnicraft.example.com")
 
     cfg = AccountsConfig.from_env()
 
     assert cfg.cookie_secret == bytes.fromhex(secret_hex)
-    assert cfg.base_url == "https://omnigent.example.com"
+    assert cfg.base_url == "https://omnicraft.example.com"
     assert cfg.secure_cookies is True
     assert cfg.session_cookie_name == "__Host-ap_session"
 
@@ -160,10 +160,10 @@ def test_accounts_config_missing_cookie_secret_fails_loud(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A missing COOKIE_SECRET raises with a remediation message."""
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_COOKIE_SECRET", raising=False)
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_BASE_URL", "http://localhost:8000")
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_COOKIE_SECRET", raising=False)
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_BASE_URL", "http://localhost:8000")
 
-    with pytest.raises(RuntimeError, match="OMNIGENT_ACCOUNTS_COOKIE_SECRET"):
+    with pytest.raises(RuntimeError, match="OMNICRAFT_ACCOUNTS_COOKIE_SECRET"):
         AccountsConfig.from_env()
 
 
@@ -175,8 +175,8 @@ def test_accounts_config_short_cookie_secret_fails_loud(
     HS256 with a key shorter than the digest size is a real
     weakness; matching OIDCConfig's stance.
     """
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_COOKIE_SECRET", "00" * 16)  # only 16 bytes
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_BASE_URL", "http://localhost:8000")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_COOKIE_SECRET", "00" * 16)  # only 16 bytes
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_BASE_URL", "http://localhost:8000")
 
     with pytest.raises(RuntimeError, match="at least 32 bytes"):
         AccountsConfig.from_env()
@@ -186,8 +186,8 @@ def test_accounts_config_non_hex_cookie_secret_fails_loud(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A non-hex COOKIE_SECRET raises with a clear message."""
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_COOKIE_SECRET", "not-hex-at-all")
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_BASE_URL", "http://localhost:8000")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_COOKIE_SECRET", "not-hex-at-all")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_BASE_URL", "http://localhost:8000")
 
     with pytest.raises(RuntimeError, match="valid hex string"):
         AccountsConfig.from_env()
@@ -214,8 +214,8 @@ def test_accounts_config_rejects_non_http_scheme(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """BASE_URL must start with http(s):// — fail loud otherwise."""
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_COOKIE_SECRET", secrets.token_hex(32))
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_BASE_URL", "ftp://omnigent.example.com")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_COOKIE_SECRET", secrets.token_hex(32))
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_BASE_URL", "ftp://omnicraft.example.com")
 
     with pytest.raises(RuntimeError, match="http://"):
         AccountsConfig.from_env()
@@ -231,7 +231,7 @@ def test_accounts_config_init_admin_empty_string_is_unset(
     silently set a zero-length admin password if not guarded.
     """
     _set_required_accounts_env(monkeypatch)
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD", "")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD", "")
 
     cfg = AccountsConfig.from_env()
 
@@ -277,7 +277,7 @@ class _FakeReq:
 
 def test_accounts_source_reads_valid_cookie() -> None:
     """The accounts source extracts a user_id from a valid session JWT."""
-    from omnigent.server.oidc import mint_session_cookie
+    from omnicraft.server.oidc import mint_session_cookie
 
     cfg = _make_accounts_config()
     provider = UnifiedAuthProvider(source="accounts", accounts_config=cfg)
@@ -297,7 +297,7 @@ def test_accounts_source_rejects_reserved_user_in_cookie() -> None:
     malicious admin somehow gets a session JWT with sub=local
     minted, the auth provider refuses to honor it.
     """
-    from omnigent.server.oidc import mint_session_cookie
+    from omnicraft.server.oidc import mint_session_cookie
 
     cfg = _make_accounts_config()
     provider = UnifiedAuthProvider(source="accounts", accounts_config=cfg)
@@ -317,7 +317,7 @@ def test_accounts_source_rejects_cookie_signed_with_wrong_secret() -> None:
     server and presenting it to another with a different secret
     must not authenticate.
     """
-    from omnigent.server.oidc import mint_session_cookie
+    from omnicraft.server.oidc import mint_session_cookie
 
     cfg = _make_accounts_config()
     provider = UnifiedAuthProvider(source="accounts", accounts_config=cfg)
@@ -335,10 +335,10 @@ def test_accounts_source_accepts_bearer_token_for_cli() -> None:
     """CLI bearer tokens (no cookie) also authenticate against accounts.
 
     The runner / CLI use Authorization: Bearer <jwt> after picking
-    the token up from ~/.omnigent/auth_tokens.json — the same
+    the token up from ~/.omnicraft/auth_tokens.json — the same
     code path the OIDC mode supports.
     """
-    from omnigent.server.oidc import mint_session_cookie
+    from omnicraft.server.oidc import mint_session_cookie
 
     cfg = _make_accounts_config()
     provider = UnifiedAuthProvider(source="accounts", accounts_config=cfg)
@@ -435,18 +435,18 @@ def test_resolve_auth_source_defaults_to_header(
     and the config-signature all rely on, so a regression here would
     desync them.
     """
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.delenv("OMNIGENT_AUTH_ENABLED", raising=False)
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_ENABLED", raising=False)
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.delenv("OMNICRAFT_AUTH_ENABLED", raising=False)
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_ENABLED", raising=False)
     assert resolve_auth_source() == "header"
 
 
 def test_resolve_auth_source_opt_in_selects_accounts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``OMNIGENT_AUTH_ENABLED=1`` (no OIDC config) opts into accounts mode."""
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", "1")
+    """``OMNICRAFT_AUTH_ENABLED=1`` (no OIDC config) opts into accounts mode."""
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.setenv("OMNICRAFT_AUTH_ENABLED", "1")
     # _clear_ambient_oidc_issuer (autouse) guarantees no issuer is set,
     # so the enable switch resolves to the built-in accounts flow.
     assert resolve_auth_source() == "accounts"
@@ -455,7 +455,7 @@ def test_resolve_auth_source_opt_in_selects_accounts(
 def test_resolve_auth_source_oidc_issuer_selects_oidc(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``OMNIGENT_AUTH_ENABLED=1`` + an OIDC issuer selects oidc, not accounts.
+    """``OMNICRAFT_AUTH_ENABLED=1`` + an OIDC issuer selects oidc, not accounts.
 
     This is the unified-switch contract: the same enable flag turns on
     accounts by default, but flips to the native OIDC flow the moment
@@ -464,9 +464,9 @@ def test_resolve_auth_source_oidc_issuer_selects_oidc(
     would be dead — an operator who set the OIDC vars would silently get
     the built-in login form instead of their IdP.
     """
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", "1")
-    monkeypatch.setenv("OMNIGENT_OIDC_ISSUER", "https://accounts.google.com")
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.setenv("OMNICRAFT_AUTH_ENABLED", "1")
+    monkeypatch.setenv("OMNICRAFT_OIDC_ISSUER", "https://accounts.google.com")
     assert resolve_auth_source() == "oidc"
 
 
@@ -481,25 +481,25 @@ def test_resolve_auth_source_oidc_issuer_ignored_when_auth_disabled(
     an OIDC one. If this resolved to ``"oidc"`` the switch would have
     been bypassed.
     """
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.delenv("OMNIGENT_AUTH_ENABLED", raising=False)
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_ENABLED", raising=False)
-    monkeypatch.setenv("OMNIGENT_OIDC_ISSUER", "https://accounts.google.com")
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.delenv("OMNICRAFT_AUTH_ENABLED", raising=False)
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_ENABLED", raising=False)
+    monkeypatch.setenv("OMNICRAFT_OIDC_ISSUER", "https://accounts.google.com")
     assert resolve_auth_source() == "header"
 
 
 def test_resolve_auth_source_deprecated_alias_still_selects_accounts(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The pre-rename ``OMNIGENT_ACCOUNTS_ENABLED`` alias still works.
+    """The pre-rename ``OMNICRAFT_ACCOUNTS_ENABLED`` alias still works.
 
     Existing deploys that set the old name must keep booting in accounts
     mode after the rename. If this regressed, an upgrade would silently
     drop those deploys back to single-user header mode (no login).
     """
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.delenv("OMNIGENT_AUTH_ENABLED", raising=False)
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_ENABLED", "1")
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.delenv("OMNICRAFT_AUTH_ENABLED", raising=False)
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_ENABLED", "1")
     assert resolve_auth_source() == "accounts"
 
 
@@ -508,15 +508,15 @@ def test_resolve_auth_source_new_var_wins_over_deprecated_alias(
 ) -> None:
     """The current name wins when both names are set.
 
-    A deploy migrating to ``OMNIGENT_AUTH_ENABLED`` can leave the old
-    ``OMNIGENT_ACCOUNTS_ENABLED`` in place: an explicit ``=0`` on the
+    A deploy migrating to ``OMNICRAFT_AUTH_ENABLED`` can leave the old
+    ``OMNICRAFT_ACCOUNTS_ENABLED`` in place: an explicit ``=0`` on the
     new name disables auth even though the old name is truthy. If the
     alias took precedence the new value would be unsettable while the
     old one lingered.
     """
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", "0")
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_ENABLED", "1")
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.setenv("OMNICRAFT_AUTH_ENABLED", "0")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_ENABLED", "1")
     assert resolve_auth_source() == "header"
 
 
@@ -529,8 +529,8 @@ def test_resolve_auth_source_explicit_passthrough_lowercased(
     unknown values is the factory's job); the signature folds whatever
     string it returns, so the passthrough must be stable.
     """
-    monkeypatch.setenv("OMNIGENT_AUTH_PROVIDER", "OIDC")
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", "0")
+    monkeypatch.setenv("OMNICRAFT_AUTH_PROVIDER", "OIDC")
+    monkeypatch.setenv("OMNICRAFT_AUTH_ENABLED", "0")
     assert resolve_auth_source() == "oidc"
 
 
@@ -540,18 +540,18 @@ def test_resolve_auth_source_explicit_passthrough_lowercased(
 def test_factory_defaults_to_header_when_env_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Unset OMNIGENT_AUTH_PROVIDER (+ no enable switch) → header mode.
+    """Unset OMNICRAFT_AUTH_PROVIDER (+ no enable switch) → header mode.
 
     The shipped default is single-user, no-login: a bare
-    ``omnigent server`` on a laptop should pop open with no
+    ``omnicraft server`` on a laptop should pop open with no
     multi-user wiring. Multi-user (accounts) is opt-in via
-    ``OMNIGENT_AUTH_ENABLED=1`` (see
+    ``OMNICRAFT_AUTH_ENABLED=1`` (see
     :func:`test_factory_accounts_enabled_truthy_enables_accounts`).
     No accounts env is set here — header mode must not require it.
     """
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.delenv("OMNIGENT_AUTH_ENABLED", raising=False)
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_ENABLED", raising=False)
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.delenv("OMNICRAFT_AUTH_ENABLED", raising=False)
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_ENABLED", raising=False)
 
     provider = create_auth_provider()
 
@@ -562,16 +562,16 @@ def test_factory_defaults_to_header_when_env_unset(
 def test_factory_explicit_header_beats_enable_switch(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Explicit ``OMNIGENT_AUTH_PROVIDER=header`` wins over the enable switch.
+    """Explicit ``OMNICRAFT_AUTH_PROVIDER=header`` wins over the enable switch.
 
     An explicit provider always wins, so a stale
-    ``OMNIGENT_AUTH_ENABLED=1`` in a shell can't silently turn
+    ``OMNICRAFT_AUTH_ENABLED=1`` in a shell can't silently turn
     accounts on for a deploy that pinned header (e.g. the internal
     hosted product, which sets header via ``setdefault`` in its
     entrypoint).
     """
-    monkeypatch.setenv("OMNIGENT_AUTH_PROVIDER", "header")
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", "1")
+    monkeypatch.setenv("OMNICRAFT_AUTH_PROVIDER", "header")
+    monkeypatch.setenv("OMNICRAFT_AUTH_ENABLED", "1")
 
     provider = create_auth_provider()
 
@@ -583,7 +583,7 @@ def test_factory_accepts_accounts_explicit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Explicit accounts setting still works the same way."""
-    monkeypatch.setenv("OMNIGENT_AUTH_PROVIDER", "accounts")
+    monkeypatch.setenv("OMNICRAFT_AUTH_PROVIDER", "accounts")
     _set_required_accounts_env(monkeypatch)
 
     provider = create_auth_provider()
@@ -594,7 +594,7 @@ def test_factory_accepts_accounts_explicit(
 
 def test_factory_rejects_unknown_source(monkeypatch: pytest.MonkeyPatch) -> None:
     """A bogus AUTH_PROVIDER value fails loud, doesn't fall through."""
-    monkeypatch.setenv("OMNIGENT_AUTH_PROVIDER", "bogus")
+    monkeypatch.setenv("OMNICRAFT_AUTH_PROVIDER", "bogus")
 
     with pytest.raises(RuntimeError, match="bogus"):
         create_auth_provider()
@@ -605,7 +605,7 @@ def test_factory_accounts_enabled_falsy_stays_header(
     monkeypatch: pytest.MonkeyPatch,
     disable_value: str,
 ) -> None:
-    """An explicitly falsy ``OMNIGENT_AUTH_ENABLED`` → header mode.
+    """An explicitly falsy ``OMNICRAFT_AUTH_ENABLED`` → header mode.
 
     Header is already the env-unset default, but a falsy value must
     be treated the same as unset (not as "set, therefore truthy") —
@@ -613,8 +613,8 @@ def test_factory_accounts_enabled_falsy_stays_header(
     when no proxy header is present. No accounts env needed — header
     mode doesn't build AccountsConfig.
     """
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", disable_value)
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.setenv("OMNICRAFT_AUTH_ENABLED", disable_value)
 
     provider = create_auth_provider()
 
@@ -627,15 +627,15 @@ def test_factory_accounts_enabled_truthy_enables_accounts(
     monkeypatch: pytest.MonkeyPatch,
     enable_value: str,
 ) -> None:
-    """A truthy ``OMNIGENT_AUTH_ENABLED`` (no OIDC) opts INTO accounts mode.
+    """A truthy ``OMNICRAFT_AUTH_ENABLED`` (no OIDC) opts INTO accounts mode.
 
     This is the multi-user opt-in: with no explicit
-    ``OMNIGENT_AUTH_PROVIDER`` and no OIDC issuer, a truthy enable
+    ``OMNICRAFT_AUTH_PROVIDER`` and no OIDC issuer, a truthy enable
     switch turns on the accounts login flow (the inverse of the
     env-unset header default).
     """
-    monkeypatch.delenv("OMNIGENT_AUTH_PROVIDER", raising=False)
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", enable_value)
+    monkeypatch.delenv("OMNICRAFT_AUTH_PROVIDER", raising=False)
+    monkeypatch.setenv("OMNICRAFT_AUTH_ENABLED", enable_value)
     _set_required_accounts_env(monkeypatch)
 
     provider = create_auth_provider()
@@ -653,8 +653,8 @@ def test_factory_explicit_accounts_beats_disabled_switch(
     stale ``AUTH_ENABLED=0`` in a shell can't silently downgrade
     an operator who explicitly opted into accounts.
     """
-    monkeypatch.setenv("OMNIGENT_AUTH_PROVIDER", "accounts")
-    monkeypatch.setenv("OMNIGENT_AUTH_ENABLED", "0")
+    monkeypatch.setenv("OMNICRAFT_AUTH_PROVIDER", "accounts")
+    monkeypatch.setenv("OMNICRAFT_AUTH_ENABLED", "0")
     _set_required_accounts_env(monkeypatch)
 
     provider = create_auth_provider()
@@ -679,7 +679,7 @@ def fresh_store(tmp_path: Path) -> SqlAlchemyAccountStore:
     in play at this layer of the suite.
     """
     db_url = f"sqlite:///{tmp_path}/test.db"
-    from omnigent.db.utils import get_or_create_engine
+    from omnicraft.db.utils import get_or_create_engine
 
     get_or_create_engine(db_url)  # runs alembic upgrade
     return SqlAlchemyAccountStore(db_url)
@@ -690,19 +690,19 @@ def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """Redirect $HOME so cli_auth.store_token writes to a temp file.
 
     Without this, the test could write into the developer's real
-    ``~/.omnigent/auth_tokens.json`` — fine, but noisy. The
-    fixture also pins OMNIGENT_ADMIN_CREDENTIALS_PATH so the
+    ``~/.omnicraft/auth_tokens.json`` — fine, but noisy. The
+    fixture also pins OMNICRAFT_ADMIN_CREDENTIALS_PATH so the
     bootstrap's 0600 file lands inside the tmp dir too.
     """
     monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", str(tmp_path / "admin-credentials"))
+    monkeypatch.setenv("OMNICRAFT_ADMIN_CREDENTIALS_PATH", str(tmp_path / "admin-credentials"))
     # Pin the admin username to "admin" so the existing test
     # assertions (which were written against the old hardcoded
     # "admin" constant) don't depend on whatever
     # getpass.getuser() happens to return in CI. The OS-username
     # resolution path is exercised by its own dedicated tests
     # below.
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_USERNAME", "admin")
     return tmp_path
 
 
@@ -712,7 +712,7 @@ def test_bootstrap_with_password_creates_admin(
     """A supplied password creates the admin on first boot.
 
     The flag/env path (``--admin-password`` /
-    ``OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD``) is the one
+    ``OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD``) is the one
     bootstrap path that creates an admin directly — for headless /
     CI deploys. The password the caller supplied must be the one
     that authenticates.
@@ -810,14 +810,14 @@ def test_bootstrap_remote_no_password_needs_setup_no_token(
     """
     result = bootstrap_admin(
         fresh_store,
-        base_url="https://omnigent.example.com",
+        base_url="https://omnicraft.example.com",
         cookie_secret=secrets.token_bytes(32),
     )
 
     assert result.needs_setup is True
     assert result.open_url is None
     assert result.tui_token_written is False
-    assert not (isolated_home / ".omnigent" / "auth_tokens.json").exists()
+    assert not (isolated_home / ".omnicraft" / "auth_tokens.json").exists()
 
 
 def test_bootstrap_loopback_no_password_needs_setup_opens_form(
@@ -845,7 +845,7 @@ def test_bootstrap_init_password_loopback_writes_cli_token_no_autoopen(
     """Supplied password on loopback → admin created, CLI token written, no auto-open.
 
     The flag path creates the admin and mints the loopback CLI token
-    (so ``omnigent run`` is signed in), but does NOT auto-open the
+    (so ``omnicraft run`` is signed in), but does NOT auto-open the
     browser — the operator chose the password and will log in when
     they want.
     """
@@ -861,7 +861,7 @@ def test_bootstrap_init_password_loopback_writes_cli_token_no_autoopen(
     assert result.needs_setup is False
     assert result.open_url is None
     assert result.tui_token_written is True
-    from omnigent import cli_auth
+    from omnicraft import cli_auth
 
     assert cli_auth.load_token(base_url) is not None
 
@@ -873,12 +873,12 @@ def test_bootstrap_refreshes_cli_token_on_returning_loopback_boot(
 
     The daemon spawns the loopback server on a fresh port each time and
     the first-boot token is port-keyed + one-time, so a returning boot
-    must re-mint a token for the current URL — otherwise ``omnigent
+    must re-mint a token for the current URL — otherwise ``omnicraft
     run`` 401s against its own server once an admin exists (the Bug B
     that motivated this). Here the second boot uses a *different* base
     URL (new port) and must still produce a usable token for it.
     """
-    from omnigent import cli_auth
+    from omnicraft import cli_auth
 
     first = bootstrap_admin(
         fresh_store,
@@ -900,7 +900,7 @@ def test_bootstrap_refreshes_cli_token_on_returning_loopback_boot(
     assert second.tui_token_written is True
     assert cli_auth.load_token(new_url) is not None, (
         "returning boot must mint a CLI token for the new spawn URL so "
-        "`omnigent run` authenticates"
+        "`omnicraft run` authenticates"
     )
 
 
@@ -910,14 +910,14 @@ def test_bootstrap_refreshes_cli_token_on_returning_loopback_boot(
 def test_resolve_admin_username_uses_env_override(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """OMNIGENT_ACCOUNTS_INIT_ADMIN_USERNAME wins over the OS user.
+    """OMNICRAFT_ACCOUNTS_INIT_ADMIN_USERNAME wins over the OS user.
 
     The override is the right knob for headless / Docker deploys
     where ``getpass.getuser()`` returns ``"root"`` (not great
     semantically) or for any deploy that wants a stable account
     name regardless of who launches the process.
     """
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_USERNAME", "operator")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_USERNAME", "operator")
     assert resolve_admin_username() == "operator"
 
 
@@ -926,12 +926,12 @@ def test_resolve_admin_username_falls_back_to_os_user(
 ) -> None:
     """With no env override, the OS user (via getpass) is the admin name.
 
-    This is the laptop-UX win — running ``omnigent server`` as
+    This is the laptop-UX win — running ``omnicraft server`` as
     ``dhruv.gupta`` creates a ``dhruv.gupta`` admin, so the CLI
     and the web UI share one identity from the start (no
     separate "local" / "admin" split).
     """
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_USERNAME", raising=False)
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_USERNAME", raising=False)
     # Mock getpass.getuser to a known value so the test is deterministic
     # across CI runners with different $USER values.
     import getpass
@@ -952,7 +952,7 @@ def test_resolve_admin_username_falls_back_to_admin_on_reserved_name(
     immediately have it rejected by the auth provider's
     reserved-name guard — silent breakage.
     """
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_USERNAME", raising=False)
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_USERNAME", raising=False)
     import getpass
 
     monkeypatch.setattr(getpass, "getuser", lambda: "local")
@@ -969,7 +969,7 @@ def test_resolve_admin_username_falls_back_on_regex_mismatch(
     spaces, or other characters the route layer would reject at
     registration time anyway.
     """
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_USERNAME", raising=False)
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_USERNAME", raising=False)
     import getpass
 
     monkeypatch.setattr(getpass, "getuser", lambda: "Administrator")
@@ -1006,41 +1006,41 @@ def _build_accounts_app(
     monkeypatch.setenv("HOME", str(tmp_path))
     # Accounts is the default provider now, but pin it explicitly
     # so this fixture doesn't depend on the global default.
-    monkeypatch.setenv("OMNIGENT_AUTH_PROVIDER", "accounts")
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_COOKIE_SECRET", secrets.token_hex(32))
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_BASE_URL", "http://localhost:8000")
+    monkeypatch.setenv("OMNICRAFT_AUTH_PROVIDER", "accounts")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_COOKIE_SECRET", secrets.token_hex(32))
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_BASE_URL", "http://localhost:8000")
     if init_admin_password is not None:
-        monkeypatch.setenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD", init_admin_password)
+        monkeypatch.setenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD", init_admin_password)
     else:
-        monkeypatch.delenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD", raising=False)
+        monkeypatch.delenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD", raising=False)
     # Pin the admin username to "admin" so the existing test
     # assertions don't depend on whatever getpass.getuser() returns
     # in CI. The OS-username resolution path is exercised by
     # dedicated tests below.
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_INIT_ADMIN_USERNAME", "admin")
-    monkeypatch.setenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", str(tmp_path / "admin-creds"))
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_INIT_ADMIN_USERNAME", "admin")
+    monkeypatch.setenv("OMNICRAFT_ADMIN_CREDENTIALS_PATH", str(tmp_path / "admin-creds"))
     # Don't auto-open the browser during tests.
-    monkeypatch.setenv("OMNIGENT_ACCOUNTS_AUTO_OPEN", "0")
+    monkeypatch.setenv("OMNICRAFT_ACCOUNTS_AUTO_OPEN", "0")
 
     db_url = f"sqlite:///{tmp_path}/test.db"
-    from omnigent.db.utils import get_or_create_engine
-    from omnigent.runtime import init as init_runtime
-    from omnigent.runtime import telemetry
-    from omnigent.runtime.agent_cache import AgentCache
-    from omnigent.runtime.caps import RuntimeCaps
-    from omnigent.server.app import create_app
-    from omnigent.stores.agent_store.sqlalchemy_store import (
+    from omnicraft.db.utils import get_or_create_engine
+    from omnicraft.runtime import init as init_runtime
+    from omnicraft.runtime import telemetry
+    from omnicraft.runtime.agent_cache import AgentCache
+    from omnicraft.runtime.caps import RuntimeCaps
+    from omnicraft.server.app import create_app
+    from omnicraft.stores.agent_store.sqlalchemy_store import (
         SqlAlchemyAgentStore,
     )
-    from omnigent.stores.artifact_store.local import LocalArtifactStore
-    from omnigent.stores.comment_store.sqlalchemy_store import (
+    from omnicraft.stores.artifact_store.local import LocalArtifactStore
+    from omnicraft.stores.comment_store.sqlalchemy_store import (
         SqlAlchemyCommentStore,
     )
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from omnicraft.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
+    from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from omnicraft.stores.host_store import HostStore
 
     get_or_create_engine(db_url)
     telemetry.init()
@@ -1118,25 +1118,25 @@ def header_mode_app(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator
     # Accounts is now the default provider — explicitly pin
     # "header" so this negative-case fixture actually exercises
     # header mode regardless of the global default.
-    monkeypatch.setenv("OMNIGENT_AUTH_PROVIDER", "header")
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_COOKIE_SECRET", raising=False)
-    monkeypatch.delenv("OMNIGENT_ACCOUNTS_BASE_URL", raising=False)
+    monkeypatch.setenv("OMNICRAFT_AUTH_PROVIDER", "header")
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_COOKIE_SECRET", raising=False)
+    monkeypatch.delenv("OMNICRAFT_ACCOUNTS_BASE_URL", raising=False)
 
     db_url = f"sqlite:///{tmp_path}/header.db"
-    from omnigent.db.utils import get_or_create_engine
-    from omnigent.runtime import init as init_runtime
-    from omnigent.runtime import telemetry
-    from omnigent.runtime.agent_cache import AgentCache
-    from omnigent.runtime.caps import RuntimeCaps
-    from omnigent.server.app import create_app
-    from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-    from omnigent.stores.artifact_store.local import LocalArtifactStore
-    from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from omnicraft.db.utils import get_or_create_engine
+    from omnicraft.runtime import init as init_runtime
+    from omnicraft.runtime import telemetry
+    from omnicraft.runtime.agent_cache import AgentCache
+    from omnicraft.runtime.caps import RuntimeCaps
+    from omnicraft.server.app import create_app
+    from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+    from omnicraft.stores.artifact_store.local import LocalArtifactStore
+    from omnicraft.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+    from omnicraft.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
+    from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from omnicraft.stores.host_store import HostStore
 
     get_or_create_engine(db_url)
     telemetry.init()
@@ -1477,8 +1477,8 @@ def test_admin_list_excludes_legacy_local_and_public_sentinels(
     ``accounts_app`` fixture wired up, then confirm the admin
     list filter drops them.
     """
-    from omnigent.db.db_models import SqlUser
-    from omnigent.db.utils import get_or_create_engine, make_managed_session_maker
+    from omnicraft.db.db_models import SqlUser
+    from omnicraft.db.utils import get_or_create_engine, make_managed_session_maker
 
     db_url = f"sqlite:///{tmp_path}/test.db"
     engine = get_or_create_engine(db_url)
@@ -1743,17 +1743,17 @@ def test_purge_expired_tokens_drops_only_expired(
     assert redeemed is not None and redeemed.id == "live"
 
 
-# ── CLI: omnigent login accounts flow ───────────────────────────
+# ── CLI: omnicraft login accounts flow ───────────────────────────
 
 
 def test_cli_accounts_login_happy_path_stores_token(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`omnigent login` in accounts mode prompts → POSTs → stores token.
+    """`omnicraft login` in accounts mode prompts → POSTs → stores token.
 
     Mocks the network surface (the /v1/me probe + the /auth/login
     POST) and the token storage (cli_auth.store_token writes to
-    the user's ~/.omnigent/), so the test verifies the CLI
+    the user's ~/.omnicraft/), so the test verifies the CLI
     plumbing without spinning up a server.
 
     Closes the AI-review gap flagged in the first review pass —
@@ -1763,8 +1763,8 @@ def test_cli_accounts_login_happy_path_stores_token(
     import httpx as _httpx
     from click.testing import CliRunner
 
-    from omnigent import cli_auth
-    from omnigent.cli import cli
+    from omnicraft import cli_auth
+    from omnicraft.cli import cli
 
     # Redirect $HOME so cli_auth.store_token writes into tmp.
     monkeypatch.setenv("HOME", str(tmp_path))
@@ -1819,7 +1819,7 @@ def test_cli_accounts_login_happy_path_stores_token(
 
     assert result.exit_code == 0, result.output
     assert "Logged in as alice" in result.output
-    # The store_token side effect lands in ~/.omnigent/auth_tokens.json.
+    # The store_token side effect lands in ~/.omnicraft/auth_tokens.json.
     assert cli_auth.load_token("http://localhost:8000") == "fake.jwt.token"
 
 
@@ -1836,7 +1836,7 @@ def test_cli_accounts_login_wrong_password_surfaces_clean_error(
     import httpx as _httpx
     from click.testing import CliRunner
 
-    from omnigent.cli import cli
+    from omnicraft.cli import cli
 
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -1886,7 +1886,7 @@ def test_cli_accounts_login_network_failure_surfaces_clean_error(
     import httpx as _httpx
     from click.testing import CliRunner
 
-    from omnigent.cli import cli
+    from omnicraft.cli import cli
 
     monkeypatch.setenv("HOME", str(tmp_path))
 
@@ -1960,14 +1960,14 @@ def test_setup_writes_loopback_cli_token(
 ) -> None:
     """First-run web admin-claim mints the loopback CLI token.
 
-    The local CUJ: ``omnigent run`` (re)spawns the local server in
+    The local CUJ: ``omnicraft run`` (re)spawns the local server in
     accounts mode with no admin, so the operator claims it via the
     browser form. ``/auth/setup`` must also mint the loopback CLI token
     (the fixture's base URL is ``http://localhost:8000`` — loopback) so
-    the in-flight ``omnigent run`` is signed in immediately instead of
+    the in-flight ``omnicraft run`` is signed in immediately instead of
     401-ing until the next server boot.
     """
-    from omnigent import cli_auth
+    from omnicraft import cli_auth
 
     client = accounts_app_needs_setup
     base_url = "http://localhost:8000"

@@ -22,9 +22,9 @@ from typing import Any
 
 import pytest
 
-from omnigent.runner import app as runner_app
-from omnigent.runner import create_runner_app
-from omnigent.spec.types import AgentSpec, ExecutorSpec
+from omnicraft.runner import app as runner_app
+from omnicraft.runner import create_runner_app
+from omnicraft.spec.types import AgentSpec, ExecutorSpec
 
 # Reuse the proven runner-turn stubs from the sessions-native suite.
 from tests.runner.helpers import NullServerClient
@@ -43,7 +43,7 @@ def _clean_subagent_registry() -> Iterator[None]:
     """Snapshot and restore the process-wide sub-agent / inbox maps.
 
     The sub-agent work registry and inbox queues live in module-level dicts on
-    ``omnigent.runner.app`` that otherwise leak across tests. Clear them before
+    ``omnicraft.runner.app`` that otherwise leak across tests. Clear them before
     the test and restore the originals after.
     """
     saved = (
@@ -154,7 +154,7 @@ async def _post_native_idle(
         return AgentSpec(
             spec_version=1,
             name="reviewer",
-            executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+            executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
         )
 
     app = create_runner_app(
@@ -312,7 +312,7 @@ async def test_replayed_idle_after_drain_does_not_redeliver(
         return AgentSpec(
             spec_version=1,
             name="reviewer",
-            executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+            executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
         )
 
     app = create_runner_app(

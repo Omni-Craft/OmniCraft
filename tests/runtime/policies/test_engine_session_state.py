@@ -19,11 +19,11 @@ from typing import Any
 
 import pytest
 
-from omnigent.llms.context_window import ModelPricing
-from omnigent.policies.function import FunctionPolicy
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from omnicraft.llms.context_window import ModelPricing
+from omnicraft.policies.function import FunctionPolicy
+from omnicraft.policies.types import EvaluationContext
+from omnicraft.runtime.policies.engine import PolicyEngine
+from omnicraft.spec.types import (
     FunctionPolicySpec,
     FunctionRef,
     Phase,
@@ -31,7 +31,7 @@ from omnigent.spec.types import (
     PolicyAction,
     StateUpdateAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 

@@ -21,14 +21,14 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 
-from omnigent.errors import OmnigentError
-from omnigent.server.auth import LEVEL_OWNER, LEVEL_READ, UnifiedAuthProvider
-from omnigent.server.routes.sessions import create_sessions_router
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.errors import OmniCraftError
+from omnicraft.server.auth import LEVEL_OWNER, LEVEL_READ, UnifiedAuthProvider
+from omnicraft.server.routes.sessions import create_sessions_router
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.permission_store.sqlalchemy_store import (
+from omnicraft.stores.permission_store.sqlalchemy_store import (
     SqlAlchemyPermissionStore,
 )
 
@@ -41,8 +41,8 @@ def _multi_user_app(db_uri: str) -> FastAPI:
     """Build a header-auth app mounting the sessions router at ``/v1``."""
     app = FastAPI()
 
-    @app.exception_handler(OmnigentError)
-    async def _handle(request: Request, exc: OmnigentError) -> JSONResponse:
+    @app.exception_handler(OmniCraftError)
+    async def _handle(request: Request, exc: OmniCraftError) -> JSONResponse:
         del request
         return JSONResponse(
             status_code=exc.http_status,

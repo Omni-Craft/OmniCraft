@@ -1,6 +1,6 @@
 """
 Tests for the built-in working-directory / worktree policy
-(:mod:`omnigent.policies.builtins.working_dir`) — the single
+(:mod:`omnicraft.policies.builtins.working_dir`) — the single
 ``block_working_dir_changes`` factory gating ``sys_os_shell`` commands that
 switch the working directory or git worktrees.
 
@@ -26,15 +26,15 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.policies.builtins.working_dir import block_working_dir_changes
-from omnigent.policies.function import FunctionPolicy, resolve_function_policy
-from omnigent.policies.registry import get_registry, load_registry, validate_factory_params
-from omnigent.policies.schema import PolicyEvent, PolicyResponse
-from omnigent.policies.types import EvaluationContext
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
+from omnicraft.policies.builtins.working_dir import block_working_dir_changes
+from omnicraft.policies.function import FunctionPolicy, resolve_function_policy
+from omnicraft.policies.registry import get_registry, load_registry, validate_factory_params
+from omnicraft.policies.schema import PolicyEvent, PolicyResponse
+from omnicraft.policies.types import EvaluationContext
+from omnicraft.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
 from tests.policies.builtins.helpers import tool_call_event as tc
 
-_HANDLER = "omnigent.policies.builtins.working_dir.block_working_dir_changes"
+_HANDLER = "omnicraft.policies.builtins.working_dir.block_working_dir_changes"
 
 
 def _sh(command: str) -> PolicyEvent:

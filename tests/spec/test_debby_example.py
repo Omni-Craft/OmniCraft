@@ -3,7 +3,7 @@
 Debby's "GPT" sub-agent must run on the ``codex`` harness, not
 ``openai-agents``. The openai-agents harness treats an unpinned model as a
 Databricks model (``is_databricks_model = model is None`` in
-``omnigent/inner/openai_agents_sdk_executor.py``) and, with no
+``omnicraft/inner/openai_agents_sdk_executor.py``) and, with no
 ``OPENAI_API_KEY`` / ``OPENAI_BASE_URL`` in the environment, silently falls
 back to ambient Databricks credentials — routing the "GPT" head through the
 Databricks gateway instead of OpenAI. The ``codex`` harness is GPT-only, uses
@@ -18,12 +18,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from omnigent.spec.parser import parse
-from omnigent.spec.types import DatabricksAuth
+from omnicraft.spec.parser import parse
+from omnicraft.spec.types import DatabricksAuth
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEBBY_DIR = _REPO_ROOT / "examples" / "debby"
-_PACKAGED_DEBBY_DIR = _REPO_ROOT / "omnigent" / "resources" / "examples" / "debby"
+_PACKAGED_DEBBY_DIR = _REPO_ROOT / "omnicraft" / "resources" / "examples" / "debby"
 
 
 def test_debby_gpt_head_uses_codex_not_openai_agents() -> None:
@@ -60,7 +60,7 @@ def test_debby_gpt_head_uses_codex_not_openai_agents() -> None:
 def test_packaged_debby_resource_stays_in_sync_with_source_example() -> None:
     """The bundled Debby resource resolves to the updated source example.
 
-    ``omnigent debby`` launches the packaged resource path, not
+    ``omnicraft debby`` launches the packaged resource path, not
     ``examples/debby`` directly. Keep this guard so the resource copy cannot
     drift back to ``openai-agents`` while the source example remains fixed.
     """

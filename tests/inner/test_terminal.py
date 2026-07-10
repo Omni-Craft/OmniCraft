@@ -1,4 +1,4 @@
-"""Unit tests for :mod:`omnigent.inner.terminal`."""
+"""Unit tests for :mod:`omnicraft.inner.terminal`."""
 
 from __future__ import annotations
 
@@ -13,22 +13,22 @@ from types import SimpleNamespace
 
 import pytest
 
-import omnigent.inner.terminal as terminal_mod
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
-from omnigent.inner.terminal import (
+import omnicraft.inner.terminal as terminal_mod
+from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec, TerminalEnvSpec
+from omnicraft.inner.terminal import (
     TERMINAL_TRANSPORT_CONTROL,
     TERMINAL_TRANSPORT_PTY,
     TerminalInstance,
     create_terminal_instance,
     resolve_terminal_transport,
 )
-from omnigent.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
+from omnicraft.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
 
 
 def _write_transport_config(config_home: Path, value: str | None) -> None:
     """Write ``terminal.transport: <value>`` into a scratch config.yaml.
 
-    :param config_home: Directory used as ``OMNIGENT_CONFIG_HOME``.
+    :param config_home: Directory used as ``OMNICRAFT_CONFIG_HOME``.
     :param value: Transport value to persist, or ``None`` to write a config
         with no ``terminal`` table.
     """
@@ -40,7 +40,7 @@ def test_resolve_terminal_transport_precedence(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """Override beats spec, spec beats config, config opts out of the control default."""
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
 
     # No config file at all → control mode is the default.
     assert resolve_terminal_transport() == TERMINAL_TRANSPORT_CONTROL
@@ -623,7 +623,7 @@ async def test_launch_disables_tmux_pane_and_window_creation_controls(
 
     The launcher should not leave tmux's default prefix table or
     right-click menus available, because those let an attached user
-    create extra panes, windows, or sessions outside Omnigent' terminal
+    create extra panes, windows, or sessions outside OmniCraft' terminal
     registry.
 
     :param tmp_path: Temporary directory used for the fake tmux socket.
@@ -752,14 +752,14 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
     monkeypatch.setenv("DATABRICKS_CONFIG_PROFILE", "ambient-host-profile")
     # A benign ambient var that is NOT in env_unset — proves the strip
     # is surgical rather than a wholesale wipe. (We can't use
-    # ``OMNIGENT_TMUX_SOCK`` for this any more: the sandbox hardening
+    # ``OMNICRAFT_TMUX_SOCK`` for this any more: the sandbox hardening
     # stopped ``launch`` from advertising the control-socket path to the pane.)
-    monkeypatch.setenv("OMNIGENT_BENIGN_SENTINEL", "keep-me")
-    # Seed an inherited OMNIGENT_TMUX_SOCK so the negative assertion
+    monkeypatch.setenv("OMNICRAFT_BENIGN_SENTINEL", "keep-me")
+    # Seed an inherited OMNICRAFT_TMUX_SOCK so the negative assertion
     # below exercises ``launch``'s explicit ``env.pop`` of any ambient
     # value — not merely the fact that launch stopped *setting* it
     # (``launch`` strips both the self-set and any inherited value).
-    monkeypatch.setenv("OMNIGENT_TMUX_SOCK", "/leaked/from/parent.sock")
+    monkeypatch.setenv("OMNICRAFT_TMUX_SOCK", "/leaked/from/parent.sock")
 
     instance = TerminalInstance(
         name="bash",
@@ -798,15 +798,15 @@ async def test_launch_strips_env_unset_keys_from_inherited_environment(
     # Sanity check that ordinary env still flows through — the strip
     # must be surgical, not a wholesale wipe. The benign ambient var
     # set above must survive since it is not in ``env_unset``.
-    assert spawned_env.get("OMNIGENT_BENIGN_SENTINEL") == "keep-me", (
+    assert spawned_env.get("OMNICRAFT_BENIGN_SENTINEL") == "keep-me", (
         "benign ambient var missing from tmux env — env_unset "
         "must remove only the listed keys, not the entire env."
     )
     # And the control-socket path must NOT be advertised to the pane
     # the tmux server is unsandboxed, so a pane that knows
     # the socket path could ``tmux -S <sock> run-shell`` out of the box.
-    assert "OMNIGENT_TMUX_SOCK" not in spawned_env, (
-        "OMNIGENT_TMUX_SOCK leaked into the tmux child env — the pane "
+    assert "OMNICRAFT_TMUX_SOCK" not in spawned_env, (
+        "OMNICRAFT_TMUX_SOCK leaked into the tmux child env — the pane "
         "must not be told the unsandboxed control socket's path."
     )
 
@@ -975,7 +975,7 @@ async def test_launch_strips_runner_binding_token_from_tmux_child(
     # The control-socket path must not be advertised to the
     # pane — the unsandboxed tmux server's run-shell would otherwise be
     # one ``tmux -S <sock>`` away for the agent payload in the pane.
-    assert "OMNIGENT_TMUX_SOCK" not in spawned_env
+    assert "OMNICRAFT_TMUX_SOCK" not in spawned_env
 
 
 @pytest.mark.asyncio
@@ -1137,7 +1137,7 @@ def _write_instance_dir(root: Path, name: str, owner_pid: int | None) -> Path:
     Create a fake terminal instance dir under the sweep root.
 
     :param root: Fake temp root the sweep scans.
-    :param name: Directory name, e.g. ``"omnigent-terminal-dead1"``.
+    :param name: Directory name, e.g. ``"omnicraft-terminal-dead1"``.
     :param owner_pid: Owner pid to record, or ``None`` for no marker
         (an unrelated / pre-marker dir the sweep must not touch).
     :returns: The created directory path.
@@ -1199,9 +1199,9 @@ def test_reap_orphaned_terminals_reaps_only_dead_owner_dirs(
         "subprocess",
         SimpleNamespace(run=_raise_if_called, TimeoutExpired=TimeoutError),
     )
-    dead_dir = _write_instance_dir(tmp_path, "omnigent-terminal-dead1", _dead_pid())
-    live_dir = _write_instance_dir(tmp_path, "omnigent-terminal-live1", os.getpid())
-    unmarked_dir = _write_instance_dir(tmp_path, "omnigent-terminal-old1", None)
+    dead_dir = _write_instance_dir(tmp_path, "omnicraft-terminal-dead1", _dead_pid())
+    live_dir = _write_instance_dir(tmp_path, "omnicraft-terminal-live1", os.getpid())
+    unmarked_dir = _write_instance_dir(tmp_path, "omnicraft-terminal-old1", None)
 
     reaped = terminal_mod.reap_orphaned_terminals()
 
@@ -1243,7 +1243,7 @@ def test_reap_orphaned_terminals_kills_server_for_dead_owner_socket(
         "subprocess",
         SimpleNamespace(run=_record_run, TimeoutExpired=TimeoutError),
     )
-    dead_dir = _write_instance_dir(tmp_path, "omnigent-terminal-dead2", _dead_pid())
+    dead_dir = _write_instance_dir(tmp_path, "omnicraft-terminal-dead2", _dead_pid())
     socket_path = dead_dir / "tmux.sock"
     socket_path.touch()
 

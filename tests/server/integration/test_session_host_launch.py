@@ -27,7 +27,7 @@ import pytest
 from asgiref.testing import ApplicationCommunicator
 from fastapi import FastAPI
 
-from omnigent.host.frames import (
+from omnicraft.host.frames import (
     HostHelloFrame,
     HostLaunchRunnerFrame,
     HostLaunchRunnerResultFrame,
@@ -38,17 +38,17 @@ from omnigent.host.frames import (
     decode_host_frame,
     encode_host_frame,
 )
-from omnigent.runner.transports.ws_tunnel.frames import HelloFrame
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.runner.transports.ws_tunnel.frames import HelloFrame
+from omnicraft.runtime.agent_cache import AgentCache
+from omnicraft.server.app import create_app
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.artifact_store.local import LocalArtifactStore
+from omnicraft.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.host_store import HostStore
+from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from omnicraft.stores.host_store import HostStore
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio
@@ -439,7 +439,7 @@ async def test_inline_launch_failure_still_returns_bound_session(
 
 
 _HARNESS_REFUSAL = (
-    "harness 'codex' is not configured on host 'laptop' — run `omnigent setup` on that machine"
+    "harness 'codex' is not configured on host 'laptop' — run `omnicraft setup` on that machine"
 )
 
 
@@ -451,7 +451,7 @@ async def test_inline_create_harness_not_configured_stays_lenient(
     """A ``harness_not_configured`` refusal at CREATE is fully lenient.
 
     The picker's readiness data can be stale (the user may have run
-    ``omnigent setup`` since the host last connected), so create never
+    ``omnicraft setup`` since the host last connected), so create never
     gates on it: the session opens (201), the binding is kept, and —
     unlike the earlier design — NO transcript item is written at create
     time. The error is deferred to the first-message relaunch (the real
@@ -465,7 +465,7 @@ async def test_inline_create_harness_not_configured_stays_lenient(
     comm = await _connect_host(app)
     agent = await create_test_agent(
         client,
-        executor={"type": "omnigent", "config": {"harness": "codex"}},
+        executor={"type": "omnicraft", "config": {"harness": "codex"}},
     )
 
     responder = asyncio.create_task(
@@ -513,7 +513,7 @@ async def test_message_relaunch_harness_not_configured_persists_error_turn(
     The first message is the real runner-start attempt. When the host
     refuses the relaunch with ``harness_not_configured``, the server
     consumes the user message AND records a sibling ``type="error"`` item
-    carrying the host's `omnigent setup` message (the web renders it as
+    carrying the host's `omnicraft setup` message (the web renders it as
     an error banner) — instead of timing out into a generic
     ``RUNNER_UNAVAILABLE``. The binding is left intact so a later message
     relaunches once the user has run setup.
@@ -523,8 +523,8 @@ async def test_message_relaunch_harness_not_configured_persists_error_turn(
     ``runner_unavailable`` and no error item is written — both assertions
     below fail.
     """
-    from omnigent.runtime import set_runner_client
-    from omnigent.server.routes import sessions as sessions_module
+    from omnicraft.runtime import set_runner_client
+    from omnicraft.server.routes import sessions as sessions_module
 
     # Grace=0 so the message takes the relaunch branch immediately instead
     # of waiting for the (never-connecting) create-bound runner.
@@ -533,7 +533,7 @@ async def test_message_relaunch_harness_not_configured_persists_error_turn(
     comm = await _connect_host(app)
     agent = await create_test_agent(
         client,
-        executor={"type": "omnigent", "config": {"harness": "codex"}},
+        executor={"type": "omnicraft", "config": {"harness": "codex"}},
     )
     # Create with a successful create-time launch so the session binds a
     # runner_id (the fake runner never actually connects).
@@ -593,7 +593,7 @@ async def test_message_relaunch_harness_not_configured_persists_error_turn(
         f"expected exactly one error item for the refused relaunch, got {error_items!r}"
     )
     assert error_items[0]["code"] == "harness_not_configured"
-    assert "omnigent setup" in error_items[0]["message"]
+    assert "omnicraft setup" in error_items[0]["message"]
     assert "harness 'codex' is not configured" in error_items[0]["message"]
 
     # Binding kept so a post-setup message can relaunch.
@@ -677,7 +677,7 @@ async def _stop_host_session(
     :param session_id: Session to stop, e.g. ``"conv_abc123"``.
     :returns: The ``runner_id`` the host was told to stop.
     """
-    from omnigent.runtime import set_runner_client
+    from omnicraft.runtime import set_runner_client
 
     def _runner_handler(request: httpx.Request) -> httpx.Response:
         """204 every runner POST (pane-kill forward) and snapshot GET."""
@@ -742,14 +742,14 @@ async def test_stopped_host_session_writes_no_label_and_host_stays_online(
     """After Stop, no marker is written and the host stays reachable.
 
     Stop is non-sticky (WS-S2): it kills the host-launched runner but
-    writes NO persistent marker. With the host's ``omnigent host``
+    writes NO persistent marker. With the host's ``omnicraft host``
     tunnel still open, ``GET /health`` keeps reporting ``host_online:
     true`` — the relaunch affordance the open-session view needs — so the
     next message auto-relaunches via the normal dispatch path (covered by
     :func:`test_stopped_host_session_message_relaunches_runner`).
 
     Asserts the post-Stop liveness reports the host still online and that
-    NO ``omnigent.stopped`` label is persisted. Mutation check: re-add a
+    NO ``omnicraft.stopped`` label is persisted. Mutation check: re-add a
     sticky stop-label write and the no-label assertion fails.
     """
     comm = await _connect_host(app)
@@ -768,10 +768,10 @@ async def test_stopped_host_session_writes_no_label_and_host_stays_online(
     )
 
     # Stop is non-sticky: no persistent marker is written. A re-introduced
-    # sticky label would resurface the retired omnigent.stopped behavior.
+    # sticky label would resurface the retired omnicraft.stopped behavior.
     snap = await client.get(f"/v1/sessions/{session_id}")
-    assert "omnigent.stopped" not in snap.json()["labels"], (
-        f"Stop must NOT persist any omnigent.stopped label; got {snap.json()['labels']!r}"
+    assert "omnicraft.stopped" not in snap.json()["labels"], (
+        f"Stop must NOT persist any omnicraft.stopped label; got {snap.json()['labels']!r}"
     )
 
 
@@ -795,8 +795,8 @@ async def test_stopped_host_session_message_relaunches_runner(
     to the relaunch branch and no launch frame is sent — the first
     assertion fails.
     """
-    from omnigent.runtime import set_runner_client
-    from omnigent.server.routes import sessions as sessions_module
+    from omnicraft.runtime import set_runner_client
+    from omnicraft.server.routes import sessions as sessions_module
 
     monkeypatch.setattr(sessions_module, "_HOST_BOUND_RUNNER_CONNECT_GRACE_S", 0.0)
 
@@ -879,8 +879,8 @@ async def test_host_session_message_relaunches_offline_runner(
     returns ``None`` and the first assertion fails. Make ``replace_runner_id``
     a no-op and the runner_id-rotation assertion fails.
     """
-    from omnigent.runtime import set_runner_client
-    from omnigent.server.routes import sessions as sessions_module
+    from omnicraft.runtime import set_runner_client
+    from omnicraft.server.routes import sessions as sessions_module
 
     monkeypatch.setattr(sessions_module, "_HOST_BOUND_RUNNER_CONNECT_GRACE_S", 0.0)
 
@@ -965,7 +965,7 @@ async def test_host_session_message_waits_for_bound_runner_before_relaunch(
     and this test observes a second host launch frame plus a changed
     conversation ``runner_id``.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from omnicraft.server.routes import sessions as sessions_module
 
     comm = await _connect_host(app)
     session = await _inline_launch_session(client, comm)
@@ -1104,7 +1104,7 @@ async def test_relaunch_posts_session_init_before_forwarding_message(
     leading ``/v1/sessions`` POST (first assertion fails). Move it after
     the forward and the index-ordering assertion fails.
     """
-    from omnigent.server.routes import sessions as sessions_module
+    from omnicraft.server.routes import sessions as sessions_module
 
     monkeypatch.setattr(sessions_module, "_HOST_BOUND_RUNNER_CONNECT_GRACE_S", 0.0)
 

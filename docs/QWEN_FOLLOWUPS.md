@@ -5,15 +5,15 @@ Tracks pending work and known limitations for the Qwen Code harness
 
 ## What works today
 
-- `omnigent run --harness qwen` / `executor.harness: qwen` (alias `qwen-code`).
+- `omnicraft run --harness qwen` / `executor.harness: qwen` (alias `qwen-code`).
 - ACP executor: streaming turns, system-prompt folding, session-not-found
   reset, missing-binary handling.
 - **Permission gating** (`session/request_permission`): routed through
-  Omnigent's TOOL_CALL policy + human-consent elicitation
+  OmniCraft's TOOL_CALL policy + human-consent elicitation
   (`_decide_permission`), mirroring claude-sdk — a hard policy DENY rejects,
   otherwise the user is asked; default-deny on policy-ASK with no handler.
   Standalone/test use (no bridges wired) falls back to allow.
-- `omnigent setup` → **Qwen Code** row: installs the CLI and guides auth
+- `omnicraft setup` → **Qwen Code** row: installs the CLI and guides auth
   (env vars or interactive `/auth`).
 - Auth via the CLI's own ambient credentials (see Auth model below).
 - **Provider / gateway routing (clean env).** A spec `auth:` / `providers:`
@@ -64,9 +64,9 @@ Tracks pending work and known limitations for the Qwen Code harness
   advertises `clientCapabilities.fs` in `initialize`, so qwen routes its file
   reads/writes back to us as `fs/read_text_file` / `fs/write_text_file` requests
   (qwen's `AcpFileSystemService` swaps in only when the capability is set). The
-  handlers execute the I/O through the Omnigent `OSEnvironment`, so the spec's
+  handlers execute the I/O through the OmniCraft `OSEnvironment`, so the spec's
   sandbox read/write roots are enforced at the Python layer — and the bytes flow
-  through Omnigent rather than qwen touching disk directly. Disabled (qwen uses
+  through OmniCraft rather than qwen touching disk directly. Disabled (qwen uses
   its own tools) when there's no `os_env` or it's a `fork` env (a forked tree's
   path would diverge from the qwen subprocess cwd). Binary/non-UTF-8 reads are
   refused; missing-file reads map to qwen's ENOENT code. (Same fix applied to
@@ -82,7 +82,7 @@ comments; this is the *what*, not the *how*.)
 
 - [x] **Native TUI variant (`qwen-native` / `native-qwen`).** Implemented — the
   live `qwen` TUI runs in a runner-owned tmux pane embedded in the web UI, driven
-  by `omnigent qwen`. Unlike the goose/cursor `tmux send-keys` native harnesses,
+  by `omnicraft qwen`. Unlike the goose/cursor `tmux send-keys` native harnesses,
   it uses qwen's built-in remote-control protocol: web-UI turns are appended to
   qwen's `--input-file` (a `{"type":"submit"}` line, routed through the same
   `submitQuery` path the keyboard uses, so it renders in the TUI), and the
@@ -103,7 +103,7 @@ comments; this is the *what*, not the *how*.)
   wins; qwen's `dual-output.md` confirms `control_request` is emitted whenever a
   tool needs approval — the earlier "default mode doesn't emit these" note was
   wrong).
-  - **Mirror:** `omnigent/qwen_native_permissions.py` —
+  - **Mirror:** `omnicraft/qwen_native_permissions.py` —
     `supervise_qwen_approval_mirror` tails the *same* `--json-file` the
     transcript forwarder reads (seeded at EOF so only new prompts park), POSTs
     each `can_use_tool` to the server's `qwen-permission-request` hook, and on
@@ -132,12 +132,12 @@ comments; this is the *what*, not the *how*.)
   `ComposerStatusLine` in `web/src/pages/ChatPage.tsx`). It was showing the
   bound spec's *default* model (`claude-sonnet-4-6`) because the qwen-native-ui
   spec sets no model and qwen picks its model inside the vendor TUI (OpenAI-compat
-  env / qwen's own `/model`), so Omnigent's `llmModel` was a misleading default.
+  env / qwen's own `/model`), so OmniCraft's `llmModel` was a misleading default.
   Hiding it is the interim; the real fix is to **surface qwen's actual model**
   (and effort/approval-mode if meaningful). The data is already on qwen's
   `--json-file` stream — `assistant` message events carry `message.model` (e.g.
   `openai/gpt-oss-120b:free`) and the `system/session_start` event carries model
-  metadata. The forwarder (`omnigent/qwen_native_forwarder.py`) could parse it
+  metadata. The forwarder (`omnicraft/qwen_native_forwarder.py`) could parse it
   and report it onto the session so the chip reflects qwen's reality.
   - **Context ring + cost tracking also missing**, same root cause: native-qwen
     doesn't yet parse/forward token usage, so `tokensUsed` / `contextWindow` stay
@@ -151,7 +151,7 @@ comments; this is the *what*, not the *how*.)
     today* (`_accumulate_usage`); native-qwen needs the equivalent off the
     `--json-file` stream. Parse `result.usage` (`input_tokens` / `output_tokens`
     / `cache_read_input_tokens` / `total_tokens`) in
-    `omnigent/qwen_native_forwarder.py`, split `cache_read_input_tokens` out of
+    `omnicraft/qwen_native_forwarder.py`, split `cache_read_input_tokens` out of
     `input_tokens` (qwen's `input_tokens` is cache-inclusive; cost wants the
     non-cached portion), and report it onto the session so the cost observer +
     context ring pick it up; the context-window *limit* comes from the curated
@@ -162,10 +162,10 @@ comments; this is the *what*, not the *how*.)
   used to relaunch a **blank** `qwen` TUI (only the web chat kept history, via the
   forwarder). Fixed, using the **same `external_session_id` convention as
   claude-/codex-/pi-native** (so it's consistent and fork-capable):
-  `_auto_create_qwen_terminal` persists the qwen session id on the Omnigent
+  `_auto_create_qwen_terminal` persists the qwen session id on the OmniCraft
   session (`_persist_qwen_external_session_id` → `PATCH /v1/sessions/{id}`), reads
   it back from the snapshot (`launch_config.external_session_id`) on the next
-  launch, and it's stamped as `omnigent.fork.source_external_session_id` for fork
+  launch, and it's stamped as `omnicraft.fork.source_external_session_id` for fork
   history carry-over. qwen is cleaner than claude/codex here — it lets us *assign*
   the id via `--session-id`, so we mint a deterministic one
   (`qwen_session_id_for_conversation`, UUIDv5 of the `conv_id`) up front instead
@@ -188,13 +188,13 @@ comments; this is the *what*, not the *how*.)
   qwen session with the prior conversation, the same way claude-/codex-/pi-native
   do. qwen-native is registered in `_FORK_HISTORY_NATIVE_HARNESSES`
   (`server/routes/sessions.py`), so both the fork and switch-agent routes stamp
-  `omnigent.fork.carry_history` and clear `external_session_id` on the clone. On
+  `omnicraft.fork.carry_history` and clear `external_session_id` on the clone. On
   the clone's first launch, `_auto_create_qwen_terminal` calls
-  `_build_qwen_fork_recording`, which fetches the clone's copied Omnigent items
+  `_build_qwen_fork_recording`, which fetches the clone's copied OmniCraft items
   (`fetch_all_session_items_for_pi_resume` — harness-neutral) and rebuilds qwen's
   on-disk recording via `qwen_session_records_from_session_items` +
   `write_qwen_session_recording`, then forces `--resume`. Because it rebuilds from
-  Omnigent items (not the source's vendor transcript), it works **cross-harness**
+  OmniCraft items (not the source's vendor transcript), it works **cross-harness**
   (claude/pi/codex → qwen). **Key on-disk-format finding:** qwen resolves
   `--resume <id>` from *three* files, not the `.jsonl` alone — it also needs
   `chats/<id>.runtime.json` (session index entry) and the project `meta.json`; a
@@ -271,11 +271,11 @@ comments; this is the *what*, not the *how*.)
   - *Full route:* spec with `executor.profile: <db-profile>` (or a
     `databricks-*` model), then `omni run`; confirm the runner log's
     `qwen gateway routing:` line shows the Databricks base URL + profile.
-- [x] **Omnigent tools.** Qwen-native now exposes the shared Omnigent MCP relay
-  (`omnigent.claude_native_bridge serve-mcp`, `mcpServers.omnigent`,
+- [x] **OmniCraft tools.** Qwen-native now exposes the shared OmniCraft MCP relay
+  (`omnicraft.claude_native_bridge serve-mcp`, `mcpServers.omnicraft`,
   `trust: true`) to qwen via the `--mcp-config <path>` launch flag (the
   claude-native model). qwen connects to it on boot, `/mcp` lists it, and the
-  model can call Omnigent's builtin tools (`sys_*`, `load_skill`, `web_fetch`, …).
+  model can call OmniCraft's builtin tools (`sys_*`, `load_skill`, `web_fetch`, …).
   The config lives in the per-session bridge dir, **not** the workspace, so we
   drop no file in the user's repo, concurrent same-workspace sessions can't
   collide, and CLI-provided servers are ungated (no "Untrusted MCP server"
@@ -285,10 +285,10 @@ comments; this is the *what*, not the *how*.)
   bearer token is written through `_ensure_secure_bridge_dir` (the same
   owner-only ancestor validation the shared relay applies to token-bearing
   trees). Permission gating on qwen's *own* tool calls already works.
-- [ ] **File I/O recording / content policy.** Omnigent now *executes* delegated
+- [ ] **File I/O recording / content policy.** OmniCraft now *executes* delegated
   file reads/writes through the `OSEnvironment` (see "File I/O delegation" in
-  What works today), so the bytes flow through Omnigent and the sandbox roots are
-  enforced. Still missing on top of that: (a) emitting the I/O into Omnigent's
+  What works today), so the bytes flow through OmniCraft and the sandbox roots are
+  enforced. Still missing on top of that: (a) emitting the I/O into OmniCraft's
   event stream (ToolCall-style records) so it shows in history, and (b) running
   TOOL_RESULT-phase content policy on the read/written content. Both build on the
   `_handle_fs_read` / `_handle_fs_write` handlers — the byte-level hook now

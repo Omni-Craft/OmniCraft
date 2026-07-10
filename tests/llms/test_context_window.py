@@ -12,8 +12,8 @@ from typing import Any
 
 import pytest
 
-from omnigent.llms import context_window
-from omnigent.llms.context_window import (
+from omnicraft.llms import context_window
+from omnicraft.llms.context_window import (
     ModelPricing,
     _registry_context_window,
     compute_llm_cost,
@@ -187,7 +187,7 @@ def test_fetch_model_pricing_parses_cache_rates(monkeypatch: pytest.MonkeyPatch)
     """
     # Catalog lookup is disabled globally in tests (conftest); re-enable
     # for this one and stub the network fetch with a cache-priced entry.
-    monkeypatch.delenv("OMNIGENT_DISABLE_CATALOG_LOOKUP", raising=False)
+    monkeypatch.delenv("OMNICRAFT_DISABLE_CATALOG_LOOKUP", raising=False)
     monkeypatch.setattr(
         context_window,
         "_fetch_mlflow_provider_catalog",
@@ -221,7 +221,7 @@ def test_fetch_model_pricing_omits_cache_rates_when_absent(
     the standard ratios. If these came back as ``0.0`` instead of ``None``,
     cache tokens would be billed free.
     """
-    monkeypatch.delenv("OMNIGENT_DISABLE_CATALOG_LOOKUP", raising=False)
+    monkeypatch.delenv("OMNICRAFT_DISABLE_CATALOG_LOOKUP", raising=False)
     monkeypatch.setattr(
         context_window,
         "_fetch_mlflow_provider_catalog",
@@ -254,7 +254,7 @@ def test_fetch_model_pricing_databricks_alias_falls_back_to_base_model(
     gateway (which defaults to ``databricks-claude-opus-4-8``) would show
     "unpriced" — the exact gap reported for the debbie/debby supervisors.
     """
-    monkeypatch.delenv("OMNIGENT_DISABLE_CATALOG_LOOKUP", raising=False)
+    monkeypatch.delenv("OMNICRAFT_DISABLE_CATALOG_LOOKUP", raising=False)
 
     def _catalog(provider: str) -> dict[str, Any] | None:
         """Databricks catalog lacks opus; the base (anthropic) catalog prices it."""
@@ -305,7 +305,7 @@ def test_provider_catalog_is_cached_across_calls(
     a download count > 1. Asserting the resolved window also proves the
     cached payload still flows through the resolver unchanged.
     """
-    monkeypatch.delenv("OMNIGENT_DISABLE_CATALOG_LOOKUP", raising=False)
+    monkeypatch.delenv("OMNICRAFT_DISABLE_CATALOG_LOOKUP", raising=False)
     # Clear any residue from earlier tests so the count starts clean.
     context_window._catalog_cache.clear()
     calls: list[str] = []
@@ -339,7 +339,7 @@ def test_provider_catalog_caches_fetch_failure(
     amplifying into per-request latency. The caller still falls back to
     the 128K default, which this also checks.
     """
-    monkeypatch.delenv("OMNIGENT_DISABLE_CATALOG_LOOKUP", raising=False)
+    monkeypatch.delenv("OMNICRAFT_DISABLE_CATALOG_LOOKUP", raising=False)
     context_window._catalog_cache.clear()
     calls: list[str] = []
 
@@ -356,7 +356,7 @@ def test_provider_catalog_caches_fetch_failure(
 
 
 # ---------------------------------------------------------------------------
-# Omnigent's authoritative context-window registry (supersedes litellm/catalog)
+# OmniCraft's authoritative context-window registry (supersedes litellm/catalog)
 # ---------------------------------------------------------------------------
 
 
@@ -401,7 +401,7 @@ def test_get_model_context_window_uses_registry_first(monkeypatch: pytest.Monkey
     beta resolve correctly even offline (the meter / overflow-threshold
     bug was that these collapsed to the 128K default).
     """
-    monkeypatch.setenv("OMNIGENT_DISABLE_CATALOG_LOOKUP", "1")
+    monkeypatch.setenv("OMNICRAFT_DISABLE_CATALOG_LOOKUP", "1")
     monkeypatch.delenv("AP_CONTEXT_WINDOW_OVERRIDE", raising=False)
     # Anthropic 1M beta: resolves via the registry, not the 128K default.
     assert get_model_context_window("claude-opus-4-8[1m]") == 1_000_000

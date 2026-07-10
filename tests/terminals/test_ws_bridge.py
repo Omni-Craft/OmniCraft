@@ -1,5 +1,5 @@
 """
-Unit tests for :mod:`omnigent.terminals.ws_bridge`.
+Unit tests for :mod:`omnicraft.terminals.ws_bridge`.
 
 Covers ``_write_all_nonblocking`` (retry-on-backpressure / short-write
 semantics over a real ``os.pipe``), the tmux-attach child reaper, the
@@ -28,8 +28,8 @@ from pathlib import Path
 
 import pytest
 
-import omnigent.terminals.ws_bridge as ws_bridge
-from omnigent.terminals.ws_bridge import (
+import omnicraft.terminals.ws_bridge as ws_bridge
+from omnicraft.terminals.ws_bridge import (
     WS_CLOSE_TERMINAL_DETACHED,
     _check_pane_dead_definitive,
     _forward_pty_to_ws,
@@ -1238,7 +1238,7 @@ def test_current_coalesce_limit_static_value() -> None:
     ``_current_coalesce_limit`` returns the integer unchanged when
     given a static cap.
     """
-    from omnigent.terminals.ws_bridge import _current_coalesce_limit
+    from omnicraft.terminals.ws_bridge import _current_coalesce_limit
 
     assert _current_coalesce_limit(4096) == 4096
 
@@ -1248,7 +1248,7 @@ def test_current_coalesce_limit_callable_invoked() -> None:
     ``_current_coalesce_limit`` calls the callable and returns its
     result when given a dynamic cap.
     """
-    from omnigent.terminals.ws_bridge import _current_coalesce_limit
+    from omnicraft.terminals.ws_bridge import _current_coalesce_limit
 
     assert _current_coalesce_limit(lambda: 2048) == 2048
 
@@ -1258,7 +1258,7 @@ def test_current_coalesce_limit_rejects_zero() -> None:
     A zero cap raises ``ValueError`` — a zero cap would make the
     frame-splitting loop infinite.
     """
-    from omnigent.terminals.ws_bridge import _current_coalesce_limit
+    from omnicraft.terminals.ws_bridge import _current_coalesce_limit
 
     with pytest.raises(ValueError, match="must be positive"):
         _current_coalesce_limit(0)
@@ -1268,7 +1268,7 @@ def test_current_coalesce_limit_rejects_negative_callable() -> None:
     """
     A callable returning a negative value raises ``ValueError``.
     """
-    from omnigent.terminals.ws_bridge import _current_coalesce_limit
+    from omnicraft.terminals.ws_bridge import _current_coalesce_limit
 
     with pytest.raises(ValueError, match="must be positive"):
         _current_coalesce_limit(lambda: -5)
@@ -1280,7 +1280,7 @@ def test_coalesce_limit_after_input_returns_large_cap_with_no_input() -> None:
     coalesce cap is the full flood cap — output should stream
     efficiently without the interactive constraint.
     """
-    from omnigent.terminals.ws_bridge import _coalesce_limit_after_input
+    from omnicraft.terminals.ws_bridge import _coalesce_limit_after_input
 
     assert _coalesce_limit_after_input(None) == ws_bridge._WS_COALESCE_MAX_BYTES
 
@@ -1294,7 +1294,7 @@ def test_coalesce_limit_after_input_returns_small_cap_within_window(
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.terminals.ws_bridge import _coalesce_limit_after_input
+    from omnicraft.terminals.ws_bridge import _coalesce_limit_after_input
 
     monkeypatch.setattr(ws_bridge, "_monotonic", lambda: 100.5)
     # Input was 0.3s ago (within the 0.75s window).
@@ -1310,7 +1310,7 @@ def test_coalesce_limit_after_input_returns_large_cap_after_window(
 
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.terminals.ws_bridge import _coalesce_limit_after_input
+    from omnicraft.terminals.ws_bridge import _coalesce_limit_after_input
 
     monkeypatch.setattr(ws_bridge, "_monotonic", lambda: 102.0)
     # Input was 2s ago (well past the 0.75s window).
@@ -1460,7 +1460,7 @@ def test_monotonic_returns_float() -> None:
     returns a float. This seems trivial but the wrapper exists as
     a test seam — verify it works as documented.
     """
-    from omnigent.terminals.ws_bridge import _monotonic
+    from omnicraft.terminals.ws_bridge import _monotonic
 
     val = _monotonic()
     assert isinstance(val, float)

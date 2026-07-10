@@ -12,7 +12,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from omnigent import goose_native_forwarder as f
+from omnicraft import goose_native_forwarder as f
 
 _SCHEMA = """
 CREATE TABLE sessions (

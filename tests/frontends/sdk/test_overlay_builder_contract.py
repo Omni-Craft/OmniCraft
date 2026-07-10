@@ -15,7 +15,7 @@ The fix is two-fold:
 1. The ``Overlay.builder`` docstring now explicitly recommends
    the ``Group`` pattern with an inline example, so future
    builder authors don't have to spelunk the reference
-   implementation in :mod:`omnigent.repl._repl`.
+   implementation in :mod:`omnicraft.repl._repl`.
 2. These tests pin the recommended pattern: a builder returning
    ``Group(*(Text.from_markup(line) for line in lines))`` is
    rendered correctly by the host's overlay-content pipeline,
@@ -39,7 +39,7 @@ import asyncio
 import io
 import re
 
-from omnigent_ui_sdk import Overlay, OverlayTarget, TerminalHost
+from omnicraft_ui_sdk import Overlay, OverlayTarget, TerminalHost
 from rich.console import Console, Group
 from rich.text import Text
 

@@ -9,7 +9,7 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runner.tool_dispatch import execute_tool
+from omnicraft.runner.tool_dispatch import execute_tool
 
 
 class _TimerPostRecorder:

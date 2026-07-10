@@ -1,6 +1,6 @@
-# Contributing to Omnigent
+# Contributing to OmniCraft
 
-Thanks for your interest in improving Omnigent. Issues and pull requests are
+Thanks for your interest in improving OmniCraft. Issues and pull requests are
 welcome. For larger changes, open an issue first so we can discuss the approach.
 
 Please don't include secrets, internal URLs, customer data, or private
@@ -31,8 +31,8 @@ Install local prerequisites first:
 - Node.js 22 LTS or newer with `npm` when working on `web/`.
 
 ```bash
-git clone https://github.com/omnigent-ai/omnigent.git
-cd omnigent
+git clone https://github.com/omnicraft-ai/omnicraft.git
+cd omnicraft
 
 uv python install
 uv venv --python "$(cat .python-version)"
@@ -61,10 +61,10 @@ and run the frontend dev server. Use three separate terminals:
 
 ```bash
 # Terminal 1: local server on :6767
-omnigent server
+omnicraft server
 
 # Terminal 2: register your machine as a host
-omnigent host --server http://localhost:6767
+omnicraft host --server http://localhost:6767
 
 # Terminal 3: frontend dev server
 cd web
@@ -76,8 +76,8 @@ Open the Vite URL from the frontend dev server, usually
 your filesystem and start new sessions on your machine — without it, the web UI
 is read/continue-only.
 
-`omni` is an alias for `omnigent`, so `omni host --server ...` works too.
-The host URL can also be passed positionally (`omnigent host
+`omni` is an alias for `omnicraft`, so `omni host --server ...` works too.
+The host URL can also be passed positionally (`omnicraft host
 http://localhost:6767`). See the [README](README.md) for more on hosts,
 harnesses, and credentials.
 
@@ -96,7 +96,7 @@ PORT=18090 scripts/backend-smoke.sh   # override the port if 18080 is busy
 ```
 
 It installs `uv` into a throwaway toolchain venv, runs `uv sync --frozen`,
-starts the server in API-only mode (`OMNIGENT_SKIP_WEB_UI=true`), waits for
+starts the server in API-only mode (`OMNICRAFT_SKIP_WEB_UI=true`), waits for
 `/health`, and smoke-tests `/`, `/health`, `/docs`, `/v1/agents`, and
 `/v1/sessions` -- expecting HTTP `200` from all five. It exits non-zero if any
 check fails.
@@ -110,10 +110,10 @@ Notes:
 - **Fully isolated, disposable:** every artifact -- the toolchain and project
   venvs, config, data, the SQLite database, artifacts, logs, and `pip`/`uv`
   caches -- lives under one `mktemp -d` runtime directory removed on exit, so
-  the run never touches your real `~/.omnigent`, `~/.config` / `~/Library`, or
+  the run never touches your real `~/.omnicraft`, `~/.config` / `~/Library`, or
   package caches. `HOME` is the primary isolation lever (it redirects
   `~/.config` on Linux and `~/Library` on macOS); the explicit `UV_*` / `PIP_*`
-  / `OMNIGENT_*` overrides pin the toolchain and app state regardless of OS,
+  / `OMNICRAFT_*` overrides pin the toolchain and app state regardless of OS,
   and `XDG_*` are set so an `XDG_*` already exported in your shell cannot
   redirect state back to your real home.
 - **What it does not cover:** the web UI, mobile access, human-in-the-loop
@@ -122,7 +122,7 @@ Notes:
 
 ## Tests
 
-A change that alters behaviour under `omnigent/` should ship with a test, and a
+A change that alters behaviour under `omnicraft/` should ship with a test, and a
 bug fix should add a test that fails before the fix. Pure refactors, renames,
 type-only changes, dependency bumps, and edits with no observable behaviour
 change don't need a new test.
@@ -137,7 +137,7 @@ would do.
 Put the test in the suite that matches the area you changed — most backend
 areas mirror their source directory under `tests/`:
 
-| Area changed (`omnigent/…`) | Test suite (`tests/…`) |
+| Area changed (`omnicraft/…`) | Test suite (`tests/…`) |
 | --- | --- |
 | `server/` | `server/` |
 | `runner/` | `runner/` |

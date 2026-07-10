@@ -10,9 +10,9 @@ import pytest
 from botocore.exceptions import ClientError
 from moto import mock_aws
 
-from omnigent.stores.artifact_store.s3 import S3ArtifactStore, _make_client
+from omnicraft.stores.artifact_store.s3 import S3ArtifactStore, _make_client
 
-_BUCKET = "omnigent-test-artifacts"
+_BUCKET = "omnicraft-test-artifacts"
 
 
 @pytest.fixture()

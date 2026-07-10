@@ -179,13 +179,13 @@ describe("Composer slash-command menu", () => {
     const onSend = vi.fn();
     render(<Composer {...composerProps({ onSend })} />);
     const ta = textarea();
-    fireEvent.change(ta, { target: { value: "omnigent" } });
+    fireEvent.change(ta, { target: { value: "omnicraft" } });
 
     fireEvent.keyDown(ta, { key: "Enter", keyCode: 229 });
     expect(onSend).not.toHaveBeenCalled();
 
     fireEvent.keyDown(ta, { key: "Enter" });
-    expect(onSend).toHaveBeenCalledWith("omnigent", undefined);
+    expect(onSend).toHaveBeenCalledWith("omnicraft", undefined);
   });
 
   it("ArrowDown moves the highlight to the next match", () => {
@@ -360,7 +360,7 @@ describe("Composer slash-command submit routing", () => {
     // isNativeWrapper without showModels → showModel false: native wrappers
     // need an explicit picker-backed propagation path. Without one, /model
     // must NOT fire setModel — it falls through to a plaintext message.
-    // Terminal-first SDK sessions (embedded Omnigent REPL terminal) keep the
+    // Terminal-first SDK sessions (embedded OmniCraft REPL terminal) keep the
     // in-process routing.
     const setModel = vi.fn().mockResolvedValue(undefined);
     useChatStore.setState({ setModel });
@@ -748,7 +748,7 @@ describe("Composer effort slash-command visibility", () => {
     expect(screen.getByTestId("slash-menu-item-model")).toBeInTheDocument();
     unmount();
 
-    // Terminal-first SDK session (embedded Omnigent REPL terminal, no
+    // Terminal-first SDK session (embedded OmniCraft REPL terminal, no
     // native wrapper) → still an in-process harness, /model stays offered.
     const { unmount: unmountSdk } = render(
       <Composer {...composerProps({ isTerminalFirst: true })} />,

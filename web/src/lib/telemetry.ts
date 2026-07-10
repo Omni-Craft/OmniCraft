@@ -1,4 +1,4 @@
-// Browser-side OpenTelemetry tracing for the Omnigent web UI.
+// Browser-side OpenTelemetry tracing for the OmniCraft web UI.
 //
 // Initializes a WebTracerProvider with fetch + XHR instrumentation so a
 // trace BEGINS in the browser (at the user's click) and continues into the

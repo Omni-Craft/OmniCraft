@@ -1,11 +1,11 @@
-# Omnigent iOS
+# OmniCraft iOS
 
-Thin SwiftUI/WKWebView shell for Omnigent. Like the Electron app, this target
+Thin SwiftUI/WKWebView shell for OmniCraft. Like the Electron app, this target
 loads the server-served web UI instead of shipping a duplicate copy of the SPA.
 
 ## Development
 
-Open `Omnigent.xcodeproj` in Xcode 16 or newer and run the `Omnigent` scheme on
+Open `OmniCraft.xcodeproj` in Xcode 16 or newer and run the `OmniCraft` scheme on
 an iOS 18 simulator.
 
 Debug builds allow `http://` web content for local development by enabling

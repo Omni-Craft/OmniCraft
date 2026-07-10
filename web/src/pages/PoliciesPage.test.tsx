@@ -53,7 +53,7 @@ function policy(overrides: Partial<Record<string, unknown>> = {}) {
     object: "default_policy",
     name: "block_canada",
     type: "python",
-    handler: "omnigent.policies.block_canada",
+    handler: "omnicraft.policies.block_canada",
     factory_params: null,
     enabled: true,
     created_at: 1,
@@ -146,14 +146,14 @@ describe("PoliciesPage list", () => {
       policy({
         id: "p2",
         name: "rate_limit",
-        handler: "omnigent.policies.rate_limit",
+        handler: "omnicraft.policies.rate_limit",
         factory_params: { max_per_min: 5 },
       }),
     ]);
     renderPage();
 
     expect(await screen.findByText("block_canada")).toBeInTheDocument();
-    expect(screen.getByText("omnigent.policies.block_canada")).toBeInTheDocument();
+    expect(screen.getByText("omnicraft.policies.block_canada")).toBeInTheDocument();
     expect(screen.getByText("Desativada")).toBeInTheDocument(); // only the disabled one
     // factory_params render as a "Parameters" block.
     expect(screen.getByText("Parâmetros")).toBeInTheDocument();
@@ -193,7 +193,7 @@ describe("PoliciesPage actions", () => {
     vi.mocked(policies.usePolicyRegistry).mockReturnValue({
       data: [
         {
-          handler: "omnigent.policies.budget",
+          handler: "omnicraft.policies.budget",
           kind: "factory",
           name: "Budget Guard",
           description: "blocks expensive models",
@@ -228,7 +228,7 @@ describe("PoliciesPage actions", () => {
 
     expect(addMutate).toHaveBeenCalledTimes(1);
     const payload = addMutate.mock.calls[0][0];
-    expect(payload.handler).toBe("omnigent.policies.budget");
+    expect(payload.handler).toBe("omnicraft.policies.budget");
     expect(payload.factory_params).toEqual({
       expensive_models: ["opus", "haiku", "custom-tier"],
     });
@@ -238,7 +238,7 @@ describe("PoliciesPage actions", () => {
     vi.mocked(policies.usePolicyRegistry).mockReturnValue({
       data: [
         {
-          handler: "omnigent.policies.block_canada",
+          handler: "omnicraft.policies.block_canada",
           kind: "callable",
           name: "Block Canada",
           description: "Deny anything mentioning Canada.",
@@ -255,7 +255,7 @@ describe("PoliciesPage actions", () => {
     fireEvent.click(within(dialog).getByRole("button", { name: /^Adicionar$/ }));
 
     expect(addMutate).toHaveBeenCalledWith(
-      { name: "block_canada", type: "python", handler: "omnigent.policies.block_canada" },
+      { name: "block_canada", type: "python", handler: "omnicraft.policies.block_canada" },
       expect.anything(),
     );
   });
@@ -266,14 +266,14 @@ describe("PoliciesPage actions", () => {
     vi.mocked(policies.usePolicyRegistry).mockReturnValue({
       data: [
         {
-          handler: "omnigent.policies.block_canada",
+          handler: "omnicraft.policies.block_canada",
           kind: "callable",
           name: "Block Canada",
           description: "Deny anything mentioning Canada.",
           params_schema: null,
         },
         {
-          handler: "omnigent.policies.rate_limit",
+          handler: "omnicraft.policies.rate_limit",
           kind: "callable",
           name: "Rate Limit",
           description: "Cap request rate.",
@@ -301,7 +301,7 @@ describe("PoliciesPage actions", () => {
     vi.mocked(policies.usePolicyRegistry).mockReturnValue({
       data: [
         {
-          handler: "omnigent.policies.block_canada",
+          handler: "omnicraft.policies.block_canada",
           kind: "callable",
           name: "Block Canada",
           description: "Deny anything mentioning Canada.",

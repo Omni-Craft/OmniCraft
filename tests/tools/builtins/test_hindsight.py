@@ -13,10 +13,10 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins import get_builtin_tool
-from omnigent.tools.builtins import hindsight as hindsight_mod
-from omnigent.tools.builtins.hindsight import (
+from omnicraft.tools.base import ToolContext
+from omnicraft.tools.builtins import get_builtin_tool
+from omnicraft.tools.builtins import hindsight as hindsight_mod
+from omnicraft.tools.builtins.hindsight import (
     HindsightRecallTool,
     HindsightReflectTool,
     HindsightRetainTool,

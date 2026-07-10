@@ -1,4 +1,4 @@
-"""Tests for omnigent.tools.builtins.load_skill."""
+"""Tests for omnicraft.tools.builtins.load_skill."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.spec.types import SkillSpec
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins import LoadSkillTool
+from omnicraft.spec.types import SkillSpec
+from omnicraft.tools.base import ToolContext
+from omnicraft.tools.builtins import LoadSkillTool
 
 
 @pytest.fixture()

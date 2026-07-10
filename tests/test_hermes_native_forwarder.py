@@ -16,8 +16,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import hermes_native_forwarder as f
-from omnigent import hermes_native_status as hstatus
+from omnicraft import hermes_native_forwarder as f
+from omnicraft import hermes_native_status as hstatus
 
 _SCHEMA = """
 CREATE TABLE sessions (

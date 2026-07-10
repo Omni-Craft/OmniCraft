@@ -48,7 +48,7 @@ async function run(nodes) {
       },
     },
   };
-  const context = { repo: { owner: "omnigent-ai", repo: "omnigent" } };
+  const context = { repo: { owner: "omnicraft-ai", repo: "omnicraft" } };
   await script({ context, github });
   return {
     closed: closed.map((c) => c.pull_number).sort((a, b) => a - b),

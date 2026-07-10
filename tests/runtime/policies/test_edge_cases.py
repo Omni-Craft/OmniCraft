@@ -18,14 +18,14 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from omnicraft.policies.types import EvaluationContext
+from omnicraft.runtime.policies.engine import PolicyEngine
+from omnicraft.spec.types import (
     Phase,
     PhaseSelector,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_policy

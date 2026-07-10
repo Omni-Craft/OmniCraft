@@ -33,11 +33,11 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from jwt.algorithms import RSAAlgorithm
 
-from omnigent.server.admin_list import AdminList
-from omnigent.server.auth import UnifiedAuthProvider
-from omnigent.server.oidc import OIDCConfig
-from omnigent.server.routes.auth import _AUTH_STATE_COOKIE_PLAIN, create_auth_router
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from omnicraft.server.admin_list import AdminList
+from omnicraft.server.auth import UnifiedAuthProvider
+from omnicraft.server.oidc import OIDCConfig
+from omnicraft.server.routes.auth import _AUTH_STATE_COOKIE_PLAIN, create_auth_router
+from omnicraft.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 _TEST_SECRET = bytes.fromhex("aa" * 32)
 _ISSUER = "https://accounts.google.com"
@@ -51,7 +51,7 @@ def _oidc_config(skip_email_verification: bool = False) -> OIDCConfig:
     ``email_verified`` gate from the domain-allowlist check.
 
     :param skip_email_verification: Waive the ``email_verified`` gate,
-        as ``OMNIGENT_OIDC_SKIP_EMAIL_VERIFICATION`` would.
+        as ``OMNICRAFT_OIDC_SKIP_EMAIL_VERIFICATION`` would.
     """
     return OIDCConfig(
         issuer=_ISSUER,
@@ -280,7 +280,7 @@ def test_callback_skip_verification_flag_admits_unverified(
     Models Okta tiers that drop ``email_verified`` for
     directory-provisioned users: the same absent-claim token rejected
     by default (covered above) mints a session when the operator has
-    opted out via ``OMNIGENT_OIDC_SKIP_EMAIL_VERIFICATION``.
+    opted out via ``OMNICRAFT_OIDC_SKIP_EMAIL_VERIFICATION``.
     """
     client, keys = callback_client
     token = keys.sign_id_token(claims)

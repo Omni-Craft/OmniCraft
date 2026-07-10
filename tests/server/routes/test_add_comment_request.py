@@ -1,4 +1,4 @@
-"""Tests for :class:`omnigent.server.routes.comments.AddCommentRequest` validation.
+"""Tests for :class:`omnicraft.server.routes.comments.AddCommentRequest` validation.
 
 ``AddCommentRequest`` has a ``model_validator`` that rejects semantically
 invalid range field combinations at the HTTP boundary before they reach the
@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from omnigent.server.routes.comments import AddCommentRequest
+from omnicraft.server.routes.comments import AddCommentRequest
 
 
 def _valid_kwargs(**overrides: object) -> dict:

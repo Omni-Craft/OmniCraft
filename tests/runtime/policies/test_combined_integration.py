@@ -29,18 +29,18 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.policies.types import EvaluationContext
-from omnigent.runtime.policies import (
+from omnicraft.policies.types import EvaluationContext
+from omnicraft.runtime.policies import (
     _enforce_policy,
     build_policy_engine,
 )
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec import load
-from omnigent.spec.types import (
+from omnicraft.runtime.policies.engine import PolicyEngine
+from omnicraft.spec import load
+from omnicraft.spec.types import (
     Phase,
     PolicyAction,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 

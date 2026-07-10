@@ -6,8 +6,8 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.exc import IntegrityError
 
-from omnigent.db.utils import get_or_create_engine
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.db.utils import get_or_create_engine
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
 
 
 def test_create_and_get(agent_store: SqlAlchemyAgentStore) -> None:

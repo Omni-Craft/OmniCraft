@@ -1,7 +1,7 @@
 // Tests for the Settings nav model + sidebar body (settingsNav).
 //
 // Covers the mobile-specific behavior: keyboard shortcuts is hidden on mobile
-// (max-md:hidden), and "Back to Omnigent" does NOT close the sidebar overlay
+// (max-md:hidden), and "Back to OmniCraft" does NOT close the sidebar overlay
 // on a plain tap (no onNavClick) so mobile lands back on the conversation list
 // instead of the homepage. Section links still close it.
 
@@ -256,7 +256,7 @@ describe("useSettingsRoute", () => {
     // Basename-agnostic: the sidebar rebases links behind the app's back in the
     // embed, so detection keys off the `settings` segment wherever it lands.
     mocks.accountsEnabled = true;
-    expect(routeHook("/ml/omnigent-embed/settings/members")).toEqual({
+    expect(routeHook("/ml/omnicraft-embed/settings/members")).toEqual({
       inSettings: true,
       section: "members",
     });

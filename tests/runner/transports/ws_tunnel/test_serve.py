@@ -12,12 +12,12 @@ from typing_extensions import Unpack
 from websockets.exceptions import InvalidStatus, InvalidURI, WebSocketException
 from websockets.http11 import Response
 
-from omnigent.runner.identity import (
-    OMNIGENT_INTERNAL_WS_ORIGIN,
+from omnicraft.runner.identity import (
+    OMNICRAFT_INTERNAL_WS_ORIGIN,
     RUNNER_TUNNEL_TOKEN_HEADER,
 )
-from omnigent.runner.transports.ws_tunnel import serve as serve_module
-from omnigent.runner.transports.ws_tunnel.frames import (
+from omnicraft.runner.transports.ws_tunnel import serve as serve_module
+from omnicraft.runner.transports.ws_tunnel.frames import (
     PingFrame,
     RequestCancelFrame,
     RequestFrame,
@@ -26,7 +26,7 @@ from omnigent.runner.transports.ws_tunnel.frames import (
     WSOpenFrame,
     encode_frame,
 )
-from omnigent.runner.transports.ws_tunnel.serve import (
+from omnicraft.runner.transports.ws_tunnel.serve import (
     _handle_tunnel_frame,
     _serve_tunnel_once,
     _websocket_auth_redirect_url,
@@ -446,7 +446,7 @@ async def test_serve_tunnel_fails_loud_on_auth_redirect(
     # what the server is asking for.
     assert login_url in message
     # User-actionable next step.
-    assert "omnigent setup" in message
+    assert "omnicraft setup" in message
 
 
 @pytest.mark.asyncio
@@ -548,7 +548,7 @@ async def test_serve_tunnel_once_sends_bearer_header(
     monkeypatch.setattr(websockets, "connect", _fake_connect)
     # No recorded ?o= selector, so no workspace-routing header rides the
     # handshake (keeps the asserted header set exact).
-    monkeypatch.setattr("omnigent.cli_auth.load_databricks_org_id", lambda _server_url: None)
+    monkeypatch.setattr("omnicraft.cli_auth.load_databricks_org_id", lambda _server_url: None)
 
     await _serve_tunnel_once(
         _noop_app,
@@ -566,7 +566,7 @@ async def test_serve_tunnel_once_sends_bearer_header(
     # addition to the bearer and tunnel-binding token.
     assert captured["kwargs"] == {
         "additional_headers": {
-            "Origin": OMNIGENT_INTERNAL_WS_ORIGIN,
+            "Origin": OMNICRAFT_INTERNAL_WS_ORIGIN,
             "Authorization": "Bearer tok-auth",
             RUNNER_TUNNEL_TOKEN_HEADER: "bind-token",
         },
@@ -617,13 +617,13 @@ async def test_serve_tunnel_once_sends_org_header(
 
     monkeypatch.setattr(websockets, "connect", _fake_connect)
     monkeypatch.setattr(
-        "omnigent.cli_auth.load_databricks_org_id", lambda _server_url: "2850744067564480"
+        "omnicraft.cli_auth.load_databricks_org_id", lambda _server_url: "2850744067564480"
     )
 
     await _serve_tunnel_once(
         _noop_app,
         tunnel_url="wss://acme.databricks.com/v1/runners/r/tunnel",
-        server_url="https://acme.databricks.com/api/2.0/omnigent",
+        server_url="https://acme.databricks.com/api/2.0/omnicraft",
         runner_id="r",
         runner_version="0.1.0",
         auth_token="tok",

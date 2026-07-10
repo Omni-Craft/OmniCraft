@@ -1,8 +1,8 @@
 /**
- * Sole owner of the editor-beside Omnigent `WebviewPanel` AND the resolved
+ * Sole owner of the editor-beside OmniCraft `WebviewPanel` AND the resolved
  * server target that drives its render.
  *
- * The panel hosts the running LOCAL Omnigent server in a single static <iframe>
+ * The panel hosts the running LOCAL OmniCraft server in a single static <iframe>
  * (panel/host.ts). There is no in-panel routing or messaging: the framed app
  * owns its own navigation. This is the ONLY `createWebviewPanel` call in the
  * codebase.
@@ -40,8 +40,8 @@ export class EditorPanelController {
       return;
     }
     const panel = vscode.window.createWebviewPanel(
-      "omnigent",
-      "Omnigent",
+      "omnicraft",
+      "OmniCraft",
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,
@@ -57,7 +57,7 @@ export class EditorPanelController {
       }
     });
     this.render(panel.webview);
-    this.output.appendLine("[omnigent] opened editor-beside panel");
+    this.output.appendLine("[omnicraft] opened editor-beside panel");
   }
 
   /** Whether the editor panel is currently open. */

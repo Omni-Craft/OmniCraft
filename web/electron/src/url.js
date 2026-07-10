@@ -2,7 +2,7 @@
 //
 // Loaded by both the Electron main process (`require("./url")` in
 // `src/main.js`) and the bundled setup page (`<script src="../src/url.js">` in
-// `setup/index.html`, where it publishes `window.omnigentUrl`). One copy keeps
+// `setup/index.html`, where it publishes `window.omnicraftUrl`). One copy keeps
 // the two from drifting — the setup page's plain-http warning and the main
 // process's navigation must agree on what a bare URL means.
 //
@@ -13,7 +13,7 @@
   if (typeof module === "object" && module.exports) {
     module.exports = api;
   } else {
-    root.omnigentUrl = api;
+    root.omnicraftUrl = api;
   }
 })(typeof globalThis !== "undefined" ? globalThis : this, function () {
   "use strict";
@@ -99,25 +99,25 @@
   }
 
   /**
-   * Path under a Databricks workspace where the Omnigent web UI is mounted. A
+   * Path under a Databricks workspace where the OmniCraft web UI is mounted. A
    * bare workspace URL serves the workspace's own web app at the root, so a
    * user who pastes just the workspace host (e.g.
    * ``https://<ws>.azuredatabricks.net``) lands on a 404 unless this suffix is
    * appended.
    *
-   * NOTE: the Python CLI records the UI mount as ``/omnigent`` in
-   * ``omnigent/conversation_browser.py`` (WORKSPACE_UI_PATH), whereas the
-   * desktop deliberately keeps ``/ml/omnigents`` for now — that is the path the
+   * NOTE: the Python CLI records the UI mount as ``/omnicraft`` in
+   * ``omnicraft/conversation_browser.py`` (WORKSPACE_UI_PATH), whereas the
+   * desktop deliberately keeps ``/ml/omnicrafts`` for now — that is the path the
    * live workspace serves the embedded SPA on. The two are intentionally
-   * divergent pending reconciliation; do not "fix" this to ``/omnigent``
+   * divergent pending reconciliation; do not "fix" this to ``/omnicraft``
    * without verifying what the workspace actually serves to the desktop shell.
    */
-  const WORKSPACE_UI_PATH = "/ml/omnigents";
+  const WORKSPACE_UI_PATH = "/ml/omnicrafts";
 
   /**
    * Databricks Apps are served from ``*.databricksapps.com`` and answer with the
    * same ``server: databricks`` header as a workspace, but they are NOT
-   * workspaces and have no ``/ml/omnigents`` mount. Skip expansion for these
+   * workspaces and have no ``/ml/omnicrafts`` mount. Skip expansion for these
    * hosts so a user who points the shell at a Databricks App is left on the URL
    * they entered.
    */
@@ -131,14 +131,14 @@
   const WORKSPACE_PROBE_TIMEOUT_MS = 8000;
 
   /**
-   * Expand a bare Databricks workspace URL to its Omnigent web-UI mount.
+   * Expand a bare Databricks workspace URL to its OmniCraft web-UI mount.
    *
    * Mirrors the omni CLI's behavioral detection
-   * (``omnigent/cli.py:_workspace_api_server_url``): rather than match
+   * (``omnicraft/cli.py:_workspace_api_server_url``): rather than match
    * hostnames, probe the URL and adopt the mount only when the host answers
    * like a Databricks workspace — a response carrying the ``server: databricks``
    * header. URLs that already carry a path, or aren't https, are returned
-   * untouched WITHOUT a probe, so a user who pastes the full ``…/ml/omnigents``
+   * untouched WITHOUT a probe, so a user who pastes the full ``…/ml/omnicrafts``
    * URL (or connects to any non-workspace server) is never second-guessed.
    *
    * The CLI appends the API mount because it's an API client; the desktop shell
@@ -162,7 +162,7 @@
       return normalized;
     }
     // Databricks Apps share the workspace ``server: databricks`` header but have
-    // no ``/ml/omnigents`` mount, so never expand them.
+    // no ``/ml/omnicrafts`` mount, so never expand them.
     const host = url.hostname.toLowerCase();
     if (host === DATABRICKS_APPS_HOST_SUFFIX || host.endsWith(`.${DATABRICKS_APPS_HOST_SUFFIX}`)) {
       return normalized;

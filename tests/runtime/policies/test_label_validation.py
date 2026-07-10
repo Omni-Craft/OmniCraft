@@ -8,16 +8,16 @@ Silent-drop semantics:
 - Unknown key (no LabelDef) → set freely.
 - Valid write → persisted via the store.
 
-The drop path is silent by design (matches omnigent) —
+The drop path is silent by design (matches omnicraft) —
 a runtime validation failure does NOT raise. The surviving
 writes still land atomically.
 """
 
 from __future__ import annotations
 
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import LabelDef
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.runtime.policies.engine import PolicyEngine
+from omnicraft.spec.types import LabelDef
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -91,7 +91,7 @@ def test_apply_label_writes_schemaless_keys_pass_freely(
     conversation_store: SqlAlchemyConversationStore,
 ) -> None:
     """Keys with no LabelDef are set freely — the
-    omnigent-parity behavior that lets policies write
+    omnicraft-parity behavior that lets policies write
     ad-hoc labels without declaring a schema first
     (POLICIES.md §10)."""
     engine = _build_engine_with_defs(

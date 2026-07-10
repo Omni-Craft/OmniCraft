@@ -19,7 +19,7 @@
 // plus a single `apply*` function that owns the DOM side-effect, called at boot
 // (main.tsx) before first paint and on every change (Appearance settings).
 
-const STORAGE_KEY = "omnigent:ui-theme-palette";
+const STORAGE_KEY = "omnicraft:ui-theme-palette";
 
 /** Selectable color palettes. The first entry is the default (brand) look. */
 export const themePalettes = ["omni", "dracula", "github", "catppuccin", "gruvbox"] as const;

@@ -551,7 +551,7 @@ async def _drive_permission_mode(base_url: str, session_id: str) -> None:
             # so the landing composer reads it on mount.
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -597,7 +597,7 @@ def test_start_session_remembers_last_picked_host(seeded_session: tuple[str, str
 
     With no stored pick the composer auto-selects the first online host
     (alpha). After the user picks a different host (beta), that choice must be
-    persisted (``omnigent:last-host-choice`` in localStorage) and restored on
+    persisted (``omnicraft:last-host-choice`` in localStorage) and restored on
     the next visit — instead of reverting to the first-online default. This is
     the OSS mirror of the managed complaint where the picker always reverted to
     the "Databricks Sandbox" default.
@@ -640,7 +640,7 @@ async def _drive_remembers_last_picked_host(base_url: str, session_id: str) -> N
             # and the composer never blocks on the (host-less) file browser.
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{
                         "{alpha_id}": ["/work/repo"],
                         "{beta_id}": ["/work/repo"]
@@ -766,7 +766,7 @@ async def _drive_managed_remembers_host(base_url: str, session_id: str) -> None:
 
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ "{host_id}": ["/work/repo"] }})
                 );"""
             )
@@ -841,7 +841,7 @@ async def _drive_model_effort(base_url: str, session_id: str) -> None:
 
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -964,7 +964,7 @@ async def _drive_agent_picker_pagination_dedupe(base_url: str, session_id: str) 
             await page.route(re.compile(r"/v1/sessions\?.*kind=any"), handle_agent_scan)
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1025,7 +1025,7 @@ async def _drive_approval_mode(base_url: str, session_id: str) -> None:
 
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1074,7 +1074,7 @@ def test_start_session_bypass_sandbox(seeded_session: tuple[str, str]) -> None:
     phrase, never arms it), and once on, a persistent red banner shows under the
     composer — surviving the menu's close. When armed, the create
     ``POST /v1/sessions`` must carry the
-    ``omnigent.codex_native.bypass_sandbox: "1"`` conversation label so the
+    ``omnicraft.codex_native.bypass_sandbox: "1"`` conversation label so the
     runner launches Codex with the bypass flag.
     """
     base_url, session_id = seeded_session
@@ -1107,7 +1107,7 @@ async def _drive_bypass_sandbox(base_url: str, session_id: str) -> None:
 
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1156,7 +1156,7 @@ async def _drive_bypass_sandbox(base_url: str, session_id: str) -> None:
             # The dangerous opt-in rides along as the canonical conversation
             # label alongside the codex-native wrapper labels.
             labels = body.get("labels") or {}
-            assert labels.get("omnigent.codex_native.bypass_sandbox") == "1", body
+            assert labels.get("omnicraft.codex_native.bypass_sandbox") == "1", body
         finally:
             await browser.close()
 
@@ -1219,7 +1219,7 @@ async def _drive_select_harness(base_url: str, session_id: str) -> None:
             # auto-fills and Send can enable without touching the file browser.
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1272,7 +1272,7 @@ def test_start_session_pi_native_picker_and_wrapper_labels(
        raw name capitalized as "Pi-native-ui".)
     2. **Session-creation wrapper labels** — selecting Pi and sending must POST
        ``/v1/sessions`` with the terminal-first wrapper labels
-       (``omnigent.ui: terminal`` + ``omnigent.wrapper: pi-native-ui``) that
+       (``omnicraft.ui: terminal`` + ``omnicraft.wrapper: pi-native-ui``) that
        make the runner launch the Pi TUI and the web UI render the
        Chat/Terminal view.
     """
@@ -1315,7 +1315,7 @@ async def _drive_pi_native_start(base_url: str, session_id: str) -> None:
             # auto-fills and Send can enable without touching the file browser.
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1344,8 +1344,8 @@ async def _drive_pi_native_start(base_url: str, session_id: str) -> None:
             # The terminal-first wrapper labels are the contract that drives the
             # runner-owned Pi TUI and the web UI's Chat/Terminal view.
             assert body.get("labels") == {
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "pi-native-ui",
+                "omnicraft.ui": "terminal",
+                "omnicraft.wrapper": "pi-native-ui",
             }, body
         finally:
             await browser.close()
@@ -1363,7 +1363,7 @@ def test_start_session_antigravity_native_picker_and_wrapper_labels(
        ``"antigravity-native-ui"`` the server sends.
     2. **Session-creation wrapper labels** — selecting Antigravity and sending must
        POST ``/v1/sessions`` with the terminal-first wrapper labels
-       (``omnigent.ui: terminal`` + ``omnigent.wrapper: antigravity-native-ui``)
+       (``omnicraft.ui: terminal`` + ``omnicraft.wrapper: antigravity-native-ui``)
        that make the runner launch the agy TUI and the web UI render the
        Chat/Terminal view.
     """
@@ -1398,7 +1398,7 @@ async def _drive_antigravity_native_start(base_url: str, session_id: str) -> Non
 
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1426,8 +1426,8 @@ async def _drive_antigravity_native_start(base_url: str, session_id: str) -> Non
             # The terminal-first wrapper labels drive the runner-owned agy TUI and
             # the web UI's Chat/Terminal view.
             assert body.get("labels") == {
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "antigravity-native-ui",
+                "omnicraft.ui": "terminal",
+                "omnicraft.wrapper": "antigravity-native-ui",
             }, body
         finally:
             await browser.close()
@@ -1446,7 +1446,7 @@ def test_start_session_opencode_native_picker_and_wrapper_labels(
        agent name ``"opencode-native-ui"`` the server sends.
     2. **Session-creation wrapper labels** — selecting OpenCode and sending
        must POST ``/v1/sessions`` with the terminal-first wrapper labels
-       (``omnigent.ui: terminal`` + ``omnigent.wrapper: opencode-native-ui``)
+       (``omnicraft.ui: terminal`` + ``omnicraft.wrapper: opencode-native-ui``)
        that make the runner launch the OpenCode TUI and the web UI render the
        Chat/Terminal view.
     """
@@ -1490,7 +1490,7 @@ async def _drive_opencode_native_start(base_url: str, session_id: str) -> None:
             # auto-fills and Send can enable without touching the file browser.
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1518,8 +1518,8 @@ async def _drive_opencode_native_start(base_url: str, session_id: str) -> None:
             # The terminal-first wrapper labels are the contract that drives the
             # runner-owned OpenCode TUI and the web UI's Chat/Terminal view.
             assert body.get("labels") == {
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "opencode-native-ui",
+                "omnicraft.ui": "terminal",
+                "omnicraft.wrapper": "opencode-native-ui",
             }, body
         finally:
             await browser.close()
@@ -1538,7 +1538,7 @@ def test_start_session_kimi_native_picker_and_wrapper_labels(
        name ``"kimi-native-ui"`` the server sends.
     2. **Session-creation wrapper labels** — selecting Kimi and sending must POST
        ``/v1/sessions`` with the terminal-first wrapper labels
-       (``omnigent.ui: terminal`` + ``omnigent.wrapper: kimi-native-ui``) that
+       (``omnicraft.ui: terminal`` + ``omnicraft.wrapper: kimi-native-ui``) that
        make the runner launch the Kimi TUI and the web UI render the
        Chat/Terminal view.
     """
@@ -1577,7 +1577,7 @@ async def _drive_kimi_native_start(base_url: str, session_id: str) -> None:
 
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1605,8 +1605,8 @@ async def _drive_kimi_native_start(base_url: str, session_id: str) -> None:
             # The terminal-first wrapper labels are the contract that drives the
             # runner-owned Kimi TUI and the web UI's Chat/Terminal view.
             assert body.get("labels") == {
-                "omnigent.ui": "terminal",
-                "omnigent.wrapper": "kimi-native-ui",
+                "omnicraft.ui": "terminal",
+                "omnicraft.wrapper": "kimi-native-ui",
             }, body
         finally:
             await browser.close()
@@ -1654,7 +1654,7 @@ async def _drive_kimi_picker_dedup(base_url: str, session_id: str) -> None:
 
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -1926,7 +1926,7 @@ async def _drive_add_worktree(base_url: str, session_id: str) -> None:
             )
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -2018,7 +2018,7 @@ async def _drive_select_existing_worktree(base_url: str, session_id: str) -> Non
 
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )

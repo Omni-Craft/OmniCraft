@@ -1,7 +1,7 @@
 # Kubernetes sandbox runners (on-demand host Pods)
 
 This Kustomize overlay turns on the **`kubernetes`** managed-sandbox provider: a
-`host_type: managed` session spawns one **runner Pod** that runs `omnigent host`
+`host_type: managed` session spawns one **runner Pod** that runs `omnicraft host`
 as its container entrypoint and dials back to the server over the existing
 launch-token tunnel. It layers the RBAC + config the provider needs onto the
 base server deployment.
@@ -10,7 +10,7 @@ base server deployment.
 
 The runner Pod's container command **is** the host. An **init container**
 prepares the workspace (`mkdir` + optional `git clone`); the **main container**
-then runs `omnigent host` under a tiny PID-1 reaper. The host re-parents runner
+then runs `omnicraft host` under a tiny PID-1 reaper. The host re-parents runner
 processes to PID 1, which the reaper reaps; SIGTERM is forwarded for graceful
 shutdown.
 
@@ -30,11 +30,11 @@ token), and list events.
 
 | Namespace | Holds |
 |---|---|
-| `omnigent` | the server, its DB/PVC, its Secrets, the `omnigent-server` SA |
-| `omnigent-sandboxes` | runner Pods, the per-Pod token Secrets, the harness-creds Secret, the powerless `omnigent-runner` SA, the scoped Role + RoleBinding |
+| `omnicraft` | the server, its DB/PVC, its Secrets, the `omnicraft-server` SA |
+| `omnicraft-sandboxes` | runner Pods, the per-Pod token Secrets, the harness-creds Secret, the powerless `omnicraft-runner` SA, the scoped Role + RoleBinding |
 
 The server SA's Pod/Secret rights are a **namespaced Role** bound (cross-namespace)
-to `omnigent-sandboxes` only — so a compromised server can manage runner Pods but
+to `omnicraft-sandboxes` only — so a compromised server can manage runner Pods but
 **cannot** delete the server/DB Pods, read the server's Secrets, or execute
 commands inside any Pod. The runner namespace enforces Pod Security `restricted`;
 the generated runner Pod is already restricted-compliant (non-root uid 1000, drop
@@ -43,12 +43,12 @@ the generated runner Pod is already restricted-compliant (non-root uid 1000, dro
 ## Prerequisites
 
 1. **A server image built with the `kubernetes` extra.** The overlay's
-   `images:` block already points at the official `omnigent-server-kubernetes`
+   `images:` block already points at the official `omnicraft-server-kubernetes`
    variant, which includes it — nothing to build. If you self-build instead,
-   keep `kubernetes` in `OMNIGENT_EXTRAS` (see `deploy/docker`) or
+   keep `kubernetes` in `OMNICRAFT_EXTRAS` (see `deploy/docker`) or
    `_ensure_sdk()` fails every launch, and point `images:` at your build.
 2. **Harness credentials.** The runners read their LLM / git credentials from a
-   Secret named by `secret_name` (default `omnigent-creds`); you create it out of
+   Secret named by `secret_name` (default `omnicraft-creds`); you create it out of
    band after applying the overlay — see step 2 of **Apply**. It is deliberately
    not checked in; for production prefer a sealed-secret / external-secrets Secret.
 
@@ -60,14 +60,14 @@ kubectl apply -k deploy/kubernetes/overlays/sandbox-runners
 
 # 2. The harness-credentials Secret the runners read — created out of band, like
 #    the OIDC secret in ../../README.md. Add only the keys your agents use.
-kubectl create secret generic omnigent-creds -n omnigent-sandboxes \
+kubectl create secret generic omnicraft-creds -n omnicraft-sandboxes \
   --from-literal=ANTHROPIC_API_KEY=sk-ant-... \
   --from-literal=OPENAI_API_KEY=sk-...
 ```
 
 Step 1 creates the runner namespace, both ServiceAccounts, the scoped Role +
 RoleBinding, and the server `sandbox:` config, and patches the server Deployment
-to run as `omnigent-server` with the config mounted. Step 2 supplies the model /
+to run as `omnicraft-server` with the config mounted. Step 2 supplies the model /
 git credentials — see [Model credentials](#model-credentials-llm-keys) and
 [Git credentials](#git-credentials-private-repositories) below for which keys to
 set (and a sealed-secret / external-secrets operator for production).
@@ -92,7 +92,7 @@ token. So how you front the server matters:
   tunnel needs no extra identity; managed hosts work out of the box. (Verified
   end-to-end on a header-auth server: a `host_type: managed` session launched a
   runner Pod and ran a Claude turn on an injected `CLAUDE_CODE_OAUTH_TOKEN`.)
-- **The built-in `accounts` provider (`OMNIGENT_AUTH_ENABLED=1`)** — the runner
+- **The built-in `accounts` provider (`OMNICRAFT_AUTH_ENABLED=1`)** — the runner
   tunnel additionally requires a *user* identity, which the per-launch host token
   does not carry, so the runner dial-back is refused (`403`) even though the host
   tunnel connects. This is a framework-level managed-host interaction shared by
@@ -104,7 +104,7 @@ the user identity on every request, including the runner WebSocket (see
 
 ## Model credentials (LLM keys)
 
-A fresh runner Pod has no model keys. They ride the **`omnigent-creds` Secret**
+A fresh runner Pod has no model keys. They ride the **`omnicraft-creds` Secret**
 (`secret_name`, projected into every Pod via `envFrom`) created in [Apply](#apply);
 the in-sandbox host forwards the standard harness credential vars to its runners.
 Which variables to inject — first-party APIs, gateways (`*_BASE_URL`),
@@ -113,12 +113,12 @@ recipes](../../../modal/README.md#llm-credentials-for-managed-sandboxes). For a
 Claude **subscription**, run `claude setup-token` on your own machine (one-time
 browser auth) and inject the long-lived token as `CLAUDE_CODE_OAUTH_TOKEN`. For
 env vars beyond the standard harness set, also set
-`OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
+`OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 
 ## Git credentials (private repositories)
 
 Inject an HTTPS token as `GIT_TOKEN` (GitLab: add `GIT_USERNAME=oauth2`) into the
-`omnigent-creds` Secret. The host image's git credential helper answers HTTPS auth
+`omnicraft-creds` Secret. The host image's git credential helper answers HTTPS auth
 from it for both the launch-time clone and the agent's later `fetch` / `push`,
 writing nothing to disk — use HTTPS repository URLs. Details by provider match the
 [Modal git guide](../../../modal/README.md#git-credentials-private-repositories).
@@ -128,7 +128,7 @@ writing nothing to disk — use HTTPS repository URLs. Details by provider match
 | Key | Meaning |
 |---|---|
 | `server_url` | URL the runner Pod's host dials back to (in-cluster service DNS by default). |
-| `namespace` | Runner-Pod namespace (defaults to `omnigent-sandboxes`). |
+| `namespace` | Runner-Pod namespace (defaults to `omnicraft-sandboxes`). |
 | `secret_name` | Harness-creds Secret projected into every Pod via `envFrom`. |
 | `service_account` | ServiceAccount the runner Pods run as (powerless). |
 | `image` | Optional runner image override (defaults to the official multi-arch amd64/arm64 host image). |
@@ -136,7 +136,7 @@ writing nothing to disk — use HTTPS repository URLs. Details by provider match
 | `node_selector` | Optional extra node labels, merged with a default `kubernetes.io/arch: amd64` — set that key to `arm64` to schedule runners on arm64 nodes. (arm64 note: the CEL policy module is unavailable there — `cel-expr-python` ships no aarch64 wheel — and degrades gracefully.) |
 | `resources` | Optional `requests` / `limits` (`cpu` / `memory`) override. |
 | `in_cluster` | Optional cluster-config source: `true` (in-cluster SA only), `false` (kubeconfig only), omit (try in-cluster, then kubeconfig). |
-| `kubeconfig` | Optional kubeconfig path for the out-of-cluster fallback (env: `OMNIGENT_KUBERNETES_KUBECONFIG`). |
+| `kubeconfig` | Optional kubeconfig path for the out-of-cluster fallback (env: `OMNICRAFT_KUBERNETES_KUBECONFIG`). |
 
 ## Troubleshooting
 
@@ -144,18 +144,18 @@ writing nothing to disk — use HTTPS repository URLs. Details by provider match
   image, or clone its repo, the launch error carries the diagnosis — recent Pod
   events and a tail of the failed container's log (e.g. the `git clone` error
   from the init container). No need to catch the Pod before it's reaped.
-- **Inspect a stuck launch:** `kubectl describe pod <pod> -n omnigent-sandboxes`
-  and `kubectl logs <pod> -n omnigent-sandboxes -c host` (or `-c workspace-prep`
+- **Inspect a stuck launch:** `kubectl describe pod <pod> -n omnicraft-sandboxes`
+  and `kubectl logs <pod> -n omnicraft-sandboxes -c host` (or `-c workspace-prep`
   for the clone step).
 - **403 on launch:** the server SA is missing the Role — re-apply this overlay
-  and confirm the cross-namespace RoleBinding subject namespace is `omnigent`.
+  and confirm the cross-namespace RoleBinding subject namespace is `omnicraft`.
 - **Runner Pod stuck in `CreateContainerConfigError`:** the `secret_name` Secret
-  (`omnigent-creds`) doesn't exist in the runner namespace — its `envFrom` is
+  (`omnicraft-creds`) doesn't exist in the runner namespace — its `envFrom` is
   non-optional, so the Pod can't start. Create it (see [Apply](#apply)).
 - **Host comes online but the session hangs / 403s on the first message:** the
   server is using the built-in `accounts` provider, which doesn't support the
   managed runner dial-back — see [Server auth](#server-auth-managed-hosts) (use
   header/OIDC auth, or run single-user).
 - **401 / "could not load Kubernetes configuration":** out of cluster, the server
-  can't find a kubeconfig — set `kubeconfig` (or `OMNIGENT_KUBERNETES_KUBECONFIG`),
+  can't find a kubeconfig — set `kubeconfig` (or `OMNICRAFT_KUBERNETES_KUBECONFIG`),
   or unset `in_cluster: true` if it isn't actually running in the cluster.

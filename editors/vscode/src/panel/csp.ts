@@ -1,7 +1,7 @@
 /**
  * CSP string construction for the iframe host page (pure, unit-testable).
  *
- * The webview hosts a single <iframe> pointed at the running LOCAL Omnigent
+ * The webview hosts a single <iframe> pointed at the running LOCAL OmniCraft
  * server. This CSP governs only the HOST page — a nonce'd <style> plus the
  * <iframe> element. The framed application runs in a separate browsing context
  * governed by the *server's* own response headers, not this policy, so the host

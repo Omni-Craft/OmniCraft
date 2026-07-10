@@ -18,7 +18,7 @@ import sqlalchemy as sa
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
 
-from omnigent.db.utils import clear_engine_cache, get_or_create_engine
+from omnicraft.db.utils import clear_engine_cache, get_or_create_engine
 
 
 @pytest.fixture
@@ -313,7 +313,7 @@ def test_compressed_columns_are_binary_at_head(db_engine: Engine) -> None:
     """
     Verify the opaque text columns are binary (``BLOB``/``BYTEA``) at head.
 
-    These columns are stored zstd-compressed by ``omnigent.db.compression``;
+    These columns are stored zstd-compressed by ``omnicraft.db.compression``;
     the compression codec writes raw bytes, so a regression that left any of
     them as ``TEXT`` would corrupt values on a NUL-rejecting backend
     (PostgreSQL) the moment a compressed payload contained a NUL byte.

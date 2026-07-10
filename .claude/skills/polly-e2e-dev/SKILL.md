@@ -1,6 +1,6 @@
 ---
 name: polly-e2e-dev
-description: End-to-end test the polly multi-agent coding orchestrator's critical user journeys (CUJs). Two halves — a deterministic mock-LLM driver (polly_cuj.py) that boots a throwaway local server + mock LLM and asserts the substrate (boot, bridged sys_* tool dispatch, the blast_radius / spawn_bounds / headless_subagent_purpose_guard guardrails, fan-out delegation), and a live real-CLI recipe (real claude/codex/pi, real worktrees/PRs) for polly's actual judgment. Load when developing, testing, or debugging examples/polly — its config.yaml, the claude_code/codex/pi sub-agents, the investigate/fanout/cross-review skills, or the omnigent.inner.nessie.policies guardrails — or reproducing a polly orchestration bug.
+description: End-to-end test the polly multi-agent coding orchestrator's critical user journeys (CUJs). Two halves — a deterministic mock-LLM driver (polly_cuj.py) that boots a throwaway local server + mock LLM and asserts the substrate (boot, bridged sys_* tool dispatch, the blast_radius / spawn_bounds / headless_subagent_purpose_guard guardrails, fan-out delegation), and a live real-CLI recipe (real claude/codex/pi, real worktrees/PRs) for polly's actual judgment. Load when developing, testing, or debugging examples/polly — its config.yaml, the claude_code/codex/pi sub-agents, the investigate/fanout/cross-review skills, or the omnicraft.inner.nessie.policies guardrails — or reproducing a polly orchestration bug.
 ---
 
 # polly orchestrator: end-to-end CUJ dev & testing
@@ -21,7 +21,7 @@ behaviors, not single-turn answers:
   sub-agent (diff + contract only); blocking issues become fix-tasks.
 - **plan gate / inbox** — pull the human in at the plan gate; supervise via the
   inbox + autowake, never busy-poll.
-- **guardrails** (`omnigent.inner.nessie.policies`) — `blast_radius` (deny
+- **guardrails** (`omnicraft.inner.nessie.policies`) — `blast_radius` (deny
   force-push / `rm -rf /`), `spawn_bounds` (cap dispatches per turn),
   `headless_subagent_purpose_guard` (every dispatch needs `args.purpose`).
 
@@ -42,7 +42,7 @@ The driver and CLI need the repo's Python ≥3.12 env. If `.venv/` is missing,
 create it once from the checkout:
 
 ```bash
-uv run --frozen python -c "import omnigent; print('ok')"   # builds .venv
+uv run --frozen python -c "import omnicraft; print('ok')"   # builds .venv
 ```
 
 Then use `.venv/bin/python` / `.venv/bin/omni` below.
@@ -51,10 +51,10 @@ Then use `.venv/bin/python` / `.venv/bin/omni` below.
 
 ## Part A — the deterministic mock loop (`polly_cuj.py`)
 
-The driver boots a throwaway local Omnigent server (which carries
-`omnigent.inner.nessie.policies` — the module polly's guardrails resolve) plus
+The driver boots a throwaway local OmniCraft server (which carries
+`omnicraft.inner.nessie.policies` — the module polly's guardrails resolve) plus
 the repo's mock-LLM server, rewrites the polly bundle to the `openai-agents`
-harness wired to the mock, then runs `omnigent run` turns where the brain is
+harness wired to the mock, then runs `omnicraft run` turns where the brain is
 *scripted* (text or tool calls). It prints one `SUMMARY {json}` per scenario and
 exits non-zero if any check failed.
 
@@ -196,9 +196,9 @@ side effects.
 - **Bundle / prompt / guardrails:** `examples/polly/config.yaml`
 - **Sub-agents:** `examples/polly/agents/{claude_code,codex,pi}/config.yaml`
 - **Orchestration skills:** `examples/polly/skills/{investigate,fanout,cross-review}/SKILL.md`
-- **Guardrail policies:** `omnigent/inner/nessie/policies.py`
-- **Runner-side gate:** `omnigent/runner/policy.py`; server-side tool-call
-  enforcement: `omnigent/server/routes/sessions.py`
+- **Guardrail policies:** `omnicraft/inner/nessie/policies.py`
+- **Runner-side gate:** `omnicraft/runner/policy.py`; server-side tool-call
+  enforcement: `omnicraft/server/routes/sessions.py`
 - **Mock LLM server:** `tests/server/integration/mock_llm_server.py`
 
 ```bash
@@ -212,14 +212,14 @@ uv run --frozen --extra dev python -m pytest \
 ## Teardown — non-negotiable
 
 The driver reaps everything it starts, including the per-conversation
-`omnigent.host._daemon_entry` / `runner._entry` / `harnesses._runner`
+`omnicraft.host._daemon_entry` / `runner._entry` / `harnesses._runner`
 subprocesses an `omni run` turn spawns (a plain server SIGTERM leaves these
 orphaned). The sweep is scoped to this interpreter, so it never touches another
 worktree. After a **live** session, sweep manually:
 
 ```bash
 .venv/bin/omni server stop
-pgrep -af "$(pwd)/.venv/bin/python -m omnigent" | grep -E "_entry|_runner|_daemon" || echo clean
+pgrep -af "$(pwd)/.venv/bin/python -m omnicraft" | grep -E "_entry|_runner|_daemon" || echo clean
 ```
 
 ## Honesty

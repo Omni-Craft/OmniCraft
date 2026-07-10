@@ -1,15 +1,15 @@
 """
 Tests for the codex-native forwarder's model-change sync-back
-(:mod:`omnigent.codex_native_forwarder`).
+(:mod:`omnicraft.codex_native_forwarder`).
 
 For codex-native, ``config.toml``'s ``model`` key is the cost-policy source
 of truth (it is what an in-TUI ``/model`` writes). At subscription and at
 each ``turn/started`` the forwarder reads it (``_refresh_model_from_config``,
 which delegates to the shared ``read_codex_config_model`` in the bridge
-module) onto ``_CodexForwarderState.model`` and mirrors it to the Omnigent server
+module) onto ``_CodexForwarderState.model`` and mirrors it to the OmniCraft server
 as an ``external_model_change`` event (→ persisted ``conv.model_override``)
 so the cost-budget policy resolves the selected model. The startup/spawn
-model IS mirrored (so Omnigent learns the session's model even when unchanged);
+model IS mirrored (so OmniCraft learns the session's model even when unchanged);
 only an already-mirrored value is not re-posted.
 """
 
@@ -21,14 +21,14 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 
-from omnigent import codex_native_forwarder as fwd
-from omnigent.codex_native_bridge import (
+from omnicraft import codex_native_forwarder as fwd
+from omnicraft.codex_native_bridge import (
     CodexNativeBridgeState,
     codex_home_for_bridge_dir,
     read_bridge_state,
     write_bridge_state,
 )
-from omnigent.codex_native_forwarder import _persist_codex_compaction_item
+from omnicraft.codex_native_forwarder import _persist_codex_compaction_item
 
 
 class _RecordingClient:
@@ -74,7 +74,7 @@ def _state(model: str | None, posted_model: str | None) -> fwd._CodexForwarderSt
 async def test_sync_model_change_posts_on_change() -> None:
     """A model differing from the baseline posts external_model_change.
 
-    The in-TUI ``/model`` switch (gpt-5.5 → gpt-5.4) must mirror to Omnigent as
+    The in-TUI ``/model`` switch (gpt-5.5 → gpt-5.4) must mirror to OmniCraft as
     an ``external_model_change`` and advance the baseline so it isn't
     re-posted. A missing post here is exactly the bug a user hit: the
     terminal model changed but the cost policy kept seeing gpt-5.5.
@@ -99,7 +99,7 @@ async def test_sync_model_change_posts_on_change() -> None:
 async def test_sync_model_change_no_post_when_unchanged() -> None:
     """Model equal to the baseline (seeded spawn default) does not post.
 
-    Prevents the spawn/startup model from being echoed back to Omnigent as a
+    Prevents the spawn/startup model from being echoed back to OmniCraft as a
     spurious "change" (which would also fire on every settings update).
     """
     client = _RecordingClient()
@@ -159,7 +159,7 @@ def test_refresh_model_from_config_updates_state(tmp_path: Path) -> None:
 def test_note_resume_response_records_model_without_seeding_baseline() -> None:
     """The startup/resume model is recorded but the baseline stays unset.
 
-    Omnigent must learn the session's ACTUAL model — including the spawn default —
+    OmniCraft must learn the session's ACTUAL model — including the spawn default —
     because the cost gate resolves ``conv.model_override or spec.llm.model``
     and for codex the spawn model is frequently NOT ``spec.llm.model``. So
     ``note_resume_response`` records ``model`` but leaves ``posted_model``
@@ -181,7 +181,7 @@ async def test_sync_after_resume_posts_spawn_model() -> None:
     """End-to-end: an unchanged spawn model is mirrored to AP.
 
     This is the regression for the wrongly-blocked cheap session: codex
-    spawned on gpt-5.4-mini, the model never "changed", yet Omnigent must still
+    spawned on gpt-5.4-mini, the model never "changed", yet OmniCraft must still
     receive it as ``model_override`` so the cost gate sees a cheap model
     instead of falling back to the spec model and DENYing.
     """
@@ -207,7 +207,7 @@ def test_thread_settings_updated_records_effort_and_collaboration_mode() -> None
 
     App-server sends the public ``ThreadSettings`` shape with ``effort`` and
     ``collaborationMode``. If this parser regresses, the later sync helpers have
-    no state to mirror, so Omnigent would keep stale ``reasoning_effort`` and
+    no state to mirror, so OmniCraft would keep stale ``reasoning_effort`` and
     mode metadata even though Codex changed them.
     """
     state = fwd._CodexForwarderState()
@@ -237,7 +237,7 @@ def test_thread_settings_updated_records_effort_and_collaboration_mode() -> None
 @pytest.mark.asyncio
 async def test_sync_reasoning_effort_change_posts_and_dedupes() -> None:
     """
-    Codex effort changes mirror to Omnigent exactly once per observed value.
+    Codex effort changes mirror to OmniCraft exactly once per observed value.
 
     The first sync must POST ``external_reasoning_effort_change`` so the server
     persists ``conversation.reasoning_effort``. The second sync with the same
@@ -276,11 +276,11 @@ async def test_sync_reasoning_effort_change_posts_and_dedupes() -> None:
 @pytest.mark.asyncio
 async def test_sync_reasoning_effort_change_posts_clear() -> None:
     """
-    Codex clearing effort mirrors JSON null to Omnigent.
+    Codex clearing effort mirrors JSON null to OmniCraft.
 
     ``None`` is a meaningful observed value (model/default effort), so the
     forwarder must still post it after a prior explicit effort. If this returned
-    early on falsey ``None``, Omnigent would keep a stale explicit effort.
+    early on falsey ``None``, OmniCraft would keep a stale explicit effort.
     """
     client = _RecordingClient()
     state = fwd._CodexForwarderState(
@@ -311,7 +311,7 @@ async def test_sync_reasoning_effort_change_posts_clear() -> None:
 @pytest.mark.asyncio
 async def test_sync_codex_collaboration_mode_change_posts_and_dedupes() -> None:
     """
-    Codex collaboration mode changes mirror to Omnigent labels once.
+    Codex collaboration mode changes mirror to OmniCraft labels once.
 
     The ``mode`` value is the durable "Plan vs Default" signal we can get from
     app-server. Missing this POST would leave the session snapshot without the
@@ -370,7 +370,7 @@ def test_user_message_has_file_content(content: object, expected: bool) -> None:
 @pytest.mark.asyncio
 async def test_post_user_message_image_only_posts_empty_content() -> None:
     """
-    An image-only ``userMessage`` is posted with EMPTY Omnigent content.
+    An image-only ``userMessage`` is posted with EMPTY OmniCraft content.
 
     Regression guard for the image-only bleed/ordering bug: the forwarder
     must post the user item (so the server drains the pending-input FIFO
@@ -1021,7 +1021,7 @@ def test_terminal_turn_status_edge_empty_turn_idle_and_warns(
     _seed_active_turn(tmp_path, "turn_123")
     params = {"turn": {"id": "turn_123", "status": "completed", "items": []}}
 
-    with caplog.at_level("WARNING", logger="omnigent.codex_native_forwarder"):
+    with caplog.at_level("WARNING", logger="omnicraft.codex_native_forwarder"):
         edge = fwd._terminal_turn_status_edge(tmp_path, "turn/completed", params)
 
     assert edge is not None
@@ -1033,7 +1033,7 @@ def test_terminal_turn_status_edge_empty_turn_idle_and_warns(
     ), "expected a WARN log for the empty (zero-item) turn"
 
 
-def test_omnigent_status_from_resume_turn_error_parity() -> None:
+def test_omnicraft_status_from_resume_turn_error_parity() -> None:
     """Resume parity: a completed resume turn carrying ``turn.error`` → ``failed``.
 
     Without this, a reconnect that backfills from ``thread/resume`` would close
@@ -1051,9 +1051,9 @@ def test_omnigent_status_from_resume_turn_error_parity() -> None:
         "items": [{"type": "agentMessage", "id": "a", "text": "hi"}],
     }
 
-    assert fwd._omnigent_status_from_resume_turn(turn_with_error) == "failed"
+    assert fwd._omnicraft_status_from_resume_turn(turn_with_error) == "failed"
     # Parity check: the clean turn still resolves to idle.
-    assert fwd._omnigent_status_from_resume_turn(turn_clean) == "idle"
+    assert fwd._omnicraft_status_from_resume_turn(turn_clean) == "idle"
 
 
 def test_resume_terminal_status_edge_attaches_error(tmp_path: Path) -> None:
@@ -1810,7 +1810,7 @@ async def test_post_session_event_records_connectivity_failure_for_watchdog(
     ``_log_post_transport_failure``) so the harness idle-turn watchdog can name
     the connectivity cause instead of a generic "wedged LLM" reason.
     """
-    from omnigent import _native_forwarder_health as health
+    from omnicraft import _native_forwarder_health as health
 
     class _AlwaysConnectError:
         """Stub client whose every POST fails to connect."""
@@ -1890,7 +1890,7 @@ async def test_mcp_startup_event_records_and_posts(tmp_path: Path) -> None:
         expected_thread_id="thread_1",
     )
 
-    from omnigent.codex_native_bridge import read_mcp_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup
 
     assert read_mcp_startup(tmp_path) == {"safe": {"status": "starting", "error": None}}
     assert client.posts == [
@@ -1924,7 +1924,7 @@ async def test_mcp_startup_event_carries_failure_error(tmp_path: Path) -> None:
         expected_thread_id="thread_1",
     )
 
-    from omnigent.codex_native_bridge import read_mcp_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup
 
     assert read_mcp_startup(tmp_path) == {
         "safe": {"status": "failed", "error": "handshake failed"}
@@ -1952,7 +1952,7 @@ async def test_mcp_startup_event_for_other_thread_is_ignored(tmp_path: Path) -> 
         expected_thread_id="thread_1",
     )
 
-    from omnigent.codex_native_bridge import read_mcp_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup
 
     assert read_mcp_startup(tmp_path) == {}
     assert client.posts == []
@@ -1978,7 +1978,7 @@ async def test_mcp_startup_event_with_unknown_status_is_ignored(tmp_path: Path) 
         expected_thread_id="thread_1",
     )
 
-    from omnigent.codex_native_bridge import read_mcp_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup
 
     assert read_mcp_startup(tmp_path) == {}
     assert client.posts == []
@@ -2007,14 +2007,14 @@ async def test_seed_mcp_startup_round_posts_config_servers(tmp_path: Path) -> No
     excluded — codex does not boot them, and a permanently-"starting"
     band entry would never resolve.
     """
-    from omnigent.codex_native_bridge import read_mcp_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup
 
     client = _RecordingClient()
     _write_session_config(
         tmp_path,
         '[mcp_servers.safe]\ncommand = "x"\n'
         '[mcp_servers.off]\ncommand = "y"\nenabled = false\n'
-        '[mcp_servers.omnigent]\ncommand = "z"\n',
+        '[mcp_servers.omnicraft]\ncommand = "z"\n',
     )
 
     timer = await fwd._seed_mcp_startup_round(
@@ -2026,7 +2026,7 @@ async def test_seed_mcp_startup_round_posts_config_servers(tmp_path: Path) -> No
     try:
         assert read_mcp_startup(tmp_path) == {
             "safe": {"status": "starting", "error": None},
-            "omnigent": {"status": "starting", "error": None},
+            "omnicraft": {"status": "starting", "error": None},
         }
         assert client.posts == [
             (
@@ -2036,7 +2036,7 @@ async def test_seed_mcp_startup_round_posts_config_servers(tmp_path: Path) -> No
                     "data": {
                         "servers": {
                             "safe": {"status": "starting", "error": None},
-                            "omnigent": {"status": "starting", "error": None},
+                            "omnicraft": {"status": "starting", "error": None},
                         }
                     },
                 },
@@ -2058,7 +2058,7 @@ async def test_seed_mcp_startup_round_skips_when_state_exists(tmp_path: Path) ->
     booting long ago. Only ``clear_bridge_state`` (each app-server
     launch) resets the map.
     """
-    from omnigent.codex_native_bridge import read_mcp_startup, update_mcp_server_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup, update_mcp_server_startup
 
     client = _RecordingClient()
     _write_session_config(tmp_path, '[mcp_servers.safe]\ncommand = "x"\n')
@@ -2089,7 +2089,7 @@ async def test_seed_rearms_settle_timer_when_round_still_pending(
     timer must actually resolve the round: once it fires, the pending
     entries are dropped and the settled map is posted.
     """
-    from omnigent.codex_native_bridge import read_mcp_startup, update_mcp_server_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup, update_mcp_server_startup
 
     client = _RecordingClient()
     update_mcp_server_startup(tmp_path, "safe", "starting")
@@ -2138,7 +2138,7 @@ async def test_thread_idle_settles_synthesized_round(tmp_path: Path) -> None:
     delivered to the thread owner) while locally-recorded ``cancelled``
     states survive, and the settled map is posted so the band clears.
     """
-    from omnigent.codex_native_bridge import read_mcp_startup, update_mcp_server_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup, update_mcp_server_startup
 
     client = _RecordingClient()
     update_mcp_server_startup(tmp_path, "safe", "starting")
@@ -2180,7 +2180,7 @@ async def test_thread_active_status_does_not_settle_round(tmp_path: Path) -> Non
     happens mid-startup, before the round ends — so settling there would
     clear the band exactly when it matters most.
     """
-    from omnigent.codex_native_bridge import read_mcp_startup, update_mcp_server_startup
+    from omnicraft.codex_native_bridge import read_mcp_startup, update_mcp_server_startup
 
     client = _RecordingClient()
     update_mcp_server_startup(tmp_path, "safe", "starting")

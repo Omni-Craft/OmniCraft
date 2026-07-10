@@ -1,21 +1,21 @@
 """Android WebView shell: web-layer feature detection and the safe-area fold.
 
 The native Android shell (``web/android``) loads the SPA and injects
-``window.omnigentNative = {kind: "android", ...}``. The web layer feature-detects
+``window.omnicraftNative = {kind: "android", ...}``. The web layer feature-detects
 it (``isAndroidShell()`` in ``web/src/lib/nativeBridge.ts``) and, when true, the
 ``AppShell`` tags its root with ``data-android-native="true"``
 (``web/src/shell/AppShell.tsx``). That attribute gates the Android-specific
 chrome in ``index.css`` — most importantly the safe-area fold: unlike iOS,
 Android WebView reports ``env(safe-area-inset-*)`` as 0, so the shell injects the
-OS-measured inset as ``--omnigent-android-safe-area-*`` and ``index.css`` folds
-it into the shared ``--omnigent-safe-top/bottom`` with ``max()``.
+OS-measured inset as ``--omnicraft-android-safe-area-*`` and ``index.css`` folds
+it into the shared ``--omnicraft-safe-top/bottom`` with ``max()``.
 
 The e2e_ui harness runs the SPA in a plain Chromium browser, not the Android
 WebView, so ``isAndroidShell()`` is false by default. To exercise the shell path
-end-to-end we inject a minimal ``window.omnigentNative`` stub via
+end-to-end we inject a minimal ``window.omnicraftNative`` stub via
 ``add_init_script`` *before any app script runs* — the same feature-detection
 stubbing the desktop shell tests use (``sessions/test_pinned_session_hotkeys.py``
-injects ``window.omnigentDesktop``).
+injects ``window.omnicraftDesktop``).
 
 These cover the chain the ``nativeBridge`` unit tests can't reach end to end:
 the injected bridge -> ``isAndroidShell()`` -> the ``AppShell``
@@ -41,7 +41,7 @@ _MOBILE_VIEWPORT: ViewportSize = {"width": 390, "height": 844}
 # unrelated native calls (badge / notify / inset subscription) from throwing
 # under the stub.
 _ANDROID_SHELL_INIT_SCRIPT = """
-window.omnigentNative = {
+window.omnicraftNative = {
   kind: "android",
   setBadgeCount: function () {},
   notify: function () { return Promise.resolve(false); },
@@ -50,15 +50,15 @@ window.omnigentNative = {
 };
 """
 
-# Read the *resolved* ``--omnigent-safe-top`` in pixels. ``getComputedStyle`` on a
+# Read the *resolved* ``--omnicraft-safe-top`` in pixels. ``getComputedStyle`` on a
 # custom property returns its declared text (the ``max()`` expression), so instead
-# size a throwaway probe by ``var(--omnigent-safe-top)`` and read its computed
+# size a throwaway probe by ``var(--omnicraft-safe-top)`` and read its computed
 # height, which resolves the fold.
 _READ_SAFE_TOP_PX = """
 () => {
   const probe = document.createElement('div');
   probe.style.cssText =
-    'position:absolute;visibility:hidden;pointer-events:none;height:var(--omnigent-safe-top)';
+    'position:absolute;visibility:hidden;pointer-events:none;height:var(--omnicraft-safe-top)';
   document.body.appendChild(probe);
   const px = getComputedStyle(probe).height;
   probe.remove();
@@ -75,8 +75,8 @@ def test_android_shell_tags_root_and_folds_os_inset(
 
     Asserts (1) the app-shell carries ``data-android-native="true"`` — i.e.
     ``isAndroidShell()`` -> ``AppShell`` wiring fires — and (2) the OS inset the
-    shell injects as ``--omnigent-android-safe-area-top`` reaches the shared
-    ``--omnigent-safe-top`` through the ``index.css`` ``max()`` fold (which is 0
+    shell injects as ``--omnicraft-android-safe-area-top`` reaches the shared
+    ``--omnicraft-safe-top`` through the ``index.css`` ``max()`` fold (which is 0
     in a plain browser, where ``env(safe-area-inset-top)`` is also 0).
 
     :param page: Playwright page fixture (fresh context per test).
@@ -96,11 +96,11 @@ def test_android_shell_tags_root_and_folds_os_inset(
     assert page.evaluate(_READ_SAFE_TOP_PX) == "0px"
 
     # The native layer pushes the measured OS inset as
-    # --omnigent-android-safe-area-top; index.css folds it into
-    # --omnigent-safe-top via max(), so the layout reads the real inset.
+    # --omnicraft-android-safe-area-top; index.css folds it into
+    # --omnicraft-safe-top via max(), so the layout reads the real inset.
     page.evaluate(
         "() => document.documentElement.style"
-        ".setProperty('--omnigent-android-safe-area-top', '40px')"
+        ".setProperty('--omnicraft-android-safe-area-top', '40px')"
     )
     assert page.evaluate(_READ_SAFE_TOP_PX) == "40px"
 
@@ -111,9 +111,9 @@ def test_no_android_tag_or_fold_in_plain_browser(
 ) -> None:
     """A plain browser tab (no bridge) gets neither the tag nor the fold.
 
-    Without the ``window.omnigentNative`` stub, ``isAndroidShell()`` is false, so
+    Without the ``window.omnicraftNative`` stub, ``isAndroidShell()`` is false, so
     the app-shell must NOT carry ``data-android-native`` and the
-    ``--omnigent-android-safe-area-*`` fold must contribute nothing — the gate
+    ``--omnicraft-android-safe-area-*`` fold must contribute nothing — the gate
     that keeps the Android chrome off the plain web app. This is the half of the
     contract only an end-to-end browser run can prove.
 
@@ -129,6 +129,6 @@ def test_no_android_tag_or_fold_in_plain_browser(
     expect(shell).to_be_visible()
     assert shell.get_attribute("data-android-native") is None
 
-    # The web app never injects --omnigent-android-safe-area-*, so with
+    # The web app never injects --omnicraft-android-safe-area-*, so with
     # env(safe-area-inset-top) also 0 here the shared inset stays 0.
     assert page.evaluate(_READ_SAFE_TOP_PX) == "0px"

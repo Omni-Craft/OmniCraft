@@ -1,10 +1,10 @@
 """
-Tests for :mod:`omnigent.resume_dispatch` — the top-level
-``omnigent resume`` dispatcher.
+Tests for :mod:`omnicraft.resume_dispatch` — the top-level
+``omnicraft resume`` dispatcher.
 
 The dispatcher's job is to translate the user's "take me back to
 where I was" intent into the right wrapper call. The two important
-properties under test are (a) we always preserve the Omnigent
+properties under test are (a) we always preserve the OmniCraft
 conversation id end-to-end (no new id minted on resume) and (b)
 claude-native conversations route to ``run_claude_native``,
 everything else surfaces a clear redirect hint.
@@ -19,19 +19,19 @@ import click
 import httpx
 import pytest
 
-from omnigent import resume_dispatch
+from omnicraft import resume_dispatch
 
 # ── run_resume — top-level entry ──────────────────────────
 
 
 def test_run_resume_picker_form_requires_server() -> None:
     """
-    ``omnigent resume`` (no conv id, no --server) must fail loud.
+    ``omnicraft resume`` (no conv id, no --server) must fail loud.
 
     Without ``target`` we'd open the cross-agent picker; without
-    ``--server`` we have no Omnigent endpoint to query. Starting an
+    ``--server`` we have no OmniCraft endpoint to query. Starting an
     empty local server just for the picker would race with any
-    other ``omnigent`` process the user has running, so we
+    other ``omnicraft`` process the user has running, so we
     redirect via UsageError instead of silently doing it.
     """
     with pytest.raises(click.UsageError) as excinfo:
@@ -66,7 +66,7 @@ def test_run_resume_picker_cancel_exits_cleanly(monkeypatch: pytest.MonkeyPatch)
         invoked.append("run_claude_native")
 
     monkeypatch.setattr(
-        "omnigent.claude_native.run_claude_native",
+        "omnicraft.claude_native.run_claude_native",
         _fail_if_called,
     )
 
@@ -88,11 +88,11 @@ def test_dispatch_by_runtime_claude_native_remote_routes_to_wrapper(
     """
     Remote claude-native conv ⇒ ``run_claude_native(server=..., session_id=conv_id)``.
 
-    The Omnigent conv id MUST be preserved as ``session_id`` (the
+    The OmniCraft conv id MUST be preserved as ``session_id`` (the
     wrapper's resume kwarg). A bug that passed ``None`` would mint a
     fresh session and the user would lose their prior context.
     Also asserts ``server`` carries through so the wrapper hits the
-    right Omnigent server.
+    right OmniCraft server.
     """
     monkeypatch.setattr(
         resume_dispatch,
@@ -109,14 +109,14 @@ def test_dispatch_by_runtime_claude_native_remote_routes_to_wrapper(
         """
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.claude_native.run_claude_native", _capture)
+    monkeypatch.setattr("omnicraft.claude_native.run_claude_native", _capture)
 
     resume_dispatch._dispatch_by_runtime(
         target="conv_abc",
         server="https://example.com/",  # trailing slash — must be normalized
     )
 
-    # session_id preserves the Omnigent conv id end-to-end.
+    # session_id preserves the OmniCraft conv id end-to-end.
     assert captured["session_id"] == "conv_abc"
     # Trailing slash stripped — the wrapper expects a bare base URL.
     assert captured["server"] == "https://example.com"
@@ -130,7 +130,7 @@ def test_dispatch_by_runtime_codex_native_remote_routes_to_wrapper(
     """
     Remote codex-native conv ⇒ ``run_codex_native(server=..., session_id=conv_id)``.
 
-    The Omnigent conv id must be preserved exactly like the
+    The OmniCraft conv id must be preserved exactly like the
     claude-native path, but the runtime-specific passthrough kwarg is
     ``codex_args``.
     """
@@ -149,7 +149,7 @@ def test_dispatch_by_runtime_codex_native_remote_routes_to_wrapper(
         """
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.codex_native.run_codex_native", _capture)
+    monkeypatch.setattr("omnicraft.codex_native.run_codex_native", _capture)
 
     resume_dispatch._dispatch_by_runtime(
         target="conv_abc",
@@ -186,7 +186,7 @@ def test_dispatch_by_runtime_codex_native_local_routes_to_wrapper(
         """
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.codex_native.run_codex_native", _capture)
+    monkeypatch.setattr("omnicraft.codex_native.run_codex_native", _capture)
 
     resume_dispatch._dispatch_by_runtime(
         target="conv_codex",
@@ -212,7 +212,7 @@ def test_dispatch_by_runtime_kiro_native_remote_routes_to_wrapper(
     def _capture(**kwargs: Any) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.kiro_native.run_kiro_native", _capture)
+    monkeypatch.setattr("omnicraft.kiro_native.run_kiro_native", _capture)
 
     resume_dispatch._dispatch_by_runtime(
         target="conv_kiro",
@@ -230,7 +230,7 @@ def test_dispatch_by_runtime_antigravity_native_remote_routes_to_wrapper(
     """
     Remote antigravity-native conv ⇒ ``run_antigravity_native(server=..., session_id=...)``.
 
-    The Omnigent conv id must be preserved exactly like the codex/claude
+    The OmniCraft conv id must be preserved exactly like the codex/claude
     paths, but the runtime-specific passthrough kwarg is
     ``antigravity_args``.
 
@@ -253,7 +253,7 @@ def test_dispatch_by_runtime_antigravity_native_remote_routes_to_wrapper(
         """
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.antigravity_native.run_antigravity_native", _capture)
+    monkeypatch.setattr("omnicraft.antigravity_native.run_antigravity_native", _capture)
 
     resume_dispatch._dispatch_by_runtime(
         target="conv_agy",
@@ -290,7 +290,7 @@ def test_dispatch_by_runtime_antigravity_native_local_routes_to_wrapper(
         """
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.antigravity_native.run_antigravity_native", _capture)
+    monkeypatch.setattr("omnicraft.antigravity_native.run_antigravity_native", _capture)
 
     resume_dispatch._dispatch_by_runtime(
         target="conv_agy_local",
@@ -327,7 +327,7 @@ def test_dispatch_by_runtime_claude_native_local_still_routes_to_wrapper(
         """
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.claude_native.run_claude_native", _capture)
+    monkeypatch.setattr("omnicraft.claude_native.run_claude_native", _capture)
 
     resume_dispatch._dispatch_by_runtime(
         target="conv_claude",
@@ -343,7 +343,7 @@ def test_dispatch_by_runtime_non_wrapper_local_raises_with_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Local non-wrapper conv surfaces the ``omnigent run --resume`` hint.
+    Local non-wrapper conv surfaces the ``omnicraft run --resume`` hint.
 
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
@@ -362,7 +362,7 @@ def test_dispatch_by_runtime_non_wrapper_local_raises_with_hint(
 
     msg = excinfo.value.message
     assert "conv_chat" in msg
-    assert "omnigent run --resume" in msg
+    assert "omnicraft run --resume" in msg
     assert "<agent.yaml>" in msg
 
 
@@ -371,14 +371,14 @@ def test_read_wrapper_label_local_reads_persistent_store(
     tmp_path: Path,
 ) -> None:
     """
-    Local dispatch classifies sessions from ``~/.omnigent/chat.db``.
+    Local dispatch classifies sessions from ``~/.omnicraft/chat.db``.
 
     :param monkeypatch: Pytest monkeypatch fixture.
-    :param tmp_path: Temporary persistent Omnigent directory.
+    :param tmp_path: Temporary persistent OmniCraft directory.
     :returns: None.
     """
-    import omnigent.chat as chat_mod
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    import omnicraft.chat as chat_mod
+    from omnicraft.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
 
@@ -389,9 +389,9 @@ def test_read_wrapper_label_local_reads_persistent_store(
         agent_name="codex-native-ui",
         agent_bundle_location="ag_codex/bundle",
         agent_description=None,
-        labels={"omnigent.wrapper": "codex-native-ui"},
+        labels={"omnicraft.wrapper": "codex-native-ui"},
     )
-    monkeypatch.setattr(chat_mod, "_omnigent_persistent_dir", lambda: tmp_path)
+    monkeypatch.setattr(chat_mod, "_omnicraft_persistent_dir", lambda: tmp_path)
 
     result = resume_dispatch._read_wrapper_label_local(conv_id=created.conversation.id)
 
@@ -403,7 +403,7 @@ def test_dispatch_by_runtime_non_claude_native_remote_raises_with_hint(
 ) -> None:
     """
     Remote non-claude-native conv ⇒ ``ClickException`` with a
-    copy-pasteable ``omnigent run --resume`` hint.
+    copy-pasteable ``omnicraft run --resume`` hint.
 
     The hint MUST include both the conv id and the original
     ``--server`` URL so the user's next attempt works without
@@ -422,7 +422,7 @@ def test_dispatch_by_runtime_non_claude_native_remote_raises_with_hint(
         del kwargs
         raise AssertionError("run_claude_native invoked on non-claude conv")
 
-    monkeypatch.setattr("omnigent.claude_native.run_claude_native", _fail_if_called)
+    monkeypatch.setattr("omnicraft.claude_native.run_claude_native", _fail_if_called)
 
     with pytest.raises(click.ClickException) as excinfo:
         resume_dispatch._dispatch_by_runtime(
@@ -432,7 +432,7 @@ def test_dispatch_by_runtime_non_claude_native_remote_raises_with_hint(
     msg = excinfo.value.message
     # All three load-bearing pieces of the hint must appear.
     assert "conv_xyz" in msg
-    assert "omnigent run --resume" in msg
+    assert "omnicraft run --resume" in msg
     assert "https://example.com" in msg
 
 
@@ -466,13 +466,13 @@ def test_read_wrapper_label_remote_returns_label_when_present(
                 "agent_id": "ag_1",
                 "status": "idle",
                 "created_at": 1,
-                "labels": {"omnigent.wrapper": "claude-code-native-ui"},
+                "labels": {"omnicraft.wrapper": "claude-code-native-ui"},
             },
         )
 
     monkeypatch.setattr(httpx, "get", _fake_get)
     monkeypatch.setattr(
-        "omnigent.chat._remote_headers",
+        "omnicraft.chat._remote_headers",
         lambda *, server_url: {},
     )
 
@@ -487,7 +487,7 @@ def test_read_wrapper_label_remote_returns_none_when_label_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    A conv with no ``omnigent.wrapper`` label returns ``None``, which
+    A conv with no ``omnicraft.wrapper`` label returns ``None``, which
     the caller treats as "not claude-native" (the right call — wrappers
     stamp their label on every session they own; absence means a
     different runtime).
@@ -509,7 +509,7 @@ def test_read_wrapper_label_remote_returns_none_when_label_missing(
 
     monkeypatch.setattr(httpx, "get", _fake_get)
     monkeypatch.setattr(
-        "omnigent.chat._remote_headers",
+        "omnicraft.chat._remote_headers",
         lambda *, server_url: {},
     )
 
@@ -538,7 +538,7 @@ def test_read_wrapper_label_remote_raises_on_404(
 
     monkeypatch.setattr(httpx, "get", _fake_get)
     monkeypatch.setattr(
-        "omnigent.chat._remote_headers",
+        "omnicraft.chat._remote_headers",
         lambda *, server_url: {},
     )
 

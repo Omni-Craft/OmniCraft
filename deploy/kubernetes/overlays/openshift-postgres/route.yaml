@@ -1,14 +1,14 @@
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
-  name: omnigent
+  name: omnicraft
   labels:
-    app: omnigent
+    app: omnicraft
 spec:
-  host: omnigent.apps.example.com
+  host: omnicraft.apps.example.com
   to:
     kind: Service
-    name: omnigent
+    name: omnicraft
     weight: 100
   port:
     targetPort: http

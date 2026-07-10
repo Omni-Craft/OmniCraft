@@ -1,16 +1,16 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: omnigent
+  name: omnicraft
 spec:
   template:
     spec:
-      serviceAccountName: omnigent
+      serviceAccountName: omnicraft
       containers:
-        - name: omnigent
+        - name: omnicraft
           volumeMounts:
             - name: openshell-gateway
-              mountPath: /home/omnigent/.config/openshell
+              mountPath: /home/omnicraft/.config/openshell
               readOnly: true
             - name: server-config
               mountPath: /data/server-config.yaml
@@ -23,4 +23,4 @@ spec:
             optional: true
         - name: server-config
           configMap:
-            name: omnigent-server-config
+            name: omnicraft-server-config

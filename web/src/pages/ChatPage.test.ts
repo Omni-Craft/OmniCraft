@@ -79,8 +79,8 @@ describe("Composer structural read-only reasons", () => {
   it("uses the closed-session reason when the live snapshot is closed", () => {
     expect(
       readOnlyReasonForSessionLabels(
-        { labels: { "omnigent.closed": "true" } },
-        { labels: { "omnigent.wrapper": "claude-code-native-ui-subagent" } },
+        { labels: { "omnicraft.closed": "true" } },
+        { labels: { "omnicraft.wrapper": "claude-code-native-ui-subagent" } },
       ),
     ).toBe("Esta sessão de sub-agente está fechada");
   });
@@ -88,7 +88,7 @@ describe("Composer structural read-only reasons", () => {
   it("falls back to the sidebar wrapper label for native read-only children", () => {
     expect(
       readOnlyReasonForSessionLabels(null, {
-        labels: { "omnigent.wrapper": "claude-code-native-ui-subagent" },
+        labels: { "omnicraft.wrapper": "claude-code-native-ui-subagent" },
       }),
     ).toBe("Sub-agentes do Claude Code são somente leitura");
   });

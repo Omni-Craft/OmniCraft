@@ -63,7 +63,7 @@ function HostLabel({ host }: { host: Host }) {
 /**
  * Dialog surfaced when the user tries to chat with an unbound *coding*
  * clone (a fork of a session that had a working directory — it carries
- * the ``omnigent.fork.source_id`` label). Unlike ``ResumeChatDialog``
+ * the ``omnicraft.fork.source_id`` label). Unlike ``ResumeChatDialog``
  * (which only prints a CLI command), this binds the clone to a host +
  * directory in-app via ``POST /v1/hosts/{id}/runners`` (``launchRunner``)
  * and lets the runner start, after which ChatPage replays the queued
@@ -76,16 +76,16 @@ function HostLabel({ host }: { host: Host }) {
  * original over the same files.
  *
  * When the source's host is offline there is no runner to launch, so the
- * dialog falls back to the CLI reconnect command (``omnigent connect``)
+ * dialog falls back to the CLI reconnect command (``omnicraft connect``)
  * — the same escape hatch ``ResumeChatDialog`` shows.
  *
  * @param open - Whether the dialog is visible.
  * @param onOpenChange - Radix-controlled visibility setter.
  * @param sessionId - The unbound clone to bind, e.g. ``"conv_clone"``.
  * @param sourceSessionId - The source the clone was forked from
- *   (``omnigent.fork.source_id``); read for host/dir/branch prefill.
+ *   (``omnicraft.fork.source_id``); read for host/dir/branch prefill.
  * @param serverUrl - Origin for the CLI fallback command.
- * @param wrapper - The clone's ``omnigent.wrapper`` label (CLI fallback).
+ * @param wrapper - The clone's ``omnicraft.wrapper`` label (CLI fallback).
  * @param onBound - Called after a successful bind so the caller can
  *   replay the message the user was trying to send.
  */
@@ -283,7 +283,7 @@ export function ResumeWithDirectoryDialog({
                 serverUrl,
                 wrapper,
                 // The source's host is offline here. With a host binding the
-                // owner re-registers the host (`omnigent host`); without one
+                // owner re-registers the host (`omnicraft host`); without one
                 // the runner is relaunched directly via the wrapper's resume
                 // form.
                 state: sourceHostId ? "host_offline" : "local_stranded",

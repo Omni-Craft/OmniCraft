@@ -11,8 +11,8 @@ forward it.
 
 from __future__ import annotations
 
-from omnigent.runtime.workflow import _apply_request_model_override
-from omnigent.spec.types import LLMConfig
+from omnicraft.runtime.workflow import _apply_request_model_override
+from omnicraft.spec.types import LLMConfig
 
 
 def test_apply_request_model_override_none_returns_input_unchanged() -> None:

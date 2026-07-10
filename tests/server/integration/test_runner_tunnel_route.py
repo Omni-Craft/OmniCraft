@@ -15,20 +15,20 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.requests import HTTPConnection
 
-from omnigent.errors import OmnigentError
-from omnigent.runner import create_runner_app
-from omnigent.runner.identity import RUNNER_TUNNEL_TOKEN_HEADER, token_bound_runner_id
-from omnigent.runner.transports.ws_tunnel.frames import (
+from omnicraft.errors import OmniCraftError
+from omnicraft.runner import create_runner_app
+from omnicraft.runner.identity import RUNNER_TUNNEL_TOKEN_HEADER, token_bound_runner_id
+from omnicraft.runner.transports.ws_tunnel.frames import (
     HelloFrame,
     RequestFrame,
     decode_frame,
     encode_frame,
 )
-from omnigent.runner.transports.ws_tunnel.registry import TunnelRegistry
-from omnigent.runner.transports.ws_tunnel.serve import dispatch_via_asgi
-from omnigent.runner.transports.ws_tunnel.transport import WSTunnelTransport
-from omnigent.server.auth import RESERVED_USER_LOCAL, AuthProvider
-from omnigent.server.routes.runner_tunnel import create_runner_tunnel_router
+from omnicraft.runner.transports.ws_tunnel.registry import TunnelRegistry
+from omnicraft.runner.transports.ws_tunnel.serve import dispatch_via_asgi
+from omnicraft.runner.transports.ws_tunnel.transport import WSTunnelTransport
+from omnicraft.server.auth import RESERVED_USER_LOCAL, AuthProvider
+from omnicraft.server.routes.runner_tunnel import create_runner_tunnel_router
 from tests.runner.helpers import NullServerClient
 
 pytestmark = pytest.mark.asyncio
@@ -956,7 +956,7 @@ async def test_ws_tunnel_managed_resolver_none_still_rejects() -> None:
 async def test_ws_tunnel_loopback_unauthenticated_registers_as_local() -> None:
     """Auth-enabled server still accepts the local loopback runner.
 
-    ``omnigent server`` starts an unauthenticated runner that connects
+    ``omnicraft server`` starts an unauthenticated runner that connects
     over loopback with no credentials. The fail-closed gate
     applies only to non-loopback peers, so this runner must still
     register — owned by the reserved single-user identity, not rejected
@@ -1007,10 +1007,10 @@ def _mint_route_app(
     auth_provider: AuthProvider | None,
     resolve_managed_runner_owner: Callable[[str], str | None] | None,
 ) -> FastAPI:
-    """Tunnel-route app with the ``OmnigentError`` -> HTTP handler installed.
+    """Tunnel-route app with the ``OmniCraftError`` -> HTTP handler installed.
 
     The bare :func:`_tunnel_route_app` omits ``create_app``'s exception
-    handler, so the mint endpoint's ``OmnigentError`` would surface as a
+    handler, so the mint endpoint's ``OmniCraftError`` would surface as a
     raw 500. Install the same mapping here so the tests assert the real
     401 / 400 statuses the endpoint intends.
 
@@ -1023,8 +1023,8 @@ def _mint_route_app(
         resolve_managed_runner_owner=resolve_managed_runner_owner,
     ).app
 
-    @app.exception_handler(OmnigentError)
-    async def _handle(request: Request, exc: OmnigentError) -> JSONResponse:
+    @app.exception_handler(OmniCraftError)
+    async def _handle(request: Request, exc: OmniCraftError) -> JSONResponse:
         """Map the application error to its HTTP status (mirrors create_app)."""
         return JSONResponse(
             status_code=exc.http_status,
@@ -1044,7 +1044,7 @@ async def _post_mint_token(
 
     :param app: The tunnel-route app under test.
     :param runner_id: Path runner id.
-    :param token: Binding token for the ``X-Omnigent-Runner-Tunnel-Token``
+    :param token: Binding token for the ``X-OmniCraft-Runner-Tunnel-Token``
         header, or ``None`` to omit it.
     :returns: The HTTP response.
     """

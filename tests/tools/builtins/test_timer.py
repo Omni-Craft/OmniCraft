@@ -20,14 +20,14 @@ import json
 
 import pytest
 
-from omnigent.spec import AgentSpec
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins.timer import (
+from omnicraft.spec import AgentSpec
+from omnicraft.tools.base import ToolContext
+from omnicraft.tools.builtins.timer import (
     SysTimerCancelTool,
     SysTimerSetTool,
     validate_timer_set_args,
 )
-from omnigent.tools.manager import ToolManager
+from omnicraft.tools.manager import ToolManager
 
 # Stub :class:`ToolContext` for the validation paths below. All the
 # parametrized invalid-argument tests hit early-exit error branches

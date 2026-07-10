@@ -1,12 +1,12 @@
 ---
 name: antigravity-native-e2e-dev
-description: Spin up a live local Omnigent server + runner and exercise the native Antigravity (agy) TUI harness (antigravity-native) end-to-end — launch the real `agy` CLI via `omnigent antigravity`, drive turns through the web UI, smoke-test, and bug-bash. Load when developing, testing, or debugging the antigravity-native harness (omnigent/inner/antigravity_native_executor.py, omnigent/antigravity_native.py, antigravity_native_bridge.py, antigravity_native_rpc.py, antigravity_native_reader.py, antigravity_native_launch.py) or its agy launch / RPC mirror / tmux delivery / OAuth / MCP-relay behavior. NOT the in-process `antigravity` Gemini SDK harness.
+description: Spin up a live local OmniCraft server + runner and exercise the native Antigravity (agy) TUI harness (antigravity-native) end-to-end — launch the real `agy` CLI via `omnicraft antigravity`, drive turns through the web UI, smoke-test, and bug-bash. Load when developing, testing, or debugging the antigravity-native harness (omnicraft/inner/antigravity_native_executor.py, omnicraft/antigravity_native.py, antigravity_native_bridge.py, antigravity_native_rpc.py, antigravity_native_reader.py, antigravity_native_launch.py) or its agy launch / RPC mirror / tmux delivery / OAuth / MCP-relay behavior. NOT the in-process `antigravity` Gemini SDK harness.
 ---
 
 # Antigravity native harness: end-to-end dev & testing (local server/runner)
 
 The `antigravity-native` harness wraps the **real Antigravity `agy` TUI** (the
-`agy` CLI, installed from `antigravity.google/cli/install.sh`). `omnigent
+`agy` CLI, installed from `antigravity.google/cli/install.sh`). `omnicraft
 antigravity` ensures a host daemon, the daemon-spawned **runner** launches `agy`
 in a runner-owned **tmux** terminal, and your TTY attaches to it. This is **not**
 the in-process `antigravity` Gemini-SDK harness — that one runs `google-antigravity`
@@ -21,10 +21,10 @@ against a live local server + runner** — not just the unit tests.
 ## What actually runs where
 
 ```
-your TTY ── (attach / pexpect) ──► omnigent antigravity (CLI, local)
+your TTY ── (attach / pexpect) ──► omnicraft antigravity (CLI, local)
                                         │ ensures
                                         ▼
-                                  host daemon ──► local Omnigent server (AP)
+                                  host daemon ──► local OmniCraft server (AP)
                                         │ spawns                      ▲
                                         ▼                  connect-RPC │ HTTP
                                   runner ── launches ──► agy (TUI, in tmux)
@@ -44,15 +44,15 @@ Three transports, easy to confuse:
    headless RPC path was retired; the `antigravity_native.py` module header still
    says "delivered via the RPC" — that's stale doc-lag, the executor is authoritative).
 2. **Read path = RPC.** `antigravity_native_reader` polls/streams agy's connect-RPC
-   trajectory steps and mirrors them into the Omnigent session.
+   trajectory steps and mirrors them into the OmniCraft session.
 3. **Control = RPC.** Interrupt is `CancelCascadeSteps`; a tool/permission prompt
-   is answered via `HandleCascadeUserInteraction` (surfaced as an Omnigent
+   is answered via `HandleCascadeUserInteraction` (surfaced as an OmniCraft
    elicitation).
 
 ## Prerequisites (check these first)
 
 1. **You're on the branch you want to test**, running from that checkout
-   (`.venv/bin/omnigent` / `.venv/bin/python` from this repo).
+   (`.venv/bin/omnicraft` / `.venv/bin/python` from this repo).
 2. **The `agy` CLI is on PATH** (or at `~/.local/bin/agy`) — the harness can't
    launch without it:
    ```bash
@@ -60,14 +60,14 @@ Three transports, easy to confuse:
    agy --version
    # install if missing (shell installer, NOT npm):
    #   curl -fsSL https://antigravity.google/cli/install.sh | bash   # then restart shell
-   .venv/bin/python -c "from omnigent.onboarding.harness_readiness import harness_is_configured; print('antigravity-native ready:', harness_is_configured('antigravity-native'))"
+   .venv/bin/python -c "from omnicraft.onboarding.harness_readiness import harness_is_configured; print('antigravity-native ready:', harness_is_configured('antigravity-native'))"
    ```
 3. **`agy` is signed in (OAuth).** agy is **OAuth-only** — it has no `agy login`;
    you authenticate by running bare `agy` once and completing the browser sign-in.
    It **ignores `GEMINI_API_KEY`** (API-key auth belongs to the separate
    `antigravity` SDK harness). Verify (no secrets printed):
    ```bash
-   .venv/bin/python -c "from omnigent.onboarding.gemini_auth import gemini_login_detected; print('agy oauth token present:', gemini_login_detected())"
+   .venv/bin/python -c "from omnicraft.onboarding.gemini_auth import gemini_login_detected; print('agy oauth token present:', gemini_login_detected())"
    agy models   # exits 0 and lists models only when signed in; else 'Please sign in'
    ```
    `False` / non-zero → run `agy` once and sign in. agy's token lives under
@@ -85,27 +85,27 @@ Three transports, easy to confuse:
 ## Step 1 — start a local server (real server + runner)
 
 ```bash
-cd /path/to/omnigent
+cd /path/to/omnicraft
 .venv/bin/omni server start          # detached managed server on a free loopback port
 .venv/bin/omni server status         # prints the URL, e.g. http://127.0.0.1:6767
 SERVER=http://127.0.0.1:6767         # use the printed URL below
 curl -s "$SERVER/health"             # {"status":"ok"}
 ```
 
-(`omnigent antigravity --server ""` also auto-spawns a persistent local server and
+(`omnicraft antigravity --server ""` also auto-spawns a persistent local server and
 uses it — handy for a one-shot manual run, but a known `$SERVER` URL is better for
 scripted API observation below.)
 
 ## Step 2 — launch the agy terminal against the local server
 
-`omnigent antigravity` **attaches an interactive TUI**, so run it where you can
+`omnicraft antigravity` **attaches an interactive TUI**, so run it where you can
 hold it open. Two patterns:
 
 **A. Background terminal (recommended for scripted drives).** Launch in one
 terminal, drive/observe from another:
 
 ```bash
-.venv/bin/omnigent antigravity --server "$SERVER" 2>&1   # attaches the agy TUI; leave it running
+.venv/bin/omnicraft antigravity --server "$SERVER" 2>&1   # attaches the agy TUI; leave it running
 # add a model:  --model gemini-2.5-pro   ;   pass-through agy args go at the end
 ```
 
@@ -117,7 +117,7 @@ CONV=conv_xxxxxxxx   # from the "Web UI:" line / resume hint
 ```
 
 **B. PTY driver (fully automated).** Drive it under `pexpect` like the
-`claude-native-e2e-test` skill's `cuj_driver.py`: spawn `omnigent antigravity
+`claude-native-e2e-test` skill's `cuj_driver.py`: spawn `omnicraft antigravity
 --server <url>` in a PTY with `cwd=<checkout>`, capture the conv id from the
 printed URL, then drive/poll the API, then **tear down the whole process tree**
 (see Teardown — a pexpect Ctrl-C only *detaches* tmux).
@@ -162,14 +162,14 @@ whole point of the TUI-typing write path).
 ## Inspect the bridge (debugging)
 
 Per-session bridge state lives under a hashed dir (keyed by *bridge id*, which
-defaults to the Omnigent conversation id):
+defaults to the OmniCraft conversation id):
 
 ```bash
-.venv/bin/python -c "from omnigent.antigravity_native_bridge import bridge_dir_for_bridge_id as d; print(d('$CONV'))"
-# ~/.omnigent/antigravity-native/<sha256(bridge_id)[:32]>/
+.venv/bin/python -c "from omnicraft.antigravity_native_bridge import bridge_dir_for_bridge_id as d; print(d('$CONV'))"
+# ~/.omnicraft/antigravity-native/<sha256(bridge_id)[:32]>/
 #   state.json     <- {session_id, conversation_id (agy's real UUID once minted), active_turn_id}
 #   tmux.json      <- {socket_path, tmux_target} the executor types into (send-keys)
-#   bridge.json    <- token for the Omnigent MCP relay (sys_* tools)
+#   bridge.json    <- token for the OmniCraft MCP relay (sys_* tools)
 #   agy-home/.gemini/...  <- per-session ISOLATED HOME: a COPY of your OAuth token
 #                            + onboarding markers + config/mcp_config.json (relay)
 ```
@@ -181,7 +181,7 @@ Key facts:
   placeholder are skipped — "not ready yet".
 - The **isolated HOME** (`agy-home/`) is why your real `~/.gemini` is never
   touched: the relay's `mcp_config.json` and agy's per-session state live there.
-  agy's `/mcp` panel should show `✓ omnigent` with the `sys_*` tools.
+  agy's `/mcp` panel should show `✓ omnicraft` with the `sys_*` tools.
 - Env vars: `HARNESS_ANTIGRAVITY_NATIVE_BRIDGE_DIR`,
   `HARNESS_ANTIGRAVITY_NATIVE_REQUEST_SESSION_ID`.
 
@@ -191,22 +191,22 @@ Key facts:
 |------|-----|
 | Web→TUI delivery | POST a message (Step 3); confirm it renders in the agy TUI AND mirrors to `…/items` |
 | Native tools (shell/edit/read) | prompt agy to create→read→edit a file + run a command; confirm it touches disk |
-| Omnigent MCP relay (`sys_*`) | in the agy TUI run `/mcp` → expect `✓ omnigent`; prompt agy to `sys_session_list` / spawn a sub-agent |
-| Permission elicitation | with a tool that needs approval, agy's `request-review` surfaces as an **Omnigent elicitation** (interaction bridge); answer it in the web UI and confirm the tool runs |
+| OmniCraft MCP relay (`sys_*`) | in the agy TUI run `/mcp` → expect `✓ omnicraft`; prompt agy to `sys_session_list` / spawn a sub-agent |
+| Permission elicitation | with a tool that needs approval, agy's `request-review` surfaces as an **OmniCraft elicitation** (interaction bridge); answer it in the web UI and confirm the tool runs |
 | Interrupt | mid-turn, hit stop in the UI → `CancelCascadeSteps` (RUNNING cascades only; a step WAITING on an interaction is unblocked by a DENY, not cancel) |
 | Model echo | `/model` in the TUI, then a web turn — confirm the new model is used (latest `USER_INPUT` step's `planModel`) |
-| Resume | stop, `omnigent antigravity --server "$SERVER" --resume "$CONV"`; `--resume` (no value) opens the antigravity-native picker |
+| Resume | stop, `omnicraft antigravity --server "$SERVER" --resume "$CONV"`; `--resume` (no value) opens the antigravity-native picker |
 | Concurrency / leaks | drive several sessions; sweep for orphaned `agy` / tmux after teardown |
 
 ## Gotchas (these cost real time)
 
-1. **It's a TUI, not `omni run`.** Use `omnigent antigravity`. The executor only
+1. **It's a TUI, not `omni run`.** Use `omnicraft antigravity`. The executor only
    delivers into the live agy pane — agy must be running (attached) for a turn to
    process.
 2. **`config.yaml`'s `server:` defaults to a remote server.** Always pass
    `--server "$SERVER"` (or `--server ""` for local). If a *local* server rejects
    `antigravity-native`, it's stale — restart it from your checkout
-   (allowlist: `omnigent/spec/_omnigent_compat.py`).
+   (allowlist: `omnicraft/spec/_omnicraft_compat.py`).
 3. **OAuth-only.** agy ignores `GEMINI_API_KEY`; if `agy models` says "sign in",
    no web turn will get a real answer. Run bare `agy` once first.
 4. **tmux must be reachable from the CLI process** for the direct attach; the
@@ -221,17 +221,17 @@ Key facts:
 
 ## Code & tests
 
-- **Executor (write path — types into the TUI):** `omnigent/inner/antigravity_native_executor.py`
-- **Harness wrap (`harness: antigravity-native`):** `omnigent/inner/antigravity_native_harness.py`
-- **CLI launch / daemon-runner / tmux attach:** `omnigent/antigravity_native.py`
-  (`run_antigravity_native`); CLI command `antigravity(...)` in `omnigent/cli.py`
-- **agy argv / auth-mode / permission flag:** `omnigent/antigravity_native_launch.py`
-- **Bridge (state, tmux delivery, isolated HOME, MCP relay):** `omnigent/antigravity_native_bridge.py`
-- **connect-RPC client (port discovery, send/cancel/interaction):** `omnigent/antigravity_native_rpc.py`
-- **RPC read driver (trajectory mirror):** `omnigent/antigravity_native_reader.py`
-- **Steps / interactions / audit:** `omnigent/antigravity_native_steps.py`,
-  `omnigent/antigravity_native_interactions.py`, `omnigent/antigravity_native_audit.py`
-- **OAuth detection:** `omnigent/onboarding/gemini_auth.py`
+- **Executor (write path — types into the TUI):** `omnicraft/inner/antigravity_native_executor.py`
+- **Harness wrap (`harness: antigravity-native`):** `omnicraft/inner/antigravity_native_harness.py`
+- **CLI launch / daemon-runner / tmux attach:** `omnicraft/antigravity_native.py`
+  (`run_antigravity_native`); CLI command `antigravity(...)` in `omnicraft/cli.py`
+- **agy argv / auth-mode / permission flag:** `omnicraft/antigravity_native_launch.py`
+- **Bridge (state, tmux delivery, isolated HOME, MCP relay):** `omnicraft/antigravity_native_bridge.py`
+- **connect-RPC client (port discovery, send/cancel/interaction):** `omnicraft/antigravity_native_rpc.py`
+- **RPC read driver (trajectory mirror):** `omnicraft/antigravity_native_reader.py`
+- **Steps / interactions / audit:** `omnicraft/antigravity_native_steps.py`,
+  `omnicraft/antigravity_native_interactions.py`, `omnicraft/antigravity_native_audit.py`
+- **OAuth detection:** `omnicraft/onboarding/gemini_auth.py`
 - **Design/plan docs:** `docs/antigravity-native-rpc-core-design.md`,
   `docs/antigravity-native-rpc-core-plan.md`
 
@@ -265,7 +265,7 @@ leave the TUI empty while the session records an error.
   early just queues into the TUI.
 - **Permission gating is all-or-nothing + post-hoc.** agy honors only
   `--dangerously-skip-permissions` (no firing pre-tool hook), so a headless launch
-  auto-bypasses and the genuine Omnigent gate is the elicitation + post-hoc audit
+  auto-bypasses and the genuine OmniCraft gate is the elicitation + post-hoc audit
   (`antigravity_native_audit`), not a per-tool pre-empt.
 - **Stale module header.** `antigravity_native.py`'s top docstring says web turns
   go over `SendUserCascadeMessage` RPC — the live executor types into the TUI
@@ -281,7 +281,7 @@ SIGTERM/SIGKILL) and separately `tmux -S <sock> kill-server`. Then verify:
 .venv/bin/omni server stop                 # stop the managed server + local daemon
 pgrep -af "(^|/)agy( |$)|harnesses\._runner|runner\._entry|tmux"   # confirm no orphans
 # clean a session's bridge dir (incl. its isolated agy HOME) if you want a reset:
-# rm -rf "$(.venv/bin/python -c "from omnigent.antigravity_native_bridge import bridge_dir_for_bridge_id as d; print(d('$CONV'))")"
+# rm -rf "$(.venv/bin/python -c "from omnicraft.antigravity_native_bridge import bridge_dir_for_bridge_id as d; print(d('$CONV'))")"
 ```
 
 ## Honesty

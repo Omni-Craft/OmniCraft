@@ -3,7 +3,7 @@
 Each native session's bridge dir holds a per-conversation bridge token + MCP
 config (secret material). ``DELETE /v1/sessions/{id}`` closes the pane but
 historically never removed this SEPARATE dir, so token-bearing
-``/tmp/omnigent-*`` (and ``~/.omnigent``) dirs accumulated even on a clean
+``/tmp/omnicraft-*`` (and ``~/.omnicraft``) dirs accumulated even on a clean
 delete. The delete path must now ``rmtree`` it — for ALL 11 native families,
 not just the original 5.
 """
@@ -18,41 +18,41 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.antigravity_native_bridge import (
+from omnicraft.antigravity_native_bridge import (
     bridge_dir_for_bridge_id as antigravity_bridge_dir,
 )
-from omnigent.claude_native_bridge import bridge_dir_for_bridge_id, prepare_bridge_dir
-from omnigent.claude_native_bridge import (
+from omnicraft.claude_native_bridge import bridge_dir_for_bridge_id, prepare_bridge_dir
+from omnicraft.claude_native_bridge import (
     bridge_dir_for_bridge_id as claude_bridge_dir,
 )
-from omnigent.codex_native_bridge import (
+from omnicraft.codex_native_bridge import (
     bridge_dir_for_bridge_id as codex_bridge_dir,
 )
-from omnigent.cursor_native_bridge import (
+from omnicraft.cursor_native_bridge import (
     bridge_dir_for_session_id as cursor_bridge_dir,
 )
-from omnigent.goose_native_bridge import (
+from omnicraft.goose_native_bridge import (
     bridge_dir_for_session_id as goose_bridge_dir,
 )
-from omnigent.hermes_native_bridge import (
+from omnicraft.hermes_native_bridge import (
     bridge_dir_for_session_id as hermes_bridge_dir,
 )
-from omnigent.kimi_native_bridge import (
+from omnicraft.kimi_native_bridge import (
     bridge_dir_for_session_id as kimi_bridge_dir,
 )
-from omnigent.kiro_native_bridge import (
+from omnicraft.kiro_native_bridge import (
     bridge_dir_for_session_id as kiro_bridge_dir,
 )
-from omnigent.opencode_native_bridge import (
+from omnicraft.opencode_native_bridge import (
     bridge_dir_for_bridge_id as opencode_bridge_dir,
 )
-from omnigent.pi_native_bridge import (
+from omnicraft.pi_native_bridge import (
     bridge_dir_for_session_id as pi_bridge_dir,
 )
-from omnigent.qwen_native_bridge import (
+from omnicraft.qwen_native_bridge import (
     bridge_dir_for_session_id as qwen_bridge_dir,
 )
-from omnigent.runner import create_runner_app
+from omnicraft.runner import create_runner_app
 from tests.runner.helpers import NullServerClient
 
 # One resolver per native family — the session_id-keyed dir each harness leaves

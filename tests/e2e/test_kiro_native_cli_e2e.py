@@ -1,14 +1,14 @@
-"""End-to-end smoke test: ``omnigent kiro`` drives the native Kiro TUI.
+"""End-to-end smoke test: ``omnicraft kiro`` drives the native Kiro TUI.
 
 This opt-in test covers the user-facing Kiro native path: the CLI starts a
 runner-owned ``kiro-cli chat --tui`` terminal, the server accepts a web-style
 ``POST /v1/sessions/{id}/events`` message, the Kiro bridge injects it into the
 TUI, and the Kiro session forwarder mirrors the assistant response back into
-the Omnigent conversation.
+the OmniCraft conversation.
 
 Run locally with a logged-in Kiro CLI::
 
-    OMNIGENT_E2E_KIRO_NATIVE=1 \
+    OMNICRAFT_E2E_KIRO_NATIVE=1 \
     .venv/bin/python -m pytest tests/e2e/test_kiro_native_cli_e2e.py -v
 
 The test is skipped by default because ``kiro-cli`` authentication is anchored
@@ -29,7 +29,7 @@ import pytest
 from tests.e2e._native_resume_helpers import (
     cli_env,
     inject_user_message,
-    omnigent_console_script,
+    omnicraft_console_script,
     poll_for_assistant_marker,
     spawn_cli_background,
     wait_for_conversation_id,
@@ -37,12 +37,12 @@ from tests.e2e._native_resume_helpers import (
 )
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("OMNIGENT_E2E_KIRO_NATIVE") != "1"
+    os.environ.get("OMNICRAFT_E2E_KIRO_NATIVE") != "1"
     or shutil.which("kiro-cli") is None
     or shutil.which("tmux") is None,
     reason=(
         "kiro-native CLI e2e needs an interactive Kiro login and a `tmux` "
-        "binary; set OMNIGENT_E2E_KIRO_NATIVE=1 and have `kiro-cli` logged in"
+        "binary; set OMNICRAFT_E2E_KIRO_NATIVE=1 and have `kiro-cli` logged in"
     ),
 )
 
@@ -60,7 +60,7 @@ def test_kiro_native_cli_smoke(
     pwd_dir.mkdir()
     marker = f"KIRO_{uuid.uuid4().hex[:8].upper()}"
 
-    omni = str(omnigent_console_script())
+    omni = str(omnicraft_console_script())
     handle = spawn_cli_background(
         [omni, "kiro", "--server", resume_test_server],
         env=cli_env(),
@@ -89,7 +89,7 @@ def test_kiro_native_cli_smoke(
                 )
             except AssertionError as exc:
                 raise AssertionError(
-                    f"`omnigent kiro` did not return marker {marker!r}. The "
+                    f"`omnicraft kiro` did not return marker {marker!r}. The "
                     "kiro-native path regressed somewhere between tmux input, "
                     "the Kiro TUI turn, and session-forwarder mirroring.\n\n"
                     f"CLI output tail:\n{handle.output()[-2000:]}"

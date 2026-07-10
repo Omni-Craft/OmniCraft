@@ -180,7 +180,7 @@ function caretPointFor(field: HTMLElement): ScreenPoint | null {
 }
 
 /**
- * The Omnigent starfish mascot (Otto) with eyes that follow the cursor: each
+ * The OmniCraft starfish mascot (Otto) with eyes that follow the cursor: each
  * black pupil slides to the inner edge of its white eye on the side nearest
  * whatever Otto is watching.
  *

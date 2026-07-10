@@ -20,20 +20,20 @@ from pathlib import Path
 
 import httpx
 
-from omnigent.harness_capabilities import AuthModel, IntegrationMode
-from omnigent.harness_plugins import harness_capabilities
-from omnigent.host.daemon_launch import (
+from omnicraft.harness_capabilities import AuthModel, IntegrationMode
+from omnicraft.harness_plugins import harness_capabilities
+from omnicraft.host.daemon_launch import (
     launch_or_reuse_daemon_runner,
     wait_for_host_online,
     wait_for_runner_online,
 )
-from omnigent.native_terminal import bind_session_runner
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN
+from omnicraft.native_terminal import bind_session_runner
+from omnicraft.runner.identity import OMNICRAFT_INTERNAL_WS_ORIGIN
 from tests._helpers.compat import apply_runner_env, compat_runner_cwd, runner_executable
 from tests._helpers.live_server import find_free_port
 from tests.e2e._harness_probes import cli_unavailable_reason
 from tests.harness_bench.driver import ProvisioningError, TurnResult, fill_snapshot_cost
-from tests.harness_bench.full_server import spawn_omnigent_server
+from tests.harness_bench.full_server import spawn_omnicraft_server
 from tests.harness_bench.profile import BenchProfile
 from tests.harness_bench.runtime_env import (
     BenchRuntimeEnv,
@@ -65,7 +65,7 @@ _INTERRUPTED_EVENT = "session.interrupted"
 _POLICY_DENIED_EVENT = "response.policy_denied"
 _ELICITATION_EVENT = "response.elicitation_request"
 
-_CEL_POLICY_HANDLER = "omnigent.policies.builtins.cel.cel_policy"
+_CEL_POLICY_HANDLER = "omnicraft.policies.builtins.cel.cel_policy"
 _NATIVE_POLICY_REASON = "bench-native-tool-policy"
 _TOOL_TURN_TIMEOUT_S = 60.0
 # policy_denied may arrive after output_item.done.
@@ -88,7 +88,7 @@ class NativeVendor:
     :param terminal_name: The native terminal to ensure, by convention the
         vendor CLI name (``"<harness>" minus "-native"``, e.g. ``"codex"``).
     :param own_auth: ``True`` when the vendor logs in itself (auth is not
-        ``OMNIGENT_CREDENTIAL``), so the bench cannot provision it — runnable
+        ``OMNICRAFT_CREDENTIAL``), so the bench cannot provision it — runnable
         only on a host where the vendor CLI is already logged in.
     :param lazy_chat: ``True`` when the vendor's ``external_session_id`` (its
         chat/thread id) is created by the FIRST message rather than at TUI
@@ -121,20 +121,20 @@ class NativeVendor:
 _LAZY_CHAT_HARNESSES: frozenset[str] = frozenset({"cursor-native"})
 
 # Missing entries skip tool and policy probes.
-_SHELL_PROMPT = "Use your shell/terminal tool to run this exact command: echo omnigent-bench-ok"
+_SHELL_PROMPT = "Use your shell/terminal tool to run this exact command: echo omnicraft-bench-ok"
 _NATIVE_TOOL_PROVOCATION: dict[str, tuple[str, str]] = {
     "claude-native": (
         "Bash",
-        "Use the Bash tool to run this exact command: echo omnigent-bench-ok",
+        "Use the Bash tool to run this exact command: echo omnicraft-bench-ok",
     ),
     "codex-native": ("shell", _SHELL_PROMPT),
-    "pi-native": ("Bash", "Use the Bash tool to run this exact command: echo omnigent-bench-ok"),
+    "pi-native": ("Bash", "Use the Bash tool to run this exact command: echo omnicraft-bench-ok"),
     "kiro-native": ("shell", _SHELL_PROMPT),
     "qwen-native": ("run_shell_command", _SHELL_PROMPT),
     "goose-native": ("developer__shell", _SHELL_PROMPT),
     "hermes-native": ("terminal", _SHELL_PROMPT),
     "antigravity-native": ("run_command", _SHELL_PROMPT),
-    "kimi-native": ("Bash", "Use the Bash tool to run this exact command: echo omnigent-bench-ok"),
+    "kimi-native": ("Bash", "Use the Bash tool to run this exact command: echo omnicraft-bench-ok"),
 }
 
 
@@ -142,7 +142,7 @@ def native_vendor(harness: str) -> NativeVendor | None:
     """Derive the :class:`NativeVendor` for *harness* from its capabilities.
 
     Returns ``None`` unless the harness declares ``integration_mode ==
-    NATIVE_TUI`` in :func:`omnigent.harness_plugins.harness_capabilities`
+    NATIVE_TUI`` in :func:`omnicraft.harness_plugins.harness_capabilities`
     (which already discovers community plugins via entry points), so any
     native-tui harness is drivable by name with no per-vendor table here.
     ``native-server`` harnesses (e.g. opencode-native) are a different
@@ -156,7 +156,7 @@ def native_vendor(harness: str) -> NativeVendor | None:
         harness=harness,
         agent_name=f"{harness}-ui",
         terminal_name=harness.removesuffix("-native"),
-        own_auth=caps.auth is not AuthModel.OMNIGENT_CREDENTIAL,
+        own_auth=caps.auth is not AuthModel.OMNICRAFT_CREDENTIAL,
         lazy_chat=harness in _LAZY_CHAT_HARNESSES,
         tool_name=tool_name,
         tool_prompt=tool_prompt,
@@ -240,18 +240,18 @@ class NativeTuiDriver:
         self._resolved_env = resolve_bench_env(self._db_profile)
         base_env = {
             **self._resolved_env.base_env,
-            "OMNIGENT_RUNNER_TUNNEL_TOKEN": binding_token,
+            "OMNICRAFT_RUNNER_TUNNEL_TOKEN": binding_token,
         }
-        # Omnigent-credential natives resolve their provider from global config.
+        # OmniCraft-credential natives resolve their provider from global config.
         if not self._vendor.own_auth:
-            base_env["OMNIGENT_CONFIG_HOME"] = str(self._write_provider_config())
-        self._proc = spawn_omnigent_server(self._tmp, port, base_env, binding_token)
+            base_env["OMNICRAFT_CONFIG_HOME"] = str(self._write_provider_config())
+        self._proc = spawn_omnicraft_server(self._tmp, port, base_env, binding_token)
         self._wait_health()
         self._daemon = self._spawn_host_daemon(base_env)
         self._client = httpx.Client(
             base_url=self._base_url,
             timeout=300.0,
-            headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+            headers={"Origin": OMNICRAFT_INTERNAL_WS_ORIGIN},
         )
         host_id = self._wait_host_online()
         agent_id = self._agent_id(self._vendor.agent_name)
@@ -268,7 +268,7 @@ class NativeTuiDriver:
 
     def _write_provider_config(self) -> Path:
         """Write config routing the native vendor through the resolved profile."""
-        config_home = self._tmp / "omnigent-config"
+        config_home = self._tmp / "omnicraft-config"
         config_home.mkdir(exist_ok=True)
         profile = self._resolved_env.db_profile if self._resolved_env is not None else None
         body = f"auth:\n  type: databricks\n  profile: {profile}\n" if profile else "auth: {}\n"
@@ -322,7 +322,7 @@ class NativeTuiDriver:
             async with httpx.AsyncClient(
                 base_url=self._base_url,
                 timeout=httpx.Timeout(30.0, read=120.0),
-                headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+                headers={"Origin": OMNICRAFT_INTERNAL_WS_ORIGIN},
             ) as ac:
                 await wait_for_host_online(ac, host_id, timeout_s=_HOST_ONLINE_TIMEOUT_S)
                 runner_id = await launch_or_reuse_daemon_runner(
@@ -338,7 +338,7 @@ class NativeTuiDriver:
         # Keep the real HOME so the vendor login remains available.
         log = (self._tmp / "host-daemon.log").open("wb")
         return subprocess.Popen(
-            [runner_executable(), "-m", "omnigent.host._daemon_entry", "--server", self._base_url],
+            [runner_executable(), "-m", "omnicraft.host._daemon_entry", "--server", self._base_url],
             env=apply_runner_env(base_env),
             cwd=compat_runner_cwd(),
             stdout=subprocess.DEVNULL,
@@ -543,7 +543,7 @@ class NativeTuiDriver:
 
         # Avoid satisfying the second probe from reused-session history.
         token = "deny" if deny else "allow"
-        prompt = self._vendor.tool_prompt.replace("omnigent-bench-ok", f"omnigent-bench-{token}")
+        prompt = self._vendor.tool_prompt.replace("omnicraft-bench-ok", f"omnicraft-bench-{token}")
 
         reader = threading.Thread(target=_read)
         try:
@@ -634,7 +634,7 @@ class NativeTuiDriver:
             reader.start()
             ready.wait(timeout=10.0)
             prompt = self._vendor.tool_prompt.replace(
-                "omnigent-bench-ok", f"omnigent-bench-{action}"
+                "omnicraft-bench-ok", f"omnicraft-bench-{action}"
             )
             self._post_message(prompt)
             deadline = time.monotonic() + _TOOL_TURN_TIMEOUT_S

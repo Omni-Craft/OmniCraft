@@ -8,15 +8,15 @@ import { defineConfig } from "vitest/config";
 
 import { computeBuildVersion } from "./src/lib/buildVersion";
 
-const OMNIGENT_URL = process.env.OMNIGENT_URL ?? "http://localhost:6767";
+const OMNICRAFT_URL = process.env.OMNICRAFT_URL ?? "http://localhost:6767";
 
 let cachedToken: string | null | undefined;
 
 function resolveToken(host: string): string | null {
   if (cachedToken !== undefined) return cachedToken;
 
-  if (process.env.OMNIGENT_AUTH_TOKEN) {
-    cachedToken = process.env.OMNIGENT_AUTH_TOKEN;
+  if (process.env.OMNICRAFT_AUTH_TOKEN) {
+    cachedToken = process.env.OMNICRAFT_AUTH_TOKEN;
     return cachedToken;
   }
 
@@ -42,8 +42,8 @@ function configureProxy(target: string, useAuth: boolean): NonNullable<ProxyOpti
   const parsed = new URL(target);
   const host = parsed.origin;
   // The URL pathname becomes a prefix prepended to every proxied request.
-  // e.g. OMNIGENT_URL=https://host.com/api/2.0/omnigent means the browser's
-  // /v1/sessions is rewritten to /api/2.0/omnigent/v1/sessions before forwarding.
+  // e.g. OMNICRAFT_URL=https://host.com/api/2.0/omnicraft means the browser's
+  // /v1/sessions is rewritten to /api/2.0/omnicraft/v1/sessions before forwarding.
   const basePath = parsed.pathname.replace(/\/$/, "");
 
   return (proxy) => {
@@ -103,28 +103,28 @@ function createProxyConfig(target: string, useAuth: boolean): Record<string, Pro
   };
 }
 
-const parsed = new URL(OMNIGENT_URL);
+const parsed = new URL(OMNICRAFT_URL);
 const useAuth =
-  !!process.env.OMNIGENT_AUTH_TOKEN ||
+  !!process.env.OMNICRAFT_AUTH_TOKEN ||
   parsed.hostname.endsWith(".databricks.com") ||
   parsed.hostname.endsWith(".azuredatabricks.net");
 
 if (useAuth) {
   const token = resolveToken(parsed.origin);
   if (token) {
-    console.log(`[dev-proxy] target=${OMNIGENT_URL} (authenticated)`);
+    console.log(`[dev-proxy] target=${OMNICRAFT_URL} (authenticated)`);
   } else {
     console.error(
       `\n[dev-proxy] ERROR: No auth token for ${parsed.origin}.\n` +
-        `  Set OMNIGENT_AUTH_TOKEN or run:  databricks auth login --host ${parsed.origin}\n`,
+        `  Set OMNICRAFT_AUTH_TOKEN or run:  databricks auth login --host ${parsed.origin}\n`,
     );
     process.exit(1);
   }
 } else {
-  console.log(`[dev-proxy] target=${OMNIGENT_URL}`);
+  console.log(`[dev-proxy] target=${OMNICRAFT_URL}`);
 }
 
-const proxyConfig = createProxyConfig(OMNIGENT_URL, useAuth);
+const proxyConfig = createProxyConfig(OMNICRAFT_URL, useAuth);
 
 // PWA web app manifest. Static (the app's identity doesn't change per build);
 // emitted by the plugin below — NOT placed in `public/`, because `public/` is
@@ -222,7 +222,7 @@ export default defineConfig({
       provider: "v8",
       // With `include` set, vitest counts every matching source file (untested
       // ones as 0%), so the total reflects the whole frontend — parity with the
-      // backend's --cov=omnigent, not just files a test happened to import.
+      // backend's --cov=omnicraft, not just files a test happened to import.
       include: ["src/**/*.{ts,tsx}"],
       exclude: [
         "src/**/*.test.{ts,tsx}",
@@ -241,7 +241,7 @@ export default defineConfig({
     proxy: proxyConfig,
   },
   build: {
-    outDir: path.resolve(__dirname, "../omnigent/server/static/web-ui"),
+    outDir: path.resolve(__dirname, "../omnicraft/server/static/web-ui"),
     emptyOutDir: true,
   },
 });

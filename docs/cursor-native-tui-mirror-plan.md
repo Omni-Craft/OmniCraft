@@ -18,11 +18,11 @@
 
 **Status:** superseded (was: proposed)
 **Baseline:** `origin/main`
-**Tracking issue:** omnigent-ai/omnigent#1032 (cursor-native tool-call elicitations not surfaced in web UI)
+**Tracking issue:** omnicraft-ai/omnicraft#1032 (cursor-native tool-call elicitations not surfaced in web UI)
 
 ## Goal / behavior
 
-Surface an Omnigent **elicitation card whenever cursor's native TUI shows an approval
+Surface an OmniCraft **elicitation card whenever cursor's native TUI shows an approval
 prompt**, answerable either from the web (→ a tmux keystroke into the pane) **or** from the
 embedded TUI directly (→ the card auto-resolves). Cursor's own native gate remains the source
 of truth — **no `--force`, no JS-bundle modification**.
@@ -46,7 +46,7 @@ approval card, no chat-timeline record, and no out-of-terminal way to answer.
 
 This plan adds that surfacing.
 
-> **Branch note:** the working branch `cursor-native-omnigent-mcp-e2e` carries an in-progress
+> **Branch note:** the working branch `cursor-native-omnicraft-mcp-e2e` carries an in-progress
 > *JS-bundle preload* attempt (`cursor_native_permissions.py`, untracked) that monkeypatches
 > cursor's `pending-decision-store.ts`. This design **replaces** that approach; it is not part
 > of the `origin/main` baseline and nothing below depends on it.
@@ -100,12 +100,12 @@ scraper POSTs `external_elicitation_resolved` to un-park the card.
 
 ## Reuse (already on `origin/main`)
 
-- `omnigent/cursor_native_bridge.py`: `read_tmux_info`, `_capture_pane`,
+- `omnicraft/cursor_native_bridge.py`: `read_tmux_info`, `_capture_pane`,
   `_run_tmux(..., "send-keys", ...)`, `_session_alive`, `_settle_pane` — the tmux detection +
   answer primitives.
-- `omnigent/cursor_native_forwarder.py`: `supervise_cursor_forwarder` — the backoff / lifecycle
+- `omnicraft/cursor_native_forwarder.py`: `supervise_cursor_forwarder` — the backoff / lifecycle
   supervisor pattern to mirror, already wired into `runner/app.py` `_auto_create_cursor_terminal`.
-- `omnigent/server/routes/sessions.py`: `_publish_and_wait_for_harness_elicitation` (publishes
+- `omnicraft/server/routes/sessions.py`: `_publish_and_wait_for_harness_elicitation` (publishes
   `response.elicitation_request` and parks for the web verdict) and the
   `external_elicitation_resolved` event handling (un-park).
 - `web/src/lib/blockStream.ts` (`elicitation_request`) and
@@ -115,7 +115,7 @@ scraper POSTs `external_elicitation_resolved` to un-park the card.
 ## Build (new, relative to `origin/main`)
 
 1. **Approval scraper supervisor** — a new runner task (new module
-   `omnigent/cursor_native_permissions.py`) modeled on `supervise_cursor_forwarder`: poll
+   `omnicraft/cursor_native_permissions.py`) modeled on `supervise_cursor_forwarder`: poll
    `_capture_pane` (~0.3s cadence) → detect approval block → parse → dedup → POST to the new
    route (parks) → on verdict `send-keys` → reconcile TUI-side answers via
    `external_elicitation_resolved`. Inherits the forwarder's backoff + lifecycle.
@@ -124,7 +124,7 @@ scraper POSTs `external_elicitation_resolved` to un-park the card.
    observed shape:
 
    ```
-    $  echo omnigent_probe > out.txt in .
+    $  echo omnicraft_probe > out.txt in .
     Run this command?
     Shell allowlist is empty
      → Run (once) (y)
@@ -139,15 +139,15 @@ scraper POSTs `external_elicitation_resolved` to un-park the card.
    (message / preview / stable elicitation-id).
 
 3. **Server route** — new `POST /sessions/{id}/hooks/cursor-permission-request` in
-   `omnigent/server/routes/sessions.py`: build `ElicitationRequestParams` from the scraped
+   `omnicraft/server/routes/sessions.py`: build `ElicitationRequestParams` from the scraped
    operation, call the existing `_publish_and_wait_for_harness_elicitation`, return
    accept/decline to the parked runner POST.
 
-4. **Runner wiring** (`omnigent/runner/app.py` `_auto_create_cursor_terminal`): start the
+4. **Runner wiring** (`omnicraft/runner/app.py` `_auto_create_cursor_terminal`): start the
    scraper supervisor **alongside** the existing `supervise_cursor_forwarder` (gather both).
    Keep cursor's native prompts (do **not** add `--force`); keep `--approve-mcps`.
 
-5. **Executor coordination** (`omnigent/cursor_native_bridge.py`): teach `_settle_pane` to treat
+5. **Executor coordination** (`omnicraft/cursor_native_bridge.py`): teach `_settle_pane` to treat
    an active approval block as "busy" so a web steering message cannot blind-paste over a pending
    prompt.
 

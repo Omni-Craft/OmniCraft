@@ -18,8 +18,8 @@ import types
 
 import pytest
 
-from omnigent.server.routes import sessions as _sessions_mod
-from omnigent.server.routes.sessions import (
+from omnicraft.server.routes import sessions as _sessions_mod
+from omnicraft.server.routes.sessions import (
     _CLAUDE_NATIVE_WRAPPER_LABEL_KEY,
     _CODEX_NATIVE_SUBAGENT_WRAPPER_LABEL_VALUE,
     _publish_status,

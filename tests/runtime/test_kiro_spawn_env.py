@@ -2,7 +2,7 @@
 
 The kiro-native harness is terminal-first: the runner spawns ``kiro-cli`` in a
 tmux pane and the executor reads ``HARNESS_KIRO_NATIVE_BRIDGE_DIR`` to find the
-per-session bridge directory. Two builders in ``omnigent.kiro_native_bridge``
+per-session bridge directory. Two builders in ``omnicraft.kiro_native_bridge``
 produce that env:
 
 * :func:`build_kiro_native_spawn_env` — the minimal env handed to the harness
@@ -16,7 +16,7 @@ produce that env:
 This is the kiro sibling of ``tests/runtime/test_goose_spawn_env.py``. Like that
 suite it does not isolate ``TMPDIR`` — ``_BRIDGE_ROOT`` is resolved at import
 time, so the builders write their per-session dir under the real
-``/tmp/omnigent-<uid>/kiro-native/`` and the assertions key off the path shape,
+``/tmp/omnicraft-<uid>/kiro-native/`` and the assertions key off the path shape,
 determinism, and permissions rather than an injected root.
 """
 
@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import stat
 
-from omnigent.kiro_native_bridge import (
+from omnicraft.kiro_native_bridge import (
     KIRO_ACP_RECORD_PATH_ENV_VAR,
     KIRO_NATIVE_BRIDGE_DIR_ENV_VAR,
     acp_record_path,

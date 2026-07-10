@@ -4,14 +4,14 @@ from typing import Any
 
 import pytest
 
-from omnigent.llms._responses_to_chat import (
+from omnicraft.llms._responses_to_chat import (
     _translate_block,
     _translate_content,
     chat_response_to_response,
     chat_stream_to_response_events,
     responses_input_to_chat_messages,
 )
-from omnigent.llms.types import (
+from omnicraft.llms.types import (
     FunctionCallOutput,
     MessageOutput,
     Response,
@@ -715,7 +715,7 @@ async def test_grok_top_level_reasoning_content_streams() -> None:
 
 def test_extract_delta_content_plain_string() -> None:
     """Plain string content returns (text, empty_reasoning)."""
-    from omnigent.llms._responses_to_chat import _extract_delta_content
+    from omnicraft.llms._responses_to_chat import _extract_delta_content
 
     text, reasoning = _extract_delta_content("Hello")
     assert text == "Hello"
@@ -724,7 +724,7 @@ def test_extract_delta_content_plain_string() -> None:
 
 def test_extract_delta_content_non_string_non_list() -> None:
     """Non-string, non-list content returns empty strings."""
-    from omnigent.llms._responses_to_chat import _extract_delta_content
+    from omnicraft.llms._responses_to_chat import _extract_delta_content
 
     text, reasoning = _extract_delta_content(42)  # type: ignore[arg-type]
     assert text == ""
@@ -733,7 +733,7 @@ def test_extract_delta_content_non_string_non_list() -> None:
 
 def test_extract_delta_content_list_with_text_blocks() -> None:
     """List of text blocks extracts text."""
-    from omnigent.llms._responses_to_chat import _extract_delta_content
+    from omnicraft.llms._responses_to_chat import _extract_delta_content
 
     content = [{"type": "text", "text": "Hello"}, {"type": "text", "text": " world"}]
     text, reasoning = _extract_delta_content(content)
@@ -743,7 +743,7 @@ def test_extract_delta_content_list_with_text_blocks() -> None:
 
 def test_extract_delta_content_list_with_output_text_blocks() -> None:
     """output_text blocks also count as text."""
-    from omnigent.llms._responses_to_chat import _extract_delta_content
+    from omnicraft.llms._responses_to_chat import _extract_delta_content
 
     content = [{"type": "output_text", "text": "Hello"}]
     text, _reasoning = _extract_delta_content(content)
@@ -752,7 +752,7 @@ def test_extract_delta_content_list_with_output_text_blocks() -> None:
 
 def test_extract_delta_content_list_with_reasoning_blocks() -> None:
     """Reasoning blocks extract summary text into reasoning output."""
-    from omnigent.llms._responses_to_chat import _extract_delta_content
+    from omnicraft.llms._responses_to_chat import _extract_delta_content
 
     content = [
         {
@@ -767,7 +767,7 @@ def test_extract_delta_content_list_with_reasoning_blocks() -> None:
 
 def test_extract_delta_content_list_with_bare_strings() -> None:
     """Bare strings in the list are treated as text."""
-    from omnigent.llms._responses_to_chat import _extract_delta_content
+    from omnicraft.llms._responses_to_chat import _extract_delta_content
 
     content = ["Hello", " world"]
     text, _reasoning = _extract_delta_content(content)
@@ -776,7 +776,7 @@ def test_extract_delta_content_list_with_bare_strings() -> None:
 
 def test_extract_delta_content_list_skips_non_dict_non_string() -> None:
     """Non-dict, non-string items in the list are skipped."""
-    from omnigent.llms._responses_to_chat import _extract_delta_content
+    from omnicraft.llms._responses_to_chat import _extract_delta_content
 
     content = [42, {"type": "text", "text": "ok"}]
     text, _reasoning = _extract_delta_content(content)
@@ -785,7 +785,7 @@ def test_extract_delta_content_list_skips_non_dict_non_string() -> None:
 
 def test_extract_delta_content_reasoning_without_summary() -> None:
     """Reasoning block without summary key yields no reasoning text."""
-    from omnigent.llms._responses_to_chat import _extract_delta_content
+    from omnicraft.llms._responses_to_chat import _extract_delta_content
 
     content = [{"type": "reasoning"}]
     _text, reasoning = _extract_delta_content(content)
@@ -796,19 +796,19 @@ def test_extract_delta_content_reasoning_without_summary() -> None:
 
 
 def test_extract_usage_returns_none_for_none() -> None:
-    from omnigent.llms._responses_to_chat import _extract_usage
+    from omnicraft.llms._responses_to_chat import _extract_usage
 
     assert _extract_usage(None) is None
 
 
 def test_extract_usage_returns_none_for_empty_dict() -> None:
-    from omnigent.llms._responses_to_chat import _extract_usage
+    from omnicraft.llms._responses_to_chat import _extract_usage
 
     assert _extract_usage({}) is None
 
 
 def test_extract_usage_maps_fields() -> None:
-    from omnigent.llms._responses_to_chat import _extract_usage
+    from omnicraft.llms._responses_to_chat import _extract_usage
 
     usage = _extract_usage({"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15})
     assert usage is not None

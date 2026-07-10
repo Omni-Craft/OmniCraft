@@ -4,10 +4,10 @@ name: Draft release notes
 # the draft), prepare everything the release coordinator needs before they hit
 # Publish:
 #
-#   1. Open a PR to omnigent/main updating the granular CHANGELOG.md (harvested
+#   1. Open a PR to omnicraft/main updating the granular CHANGELOG.md (harvested
 #      from each merged PR's "## Changelog" section), so the draft's
 #      "Full Changelog" link resolves before the release goes public.
-#   2. Synthesize concise, curated release notes (an Omnigent agent collapses the
+#   2. Synthesize concise, curated release notes (an OmniCraft agent collapses the
 #      merged PRs into ~4-5 themed highlights per section) and drop them into the
 #      GitHub Release DRAFT body for the coordinator to edit.
 #
@@ -57,8 +57,8 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  SOURCE_REPO: omnigent-ai/omnigent
-  OMNIGENT_SKIP_WEB_UI: "true"
+  SOURCE_REPO: omnicraft-ai/omnicraft
+  OMNICRAFT_SKIP_WEB_UI: "true"
   UV_INDEX_URL: https://pypi.org/simple
   PIP_INDEX_URL: https://pypi.org/simple
 
@@ -66,7 +66,7 @@ jobs:
   draft:
     name: Harvest CHANGELOG and draft release notes
     if: >-
-      github.repository == 'omnigent-ai/omnigent' &&
+      github.repository == 'omnicraft-ai/omnicraft' &&
       (github.event_name == 'workflow_dispatch' ||
        github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
@@ -131,7 +131,7 @@ jobs:
             | tee -a "$GITHUB_STEP_SUMMARY"
 
       # Trusted default branch, full history + tags for the range computation.
-      - name: Checkout omnigent (main)
+      - name: Checkout omnicraft (main)
         if: steps.guard.outputs.proceed == 'true'
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
@@ -226,12 +226,12 @@ jobs:
           node node_modules/@anthropic-ai/claude-code/install.cjs
           echo "${GITHUB_WORKSPACE}/.cc-cli/node_modules/.bin" >> "$GITHUB_PATH"
 
-      - name: Write Omnigent provider config
+      - name: Write OmniCraft provider config
         if: steps.guard.outputs.proceed == 'true' && steps.creds.outputs.available == 'true'
         env:
           GATEWAY_BASE_URL: ${{ secrets.GATEWAY_BASE_URL }}
         run: |
-          mkdir -p "$HOME/.omnigent"
+          mkdir -p "$HOME/.omnicraft"
           python3 -c "
           import pathlib, os, json
           gw = os.environ['GATEWAY_BASE_URL']
@@ -242,7 +242,7 @@ jobs:
                   'api_key_ref': 'env:LLM_API_KEY',
                   'models': {'default': 'databricks-claude-opus-4-8'},
               }}}}
-          pathlib.Path.home().joinpath('.omnigent', 'config.yaml').write_text(json.dumps(cfg, indent=2))
+          pathlib.Path.home().joinpath('.omnicraft', 'config.yaml').write_text(json.dumps(cfg, indent=2))
           "
 
       - name: Build drafter prompt
@@ -254,7 +254,7 @@ jobs:
           python3 -u <<'PYEOF'
           import os, pathlib
           tag = os.environ["TAG"]
-          # The agent is tools-less, so its input must be inline — but `omnigent run
+          # The agent is tools-less, so its input must be inline — but `omnicraft run
           # -p` passes the whole prompt as one argv string, capped at ~128 KiB on
           # Linux (MAX_ARG_STRLEN). Cap the PR list well under that; the mechanical
           # scaffold already covers everything, so a partial list still drafts.
@@ -285,7 +285,7 @@ jobs:
         run: |
           set -euo pipefail
           prompt="$(cat /tmp/draft_prompt.txt)"
-          uv run --project "${GITHUB_WORKSPACE}" omnigent run \
+          uv run --project "${GITHUB_WORKSPACE}" omnicraft run \
             "${GITHUB_WORKSPACE}/.github/agents/release-notes-drafter" \
             -p "$prompt" --no-session \
             2>draft-stderr.log | tee /tmp/draft_out.txt \
@@ -320,15 +320,15 @@ jobs:
           PYEOF
 
       # --- 3) Mint the write-token — ONLY now, after the agent has run ---
-      - name: Mint App token (omnigent)
+      - name: Mint App token (omnicraft)
         id: app-token
-        if: steps.guard.outputs.proceed == 'true' && steps.guard.outputs.dry_run != 'true' && vars.OMNIGENT_BOT_APP_ID != ''
+        if: steps.guard.outputs.proceed == 'true' && steps.guard.outputs.dry_run != 'true' && vars.OMNICRAFT_BOT_APP_ID != ''
         uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          app-id: ${{ vars.OMNIGENT_BOT_APP_ID }}
-          private-key: ${{ secrets.OMNIGENT_BOT_APP_KEY }}
+          app-id: ${{ vars.OMNICRAFT_BOT_APP_ID }}
+          private-key: ${{ secrets.OMNICRAFT_BOT_APP_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: omnigent
+          repositories: omnicraft
 
       # Find the DRAFT release for this tag using the App token (push access) — a
       # read-only token can't see drafts. Match by tag_name over the release list:
@@ -378,8 +378,8 @@ jobs:
             exit 0
           fi
           BRANCH="auto/changelog/${TAG}"
-          git config user.name "omnigent-ci[bot]"
-          git config user.email "294685417+omnigent-ci[bot]@users.noreply.github.com"
+          git config user.name "omnicraft-ci[bot]"
+          git config user.email "294685417+omnicraft-ci[bot]@users.noreply.github.com"
           # No credentials persisted in .git/config (the unsandboxed agent ran
           # earlier); push via the token URL, which GitHub masks in logs.
           PUSH_URL="https://x-access-token:${SITE_TOKEN}@github.com/${SOURCE_REPO}.git"

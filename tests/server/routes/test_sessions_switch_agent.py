@@ -17,10 +17,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from omnigent.entities import Agent, Conversation, ConversationItem, MessageData, PagedList
-from omnigent.errors import OmnigentError
-from omnigent.server.routes import sessions as sessions_mod
-from omnigent.server.routes.sessions import create_sessions_router
+from omnicraft.entities import Agent, Conversation, ConversationItem, MessageData, PagedList
+from omnicraft.errors import OmniCraftError
+from omnicraft.server.routes import sessions as sessions_mod
+from omnicraft.server.routes.sessions import create_sessions_router
 
 # ── Stubs ────────────────────────────────────────────────────────
 
@@ -270,8 +270,8 @@ def _build_app(conv_store: _ConversationStore, agent_store: _AgentStore) -> Fast
     )
     app = FastAPI()
 
-    @app.exception_handler(OmnigentError)
-    async def _handle(request: Request, exc: OmnigentError) -> JSONResponse:
+    @app.exception_handler(OmniCraftError)
+    async def _handle(request: Request, exc: OmniCraftError) -> JSONResponse:
         del request
         return JSONResponse(
             status_code=exc.http_status,
@@ -356,7 +356,7 @@ async def test_switch_same_family_native_carries_history(
             "ag_builtin_origin": _BUILTIN_ORIGIN,
         }
     )
-    labels = {"omnigent.ui": "terminal", "omnigent.wrapper": "claude-code-native-ui"}
+    labels = {"omnicraft.ui": "terminal", "omnicraft.wrapper": "claude-code-native-ui"}
     _patch_family_helpers(monkeypatch, same_family=True, native=True, labels=labels)
     client = TestClient(_build_app(conv_store, agent_store))
 
@@ -394,7 +394,7 @@ async def test_switch_cross_family_resets_model_but_carries_history(
 
     The model id is provider-bound so it must reset; history is NOT — the
     switch clears ``external_session_id`` and the runner rebuilds the
-    native transcript from this session's own Omnigent items, a conversion
+    native transcript from this session's own OmniCraft items, a conversion
     that doesn't depend on the source harness.
     """
     conv_store = _ConversationStore(conversations={"conv_src": _conv()})
@@ -410,7 +410,7 @@ async def test_switch_cross_family_resets_model_but_carries_history(
     # Cross-family → reset model settings (a model id is provider-bound).
     assert call["copy_model_settings"] is False
     # Native target carries history regardless of family: the runner
-    # rebuilds the transcript from Omnigent items. False here would mean
+    # rebuilds the transcript from OmniCraft items. False here would mean
     # the cross-family gate regressed and the session resumes blank.
     assert call["carry_history_into_native"] is True
 
@@ -422,7 +422,7 @@ async def test_switch_cross_family_resets_model_but_carries_history(
         (
             _BUILTIN_CURSOR,
             "cursor-native",
-            {"omnigent.ui": "terminal", "omnigent.wrapper": "cursor-native-ui"},
+            {"omnicraft.ui": "terminal", "omnicraft.wrapper": "cursor-native-ui"},
             False,
         ),
         # pi-native rebuilds its JSONL session file from the copied items →
@@ -430,7 +430,7 @@ async def test_switch_cross_family_resets_model_but_carries_history(
         (
             _BUILTIN_PI,
             "pi-native",
-            {"omnigent.ui": "terminal", "omnigent.wrapper": "pi-native-ui"},
+            {"omnicraft.ui": "terminal", "omnicraft.wrapper": "pi-native-ui"},
             True,
         ),
         # qwen-native rebuilds qwen's on-disk chat recording from the copied
@@ -438,7 +438,7 @@ async def test_switch_cross_family_resets_model_but_carries_history(
         (
             _BUILTIN_QWEN,
             "qwen-native",
-            {"omnigent.ui": "terminal", "omnigent.wrapper": "qwen-native-ui"},
+            {"omnicraft.ui": "terminal", "omnicraft.wrapper": "qwen-native-ui"},
             True,
         ),
     ],
@@ -526,7 +526,7 @@ async def test_switch_publishes_agent_changed_event(
 
     # Capture session-stream publishes by rebinding the module's
     # ``session_stream`` reference to a recorder (not patching ``publish``
-    # through the shared module singleton) — omnigent-testing rule 14.
+    # through the shared module singleton) — omnicraft-testing rule 14.
     published: list[dict[str, object]] = []
 
     class _RecordingStream:

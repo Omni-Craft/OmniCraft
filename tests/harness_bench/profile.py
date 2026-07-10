@@ -25,7 +25,7 @@ class BenchProfile:
     """Self-declared bench metadata for one harness.
 
     :param harness: Harness name as registered in
-        ``omnigent.runtime.harnesses._HARNESS_MODULES`` (or resolvable by
+        ``omnicraft.runtime.harnesses._HARNESS_MODULES`` (or resolvable by
         :func:`resolve_profile` for a community harness), e.g.
         ``"claude-sdk"``.
     :param model: A real model id the harness can route this run, threaded
@@ -81,7 +81,7 @@ def resolve_profile(name: str) -> BenchProfile:
        to either a ``BenchProfile`` instance or a zero-arg
        ``bench_profile()`` factory (e.g.
        ``mypkg.myharness:bench_profile`` or ``mypkg.myharness.PROFILE``).
-    3. Any harness registered in the omnigent registry (in-repo or an
+    3. Any harness registered in the omnicraft registry (in-repo or an
        entry-point plugin), resolved by name / alias — the profile is
        derived from the capability model (see
        :func:`tests.harness_bench.manifest._registry_profile`). This is what
@@ -110,7 +110,7 @@ def resolve_profile(name: str) -> BenchProfile:
         return from_registry
 
     raise KeyError(
-        f"unknown harness {name!r}: not a registered omnigent harness, not an "
+        f"unknown harness {name!r}: not a registered omnicraft harness, not an "
         f"official profile ({', '.join(sorted(OFFICIAL_PROFILES))}), and not an "
         f"importable BenchProfile reference (try 'module:attr' or 'module.ATTR')"
     )

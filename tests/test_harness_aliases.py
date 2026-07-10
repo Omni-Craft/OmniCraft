@@ -1,15 +1,15 @@
-"""Tests for omnigent.harness_aliases."""
+"""Tests for omnicraft.harness_aliases."""
 
 from __future__ import annotations
 
 import pytest
 
-from omnigent.harness_aliases import (
+from omnicraft.harness_aliases import (
     canonicalize_harness,
     is_native_harness,
     native_terminal_name,
 )
-from omnigent.spec._omnigent_compat import OMNIGENT_HARNESSES
+from omnicraft.spec._omnicraft_compat import OMNICRAFT_HARNESSES
 
 
 @pytest.mark.parametrize(
@@ -19,7 +19,7 @@ from omnigent.spec._omnigent_compat import OMNIGENT_HARNESSES
         ("native-pi", "pi-native"),
         ("native-kiro", "kiro-native"),
         # Docs / runtime-dispatch spelling of the openai-agents harness;
-        # specs and OMNIGENT_HARNESSES use "openai-agents".
+        # specs and OMNICRAFT_HARNESSES use "openai-agents".
         ("openai-agents-sdk", "openai-agents"),
         # Canonical names pass through unchanged.
         ("openai-agents", "openai-agents"),
@@ -39,7 +39,7 @@ def test_canonicalize_harness(alias: str | None, canonical: str | None) -> None:
     """Alias spellings map to canonical ids; everything else passes through.
 
     A missing ``openai-agents-sdk`` mapping breaks the documented
-    ``omnigent run ... --harness openai-agents-sdk`` invocation at
+    ``omnicraft run ... --harness openai-agents-sdk`` invocation at
     ``_validate_harness``.
     """
     assert canonicalize_harness(alias) == canonical
@@ -57,7 +57,7 @@ def test_canonicalize_harness(alias: str | None, canonical: str | None) -> None:
         ("native-pi", True),
         ("kiro-native", True),
         ("native-kiro", True),
-        # SDK harnesses are NOT native — they replay the Omnigent
+        # SDK harnesses are NOT native — they replay the OmniCraft
         # transcript and don't own an on-disk runtime transcript. A
         # regression that classified these as native would wrongly route a
         # fork into the native-rebuild path.
@@ -85,10 +85,10 @@ def test_is_native_harness(harness: str | None, expected: bool) -> None:
     assert is_native_harness(harness) is expected
 
 
-def test_kiro_native_is_valid_omnigent_harness_but_plain_kiro_is_not() -> None:
+def test_kiro_native_is_valid_omnicraft_harness_but_plain_kiro_is_not() -> None:
     """Kiro's native identity is canonical; plain ``kiro`` is not a generic harness."""
-    assert "kiro-native" in OMNIGENT_HARNESSES
-    assert "kiro" not in OMNIGENT_HARNESSES
+    assert "kiro-native" in OMNICRAFT_HARNESSES
+    assert "kiro" not in OMNICRAFT_HARNESSES
 
 
 @pytest.mark.parametrize(

@@ -8,7 +8,7 @@ import { useServiceWorkerUpdate } from "./useServiceWorkerUpdate";
  *
  * Mounted once at the standalone app root (NOT in the embed island). The
  * service worker never swaps under a live session — we surface this banner and
- * let the user reload into the new build. Omnigent has no offline mode (cloud
+ * let the user reload into the new build. OmniCraft has no offline mode (cloud
  * app), so there is deliberately no "ready to work offline" state.
  */
 export function PWAUpdateBanner() {

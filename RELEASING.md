@@ -1,39 +1,39 @@
-# Releasing omnigent
+# Releasing omnicraft
 
-omnigent ships **three PyPI packages that version-lock together**:
+omnicraft ships **three PyPI packages that version-lock together**:
 
 | Package | What it is |
 | --- | --- |
-| `omnigent` | core wheel (bundles the `web` web UI) |
-| `omnigent-client` | Python client SDK |
-| `omnigent-ui-sdk` | terminal UI SDK |
+| `omnicraft` | core wheel (bundles the `web` web UI) |
+| `omnicraft-client` | Python client SDK |
+| `omnicraft-ui-sdk` | terminal UI SDK |
 
-`pip install omnigent==X` must resolve `omnigent-client==X` and
-`omnigent-ui-sdk==X`. The pins are **lockstep** (the three packages co-version and
+`pip install omnicraft==X` must resolve `omnicraft-client==X` and
+`omnicraft-ui-sdk==X`. The pins are **lockstep** (the three packages co-version and
 pin each other with `==`), so every release builds and publishes **all three at
 one identical version**.
 
 ## Where things run
 
-- **Source of truth** (versions, tags, GitHub Releases): **`omnigent-ai/omnigent`**
+- **Source of truth** (versions, tags, GitHub Releases): **`omnicraft-ai/omnicraft`**
   — use the **OSS GitHub account** (the personal account with push/release rights
   on the public repo).
 - **Publishing to PyPI**: the central **secure-release repo**
-  **`databricks/secure-public-registry-releases-eng`**, `omnigent` workflow —
+  **`databricks/secure-public-registry-releases-eng`**, `omnicraft` workflow —
   use the **Databricks EMU account**. Publishing runs on hardened runner
   groups with **OIDC Trusted Publishing (no stored secrets)** and a **mandatory
-  dependency scan**. This is why we don't publish from `omnigent-ai/omnigent`.
+  dependency scan**. This is why we don't publish from `omnicraft-ai/omnicraft`.
 
 > The exact account handles — and how to request publish access — live in the
 > internal release wiki; this public runbook refers to them only by role.
 > Substitute your own handles for `<oss-account>` / `<emu-account>` in the
 > `gh auth switch --user …` commands below.
 
-The legacy `.github/workflows/release-omnigent.yml` in this repo is a
+The legacy `.github/workflows/release-omnicraft.yml` in this repo is a
 **deprecated manual fallback only** — its tag-push trigger was removed so a tag
 never double-publishes. Use the secure repo for real releases.
 
-> The secure `omnigent` workflow is **manual `workflow_dispatch`** — it can't see
+> The secure `omnicraft` workflow is **manual `workflow_dispatch`** — it can't see
 > this repo's tag pushes. You bump + tag here, then dispatch it with that tag.
 
 ## Versioning model
@@ -51,12 +51,12 @@ never double-publishes. Use the secure repo for real releases.
 Because `main` carries the **next** version, the docs generated from merged PRs
 describe a release that isn't out yet — so they must **not** deploy to the live
 site on merge. Two workflows enforce this by staging onto a **per-minor docs
-branch** on `omnigent-site` instead of `main`:
+branch** on `omnicraft-site` instead of `main`:
 
 - **`doc-sync.yml`** — drafts prose docs for each merged PR that needs them.
 - **`sync-openapi-to-site.yml`** — syncs the API reference (`openapi.json`).
 
-Both derive the branch name from `omnigent/version.py` (`0.5.0.dev0` → `0.5-docs`)
+Both derive the branch name from `omnicraft/version.py` (`0.5.0.dev0` → `0.5-docs`)
 and create it off site `main` the first time a doc PR lands in the cycle. All docs
 for the `0.5` line — including patches — accumulate on `0.5-docs`. Each PR still
 gets its own review, but merging one only lands it on the staging branch, not the
@@ -71,7 +71,7 @@ tracks `main`'s version automatically.
 
 ## Release steps (example: `v0.2.0`)
 
-### 1. Cut the release branch + tag — `omnigent-ai/omnigent` (OSS account)
+### 1. Cut the release branch + tag — `omnicraft-ai/omnicraft` (OSS account)
 
 Only tag a commit that already has **green CI** — verify `main` is green before
 branching:
@@ -79,7 +79,7 @@ branching:
 ```bash
 gh auth switch --user <oss-account>
 git fetch origin
-gh run list --repo omnigent-ai/omnigent --branch main --status success --limit 1
+gh run list --repo omnicraft-ai/omnicraft --branch main --status success --limit 1
 git checkout -b branch-0.2 origin/main
 ```
 
@@ -87,12 +87,12 @@ Set the release version in **all three** `pyproject.toml` files — the
 `version` field **and** the cross-package `==` pins — plus `uv.lock`
 (`0.2.0.dev0` → `0.2.0`):
 
-- `pyproject.toml` (`version`, `omnigent-client==`, `omnigent-ui-sdk==`)
-- `sdks/python-client/pyproject.toml` (`version`, `omnigent==`)
-- `sdks/ui/pyproject.toml` (`version`, `omnigent-client==`)
-- `uv.lock` — **hand-edit** the three `version = "…"` lines (omnigent,
-  omnigent-client, omnigent-ui-sdk) and the one cross-pin `specifier = "==…"`
-  (`omnigent-ui-sdk`'s dep on `omnigent-client`). The three packages are
+- `pyproject.toml` (`version`, `omnicraft-client==`, `omnicraft-ui-sdk==`)
+- `sdks/python-client/pyproject.toml` (`version`, `omnicraft==`)
+- `sdks/ui/pyproject.toml` (`version`, `omnicraft-client==`)
+- `uv.lock` — **hand-edit** the three `version = "…"` lines (omnicraft,
+  omnicraft-client, omnicraft-ui-sdk) and the one cross-pin `specifier = "==…"`
+  (`omnicraft-ui-sdk`'s dep on `omnicraft-client`). The three packages are
   **editable workspace members** (`source = { editable = … }`), so uv records
   **no wheel `hash` entries** for them, and the other two cross-deps appear as
   `editable = "…"` with no `==` specifier — so only those version/specifier
@@ -131,7 +131,7 @@ git push
 
 ```bash
 gh auth switch --user <emu-account>
-gh workflow run omnigent.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run omnicraft.yml --repo databricks/secure-public-registry-releases-eng \
   -f ref=v0.2.0 -f destination=test-pypi -f dry-run=true
 ```
 
@@ -141,25 +141,25 @@ Runs build + dependency scan + the gates (lockstep version/pins, web-UI-in-wheel
 ### 3. Publish to TestPyPI + validate
 
 ```bash
-gh workflow run omnigent.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run omnicraft.yml --repo databricks/secure-public-registry-releases-eng \
   -f ref=v0.2.0 -f destination=test-pypi -f dry-run=false
 ```
 
 Validate in a clean venv. **Don't** use `--extra-index-url` with TestPyPI: pip
 resolves each name across *both* indexes and picks the highest version, so anyone
-squatting `omnigent` / `omnigent-client` / `omnigent-ui-sdk` on real PyPI at a
+squatting `omnicraft` / `omnicraft-client` / `omnicraft-ui-sdk` on real PyPI at a
 higher version wins the resolution (dependency confusion). Instead, take **deps
 from real PyPI only** and the **candidates from TestPyPI only**, exact-pinned with
 `--no-deps`:
 
 ```bash
 python -m venv /tmp/omni-rc
-# 1) seed the dependency closure from REAL PyPI (the last released omnigent):
-/tmp/omni-rc/bin/pip install --index-url https://pypi.org/simple/ omnigent
+# 1) seed the dependency closure from REAL PyPI (the last released omnicraft):
+/tmp/omni-rc/bin/pip install --index-url https://pypi.org/simple/ omnicraft
 # 2) overlay the candidates from TestPyPI ONLY, exact-pinned, no deps:
 /tmp/omni-rc/bin/pip install --index-url https://test.pypi.org/simple/ --no-deps \
-  omnigent==0.2.0 omnigent-client==0.2.0 omnigent-ui-sdk==0.2.0
-/tmp/omni-rc/bin/omnigent --version    # expect 0.2.0
+  omnicraft==0.2.0 omnicraft-client==0.2.0 omnicraft-ui-sdk==0.2.0
+/tmp/omni-rc/bin/omnicraft --version    # expect 0.2.0
 ```
 
 > If this release **adds a new runtime dependency** the previous release didn't
@@ -171,23 +171,23 @@ python -m venv /tmp/omni-rc
 
 Requires **admin/maintain** on the secure repo (if you hit a 403, request access
 via the secure-release owning team / internal release wiki before proceeding);
-binds the per-package `pypi-omnigent`, `pypi-omnigent-client`,
-`pypi-omnigent-ui-sdk` Trusted-Publisher environments (may gate on reviewer
+binds the per-package `pypi-omnicraft`, `pypi-omnicraft-client`,
+`pypi-omnicraft-ui-sdk` Trusted-Publisher environments (may gate on reviewer
 approval). The prod path also re-verifies that
 `ref` is exactly the `vX.Y.Z` tag and that the tag points at the built commit.
 
 ```bash
-gh workflow run omnigent.yml --repo databricks/secure-public-registry-releases-eng \
+gh workflow run omnicraft.yml --repo databricks/secure-public-registry-releases-eng \
   -f ref=v0.2.0 -f destination=pypi -f dry-run=false
 
-uv tool install omnigent==0.2.0        # final sanity from real PyPI
+uv tool install omnicraft==0.2.0        # final sanity from real PyPI
 ```
 
-> Note: the dispatch's `-f ref=v0.2.0` is the **omnigent source ref**; it is
+> Note: the dispatch's `-f ref=v0.2.0` is the **omnicraft source ref**; it is
 > distinct from `gh workflow run --ref`, which selects the branch the *workflow
 > definition* runs from (the secure repo's default).
 
-### 5. Publish the GitHub Release — `omnigent-ai/omnigent` (OSS account)
+### 5. Publish the GitHub Release — `omnicraft-ai/omnicraft` (OSS account)
 
 Pushing the `v0.2.0` tag (step 1) set the **changelog automation** in motion —
 two workflows have already done the prep for you:
@@ -206,7 +206,7 @@ Now:
 
 1. **Merge the `CHANGELOG.md` PR** as part of cutting the release, so the draft's
    `Full Changelog` link (which points at `CHANGELOG.md` on `main`) resolves.
-2. Open <https://github.com/omnigent-ai/omnigent/releases>, find the `v0.2.0`
+2. Open <https://github.com/omnicraft-ai/omnicraft/releases>, find the `v0.2.0`
    draft, and **review/trim the curated notes** — they're a strong starting point,
    not the final word. Lead with user-facing highlights; call out breaking changes.
    Whatever you leave here becomes the website post, so curate it well.
@@ -216,10 +216,10 @@ Now:
 Publishing a **final** release fires `.github/workflows/publish-changelog.yml`,
 which opens **two** PRs to review and merge (pre-releases are skipped):
 
-- **`omnigent-site` `/releases/<version>`** — a per-version post mirroring the
+- **`omnicraft-site` `/releases/<version>`** — a per-version post mirroring the
   notes you just curated (PR refs and angle/brace characters are made MDX-safe for
   you). Targets `main`.
-- **`omnigent-site` `X.Y-docs → main`** — publishes the docs staged this cycle
+- **`omnicraft-site` `X.Y-docs → main`** — publishes the docs staged this cycle
   (see [Docs staging](#docs-staging) below). Skipped if that branch doesn't exist
   or has nothing beyond `main`. Review the batch and merge to take the version's
   docs live.
@@ -233,7 +233,7 @@ If the draft wasn't created (e.g. the workflow was disabled), do it manually:
 
 ```bash
 gh auth switch --user <oss-account>
-gh release create v0.2.0 --repo omnigent-ai/omnigent \
+gh release create v0.2.0 --repo omnicraft-ai/omnicraft \
   --draft --verify-tag --generate-notes --title "v0.2.0"
 # review/edit, then publish from the Releases page (or `gh release edit v0.2.0 --draft=false`)
 ```
@@ -245,7 +245,7 @@ gh release create v0.2.0 --repo omnigent-ai/omnigent \
 Cherry-pick the fix onto the existing `branch-0.2`, then:
 
 1. Confirm CI is green on `branch-0.2` after the cherry-pick
-   (`gh run list --repo omnigent-ai/omnigent --branch branch-0.2 --status success --limit 1`).
+   (`gh run list --repo omnicraft-ai/omnicraft --branch branch-0.2 --status success --limit 1`).
 2. Bump the three versions/pins + `uv.lock` to `0.2.1` (same hand-edit rules as above).
 3. Stage explicitly, commit, and tag **on `branch-0.2`**:
    `git add <version files> && git commit -m "release: v0.2.1" && git tag v0.2.1 && git push origin branch-0.2 v0.2.1`.
@@ -269,7 +269,7 @@ can never be reused. So:
   next patch with the fix. Don't try to overwrite — Trusted Publishing / `twine`
   rejects re-uploading an existing version.
 - **GitHub Release** for a version you abandoned:
-  `gh release delete vX.Y.Z --repo omnigent-ai/omnigent`, and drop the tag if it
+  `gh release delete vX.Y.Z --repo omnicraft-ai/omnicraft`, and drop the tag if it
   shouldn't exist (`git push origin :refs/tags/vX.Y.Z`); re-tag only the corrected
   commit.
 - Publishing uses **OIDC Trusted Publishing (no stored secrets)**, so a failed run

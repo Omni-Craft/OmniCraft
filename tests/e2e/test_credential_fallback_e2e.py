@@ -4,7 +4,7 @@ End-to-end: the runner's first-available credential fallback (server → runner)
 A web-UI / remote-host launch resolves credentials in the RUNNER, not the CLI or
 the server. This proves that path end-to-end: with NO ambient OpenAI credential
 and an openai provider that is configured but NOT marked ``default``, a real
-``omnigent run`` (server → runner → openai-agents harness) credentials the head
+``omnicraft run`` (server → runner → openai-agents harness) credentials the head
 via :func:`first_available_provider` and completes a turn. Before the fix the
 head launched with no credential and failed with codex/openai's "Invalid API
 key" — so a completed turn here is the regression guard for the runner fallback.
@@ -58,7 +58,7 @@ _CREDENTIAL_VARS = (
 @pytest.fixture
 def local_server(tmp_path: Path, mock_llm_server_url: str) -> Iterator[str]:
     """
-    Spawn a throwaway in-tree ``omnigent server`` (state only).
+    Spawn a throwaway in-tree ``omnicraft server`` (state only).
 
     A server ``llm:`` block points any server-side prompt-policy classifier at
     the mock with an ALLOW fallback, mirroring the session ``live_server`` so a
@@ -88,7 +88,7 @@ def local_server(tmp_path: Path, mock_llm_server_url: str) -> Iterator[str]:
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "omnicraft",
             "server",
             "--host",
             "127.0.0.1",
@@ -104,8 +104,8 @@ def local_server(tmp_path: Path, mock_llm_server_url: str) -> Iterator[str]:
         cwd=str(_REPO),
         env={
             **os.environ,
-            "OMNIGENT_SKIP_ONBOARD": "1",
-            "OMNIGENT_NO_UPDATE_CHECK": "1",
+            "OMNICRAFT_SKIP_ONBOARD": "1",
+            "OMNICRAFT_NO_UPDATE_CHECK": "1",
         },
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
@@ -127,7 +127,7 @@ def local_server(tmp_path: Path, mock_llm_server_url: str) -> Iterator[str]:
 
 def _fallback_run_env(mock_llm_server_url: str, config_home: Path) -> dict[str, str]:
     """
-    Build the ``omnigent run`` env: no ambient credentials, and an isolated
+    Build the ``omnicraft run`` env: no ambient credentials, and an isolated
     config whose only openai-family credential is a provider that is configured
     but NOT marked default.
 
@@ -135,13 +135,13 @@ def _fallback_run_env(mock_llm_server_url: str, config_home: Path) -> dict[str, 
     head only through the first-available fallback.
 
     :param mock_llm_server_url: Mock LLM base URL.
-    :param config_home: Isolated ``OMNIGENT_CONFIG_HOME`` (also used as HOME so
+    :param config_home: Isolated ``OMNICRAFT_CONFIG_HOME`` (also used as HOME so
         ambient CLI-login detection finds nothing).
     :returns: The subprocess env.
     """
     env = dict(os.environ)
-    env["OMNIGENT_SKIP_ONBOARD"] = "1"
-    env["OMNIGENT_NO_UPDATE_CHECK"] = "1"
+    env["OMNICRAFT_SKIP_ONBOARD"] = "1"
+    env["OMNICRAFT_NO_UPDATE_CHECK"] = "1"
     env["HOME"] = str(config_home)
     for stale in _CREDENTIAL_VARS:
         env.pop(stale, None)
@@ -161,7 +161,7 @@ def _fallback_run_env(mock_llm_server_url: str, config_home: Path) -> dict[str, 
         ),
         encoding="utf-8",
     )
-    env["OMNIGENT_CONFIG_HOME"] = str(config_home)
+    env["OMNICRAFT_CONFIG_HOME"] = str(config_home)
     return env
 
 
@@ -173,7 +173,7 @@ def _probe_agent_dir(tmp_path: Path) -> Path:
         "spec_version: 1\n"
         "name: fallback-probe\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: openai-agents\n"
         'prompt: "You are a terse test agent. Reply concisely."\n',
@@ -190,7 +190,7 @@ def test_runner_fallback_credentials_head_with_nondefault_provider(
 ) -> None:
     """
     The runner credentials an unpinned head from a configured-but-not-default
-    provider, with no ambient credential — end-to-end via ``omnigent run``
+    provider, with no ambient credential — end-to-end via ``omnicraft run``
     (server → runner → openai-agents harness).
 
     The completed turn proves the first-available fallback fired in the real
@@ -208,14 +208,14 @@ def test_runner_fallback_credentials_head_with_nondefault_provider(
         [{"text": "pong from the fallback-credentialed head"}],
         match=token,
     )
-    config_home = Path(tempfile.mkdtemp(prefix="omnigent-fallback-cfg-"))
+    config_home = Path(tempfile.mkdtemp(prefix="omnicraft-fallback-cfg-"))
     agent_dir = _probe_agent_dir(tmp_path)
 
     result = subprocess.run(
         [
             sys.executable,
             "-m",
-            "omnigent",
+            "omnicraft",
             "run",
             str(agent_dir),
             "--server",
@@ -231,7 +231,7 @@ def test_runner_fallback_credentials_head_with_nondefault_provider(
     )
 
     assert result.returncode == 0, (
-        f"omnigent run failed (exit {result.returncode}) — the head was not "
+        f"omnicraft run failed (exit {result.returncode}) — the head was not "
         f"credentialed via the fallback.\nSTDOUT:\n{result.stdout[-3000:]}\n"
         f"STDERR:\n{result.stderr[-3000:]}"
     )

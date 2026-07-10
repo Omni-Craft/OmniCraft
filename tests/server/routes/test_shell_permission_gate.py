@@ -30,17 +30,17 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from omnigent.entities import Conversation, ResolvedAccess, SessionPermission
-from omnigent.errors import OmnigentError
-from omnigent.runtime import _globals, set_runner_client, set_runner_router
-from omnigent.server.auth import (
+from omnicraft.entities import Conversation, ResolvedAccess, SessionPermission
+from omnicraft.errors import OmniCraftError
+from omnicraft.runtime import _globals, set_runner_client, set_runner_router
+from omnicraft.server.auth import (
     LEVEL_EDIT,
     LEVEL_OWNER,
     LEVEL_READ,
     RESERVED_USER_PUBLIC,
     UnifiedAuthProvider,
 )
-from omnigent.server.routes.sessions import create_sessions_router
+from omnicraft.server.routes.sessions import create_sessions_router
 
 # The server route is mounted under /v1 and proxies to the runner at the
 # same path, so the client URL and the recorded runner path are identical.
@@ -210,10 +210,10 @@ def app(runner_globals_reset: None, runner_client: _RecordingRunnerClient) -> Fa
 
     application = FastAPI()
 
-    @application.exception_handler(OmnigentError)
-    async def _handle_omnigent_error(
+    @application.exception_handler(OmniCraftError)
+    async def _handle_omnicraft_error(
         request: Request,
-        exc: OmnigentError,
+        exc: OmniCraftError,
     ) -> JSONResponse:
         del request
         return JSONResponse(
@@ -228,7 +228,7 @@ def app(runner_globals_reset: None, runner_client: _RecordingRunnerClient) -> Fa
             # local_single_user=False: this suite verifies the strict
             # (deployed multi-user) posture where a headerless request is
             # rejected, so opt out of the suite-wide single-user default
-            # set in tests/conftest.py (OMNIGENT_LOCAL_SINGLE_USER=1).
+            # set in tests/conftest.py (OMNICRAFT_LOCAL_SINGLE_USER=1).
             auth_provider=UnifiedAuthProvider(source="header", local_single_user=False),
             permission_store=perm_store,  # type: ignore[arg-type]
         ),

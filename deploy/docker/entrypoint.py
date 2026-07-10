@@ -1,4 +1,4 @@
-"""OSS Docker entrypoint for the Omnigent server.
+"""OSS Docker entrypoint for the OmniCraft server.
 
 Mirrors ``deploy/databricks/src/app.py`` (the Databricks Apps entrypoint) but
 configured for a plain Postgres database and a local-filesystem
@@ -7,7 +7,7 @@ artifact store. Intended to run inside the image built by
 
 Execution mode: external runners only. The server accepts runner
 WebSocket connections at ``/v1/runner/tunnel`` and never spawns
-harness subprocesses on its own. Users run ``omnigent run … --server
+harness subprocesses on its own. Users run ``omnicraft run … --server
 <url>`` on their own machine; that runner dials in.
 
 Importing this module has **no side effects**: configuration loading,
@@ -44,10 +44,10 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from fastapi import FastAPI
 
-    from omnigent.stores.artifact_store import ArtifactStore
+    from omnicraft.stores.artifact_store import ArtifactStore
 
 logging.basicConfig(level=logging.INFO, stream=sys.stderr, force=True)
-logger = logging.getLogger("omnigent-docker")
+logger = logging.getLogger("omnicraft-docker")
 
 # Defaults live as module-level constants — the Dockerfile and
 # docker-compose.yaml both also set these, so the values here just
@@ -102,7 +102,7 @@ def run_migrations(database_url: str) -> None:
     """
     import sqlalchemy
 
-    from omnigent.db.utils import _run_migrations as _run_alembic_upgrade
+    from omnicraft.db.utils import _run_migrations as _run_alembic_upgrade
 
     migration_engine = sqlalchemy.create_engine(database_url)
     try:
@@ -114,15 +114,15 @@ def run_migrations(database_url: str) -> None:
 def _resolve_config() -> _ResolvedConfig:
     """Load config and resolve startup settings before migrations run."""
 
-    from omnigent.db.utils import normalize_database_url
-    from omnigent.server.paas_env import detect_base_url, resolve_bind_host
-    from omnigent.server.server_config import load_server_config
+    from omnicraft.db.utils import normalize_database_url
+    from omnicraft.server.paas_env import detect_base_url, resolve_bind_host
+    from omnicraft.server.server_config import load_server_config
 
     # ── Configuration ────────────────────────────────────────
     # Non-secret settings come from a YAML config file (default
     # <data_dir>/config.yaml, e.g. /data/config.yaml on the volume, or
-    # OMNIGENT_CONFIG) — the same experience a laptop gets from
-    # `omnigent server -c`. Secrets stay in the environment:
+    # OMNICRAFT_CONFIG) — the same experience a laptop gets from
+    # `omnicraft server -c`. Secrets stay in the environment:
     # DATABASE_URL (carries the password) and the cookie / OIDC secrets.
     cfg = load_server_config()
 
@@ -133,7 +133,7 @@ def _resolve_config() -> _ResolvedConfig:
         raise RuntimeError(
             "DATABASE_URL is required (env), or set `database_uri:` in the server config. "
             "Accepted forms: "
-            "'postgresql+psycopg://user:pw@host:5432/omnigent' (explicit psycopg3), "
+            "'postgresql+psycopg://user:pw@host:5432/omnicraft' (explicit psycopg3), "
             "or the 'postgres://' / 'postgresql://' URLs emitted by Railway, Render, etc."
         )
     # Normalize PaaS-style URLs (postgres:// or postgresql://) to the
@@ -155,10 +155,10 @@ def _resolve_config() -> _ResolvedConfig:
     # Optional remote artifact store (S3 / Cloudflare R2 / MinIO / …). When set,
     # the artifact STORE is remote and durable; artifact_dir stays local for the
     # cookie secret and on-disk cache. Mirrors how DATABASE_URL selects the DB.
-    artifact_store_uri = cfg.get("artifact_store_uri") or os.environ.get("OMNIGENT_ARTIFACT_URI")
+    artifact_store_uri = cfg.get("artifact_store_uri") or os.environ.get("OMNICRAFT_ARTIFACT_URI")
     if artifact_store_uri and not artifact_store_uri.startswith("s3://"):
         raise RuntimeError(
-            "OMNIGENT_ARTIFACT_URI (or `artifact_store_uri:` in config) must be an "
+            "OMNICRAFT_ARTIFACT_URI (or `artifact_store_uri:` in config) must be an "
             f"'s3://bucket[/prefix]' URI, got: {artifact_store_uri!r}"
         )
 
@@ -171,53 +171,53 @@ def _resolve_config() -> _ResolvedConfig:
     )
 
     # Containerized / remote deploys default to authenticated auth.
-    # The framework-wide default (a bare local `omnigent server`) is
+    # The framework-wide default (a bare local `omnicraft server`) is
     # single-user header mode with no login, but a Docker / HF / PaaS
     # instance is typically network-exposed, so we opt it into the
     # multi-user login flow here — accounts by default, or OIDC if the
-    # operator supplied OMNIGENT_OIDC_* config. An operator can still
-    # force header/oidc/accounts via OMNIGENT_AUTH_PROVIDER, or turn
-    # auth off with OMNIGENT_AUTH_ENABLED=0.
-    os.environ.setdefault("OMNIGENT_AUTH_ENABLED", "1")
+    # operator supplied OMNICRAFT_OIDC_* config. An operator can still
+    # force header/oidc/accounts via OMNICRAFT_AUTH_PROVIDER, or turn
+    # auth off with OMNICRAFT_AUTH_ENABLED=0.
+    os.environ.setdefault("OMNICRAFT_AUTH_ENABLED", "1")
 
-    # Kill-switch ergonomics: OMNIGENT_AUTH_ENABLED=0 means "no login,
+    # Kill-switch ergonomics: OMNICRAFT_AUTH_ENABLED=0 means "no login,
     # single-user local container" (the documented local-dev posture).
     # Header mode now fails closed on a missing X-Forwarded-Email,
     # so without this marker a no-auth container would
     # 401 every request — nothing injects the header. Only the implicit
     # kill-switch path gets the marker: an EXPLICIT
-    # OMNIGENT_AUTH_PROVIDER=header deploy declared a header-injecting
+    # OMNICRAFT_AUTH_PROVIDER=header deploy declared a header-injecting
     # proxy and must stay strict.
-    from omnigent.server.auth import env_var_is_truthy
+    from omnicraft.server.auth import env_var_is_truthy
 
-    # Compose passes OMNIGENT_AUTH_PROVIDER as "" when unset
+    # Compose passes OMNICRAFT_AUTH_PROVIDER as "" when unset
     # ("${VAR:-}"): empty and missing both mean "not explicitly pinned".
-    _raw_auth_provider = os.environ.get("OMNIGENT_AUTH_PROVIDER")
+    _raw_auth_provider = os.environ.get("OMNICRAFT_AUTH_PROVIDER")
     _auth_provider_explicit = bool(_raw_auth_provider and _raw_auth_provider.strip())
-    if not _auth_provider_explicit and not env_var_is_truthy("OMNIGENT_AUTH_ENABLED"):
-        os.environ.setdefault("OMNIGENT_LOCAL_SINGLE_USER", "1")
+    if not _auth_provider_explicit and not env_var_is_truthy("OMNICRAFT_AUTH_ENABLED"):
+        os.environ.setdefault("OMNICRAFT_LOCAL_SINGLE_USER", "1")
 
     # Accounts mode ergonomics: when the operator hasn't set them, supply the
     # two required vars (cookie secret + base URL) so a 1-click / `docker
     # compose up` deploy works with zero config. Gate on the *resolved*
     # selection so an explicit header/oidc deploy (or AUTH_ENABLED=0)
     # doesn't mint accounts secrets it never reads.
-    from omnigent.server.auth import resolve_auth_source
+    from omnicraft.server.auth import resolve_auth_source
 
     if resolve_auth_source() == "accounts":
-        from omnigent.server.accounts_secret import load_or_generate_cookie_secret
+        from omnicraft.server.accounts_secret import load_or_generate_cookie_secret
 
         # Empty-check, not setdefault: compose passes these as empty strings
         # ("${VAR:-}"), which setdefault would leave in place — defeating the default.
-        if not os.environ.get("OMNIGENT_ACCOUNTS_COOKIE_SECRET"):
-            os.environ["OMNIGENT_ACCOUNTS_COOKIE_SECRET"] = load_or_generate_cookie_secret(
+        if not os.environ.get("OMNICRAFT_ACCOUNTS_COOKIE_SECRET"):
+            os.environ["OMNICRAFT_ACCOUNTS_COOKIE_SECRET"] = load_or_generate_cookie_secret(
                 artifact_dir
             )
-        if not os.environ.get("OMNIGENT_ACCOUNTS_BASE_URL"):
+        if not os.environ.get("OMNICRAFT_ACCOUNTS_BASE_URL"):
             # Auto-detect the public URL from the PaaS env (Render / Railway /
             # Fly / HF Spaces) so a 1-click deploy needs zero manual config;
             # falls back to the bind address for local / Docker / EC2.
-            os.environ["OMNIGENT_ACCOUNTS_BASE_URL"] = detect_base_url(
+            os.environ["OMNICRAFT_ACCOUNTS_BASE_URL"] = detect_base_url(
                 os.environ, host=host, port=port
             )
 
@@ -236,19 +236,19 @@ def _select_artifact_store(resolved_config: _ResolvedConfig) -> ArtifactStore:
     Pick the artifact store implementation from the resolved config.
 
     An ``s3://bucket[/prefix]`` ``artifact_store_uri`` selects the remote,
-    durable :class:`~omnigent.stores.artifact_store.s3.S3ArtifactStore` (AWS S3,
+    durable :class:`~omnicraft.stores.artifact_store.s3.S3ArtifactStore` (AWS S3,
     Cloudflare R2, MinIO, …), which survives an ephemeral or multi-replica
     deploy. Otherwise the local-filesystem store at ``artifact_dir`` is used.
     Mirrors how ``DATABASE_URL`` selects the database backend.
 
     :param resolved_config: The resolved startup configuration.
     :returns: The selected
-        :class:`~omnigent.stores.artifact_store.ArtifactStore`.
+        :class:`~omnicraft.stores.artifact_store.ArtifactStore`.
     """
-    from omnigent.stores.artifact_store.local import LocalArtifactStore
+    from omnicraft.stores.artifact_store.local import LocalArtifactStore
 
     if resolved_config.artifact_store_uri:
-        from omnigent.stores.artifact_store.s3 import S3ArtifactStore
+        from omnicraft.stores.artifact_store.s3 import S3ArtifactStore
 
         return S3ArtifactStore(resolved_config.artifact_store_uri)
     return LocalArtifactStore(str(resolved_config.artifact_dir))
@@ -260,8 +260,8 @@ def build_app(resolved_config: _ResolvedConfig | None = None) -> _BuiltApp:
     This function intentionally does not run migrations; ``main()`` runs
     them explicitly after config resolution and before store construction.
     """
-    from omnigent.server.app import create_app
-    from omnigent.server.server_config import config_str_list
+    from omnicraft.server.app import create_app
+    from omnicraft.server.server_config import config_str_list
 
     if resolved_config is None:
         resolved_config = _resolve_config()
@@ -272,21 +272,21 @@ def build_app(resolved_config: _ResolvedConfig | None = None) -> _BuiltApp:
 
     # ── Stores ───────────────────────────────────────────────
 
-    from omnigent.runtime import init as init_runtime
-    from omnigent.runtime import telemetry
-    from omnigent.runtime.agent_cache import AgentCache
-    from omnigent.runtime.caps import RuntimeCaps
-    from omnigent.server.managed_hosts import parse_sandbox_config
-    from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-    from omnigent.stores.comment_store.sqlalchemy_store import (
+    from omnicraft.runtime import init as init_runtime
+    from omnicraft.runtime import telemetry
+    from omnicraft.runtime.agent_cache import AgentCache
+    from omnicraft.runtime.caps import RuntimeCaps
+    from omnicraft.server.managed_hosts import parse_sandbox_config
+    from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+    from omnicraft.stores.comment_store.sqlalchemy_store import (
         SqlAlchemyCommentStore,
     )
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from omnicraft.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
-    from omnigent.stores.permission_store.sqlalchemy_store import (
+    from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from omnicraft.stores.host_store import HostStore
+    from omnicraft.stores.permission_store.sqlalchemy_store import (
         SqlAlchemyPermissionStore,
     )
 
@@ -325,13 +325,13 @@ def build_app(resolved_config: _ResolvedConfig | None = None) -> _BuiltApp:
     # so internally, so this same code path can opt out by passing
     # None for non-accounts deploys (matching the structural
     # contract used on the hosted product).
-    from omnigent.server.auth import UnifiedAuthProvider as _UAP
-    from omnigent.server.auth import create_auth_provider
+    from omnicraft.server.auth import UnifiedAuthProvider as _UAP
+    from omnicraft.server.auth import create_auth_provider
 
     auth_provider = create_auth_provider()
     account_store = None
     if isinstance(auth_provider, _UAP) and auth_provider._source == "accounts":
-        from omnigent.server.accounts_store import SqlAlchemyAccountStore
+        from omnicraft.server.accounts_store import SqlAlchemyAccountStore
 
         account_store = SqlAlchemyAccountStore(database_url)
 
@@ -377,11 +377,11 @@ def main() -> None:
 
         import uvicorn
 
-        from omnigent.runner.transports.ws_tunnel.limits import (
+        from omnicraft.runner.transports.ws_tunnel.limits import (
             RUNNER_TUNNEL_MAX_MESSAGE_BYTES,
         )
 
-        logger.info("Starting omnigent server on %s:%d", resolved.host, resolved.port)
+        logger.info("Starting omnicraft server on %s:%d", resolved.host, resolved.port)
         uvicorn.run(
             resolved.app,
             host=resolved.host,
@@ -389,7 +389,7 @@ def main() -> None:
             ws_max_size=RUNNER_TUNNEL_MAX_MESSAGE_BYTES,
         )
     except Exception:  # noqa: BLE001 — startup catch-all so failures land in logs
-        logger.error("FATAL: omnigent server failed to start:\n%s", traceback.format_exc())
+        logger.error("FATAL: omnicraft server failed to start:\n%s", traceback.format_exc())
         # Keep the process alive briefly so the container log capture has time
         # to flush before the orchestrator restarts us.
         import time  # deferred — keeps module inert

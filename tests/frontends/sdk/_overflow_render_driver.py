@@ -33,9 +33,9 @@ from __future__ import annotations
 
 import sys
 
-from omnigent_client import BlockContext, TextChunk, TextDone
-from omnigent_ui_sdk.terminal._formatter import RichBlockFormatter
-from omnigent_ui_sdk.terminal._host import TerminalHost
+from omnicraft_client import BlockContext, TextChunk, TextDone
+from omnicraft_ui_sdk.terminal._formatter import RichBlockFormatter
+from omnicraft_ui_sdk.terminal._host import TerminalHost
 
 
 def _main() -> None:

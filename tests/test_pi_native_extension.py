@@ -25,10 +25,10 @@ def test_delivery_cap_drops_followup_without_failed_session_status(
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -50,14 +50,14 @@ fs.writeFileSync(
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "session-1",
     inboxDir,
     authHeaders: { authorization: "Bearer test" },
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const postedEvents = [];
 global.fetch = async (_url, request) => {
@@ -177,12 +177,12 @@ const configPath = path.join(require("os").tmpdir(), `pi-usage-${process.pid}.js
 require("fs").writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "session-1",
     authHeaders: { authorization: "Bearer test" },
   }),
 );
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const postedEvents = [];
 global.fetch = async (_url, request) => {
@@ -219,10 +219,10 @@ def test_message_end_posts_external_session_usage(tmp_path: Path) -> None:
         pytest.skip("node is required for the pi-native extension e2e test")
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = (
@@ -273,10 +273,10 @@ def test_usage_accumulates_and_dedupes_across_messages(tmp_path: Path) -> None:
         pytest.skip("node is required for the pi-native extension e2e test")
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = (
@@ -326,10 +326,10 @@ def test_no_usage_message_posts_nothing(tmp_path: Path) -> None:
         pytest.skip("node is required for the pi-native extension e2e test")
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = (
@@ -386,10 +386,10 @@ def test_distinct_messages_with_identical_usage_are_not_collapsed(
         pytest.skip("node is required for the pi-native extension e2e test")
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = (
@@ -448,10 +448,10 @@ def test_agent_end_dedupes_real_shaped_messages_by_timestamp(
         pytest.skip("node is required for the pi-native extension e2e test")
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = (
@@ -490,10 +490,10 @@ def test_agent_end_dedupes_real_shaped_messages_by_timestamp(
 def _extension_path() -> Path:
     return (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
 
@@ -523,9 +523,9 @@ const configPath = path.join(tmpDir, "config.json");
 
 fs.writeFileSync(
   configPath,
-  JSON.stringify({ serverUrl: "http://omnigent.test", sessionId: "session-1" }),
+  JSON.stringify({ serverUrl: "http://omnicraft.test", sessionId: "session-1" }),
 );
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const posted = [];
 global.fetch = async (_url, request) => {
@@ -759,13 +759,13 @@ def test_message_without_streamed_text_posts_no_delta(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stdout + result.stderr
 
 
-def test_registers_omnigent_tools_and_execute_round_trips(tmp_path: Path) -> None:
+def test_registers_omnicraft_tools_and_execute_round_trips(tmp_path: Path) -> None:
     """The extension registers config.tools and execute() round-trips via /mcp.
 
     Drives the real JavaScript extension under Node with a config carrying a
     flat tool list (as the runner now writes). Asserts each tool is registered
     via ``pi.registerTool`` with its schema, and that calling a registered
-    tool's ``execute`` POSTs a JSON-RPC ``tools/call`` to the Omnigent server's
+    tool's ``execute`` POSTs a JSON-RPC ``tools/call`` to the OmniCraft server's
     ``/v1/sessions/{id}/mcp`` proxy and returns the tool output to Pi.
     """
     node = shutil.which("node")
@@ -774,10 +774,10 @@ def test_registers_omnigent_tools_and_execute_round_trips(tmp_path: Path) -> Non
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -794,7 +794,7 @@ fs.mkdirSync(inboxDir, { recursive: true });
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "conv_abc",
     inboxDir,
     authHeaders: { authorization: "Bearer test" },
@@ -817,14 +817,14 @@ fs.writeFileSync(
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 // Capture every fetch so we can assert the execute() round-trip hits /mcp with
 // a JSON-RPC tools/call and the right auth headers.
 const fetchCalls = [];
 global.fetch = async (url, request) => {
   fetchCalls.push({ url, request });
-  // Mimic the Omnigent /mcp proxy success envelope.
+  // Mimic the OmniCraft /mcp proxy success envelope.
   return {
     ok: true,
     async json() {
@@ -875,7 +875,7 @@ require(extensionPath)(pi);
 
   assert.equal(fetchCalls.length, 1, JSON.stringify(fetchCalls));
   const call = fetchCalls[0];
-  assert.equal(call.url, "http://omnigent.test/v1/sessions/conv_abc/mcp");
+  assert.equal(call.url, "http://omnicraft.test/v1/sessions/conv_abc/mcp");
   assert.equal(call.request.method, "POST");
   assert.equal(call.request.headers.authorization, "Bearer test");
   const body = JSON.parse(call.request.body);
@@ -907,7 +907,7 @@ require(extensionPath)(pi);
 
 
 def test_bridged_tool_call_skips_hook_policy_eval(tmp_path: Path) -> None:
-    """The tool_call hook must NOT re-evaluate policy for bridged Omnigent tools.
+    """The tool_call hook must NOT re-evaluate policy for bridged OmniCraft tools.
 
     Bridged tools are policy-evaluated server-side inside the /mcp proxy when
     execute() runs, so the hook-level ``policies/evaluate`` call would
@@ -920,10 +920,10 @@ def test_bridged_tool_call_skips_hook_policy_eval(tmp_path: Path) -> None:
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -940,7 +940,7 @@ fs.mkdirSync(inboxDir, { recursive: true });
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "conv_abc",
     inboxDir,
     authHeaders: {},
@@ -950,7 +950,7 @@ fs.writeFileSync(
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const policyUrls = [];
 global.fetch = async (url, _request) => {
@@ -1026,10 +1026,10 @@ def test_input_required_approve_round_trips_then_executes(tmp_path: Path) -> Non
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -1046,7 +1046,7 @@ fs.mkdirSync(inboxDir, { recursive: true });
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "conv_abc",
     inboxDir,
     authHeaders: { authorization: "Bearer test" },
@@ -1060,7 +1060,7 @@ fs.writeFileSync(
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const ELICIT_ID = "elicit_abc123";
 const REQUEST_STATE = JSON.stringify({ elicitation_id: ELICIT_ID, session_id: "conv_abc" });
@@ -1146,7 +1146,7 @@ require(extensionPath)(pi);
 
 
 def test_mcp_unreachable_fails_closed_without_throwing(tmp_path: Path) -> None:
-    """An unreachable Omnigent MCP server resolves to an error, never a throw.
+    """An unreachable OmniCraft MCP server resolves to an error, never a throw.
 
     Boundary discipline at the /mcp call site: a transport failure (connection
     refused) and an HTTP non-2xx must each resolve ``execute`` to a readable
@@ -1159,10 +1159,10 @@ def test_mcp_unreachable_fails_closed_without_throwing(tmp_path: Path) -> None:
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -1179,7 +1179,7 @@ fs.mkdirSync(inboxDir, { recursive: true });
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "conv_abc",
     inboxDir,
     authHeaders: {},
@@ -1189,7 +1189,7 @@ fs.writeFileSync(
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 let mode = "throw";
 global.fetch = async () => {
@@ -1248,10 +1248,10 @@ def test_input_required_denied_fails_closed_not_false_success(tmp_path: Path) ->
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -1268,7 +1268,7 @@ fs.mkdirSync(inboxDir, { recursive: true });
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "conv_abc",
     inboxDir,
     authHeaders: {},
@@ -1278,7 +1278,7 @@ fs.writeFileSync(
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const ELICIT_ID = "elicit_deny";
 const REQUEST_STATE = JSON.stringify({ elicitation_id: ELICIT_ID, session_id: "conv_abc" });
@@ -1381,10 +1381,10 @@ def test_compact_payload_triggers_ctx_compact_and_brackets_spinner(
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -1410,14 +1410,14 @@ fs.writeFileSync(
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "session-1",
     inboxDir,
     authHeaders: { authorization: "Bearer test" },
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const postedEvents = [];
 global.fetch = async (_url, request) => {
@@ -1543,10 +1543,10 @@ fs.mkdirSync(inboxDir, { recursive: true });
 fs.writeFileSync(payloadPath, JSON.stringify({ id: "compact-1", type: "compact" }));
 fs.writeFileSync(
   configPath,
-  JSON.stringify({ serverUrl: "http://omnigent.test", sessionId: "session-1", inboxDir }),
+  JSON.stringify({ serverUrl: "http://omnicraft.test", sessionId: "session-1", inboxDir }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 // Record the order the SERVER receives edges (on resolution), and stall only
 // the in_progress POST so a non-awaited completed could overtake it.
@@ -1634,10 +1634,10 @@ def test_compact_payload_without_ctx_compact_surfaces_error_and_consumes_file(
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -1659,13 +1659,13 @@ fs.writeFileSync(
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "session-1",
     inboxDir,
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const postedEvents = [];
 global.fetch = async (_url, request) => {
@@ -1765,10 +1765,10 @@ def test_compact_payload_synchronous_throw_dismisses_spinner(
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -1790,13 +1790,13 @@ fs.writeFileSync(
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "session-1",
     inboxDir,
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const postedEvents = [];
 global.fetch = async (_url, request) => {
@@ -1880,10 +1880,10 @@ def test_compact_payload_failure_dismisses_spinner(tmp_path: Path) -> None:
 
     extension_path = (
         Path(__file__).resolve().parents[1]
-        / "omnigent"
+        / "omnicraft"
         / "resources"
         / "pi_native"
-        / "omnigent_pi_native_extension.js"
+        / "omnicraft_pi_native_extension.js"
     )
 
     script = r"""
@@ -1905,13 +1905,13 @@ fs.writeFileSync(
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "session-1",
     inboxDir,
   }),
 );
 
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const postedEvents = [];
 global.fetch = async (_url, request) => {
@@ -2003,12 +2003,12 @@ const configPath = path.join(tmpDir, "config.json");
 fs.writeFileSync(
   configPath,
   JSON.stringify({
-    serverUrl: "http://omnigent.test",
+    serverUrl: "http://omnicraft.test",
     sessionId: "session-1",
     authHeaders: { authorization: "Bearer test" },
   }),
 );
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 // Captured evaluate-request bodies (parsed) in call order.
 const evalBodies = [];
@@ -2148,7 +2148,7 @@ def test_policy_allow_proceeds(tmp_path: Path) -> None:
   assert.ok(!verdict || verdict.block !== true, JSON.stringify(verdict));
   assert.equal(evalBodies.length, 1);
   // The evaluate body must carry a valid re-attach id and a PHASE_TOOL_CALL.
-  assert.match(evalBodies[0]._omnigent_elicitation_id, /^elicit_evaluate_[0-9a-f]{32}$/);
+  assert.match(evalBodies[0]._omnicraft_elicitation_id, /^elicit_evaluate_[0-9a-f]{32}$/);
   assert.equal(evalBodies[0].event.type, "PHASE_TOOL_CALL");
   assert.equal(evalBodies[0].event.data.name, "Bash");
 })().catch((error) => {
@@ -2196,8 +2196,8 @@ def test_policy_ask_parks_then_resolves_allow(tmp_path: Path) -> None:
   // Both POSTs must reuse the SAME elicitation id so the server re-attaches
   // rather than opening a second approval card.
   assert.equal(
-    evalBodies[0]._omnigent_elicitation_id,
-    evalBodies[1]._omnigent_elicitation_id,
+    evalBodies[0]._omnicraft_elicitation_id,
+    evalBodies[1]._omnicraft_elicitation_id,
   );
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
@@ -2219,8 +2219,8 @@ def test_policy_ask_parks_then_resolves_deny(tmp_path: Path) -> None:
   assert.deepEqual(verdict, { block: true, reason: "declined" });
   assert.equal(evalBodies.length, 2);
   assert.equal(
-    evalBodies[0]._omnigent_elicitation_id,
-    evalBodies[1]._omnigent_elicitation_id,
+    evalBodies[0]._omnicraft_elicitation_id,
+    evalBodies[1]._omnicraft_elicitation_id,
   );
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
@@ -2260,8 +2260,8 @@ def test_policy_park_abort_reattaches_same_id(tmp_path: Path) -> None:
   assert.ok(!verdict || verdict.block !== true, JSON.stringify(verdict));
   assert.equal(evalBodies.length, 2, "expected re-attach after abort = 2 evaluates");
   assert.equal(
-    evalBodies[0]._omnigent_elicitation_id,
-    evalBodies[1]._omnigent_elicitation_id,
+    evalBodies[0]._omnicraft_elicitation_id,
+    evalBodies[1]._omnicraft_elicitation_id,
   );
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
@@ -2326,7 +2326,7 @@ def test_policy_transport_error_fails_closed(tmp_path: Path) -> None:
     so an unevaluable policy must BLOCK, not proceed. Every evaluate POST
     throws a non-abort transport error; after the transient retry budget
     elapses the extension returns a deny verdict (fail closed) rather than
-    null, matching omnigent.policies.types.FAIL_CLOSED_PHASES and the Python
+    null, matching omnicraft.policies.types.FAIL_CLOSED_PHASES and the Python
     native hook's fail_closed_hook_output(PreToolUse) → deny.
     """
     body = r"""
@@ -2441,7 +2441,7 @@ def test_policy_raw_ask_never_collapses_fails_closed(tmp_path: Path) -> None:
   // unbounded). All POSTs reuse the SAME elicitation id.
   assert.ok(evalBodies.length >= 2, "expected re-evaluation, got " + evalBodies.length);
   assert.ok(evalBodies.length <= 50, "raw ASK rounds must be capped, got " + evalBodies.length);
-  const ids = new Set(evalBodies.map((b) => b._omnigent_elicitation_id));
+  const ids = new Set(evalBodies.map((b) => b._omnicraft_elicitation_id));
   assert.equal(ids.size, 1, "all raw-ASK rounds must reuse one elicitation id");
 })().catch((error) => {
   console.error(error && error.stack ? error.stack : error);
@@ -2546,14 +2546,14 @@ function writeConfig(bearer) {
   fs.writeFileSync(
     configPath,
     JSON.stringify({
-      serverUrl: "http://omnigent.test",
+      serverUrl: "http://omnicraft.test",
       sessionId: "session-1",
       authHeaders: { authorization: bearer },
     }),
   );
 }
 writeConfig("Bearer stale");
-process.env.OMNIGENT_PI_NATIVE_CONFIG = configPath;
+process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
 
 const sentAuth = [];
 global.fetch = async (_url, request) => {

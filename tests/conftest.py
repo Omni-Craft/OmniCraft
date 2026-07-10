@@ -1,4 +1,4 @@
-"""Shared pytest configuration and fixtures for Omnigent tests."""
+"""Shared pytest configuration and fixtures for OmniCraft tests."""
 
 from __future__ import annotations
 
@@ -21,24 +21,24 @@ except ImportError:
 # block 5 s on the timeout. ``setdefault`` so a developer can opt
 # back in by exporting the var with any other value when exercising the
 # catalog code path explicitly.
-os.environ.setdefault("OMNIGENT_DISABLE_CATALOG_LOOKUP", "1")
+os.environ.setdefault("OMNICRAFT_DISABLE_CATALOG_LOOKUP", "1")
 
 # Pin header mode for the whole suite. Header is the env-unset default,
-# but a developer's shell often has OMNIGENT_AUTH_ENABLED=1 set (the
+# but a developer's shell often has OMNICRAFT_AUTH_ENABLED=1 set (the
 # multi-user opt-in they use to test the login flow locally; the
-# pre-rename OMNIGENT_ACCOUNTS_ENABLED is still honored too) — and that
+# pre-rename OMNICRAFT_ACCOUNTS_ENABLED is still honored too) — and that
 # enable switch would flip the env-unset default to accounts (or oidc, if
-# the shell also exports OMNIGENT_OIDC_ISSUER), booting every server in
+# the shell also exports OMNICRAFT_OIDC_ISSUER), booting every server in
 # multi-user mode and failing loud with "Missing required environment
-# variable OMNIGENT_ACCOUNTS_COOKIE_SECRET" / "Authentication required"
+# variable OMNICRAFT_ACCOUNTS_COOKIE_SECRET" / "Authentication required"
 # (401). An explicit AUTH_PROVIDER always wins over the enable switch, so
 # pinning it here keeps tests deterministic regardless of the ambient
 # shell. Accounts/OIDC-specific tests still opt in by monkeypatching the
 # vars inside their own fixtures (tests/server/test_accounts.py,
 # tests/server/test_oidc.py). Module-level setdefault rather than a fixture
-# so subprocess-spawning tests (e2e shells out to `omnigent run`) inherit
+# so subprocess-spawning tests (e2e shells out to `omnicraft run`) inherit
 # the pin via env.
-os.environ.setdefault("OMNIGENT_AUTH_PROVIDER", "header")
+os.environ.setdefault("OMNICRAFT_AUTH_PROVIDER", "header")
 
 # Mark the whole suite a single-user local runtime. Header mode now
 # fails closed on a missing X-Forwarded-Email: a request
@@ -53,9 +53,9 @@ os.environ.setdefault("OMNIGENT_AUTH_PROVIDER", "header")
 # multi-user) posture opt OUT by constructing
 # UnifiedAuthProvider(source="header", local_single_user=False) or by
 # monkeypatch.delenv-ing this var.
-os.environ.setdefault("OMNIGENT_LOCAL_SINGLE_USER", "1")
+os.environ.setdefault("OMNICRAFT_LOCAL_SINGLE_USER", "1")
 
-from omnigent.db.utils import _engine_cache, _engine_lock, get_or_create_engine
+from omnicraft.db.utils import _engine_cache, _engine_lock, get_or_create_engine
 from tests import _model_pools
 
 pytest_plugins = ["tests._token_usage"]
@@ -110,13 +110,13 @@ def _run_test_environment_guardrails(config: pytest.Config) -> None:
 
     Hard-fail: :func:`check_test_environment` raises on anything that
     looks like a real (non-test) DB or a base URL aimed at a dev/prod host
-    or port. Set ``OMNIGENT_DISABLE_TEST_GUARDRAILS=1`` to temporarily
+    or port. Set ``OMNICRAFT_DISABLE_TEST_GUARDRAILS=1`` to temporarily
     downgrade violations to warn-only for deliberate integration runs.
     """
-    from omnigent.testing.guardrails import check_test_environment
+    from omnicraft.testing.guardrails import check_test_environment
 
-    db_uri = os.environ.get("OMNIGENT_DATABASE_URI", "")
-    base_url = config.getoption("--omnigent-server-url", default=None)
+    db_uri = os.environ.get("OMNICRAFT_DATABASE_URI", "")
+    base_url = config.getoption("--omnicraft-server-url", default=None)
     check_test_environment(db_uri=db_uri, base_url=base_url, warn_only=False)
 
 
@@ -256,11 +256,11 @@ def pytest_addoption(parser):
         ),
     )
     parser.addoption(
-        "--omnigent-server-url",
+        "--omnicraft-server-url",
         action="store",
         default=None,
         help=(
-            "Base URL of an externally-managed `omnigent.cli server` to run "
+            "Base URL of an externally-managed `omnicraft.cli server` to run "
             "e2e tests against, e.g. `http://localhost:8080`. When set, "
             "server-fixtures skip the spawn step and yield this URL. Useful "
             "for iterating on tests against a long-running dev server "
@@ -280,15 +280,15 @@ def _isolate_claude_native_state(
     """
     Redirect claude-native client-side persistent state to a tmp dir.
 
-    The ``omnigent claude`` wrapper writes per-conversation
+    The ``omnicraft claude`` wrapper writes per-conversation
     launch state (the cwd a session was created in) under
-    ``~/.omnigent/claude-native/<hash>/launch.json``. Any test
+    ``~/.omnicraft/claude-native/<hash>/launch.json``. Any test
     that drives the wrapper -- directly or indirectly via test
     fakes that invoke its helpers -- would otherwise write to the
-    developer's real ``~/.omnigent`` directory and pollute it
+    developer's real ``~/.omnicraft`` directory and pollute it
     across test runs.
 
-    The state module honors :data:`OMNIGENT_CLAUDE_NATIVE_STATE_DIR`
+    The state module honors :data:`OMNICRAFT_CLAUDE_NATIVE_STATE_DIR`
     as a root override. ``autouse=True`` because the alternative
     (opt-in fixture per test) leaves us one missed test away from
     re-polluting the user's home; the override has no side effects
@@ -306,7 +306,7 @@ def _isolate_claude_native_state(
     :returns: None.
     """
     state_dir = tmp_path_factory.mktemp("claude-native-state")
-    monkeypatch.setenv("OMNIGENT_CLAUDE_NATIVE_STATE_DIR", str(state_dir))
+    monkeypatch.setenv("OMNICRAFT_CLAUDE_NATIVE_STATE_DIR", str(state_dir))
 
 
 @pytest.fixture(autouse=True)
@@ -317,12 +317,12 @@ def _isolate_codex_native_state(
     """
     Redirect codex-native client-side persistent state to a tmp dir.
 
-    The ``omnigent codex`` wrapper writes per-conversation launch
-    state under ``~/.omnigent/codex-native/<hash>/launch.json``.
+    The ``omnicraft codex`` wrapper writes per-conversation launch
+    state under ``~/.omnicraft/codex-native/<hash>/launch.json``.
     Tests that drive the wrapper should never write to or read from
     the developer's real persistent resume state.
 
-    The state module honors :data:`OMNIGENT_CODEX_NATIVE_STATE_DIR`
+    The state module honors :data:`OMNICRAFT_CODEX_NATIVE_STATE_DIR`
     as a root override. ``autouse=True`` keeps test isolation as the
     default even for indirect wrapper tests that do not explicitly
     request a Codex state fixture.
@@ -333,7 +333,7 @@ def _isolate_codex_native_state(
     :returns: None.
     """
     state_dir = tmp_path_factory.mktemp("codex-native-state")
-    monkeypatch.setenv("OMNIGENT_CODEX_NATIVE_STATE_DIR", str(state_dir))
+    monkeypatch.setenv("OMNICRAFT_CODEX_NATIVE_STATE_DIR", str(state_dir))
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -393,8 +393,8 @@ def _worker_db_uri() -> Generator[str, None, None]:
     """
     Session-scoped database URI — one DB per xdist worker, migrated once.
 
-    When ``OMNIGENT_TEST_DB_URI`` is set, creates one database per worker
-    (``omnigent_test_w0``, ``omnigent_test_w1``, …), runs Alembic migrations
+    When ``OMNICRAFT_TEST_DB_URI`` is set, creates one database per worker
+    (``omnicraft_test_w0``, ``omnicraft_test_w1``, …), runs Alembic migrations
     exactly once per worker session, then tears the database down at the end.
     This avoids migrating hundreds of times — one migration run per worker
     instead of one per test.
@@ -405,13 +405,13 @@ def _worker_db_uri() -> Generator[str, None, None]:
 
     import sqlalchemy as _sa
 
-    base_uri = os.environ.get("OMNIGENT_TEST_DB_URI", "")
+    base_uri = os.environ.get("OMNICRAFT_TEST_DB_URI", "")
     if not base_uri:
         yield ""
         return
 
     worker = os.environ.get("PYTEST_XDIST_WORKER", "w0")
-    db_name = f"omnigent_test_{worker}"
+    db_name = f"omnicraft_test_{worker}"
     uri = re.sub(r"/[^/]*(\?.*)?$", f"/{db_name}", base_uri)
 
     root_engine = _sa.create_engine(base_uri, isolation_level="AUTOCOMMIT")
@@ -451,7 +451,7 @@ def db_uri(tmp_path: Path, _worker_db_uri: str) -> Generator[str, None, None]:
     Per-test database URI.
 
     * **SQLite** (default): fresh file per test, fully isolated.
-    * **Postgres / MySQL** (``OMNIGENT_TEST_DB_URI`` set): reuses the
+    * **Postgres / MySQL** (``OMNICRAFT_TEST_DB_URI`` set): reuses the
       session-scoped worker database and truncates all non-alembic tables
       between tests so each test starts clean without re-migrating.
     """
@@ -503,7 +503,7 @@ def lowered_idle_thresholds(monkeypatch: pytest.MonkeyPatch) -> None:
     :param monkeypatch: Pytest's monkeypatch fixture; auto-restores
         the original constants at teardown.
     """
-    from omnigent.inner import terminal as terminal_module
+    from omnicraft.inner import terminal as terminal_module
 
     monkeypatch.setattr(terminal_module, "_IDLE_THRESHOLD_SECONDS", 0.4)
     monkeypatch.setattr(terminal_module, "_IDLE_POLL_INTERVAL_SECONDS", 0.1)

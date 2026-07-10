@@ -17,13 +17,13 @@ from collections.abc import Callable
 
 import pytest
 
-from omnigent.runner.transports.ws_tunnel.frames import (
+from omnicraft.runner.transports.ws_tunnel.frames import (
     HelloFrame,
     ResponseBodyFrame,
     ResponseEndFrame,
     ResponseHeadFrame,
 )
-from omnigent.runner.transports.ws_tunnel.registry import TunnelRegistry
+from omnicraft.runner.transports.ws_tunnel.registry import TunnelRegistry
 
 
 class _NoopWS:

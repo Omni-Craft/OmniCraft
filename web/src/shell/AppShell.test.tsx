@@ -456,7 +456,7 @@ describe("AppShell header", () => {
       {
         id: "conv_terminal",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useTerminalsMock.mockReturnValue({
@@ -482,7 +482,7 @@ describe("AppShell header", () => {
     // Baseline for the suppression test below: terminalPending (PTY being
     // created) with no terminals available drives terminalStartingUp true.
     mockConversations([
-      { id: "conv_terminal", permission_level: null, labels: { "omnigent.ui": "terminal" } },
+      { id: "conv_terminal", permission_level: null, labels: { "omnicraft.ui": "terminal" } },
     ]);
     useChatStore.setState({ terminalPending: true, sessionStatus: "running" });
 
@@ -497,7 +497,7 @@ describe("AppShell header", () => {
     // must drop the spinner so the error banner stands alone — otherwise
     // the user sees a spinner that spins forever beside the error.
     mockConversations([
-      { id: "conv_terminal", permission_level: null, labels: { "omnigent.ui": "terminal" } },
+      { id: "conv_terminal", permission_level: null, labels: { "omnicraft.ui": "terminal" } },
     ]);
     useChatStore.setState({ terminalPending: true, sessionStatus: "failed" });
 
@@ -518,8 +518,8 @@ describe("TerminalFirstContext", () => {
         id: "conv_native",
         permission_level: null,
         labels: {
-          "omnigent.ui": "terminal",
-          "omnigent.wrapper": "claude-code-native-ui",
+          "omnicraft.ui": "terminal",
+          "omnicraft.wrapper": "claude-code-native-ui",
         },
       },
       {
@@ -565,8 +565,8 @@ describe("TerminalFirstContext", () => {
         createdAt: 0,
         title: null,
         labels: {
-          "omnigent.ui": "terminal",
-          "omnigent.wrapper": "claude-code-native-ui",
+          "omnicraft.ui": "terminal",
+          "omnicraft.wrapper": "claude-code-native-ui",
         },
         items: [],
         pendingElicitations: [],
@@ -604,7 +604,7 @@ describe("TerminalFirstContext", () => {
       {
         id: "conv_native",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useTerminalsMock.mockReturnValue({
@@ -644,7 +644,7 @@ describe("TerminalFirstContext", () => {
       {
         id: "conv_native_empty",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useTerminalsMock.mockReturnValue({
@@ -678,7 +678,7 @@ describe("TerminalFirstContext", () => {
       {
         id: "conv_native",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
       { id: "conv_other", permission_level: null, labels: {} },
     ]);
@@ -721,7 +721,7 @@ describe("TerminalFirstContext", () => {
       {
         id: "conv_native",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useTerminalsMock.mockReturnValue({
@@ -750,7 +750,7 @@ describe("Right-rail terminals card", () => {
       {
         id: "conv_native",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useTerminalsMock.mockReturnValue({
@@ -893,7 +893,7 @@ describe("Right-rail terminals card", () => {
       {
         id: "conv_native",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useTerminalsMock.mockReturnValue({
@@ -1026,7 +1026,7 @@ describe("Subagents tab", () => {
       {
         id: "conv_native",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useChildSessionsMock.mockReturnValue(oneChild);
@@ -1712,7 +1712,7 @@ describe("Right workspace card visibility", () => {
 
 describe("Embedded REPL terminal rail inventory", () => {
   it("shows no Terminals tab when the REPL is a terminal-first SDK session's only terminal", () => {
-    // The runner auto-creates terminal_tui_main (the embedded Omnigent
+    // The runner auto-creates terminal_tui_main (the embedded OmniCraft
     // REPL) for every runner-hosted SDK session. It backs the pill's
     // Terminal view; a rail entry for it reads as a phantom "main"
     // terminal on agents (Debby/Polly) that don't run a TUI. The pill
@@ -1730,9 +1730,9 @@ describe("Embedded REPL terminal rail inventory", () => {
       {
         id: "conv_sdk",
         permission_level: null,
-        // Terminal-first SDK session: omnigent.ui stamped by the
+        // Terminal-first SDK session: omnicraft.ui stamped by the
         // runner's REPL auto-create, NO native wrapper label.
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
 
@@ -1767,7 +1767,7 @@ describe("Embedded REPL terminal rail inventory", () => {
       {
         id: "conv_sdk",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
 
@@ -1801,7 +1801,7 @@ describe("Embedded REPL terminal rail inventory", () => {
       {
         id: "conv_sdk",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
 
@@ -2030,7 +2030,7 @@ describe("AppShell URL sync — view param", () => {
 });
 
 describe("Files scope default and persistence", () => {
-  const PREF_KEY = "omnigent:files-panel-preferences";
+  const PREF_KEY = "omnicraft:files-panel-preferences";
 
   function mockChangedFiles(paths: string[]) {
     useChangedFilesMock.mockReturnValue({
@@ -2374,8 +2374,8 @@ describe("Mobile session menu", () => {
         // Native sessions stamp BOTH labels: the wrapper (behavior
         // gates) and the terminal-first UI marker (presentation).
         labels: {
-          "omnigent.wrapper": "claude-code-native-ui",
-          "omnigent.ui": "terminal",
+          "omnicraft.wrapper": "claude-code-native-ui",
+          "omnicraft.ui": "terminal",
         },
       },
     ]);
@@ -2424,7 +2424,7 @@ describe("Mobile session menu", () => {
   });
 
   it("keeps the Terminals entry in terminal-first SDK sessions (no native wrapper)", () => {
-    // Terminal-first SDK sessions (embedded Omnigent REPL, `omnigent.ui:
+    // Terminal-first SDK sessions (embedded OmniCraft REPL, `omnicraft.ui:
     // terminal` without a wrapper label) keep the rail/menu Shells entry
     // for user shells: the pill is quick access to the REPL, while the
     // rail lists the shell inventory (sans the agent's own terminal).
@@ -2436,7 +2436,7 @@ describe("Mobile session menu", () => {
       {
         id: "conv_native",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useTerminalsMock.mockReturnValue({
@@ -2467,7 +2467,7 @@ describe("Mobile session menu", () => {
       {
         id: "conv_sdk",
         permission_level: null,
-        labels: { "omnigent.ui": "terminal" },
+        labels: { "omnicraft.ui": "terminal" },
       },
     ]);
     useTerminalsMock.mockReturnValue({
@@ -2567,7 +2567,7 @@ describe("Mobile session menu", () => {
       {
         id: "conv_native",
         permission_level: null,
-        labels: { "omnigent.wrapper": "claude-code-native-ui" },
+        labels: { "omnicraft.wrapper": "claude-code-native-ui" },
       },
     ]);
     useChatStore.setState({

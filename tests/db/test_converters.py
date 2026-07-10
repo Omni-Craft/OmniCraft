@@ -1,4 +1,4 @@
-"""Tests for entity <-> ORM row converters (omnigent/db/converters.py).
+"""Tests for entity <-> ORM row converters (omnicraft/db/converters.py).
 
 The converter layer currently provides ``sql_agent_to_entity``.
 Tests verify round-trip fidelity: entity -> ORM row -> entity, and
@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import time
 
-from omnigent.db.converters import sql_agent_to_entity
-from omnigent.db.db_models import SqlAgent
-from omnigent.db.enum_codecs import encode_agent_kind
-from omnigent.db.utils import get_or_create_engine, make_managed_session_maker
-from omnigent.entities import Agent
+from omnicraft.db.converters import sql_agent_to_entity
+from omnicraft.db.db_models import SqlAgent
+from omnicraft.db.enum_codecs import encode_agent_kind
+from omnicraft.db.utils import get_or_create_engine, make_managed_session_maker
+from omnicraft.entities import Agent
 
 AGENT_KIND_TEMPLATE = encode_agent_kind("template")
 AGENT_KIND_SESSION = encode_agent_kind("session")

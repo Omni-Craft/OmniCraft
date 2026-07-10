@@ -453,7 +453,7 @@ describe("runner binding", () => {
         status: "idle",
         created_at: 1704067200,
         items: [],
-        labels: { "omnigent.codex_native.collaboration_mode": "plan" },
+        labels: { "omnicraft.codex_native.collaboration_mode": "plan" },
       }),
     );
 
@@ -461,7 +461,7 @@ describe("runner binding", () => {
 
     const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(JSON.parse(init.body as string)).toEqual({ collaboration_mode: "plan" });
-    expect(session.labels?.["omnigent.codex_native.collaboration_mode"]).toBe("plan");
+    expect(session.labels?.["omnicraft.codex_native.collaboration_mode"]).toBe("plan");
   });
 
   it("surfaces AP error messages from failed PATCHes", async () => {

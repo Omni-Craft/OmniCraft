@@ -1,7 +1,7 @@
 /**
  * Per-conversation WebContentsView registry.
  *
- * Keyed by `conversationId` for Omnigent's session model. Each entry owns its
+ * Keyed by `conversationId` for OmniCraft's session model. Each entry owns its
  * own bounds controller so per-conversation state never cross-contaminates.
  *
  * Pure factory — no Electron imports at module scope. All deps are injected

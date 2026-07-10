@@ -242,7 +242,7 @@ async def _drive_codex_needs_auth(base_url: str) -> None:
             # never has to touch the host-less file browser).
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -277,7 +277,7 @@ async def _drive_codex_needs_auth(base_url: str) -> None:
             )
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )
@@ -322,7 +322,7 @@ async def _drive_codex_badge(base_url: str) -> None:
             )
             await page.add_init_script(
                 f"""window.localStorage.setItem(
-                    "omnigent:recent-workspaces",
+                    "omnicraft:recent-workspaces",
                     JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
                 );"""
             )

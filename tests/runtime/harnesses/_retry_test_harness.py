@@ -34,8 +34,8 @@ from pathlib import Path
 
 from fastapi import FastAPI
 
-from omnigent.runtime.harnesses._scaffold import HarnessApp, TurnContext
-from omnigent.server.schemas import CreateResponseRequest, OutputTextDeltaEvent
+from omnicraft.runtime.harnesses._scaffold import HarnessApp, TurnContext
+from omnicraft.server.schemas import CreateResponseRequest, OutputTextDeltaEvent
 
 _logger = logging.getLogger(__name__)
 

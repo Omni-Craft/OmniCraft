@@ -8,14 +8,14 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins import get_builtin_tool
-from omnigent.tools.builtins.web_search import WebSearchTool
-from omnigent.tools.builtins.web_search_keenable import (
+from omnicraft.tools.base import ToolContext
+from omnicraft.tools.builtins import get_builtin_tool
+from omnicraft.tools.builtins.web_search import WebSearchTool
+from omnicraft.tools.builtins.web_search_keenable import (
     _resolve_max_results as _resolve_max_results_keenable,
 )
-from omnigent.tools.builtins.web_search_nimble import _resolve_max_results
-from omnigent.tools.builtins.web_search_tavily import (
+from omnicraft.tools.builtins.web_search_nimble import _resolve_max_results
+from omnicraft.tools.builtins.web_search_tavily import (
     _resolve_max_results as _resolve_max_results_tavily,
 )
 
@@ -124,7 +124,7 @@ def test_google_backend_via_spec_config(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_google.httpx.get") as mock_get:
+    with patch("omnicraft.tools.builtins.web_search_google.httpx.get") as mock_get:
         mock_get.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "python"}), tool_ctx)
 
@@ -171,7 +171,7 @@ def test_perplexity_backend_via_spec_config(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "python"}), tool_ctx)
 
@@ -220,7 +220,7 @@ def test_nimble_backend_via_spec_config(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "nimble"}), tool_ctx)
 
@@ -246,7 +246,7 @@ def test_nimble_answer_shown_first_when_present(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "nimble"}), tool_ctx)
 
@@ -282,7 +282,7 @@ def test_nimble_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -299,7 +299,7 @@ def test_nimble_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None:
 
 
 def test_nimble_sends_x_client_source_header(tool_ctx: ToolContext) -> None:
-    """Every request carries the ``X-Client-Source`` header identifying Omnigent."""
+    """Every request carries the ``X-Client-Source`` header identifying OmniCraft."""
     fake_response = MagicMock()
     fake_response.json.return_value = {"results": []}
 
@@ -307,13 +307,13 @@ def test_nimble_sends_x_client_source_header(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "spec-nimble"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
     headers = mock_post.call_args.kwargs["headers"]
-    assert headers["X-Client-Source"] == "omnigent", (
-        f"Expected X-Client-Source 'omnigent', got {headers.get('X-Client-Source')!r}"
+    assert headers["X-Client-Source"] == "omnicraft", (
+        f"Expected X-Client-Source 'omnicraft', got {headers.get('X-Client-Source')!r}"
     )
 
 
@@ -325,7 +325,7 @@ def test_nimble_http_error_returns_error_string(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.side_effect = httpx.HTTPStatusError(
             "401", request=MagicMock(), response=fake_response
         )
@@ -342,7 +342,7 @@ def test_nimble_answer_kept_when_no_results(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
     assert result == "Direct answer.", f"Answer must not be dropped, got {result!r}"
@@ -354,7 +354,7 @@ def test_nimble_rejects_unsupported_search_depth(tool_ctx: ToolContext) -> None:
         config={"search_provider": "nimble", "api_key": "k", "search_depth": "fast"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_nimble.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_nimble.httpx.post") as mock_post:
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
     assert "search_depth" in result
     assert mock_post.call_count == 0, "Must not call the API for an invalid search_depth."
@@ -395,7 +395,7 @@ def test_tavily_backend_via_spec_config(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_tavily.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_tavily.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "tavily"}), tool_ctx)
 
@@ -419,7 +419,7 @@ def test_tavily_answer_shown_first_when_present(tool_ctx: ToolContext) -> None:
         config={"search_provider": "tavily", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_tavily.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_tavily.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "tavily"}), tool_ctx)
 
@@ -453,7 +453,7 @@ def test_tavily_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_tavily.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_tavily.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -470,7 +470,7 @@ def test_tavily_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None:
 
 
 def test_tavily_sends_x_client_source_header(tool_ctx: ToolContext) -> None:
-    """Every request carries the ``X-Client-Source`` header identifying Omnigent."""
+    """Every request carries the ``X-Client-Source`` header identifying OmniCraft."""
     fake_response = MagicMock()
     fake_response.json.return_value = {"results": []}
 
@@ -478,13 +478,13 @@ def test_tavily_sends_x_client_source_header(tool_ctx: ToolContext) -> None:
         config={"search_provider": "tavily", "api_key": "spec-tavily"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_tavily.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_tavily.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
     headers = mock_post.call_args.kwargs["headers"]
-    assert headers["X-Client-Source"] == "omnigent", (
-        f"Expected X-Client-Source 'omnigent', got {headers.get('X-Client-Source')!r}"
+    assert headers["X-Client-Source"] == "omnicraft", (
+        f"Expected X-Client-Source 'omnicraft', got {headers.get('X-Client-Source')!r}"
     )
 
 
@@ -496,7 +496,7 @@ def test_tavily_http_error_returns_error_string(tool_ctx: ToolContext) -> None:
         config={"search_provider": "tavily", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_tavily.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_tavily.httpx.post") as mock_post:
         mock_post.side_effect = httpx.HTTPStatusError(
             "401", request=MagicMock(), response=fake_response
         )
@@ -513,7 +513,7 @@ def test_tavily_empty_results_returns_no_results(tool_ctx: ToolContext) -> None:
         config={"search_provider": "tavily", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_tavily.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_tavily.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
     assert result == "No results found."
@@ -527,7 +527,7 @@ def test_tavily_answer_kept_when_no_results(tool_ctx: ToolContext) -> None:
         config={"search_provider": "tavily", "api_key": "k"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_tavily.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_tavily.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
     assert result == "Direct answer.", f"Answer must not be dropped, got {result!r}"
@@ -539,7 +539,7 @@ def test_tavily_rejects_unsupported_search_depth(tool_ctx: ToolContext) -> None:
         config={"search_provider": "tavily", "api_key": "k", "search_depth": "fast"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_tavily.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_tavily.httpx.post") as mock_post:
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
     assert "search_depth" in result
     assert mock_post.call_count == 0, "Must not call the API for an invalid search_depth."
@@ -565,7 +565,7 @@ def test_no_search_provider_fails_loudly(
     always explicit which engine ran (per maintainer review). The DDG backend
     must not be invoked.
     """
-    import omnigent.tools.builtins.web_search_duckduckgo as ddg
+    import omnicraft.tools.builtins.web_search_duckduckgo as ddg
 
     monkeypatch.setattr(
         ddg, "_search_duckduckgo", lambda q, c: pytest.fail("must not auto-run DDG")
@@ -606,7 +606,7 @@ def test_keenable_backend_via_spec_config(tool_ctx: ToolContext) -> None:
         config={"search_provider": "keenable"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_keenable.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_keenable.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "keenable"}), tool_ctx)
 
@@ -627,7 +627,7 @@ def test_keenable_keyless_by_default(tool_ctx: ToolContext) -> None:
         config={"search_provider": "keenable"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_keenable.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_keenable.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -647,7 +647,7 @@ def test_keenable_keyed_uses_x_api_key_and_authed_endpoint(tool_ctx: ToolContext
         config={"search_provider": "keenable", "api_key": "spec-keenable"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_keenable.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_keenable.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -669,12 +669,12 @@ def test_keenable_sends_x_keenable_title_header(tool_ctx: ToolContext) -> None:
         config={"search_provider": "keenable"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_keenable.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_keenable.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
     headers = mock_post.call_args.kwargs["headers"]
-    assert headers["X-Keenable-Title"] == "Omnigent"
+    assert headers["X-Keenable-Title"] == "OmniCraft"
 
 
 def test_keenable_http_error_returns_error_string(tool_ctx: ToolContext) -> None:
@@ -688,7 +688,7 @@ def test_keenable_http_error_returns_error_string(tool_ctx: ToolContext) -> None
         config={"search_provider": "keenable"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_keenable.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_keenable.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -704,7 +704,7 @@ def test_keenable_empty_results_returns_no_results(tool_ctx: ToolContext) -> Non
         config={"search_provider": "keenable"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_keenable.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_keenable.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -724,7 +724,7 @@ def test_keenable_max_results_slices_output(tool_ctx: ToolContext) -> None:
         config={"search_provider": "keenable", "max_results": "2"},
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_keenable.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_keenable.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         result = tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -760,7 +760,7 @@ def test_google_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None:
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_google.httpx.get") as mock_get:
+    with patch("omnicraft.tools.builtins.web_search_google.httpx.get") as mock_get:
         mock_get.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -785,7 +785,7 @@ def test_perplexity_spec_config_used_in_http_call(tool_ctx: ToolContext) -> None
         },
         llm_provider="anthropic",
     )
-    with patch("omnigent.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
+    with patch("omnicraft.tools.builtins.web_search_perplexity.httpx.post") as mock_post:
         mock_post.return_value = fake_response
         tool.invoke(json.dumps({"query": "test"}), tool_ctx)
 
@@ -824,6 +824,6 @@ def test_non_openai_mode_is_sync_in_sessions_native_mode() -> None:
 
 
 def test_openai_mode_is_not_async() -> None:
-    """OpenAI passthrough mode should not enter Omnigent async dispatch."""
+    """OpenAI passthrough mode should not enter OmniCraft async dispatch."""
     tool = WebSearchTool(llm_provider="openai")
     assert tool.is_async() is False

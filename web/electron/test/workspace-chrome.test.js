@@ -22,7 +22,7 @@ describe("applyWorkspaceChromeHideCss", () => {
   it("injects the chrome-hide CSS even when the URL is not under the workspace path", () => {
     const injected = [];
     const webContents = {
-      // A path variant the old guard would have skipped (not /ml/omnigents).
+      // A path variant the old guard would have skipped (not /ml/omnicrafts).
       getURL: () => "https://dbc-x.cloud.databricks.com/dashboard",
       insertCSS: (css) => {
         injected.push(css);
@@ -37,10 +37,10 @@ describe("applyWorkspaceChromeHideCss", () => {
       [WORKSPACE_CHROME_HIDE_CSS],
       [
         "applyWorkspaceChromeHideCss must inject WORKSPACE_CHROME_HIDE_CSS for ANY loaded",
-        "URL, but it did not fire for a non-/ml/omnigents path. A URL/path guard has likely",
+        "URL, but it did not fire for a non-/ml/omnicrafts path. A URL/path guard has likely",
         "been reintroduced. That is the original bug: gating injection by path left the",
         "Databricks workspace switcher visible on auth redirects and path variants. Injection",
-        "must stay unconditional — the CSS only targets .omnigent-app (workspace-embedded",
+        "must stay unconditional — the CSS only targets .omnicraft-app (workspace-embedded",
         "build), so it is a harmless no-op elsewhere.",
       ].join(" "),
     );
@@ -102,7 +102,7 @@ describe("registerWorkspaceChromeHide", () => {
         "after did-finish-load fired. Likely the event name was changed (it must stay",
         "'did-finish-load', the full-document-load event), the listener was not registered,",
         "or the injection was dropped. Without this, the Databricks workspace top-nav/switcher",
-        "stays visible in the desktop window and users can navigate out of Omnigent.",
+        "stays visible in the desktop window and users can navigate out of OmniCraft.",
       ].join(" "),
     );
   });

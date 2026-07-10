@@ -1,6 +1,6 @@
 """Unit tests for nessie's bounds + blast-radius policies.
 
-These exercise the real :mod:`omnigent.inner.nessie.policies` evaluator
+These exercise the real :mod:`omnicraft.inner.nessie.policies` evaluator
 logic. The callables take and return plain dicts, so no mocks are needed —
 the tests construct real V0 event dicts and assert on the decision. Each
 test fails if the corresponding guard regresses (a command mis-classified,
@@ -13,7 +13,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.inner.nessie.policies import (
+from omnicraft.inner.nessie.policies import (
     blast_radius,
     headless_subagent_purpose_guard,
     read_only_os,
@@ -408,7 +408,7 @@ def test_worktree_guard_blocks_escapes(path: str, expected: str) -> None:
         ("MultiEdit", "file_path", "src/app.py", "ALLOW"),
         ("MultiEdit", "file_path", "/etc/passwd", "DENY"),
         ("MultiEdit", "file_path", "../escape.py", "DENY"),
-        # Pi native write/edit (lowercase) use ``path`` (Omnigent convention).
+        # Pi native write/edit (lowercase) use ``path`` (OmniCraft convention).
         ("write", "path", "src/app.py", "ALLOW"),
         ("write", "path", "/etc/passwd", "DENY"),
         ("edit", "path", "../escape.py", "DENY"),
@@ -443,7 +443,7 @@ def test_worktree_guard_gates_native_write_edit(
 
     :param tool: Native tool name, e.g. ``"Write"``.
     :param path_key: The argument key carrying the file path (``"file_path"``
-        for Claude native, ``"path"`` for Omnigent built-in).
+        for Claude native, ``"path"`` for OmniCraft built-in).
     :param path: The file path value to test.
     :param expected: ``"ALLOW"`` or ``"DENY"``.
     """
@@ -464,7 +464,7 @@ def test_worktree_guard_only_guards_writes() -> None:
 @pytest.mark.parametrize(
     "tool,args",
     [
-        # Omnigent built-in write/edit.
+        # OmniCraft built-in write/edit.
         ("sys_os_write", {"path": "a.py", "content": "x"}),
         ("sys_os_edit", {"path": "a.py", "old": "x", "new": "y"}),
         # Claude/Codex native aliases.

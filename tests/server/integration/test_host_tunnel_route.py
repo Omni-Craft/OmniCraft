@@ -10,17 +10,17 @@ from fastapi import FastAPI
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from omnigent.db.db_models import SqlHost
-from omnigent.db.utils import get_or_create_engine, now_epoch
-from omnigent.host.frames import (
+from omnicraft.db.db_models import SqlHost
+from omnicraft.db.utils import get_or_create_engine, now_epoch
+from omnicraft.host.frames import (
     HostHelloFrame,
     HostLaunchRunnerResultFrame,
     encode_host_frame,
 )
-from omnigent.server.auth import AuthProvider
-from omnigent.server.host_registry import HostRegistry
-from omnigent.server.routes.host_tunnel import create_host_tunnel_router
-from omnigent.stores.host_store import HostStore
+from omnicraft.server.auth import AuthProvider
+from omnicraft.server.host_registry import HostRegistry
+from omnicraft.server.routes.host_tunnel import create_host_tunnel_router
+from omnicraft.stores.host_store import HostStore
 
 pytestmark = pytest.mark.asyncio
 
@@ -210,7 +210,7 @@ async def test_host_tunnel_ping_loop_persists_heartbeat(
     into the past and assert the heartbeat drags it back while the host
     stays ``online``.
     """
-    import omnigent.server.routes.host_tunnel as tunnel_mod
+    import omnicraft.server.routes.host_tunnel as tunnel_mod
 
     monkeypatch.setattr(tunnel_mod, "PING_INTERVAL_S", 0.02)
     # Never trip the ping-timeout path so the only writer of updated_at
@@ -565,7 +565,7 @@ def _managed_scope(path: str, token: str) -> dict[str, object]:
     :returns: ASGI WebSocket scope with the token header set.
     """
     scope = _websocket_scope(path)
-    scope["headers"] = [(b"x-omnigent-host-token", token.encode("ascii"))]
+    scope["headers"] = [(b"x-omnicraft-host-token", token.encode("ascii"))]
     return scope
 
 

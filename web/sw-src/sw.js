@@ -1,6 +1,6 @@
-// Omnigent installability / update-only service worker (hand-rolled).
+// OmniCraft installability / update-only service worker (hand-rolled).
 //
-// Omnigent is a cloud app with NO offline mode, so this worker deliberately:
+// OmniCraft is a cloud app with NO offline mode, so this worker deliberately:
 //   - does NOT precache or serve the app shell, and
 //   - does NOT intercept navigations — every navigation hits the network, so a
 //     deploy is never masked behind a stale cached shell.
@@ -12,7 +12,7 @@
 // every code/style deploy. That byte change is what the browser's update
 // algorithm (via workbox-window in the page) detects to fire the prompt.
 const BUILD_VERSION = "__BUILD_VERSION__";
-const CACHE_NAME = `omnigent-pwa-${BUILD_VERSION}`;
+const CACHE_NAME = `omnicraft-pwa-${BUILD_VERSION}`;
 
 self.addEventListener("install", (event) => {
   // Precache ONLY version.json. Two reasons: it gives the worker a real

@@ -28,7 +28,7 @@ export interface AvailableAgent {
   // omitted on session-derived agents and on older servers without the field
   // (where a missing value is treated as protected, preserving prior
   // shadow-everything behavior). The picker protects seeded built-ins from a
-  // same-named `omnigent run` upload, but lets a newer upload supersede a
+  // same-named `omnicraft run` upload, but lets a newer upload supersede a
   // user-registered template (builtin === false).
   builtin?: boolean;
   // Creation epoch of a catalog agent — recency signal for same-name
@@ -240,7 +240,7 @@ async function enrichSessionAgent(scanned: ScannedSessionAgent): Promise<Availab
  * included) via `GET /v1/sessions?kind=any`.
  *
  * Two kinds of catalog row are handled differently when a same-named
- * `omnigent run` upload exists:
+ * `omnicraft run` upload exists:
  *
  * - SEEDED built-ins (`builtin: true`, deterministic id) are protected:
  *   they always list verbatim, and a same-named upload (or a fork/switch
@@ -248,7 +248,7 @@ async function enrichSessionAgent(scanned: ScannedSessionAgent): Promise<Availab
  *   dropped. The seeded agent is the canonical identity for its name.
  * - USER-registered templates (`builtin: false`, e.g. `--agent`) compete
  *   with same-named uploads on recency: the newest of {template, uploads}
- *   wins, so a fresh `omnigent run agent.yaml` supersedes a stale template
+ *   wins, so a fresh `omnicraft run agent.yaml` supersedes a stale template
  *   instead of being shadowed by it. This is the fix for the picker binding
  *   an older version when a newer one was just run.
  *

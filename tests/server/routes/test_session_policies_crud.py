@@ -16,17 +16,17 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.db.utils import generate_agent_id
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.db.utils import generate_agent_id
+from omnicraft.runtime.agent_cache import AgentCache
+from omnicraft.server.app import create_app
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.artifact_store.local import LocalArtifactStore
+from omnicraft.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from omnicraft.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 
 
 @pytest.fixture()

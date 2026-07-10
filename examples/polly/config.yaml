@@ -21,12 +21,12 @@ spawn: true
 # claude_code / codex / opencode / cursor / hermes / pi sub-agents, doing only non-code authoring (docs /
 # Markdown / text edits, skills) itself. No model/profile is pinned, so the
 # brain runs on whatever Claude provider is configured as the default
-# (`omnigent setup --no-internal-beta`) — an Anthropic API key, a Claude
+# (`omnicraft setup --no-internal-beta`) — an Anthropic API key, a Claude
 # subscription, an OpenAI-compatible gateway, or a Databricks workspace. With
 # no model named the claude-sdk harness resolves the configured provider's
 # default Claude model (the bundled catalog default is claude-opus-4-8).
 executor:
-  type: omnigent
+  type: omnicraft
   context_window: 1000000
   config:
     harness: claude-sdk
@@ -316,7 +316,7 @@ guardrails:
     blast_radius:
       type: function
       function:
-        path: omnigent.inner.nessie.policies.blast_radius
+        path: omnicraft.inner.nessie.policies.blast_radius
         arguments:
           # Orchestrator runs unattended; don't ASK on push/merge/deploy. The
           # catastrophic DENY set (force-push, rm -rf /, hard-reset to a remote
@@ -325,7 +325,7 @@ guardrails:
     spawn_bounds:
       type: function
       function:
-        path: omnigent.inner.nessie.policies.spawn_bounds
+        path: omnicraft.inner.nessie.policies.spawn_bounds
         arguments:
           max_dispatches_per_turn: 6
           # sys_session_create counts too: with spawn: true polly can
@@ -335,6 +335,6 @@ guardrails:
     headless_subagent_purpose_guard:
       type: function
       function:
-        path: omnigent.inner.nessie.policies.headless_subagent_purpose_guard
+        path: omnicraft.inner.nessie.policies.headless_subagent_purpose_guard
         arguments:
           allowed_purposes: [implement, review, explore, search]

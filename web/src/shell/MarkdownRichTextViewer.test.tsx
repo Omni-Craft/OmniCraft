@@ -279,7 +279,7 @@ describe("MarkdownRichTextViewer dirty banners", () => {
 // ── Link following ───────────────────────────────────────────────────────────
 
 describe("MarkdownRichTextViewer link following", () => {
-  const HREF = "https://omnigent.ai/docs/build/harnesses";
+  const HREF = "https://omnicraft.ai/docs/build/harnesses";
 
   // The TipTap editor (and the links it renders, incl. those in table cells)
   // is mocked to null here, so inject an anchor into the scroll container to

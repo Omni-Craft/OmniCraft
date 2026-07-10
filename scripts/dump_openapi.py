@@ -1,6 +1,6 @@
-"""Generate and post-process the omnigent OpenAPI 3.2 document.
+"""Generate and post-process the omnicraft OpenAPI 3.2 document.
 
-The omnigent server runs on FastAPI 0.135.x, which emits OpenAPI
+The omnicraft server runs on FastAPI 0.135.x, which emits OpenAPI
 3.1. OpenAPI 3.2 (released September 2025) introduced first-class
 support for sequential media types — specifically, the
 ``itemSchema`` keyword for describing each item in a streaming
@@ -10,7 +10,7 @@ correctly to consuming SDK / docs tooling.
 
 This script:
 
-1. Imports :func:`omnigent.server.app.create_app` and instantiates
+1. Imports :func:`omnicraft.server.app.create_app` and instantiates
    it against in-memory store stubs (no DB needed).
 2. Calls ``app.openapi()`` to get the FastAPI-generated 3.1 dict.
 3. Bumps the top-level ``openapi`` field to ``"3.2.0"``.
@@ -93,29 +93,29 @@ _SSE_ROUTES: list[tuple[str, str]] = [
 # document-level metadata an integrator needs: no ``servers``, no auth
 # description, no ``info.description``, and only bare snake_case tags.
 # We inject that connective tissue here so the published reference
-# (rendered by Scalar on the omnigent website) is usable for building
+# (rendered by Scalar on the omnicraft website) is usable for building
 # an integration. Keeping it in this script — rather than scattering it
 # across the route decorators — confines presentation concerns to the
 # spec-generation layer, and the drift test
 # (``tests/server/test_openapi_drift.py``) guards the result.
 
-# Self-hosted base URL. ``omnigent server`` binds 127.0.0.1:6767 by
+# Self-hosted base URL. ``omnicraft server`` binds 127.0.0.1:6767 by
 # default (see ``_DEFAULT_LOCAL_PORT`` in
-# ``omnigent/host/local_server.py``).
+# ``omnicraft/host/local_server.py``).
 _SERVERS: list[dict[str, str]] = [
     {
         "url": "http://127.0.0.1:6767",
-        "description": "Self-hosted Omnigent server (default local port).",
+        "description": "Self-hosted OmniCraft server (default local port).",
     },
 ]
 
 # Markdown prose shown at the top of the rendered reference. Covers
 # what the API is, the self-hosted base URL, and the deployment-driven
 # auth model (there is no bearer/API-key scheme — see
-# ``omnigent/server/auth.py``).
+# ``omnicraft/server/auth.py``).
 _INFO_DESCRIPTION: str = """\
-Omnigent is an open-source meta-harness for building and running AI \
-agents. This is the REST API exposed by the Omnigent server: use it to \
+OmniCraft is an open-source meta-harness for building and running AI \
+agents. This is the REST API exposed by the OmniCraft server: use it to \
 create and drive **sessions**, manage **agents**, **hosts**, and \
 **runners**, attach **contextual policies**, post **comments**, and work \
 with session **resources** — files, terminals, and sandboxed \
@@ -123,13 +123,13 @@ environments.
 
 ## Base URL
 
-Omnigent is self-hosted. The server binds `http://127.0.0.1:6767` by \
-default (`omnigent server`); point the base URL at your own deployment.
+OmniCraft is self-hosted. The server binds `http://127.0.0.1:6767` by \
+default (`omnicraft server`); point the base URL at your own deployment.
 
 ## Authentication
 
 There is no API-key or bearer-token scheme. Identity is supplied by the \
-deployment's configured auth provider (`OMNIGENT_AUTH_PROVIDER`):
+deployment's configured auth provider (`OMNICRAFT_AUTH_PROVIDER`):
 
 - **Trusted proxy header** (default) — an upstream proxy injects an \
 identity header (`X-Forwarded-Email`, configurable). Single-user local \
@@ -149,9 +149,9 @@ according to your deployment.
 schema documented below.
 """
 
-# Auth representations. Omnigent has no bearer/API-key scheme — identity
+# Auth representations. OmniCraft has no bearer/API-key scheme — identity
 # arrives via a trusted-proxy header or a signed session cookie,
-# selected by ``OMNIGENT_AUTH_PROVIDER``. We model both as OpenAPI
+# selected by ``OMNICRAFT_AUTH_PROVIDER``. We model both as OpenAPI
 # ``apiKey`` schemes so SDK generators and the reference can surface
 # them. We deliberately do NOT assert a top-level ``security``
 # requirement: the active scheme is deployment-specific, and public
@@ -165,7 +165,7 @@ _SECURITY_SCHEMES: dict[str, dict[str, str]] = {
         "description": (
             "Trusted-proxy identity header (header-auth mode, the "
             "default). The header name is configurable via "
-            "``OMNIGENT_AUTH_HEADER``."
+            "``OMNICRAFT_AUTH_HEADER``."
         ),
     },
     "sessionCookieAuth": {
@@ -318,17 +318,17 @@ def _build_app_with_stub_stores() -> Any:
     """
     import tempfile
 
-    from omnigent.runtime.agent_cache import AgentCache
-    from omnigent.server.app import create_app
-    from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-    from omnigent.stores.artifact_store.local import LocalArtifactStore
-    from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from omnicraft.runtime.agent_cache import AgentCache
+    from omnicraft.server.app import create_app
+    from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+    from omnicraft.stores.artifact_store.local import LocalArtifactStore
+    from omnicraft.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+    from omnicraft.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
-    from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+    from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from omnicraft.stores.host_store import HostStore
+    from omnicraft.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 
     # On-disk SQLite (mkdtemp ensures uniqueness so concurrent
     # invocations don't collide).
@@ -370,7 +370,7 @@ def _server_stream_event_schema() -> dict[str, Any]:
         * ``"definitions"`` — the per-variant component schemas
           (merged into ``components.schemas``).
     """
-    from omnigent.server.schemas import ServerStreamEvent
+    from omnicraft.server.schemas import ServerStreamEvent
 
     adapter: TypeAdapter[ServerStreamEvent] = TypeAdapter(ServerStreamEvent)
     schema = adapter.json_schema(ref_template="#/components/schemas/{model}")

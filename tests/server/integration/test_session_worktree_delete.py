@@ -16,16 +16,16 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.host.frames import (
+from omnicraft.host.frames import (
     HostHelloFrame,
     HostRemoveWorktreeFrame,
     decode_host_frame,
 )
-from omnigent.server.auth import RESERVED_USER_LOCAL
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.server.auth import RESERVED_USER_LOCAL
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.host_store import HostStore
+from omnicraft.stores.host_store import HostStore
 
 pytestmark = pytest.mark.asyncio
 

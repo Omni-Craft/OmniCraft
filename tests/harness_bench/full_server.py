@@ -1,4 +1,4 @@
-"""Shared full-server infrastructure: spawn a real Omnigent server + runner.
+"""Shared full-server infrastructure: spawn a real OmniCraft server + runner.
 
 Split from :mod:`tests.harness_bench.full_server_driver` so the *server
 lifecycle* (spawning the server/runner, registering bench agents + sessions)
@@ -31,7 +31,7 @@ from typing import Any
 import httpx
 import yaml
 
-from omnigent.runner.identity import OMNIGENT_INTERNAL_WS_ORIGIN, token_bound_runner_id
+from omnicraft.runner.identity import OMNICRAFT_INTERNAL_WS_ORIGIN, token_bound_runner_id
 from tests._helpers.compat import (
     apply_runner_env,
     apply_server_env,
@@ -57,10 +57,10 @@ _TOOL_NAME = "list_files"
 _DENY_REASON = "bench-policy-deny"
 
 
-def spawn_omnigent_server(
+def spawn_omnicraft_server(
     tmp: Path, port: int, base_env: dict[str, str], binding_token: str
 ) -> subprocess.Popen[bytes]:
-    """Spawn an ``omnigent server`` subprocess writing state under *tmp*.
+    """Spawn an ``omnicraft server`` subprocess writing state under *tmp*.
 
     Shared by the full-server and native-tui drivers (both need the same
     server; only what connects to it differs — a bare runner vs a host
@@ -73,7 +73,7 @@ def spawn_omnigent_server(
     args = [
         server_executable(),
         "-m",
-        "omnigent.cli",
+        "omnicraft.cli",
         "server",
         "--port",
         str(port),
@@ -84,7 +84,7 @@ def spawn_omnigent_server(
     ]
     return subprocess.Popen(
         args,
-        env={**base_env, "OMNIGENT_RUNNER_TUNNEL_TOKEN": binding_token},
+        env={**base_env, "OMNICRAFT_RUNNER_TUNNEL_TOKEN": binding_token},
         cwd=compat_server_cwd(),
         stdout=log.open("wb"),
         stderr=subprocess.STDOUT,
@@ -99,14 +99,14 @@ def _spawn_bench_runner(
     runner_env = apply_runner_env(
         {
             **base_env,
-            "OMNIGENT_RUNNER_ID": runner_id,
-            "OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
-            "OMNIGENT_RUNNER_PARENT_PID": str(os.getpid()),
+            "OMNICRAFT_RUNNER_ID": runner_id,
+            "OMNICRAFT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
+            "OMNICRAFT_RUNNER_PARENT_PID": str(os.getpid()),
             "RUNNER_SERVER_URL": base_url,
         }
     )
     return subprocess.Popen(
-        [runner_executable(), "-m", "omnigent.runner._entry"],
+        [runner_executable(), "-m", "omnicraft.runner._entry"],
         env=runner_env,
         cwd=compat_runner_cwd(),
         stdout=log.open("wb"),
@@ -153,7 +153,7 @@ def _build_bench_agent_config(
     safe_harness = profile.harness.replace(":", "-")
     name = f"bench-{safe_harness}" + (f"-{policy_action}" if policy_action else "")
     executor: dict[str, Any] = {
-        "type": "omnigent",
+        "type": "omnicraft",
         "model": profile.model,
         "config": {"harness": profile.harness},
     }
@@ -178,7 +178,7 @@ def _build_bench_agent_config(
                 f"{policy_action}_tool": {
                     "type": "function",
                     "function": {
-                        "path": "omnigent.policies.function.make_fixed_action_callable",
+                        "path": "omnicraft.policies.function.make_fixed_action_callable",
                         "arguments": {
                             "action": policy_action,
                             "reason": _DENY_REASON,
@@ -206,7 +206,7 @@ def _bundle_agent_config(config: dict[str, Any]) -> bytes:
 class SharedFullServer:
     """One server + one runner shared by several full-server harnesses.
 
-    The Omnigent server is multi-agent/multi-session, and a single runner
+    The OmniCraft server is multi-agent/multi-session, and a single runner
     resolves the harness type per session from that session's agent spec (see
     ``runner/app.py``). So N SDK harnesses do NOT each need their own
     server+runner — they can each register as their own agent + session on one
@@ -239,7 +239,7 @@ class SharedFullServer:
         # OPENAI_* wins, else resolve_databricks_workspace) in resolve_bench_env.
         base_env = dict(self._env.base_env)
         apply_server_env(base_env, _REPO_ROOT)
-        self._proc = spawn_omnigent_server(self._tmp, port, base_env, binding_token)
+        self._proc = spawn_omnicraft_server(self._tmp, port, base_env, binding_token)
         self._runner = _spawn_bench_runner(
             self._tmp, base_env, self.runner_id, binding_token, self.base_url
         )
@@ -247,7 +247,7 @@ class SharedFullServer:
         self.client = httpx.Client(
             base_url=self.base_url,
             timeout=300.0,
-            headers={"Origin": OMNIGENT_INTERNAL_WS_ORIGIN},
+            headers={"Origin": OMNICRAFT_INTERNAL_WS_ORIGIN},
         )
         return self
 
@@ -296,5 +296,5 @@ class SharedFullServer:
 
 __all__ = [
     "SharedFullServer",
-    "spawn_omnigent_server",
+    "spawn_omnicraft_server",
 ]

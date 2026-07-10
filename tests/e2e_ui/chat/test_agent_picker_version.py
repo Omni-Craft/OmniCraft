@@ -4,8 +4,8 @@ Regression for the picker selecting a stale agent version. Setup mirrors the
 report:
 
 * Agent A exists as a user-registered template (``builtin: false`` in
-  ``GET /v1/agents``) — e.g. created via ``omnigent server --agent``.
-* A newer ``omnigent run`` minted a session-scoped Agent A with a DISTINCT
+  ``GET /v1/agents``) — e.g. created via ``omnicraft server --agent``.
+* A newer ``omnicraft run`` minted a session-scoped Agent A with a DISTINCT
   agent_id (discovered via ``GET /v1/sessions?kind=any``), created after the
   template.
 
@@ -170,7 +170,7 @@ async def _register_routes(page, *, created_session_id: str, create_requests: li
 async def _seed_workspace(page) -> None:
     await page.add_init_script(
         f"""window.localStorage.setItem(
-            "omnigent:recent-workspaces",
+            "omnicraft:recent-workspaces",
             JSON.stringify({{ {_HOST_ID}: ["/work/repo"] }})
         );"""
     )

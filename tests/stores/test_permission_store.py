@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import pytest
 
-from omnigent.entities import SessionPermission
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.entities import SessionPermission
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.permission_store.sqlalchemy_store import (
+from omnicraft.stores.permission_store.sqlalchemy_store import (
     SqlAlchemyPermissionStore,
 )
 
@@ -571,8 +571,8 @@ def test_permissions_not_auto_deleted_when_conversation_deleted(
     # Delete the conversation directly — no FK cascade fires.
     from sqlalchemy import delete as sa_delete
 
-    from omnigent.db.db_models import SqlConversation
-    from omnigent.db.utils import get_or_create_engine, make_managed_session_maker
+    from omnicraft.db.db_models import SqlConversation
+    from omnicraft.db.utils import get_or_create_engine, make_managed_session_maker
 
     engine = get_or_create_engine(db_uri)
     session_maker = make_managed_session_maker(engine)
@@ -602,8 +602,8 @@ def test_cascade_delete_does_not_affect_other_sessions(
     # Delete conv_a.
     from sqlalchemy import delete as sa_delete
 
-    from omnigent.db.db_models import SqlConversation
-    from omnigent.db.utils import get_or_create_engine, make_managed_session_maker
+    from omnicraft.db.db_models import SqlConversation
+    from omnicraft.db.utils import get_or_create_engine, make_managed_session_maker
 
     engine = get_or_create_engine(db_uri)
     session_maker = make_managed_session_maker(engine)
@@ -970,7 +970,7 @@ def test_check_access_direct_grant(store: SqlAlchemyPermissionStore, db_uri: str
 
 def test_check_access_public_grant_fallback(store: SqlAlchemyPermissionStore, db_uri: str) -> None:
     """check_access falls back to __public__ grant when user has no direct grant."""
-    from omnigent.server.auth import RESERVED_USER_PUBLIC
+    from omnicraft.server.auth import RESERVED_USER_PUBLIC
 
     _ensure_user(store, "alice")
     _ensure_user(store, RESERVED_USER_PUBLIC)
@@ -1009,7 +1009,7 @@ def test_get_permission_level_admin_gets_owner(
     store: SqlAlchemyPermissionStore, db_uri: str
 ) -> None:
     """get_permission_level returns LEVEL_OWNER for admin users."""
-    from omnigent.server.auth import LEVEL_OWNER
+    from omnicraft.server.auth import LEVEL_OWNER
 
     store.ensure_user("admin_user", is_admin=True)
     conv = _create_conversation(db_uri)
@@ -1021,7 +1021,7 @@ def test_get_permission_level_public_fallback(
     store: SqlAlchemyPermissionStore, db_uri: str
 ) -> None:
     """get_permission_level falls back to public grant when no direct grant."""
-    from omnigent.server.auth import RESERVED_USER_PUBLIC
+    from omnicraft.server.auth import RESERVED_USER_PUBLIC
 
     _ensure_user(store, "alice")
     _ensure_user(store, RESERVED_USER_PUBLIC)

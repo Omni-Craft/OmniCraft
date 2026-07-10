@@ -11,14 +11,14 @@ import asyncio
 import httpx
 import pytest
 
-from omnigent.runner.transports.ws_tunnel.frames import (
+from omnicraft.runner.transports.ws_tunnel.frames import (
     HelloFrame,
     ResponseBodyFrame,
     ResponseEndFrame,
     ResponseHeadFrame,
 )
-from omnigent.runner.transports.ws_tunnel.registry import TunnelRegistry
-from omnigent.runner.transports.ws_tunnel.transport import (
+from omnicraft.runner.transports.ws_tunnel.registry import TunnelRegistry
+from omnicraft.runner.transports.ws_tunnel.transport import (
     WSTunnelTransport,
     _TunneledByteStream,
 )

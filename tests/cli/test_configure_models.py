@@ -1,10 +1,10 @@
-"""Tests for ``omnigent setup --no-internal-beta`` (CLI model-provider config).
+"""Tests for ``omnicraft setup --no-internal-beta`` (CLI model-provider config).
 
 Drives the click command tree with :class:`click.testing.CliRunner` and
 piped stdin, then asserts on the **exact config mutations** written to a
-tmp ``~/.omnigent/config.yaml`` (isolated via ``OMNIGENT_CONFIG_HOME``)
+tmp ``~/.omnicraft/config.yaml`` (isolated via ``OMNICRAFT_CONFIG_HOME``)
 and the secret store (forced to the file backend via
-``OMNIGENT_DISABLE_KEYRING``). Each test asserts on the persisted YAML
+``OMNICRAFT_DISABLE_KEYRING``). Each test asserts on the persisted YAML
 shape, not just the command's exit code, so a regression in the
 add/set-default/remove write paths surfaces here rather than silently.
 
@@ -43,9 +43,9 @@ import tomllib
 import yaml
 from click.testing import CliRunner
 
-from omnigent.cli import cli
-from omnigent.onboarding import secrets
-from omnigent.onboarding.configure_models import (
+from omnicraft.cli import cli
+from omnicraft.onboarding import secrets
+from omnicraft.onboarding.configure_models import (
     add_menu_options,
     add_menu_options_for_family,
     build_bedrock_provider_entry,
@@ -53,7 +53,7 @@ from omnigent.onboarding.configure_models import (
     kind_glyph,
     provider_display_name,
 )
-from omnigent.onboarding.provider_config import (
+from omnicraft.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
     GEMINI_FAMILY,
     OPENAI_FAMILY,
@@ -67,8 +67,8 @@ from omnigent.onboarding.provider_config import (
 def isolated_config(tmp_path, monkeypatch):
     """Isolate config + secrets to a tmp dir with the file secret backend.
 
-    Sets ``OMNIGENT_CONFIG_HOME`` so config and secrets land under
-    *tmp_path*, ``OMNIGENT_DISABLE_KEYRING`` so the secret store uses the
+    Sets ``OMNICRAFT_CONFIG_HOME`` so config and secrets land under
+    *tmp_path*, ``OMNICRAFT_DISABLE_KEYRING`` so the secret store uses the
     ``0600`` JSON file (no OS keychain dependency in CI), and clears any
     ambient vendor keys so detection is deterministic.
 
@@ -76,8 +76,8 @@ def isolated_config(tmp_path, monkeypatch):
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: The tmp config-home directory path.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     for var in (
         "ANTHROPIC_API_KEY",
         "OPENAI_API_KEY",
@@ -99,8 +99,8 @@ def isolated_config(tmp_path, monkeypatch):
     # - _claude_login_detected: on macOS falls back to `claude auth status`
     #   which reads the Keychain (not HOME), so a real Claude subscription
     #   leaks through even with HOME redirected to tmp_path.
-    monkeypatch.setattr("omnigent.onboarding.ambient._ollama_reachable", lambda: False)
-    monkeypatch.setattr("omnigent.onboarding.ambient._claude_login_detected", lambda: False)
+    monkeypatch.setattr("omnicraft.onboarding.ambient._ollama_reachable", lambda: False)
+    monkeypatch.setattr("omnicraft.onboarding.ambient._claude_login_detected", lambda: False)
     return tmp_path
 
 
@@ -118,15 +118,15 @@ def _harnesses_installed(monkeypatch):
     :param monkeypatch: Pytest monkeypatch fixture.
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed",
+        "omnicraft.onboarding.harness_install.harness_cli_installed",
         lambda family: True,
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_login",
+        "omnicraft.onboarding.harness_install.harness_login",
         lambda family: True,
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_logout",
+        "omnicraft.onboarding.harness_install.harness_logout",
         lambda family: True,
     )
 
@@ -145,7 +145,7 @@ def _config_yaml(config_home) -> dict[str, object]:
 
 
 def test_configure_models_list_groups_configured_providers(isolated_config) -> None:
-    """``omnigent config list`` renders each configured provider grouped by harness.
+    """``omnicraft config list`` renders each configured provider grouped by harness.
 
     Seeds two providers directly, then asserts the listing shows both
     names, their kind words, the Claude/Codex harness groups, and the
@@ -245,7 +245,7 @@ def test_configure_models_add_key_persists_catalog_default_when_declined(
     to the bundled catalog's default model for that provider, so an anthropic
     ``key`` provider always carries a real ``models.default``.
     """
-    from omnigent.onboarding.providers import default_chat_model
+    from omnicraft.onboarding.providers import default_chat_model
 
     # L1 1=Claude → L2 1=+Add → anthropic menu 1=Anthropic key → key →
     # default model blank (declined) → L2 q=back → L1 q=exit. Blank model
@@ -271,7 +271,7 @@ def test_configure_models_readd_key_does_not_drop_default(isolated_config) -> No
     catalog fallback the pin would vanish. Asserts the re-added entry still
     carries a (catalog) default rather than dropping ``models`` entirely.
     """
-    from omnigent.onboarding.providers import default_chat_model
+    from omnicraft.onboarding.providers import default_chat_model
 
     config_path = os.path.join(isolated_config, "config.yaml")
     with open(config_path, "w") as f:
@@ -599,7 +599,7 @@ def test_add_menu_databricks_option_gated_on_extra(monkeypatch) -> None:
     # calls this exact name, so the patch deterministically simulates a
     # bare install without touching the process-wide importlib machinery.
     monkeypatch.setattr(
-        "omnigent.onboarding.configure_models.databricks_sdk_installed",
+        "omnicraft.onboarding.configure_models.databricks_sdk_installed",
         lambda: False,
     )
     options = add_menu_options()
@@ -635,7 +635,7 @@ def test_configure_models_add_databricks_aborts_without_extra(
     # cli.py's databricks branch resolves databricks_sdk_installed from the
     # source module at call time, so patching the module attribute is seen.
     monkeypatch.setattr(
-        "omnigent.onboarding.databricks_config.databricks_sdk_installed",
+        "omnicraft.onboarding.databricks_config.databricks_sdk_installed",
         lambda: False,
     )
 
@@ -647,7 +647,7 @@ def test_configure_models_add_databricks_aborts_without_extra(
         )
 
     monkeypatch.setattr(
-        "omnigent.onboarding.setup.login_databricks_workspace",
+        "omnicraft.onboarding.setup.login_databricks_workspace",
         _login_must_not_run,
     )
 
@@ -702,7 +702,7 @@ def test_kind_glyph_uniform_display_width(kind: str) -> None:
     a VS16-forced wide emoji as the two cells terminals render). A regression
     that dropped the VS16 (or a glyph) yields width != 2.
     """
-    from omnigent.inner.banner import _display_width
+    from omnicraft.inner.banner import _display_width
 
     g = kind_glyph(kind)
     width = _display_width(g)
@@ -761,7 +761,7 @@ def test_add_subscription_invokes_harness_login(isolated_config, monkeypatch) ->
     """
     calls: list[str] = []
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_login",
+        "omnicraft.onboarding.harness_install.harness_login",
         lambda family: calls.append(family) or True,
     )
     stdin = "\n".join(["1", "1", "2", "q", "q"]) + "\n"  # Claude → +Add → subscription
@@ -780,7 +780,7 @@ def test_add_subscription_aborts_when_login_fails(isolated_config, monkeypatch) 
     must not persist a subscription entry — otherwise routing would later strand
     the user at the harness's own login screen, exactly what we're fixing.
     """
-    monkeypatch.setattr("omnigent.onboarding.harness_install.harness_login", lambda family: False)
+    monkeypatch.setattr("omnicraft.onboarding.harness_install.harness_login", lambda family: False)
     stdin = "\n".join(["1", "1", "2", "q", "q"]) + "\n"  # Claude → +Add → subscription
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
     assert result.exit_code == 0, result.output
@@ -803,7 +803,7 @@ def test_remove_subscription_signs_out_and_removes(isolated_config, monkeypatch)
         )
     calls: list[str] = []
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_logout",
+        "omnicraft.onboarding.harness_install.harness_logout",
         lambda family: calls.append(family) or True,
     )
     # L1 1=Claude → L2 1=select the subscription → L3 2=Remove → confirm 1=Yes
@@ -833,7 +833,7 @@ def test_remove_subscription_declined_keeps_it_and_login(isolated_config, monkey
     def _no_logout(family: str) -> bool:
         raise AssertionError("harness_logout called despite the user declining removal")
 
-    monkeypatch.setattr("omnigent.onboarding.harness_install.harness_logout", _no_logout)
+    monkeypatch.setattr("omnicraft.onboarding.harness_install.harness_logout", _no_logout)
     # L1 1=Claude → L2 1=select → L3 2=Remove → confirm 2=No → L2 q → L1 q.
     stdin = "\n".join(["1", "1", "2", "2", "q", "q"]) + "\n"
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
@@ -934,9 +934,9 @@ def test_render_listing_excludes_configured_subscription_clis(
     it. The CLI must be excluded once a subscription wraps it, while an
     unrelated detection still shows.
     """
-    from omnigent.onboarding.ambient import DetectedProvider
-    from omnigent.onboarding.configure_models import render_provider_listing
-    from omnigent.onboarding.provider_config import load_providers
+    from omnicraft.onboarding.ambient import DetectedProvider
+    from omnicraft.onboarding.configure_models import render_provider_listing
+    from omnicraft.onboarding.provider_config import load_providers
 
     config: dict[str, object] = {
         "providers": {"claude-subscription": {"kind": "subscription", "cli": "claude"}}
@@ -1275,7 +1275,7 @@ def test_promote_global_auth_backfills_databricks_for_existing_configs(isolated_
     defaulting both families (the config only ever had the auth: block, so
     routing already used databricks for both).
     """
-    from omnigent.cli import _promote_global_auth_to_provider, _save_global_config
+    from omnicraft.cli import _promote_global_auth_to_provider, _save_global_config
 
     _save_global_config({"auth": {"type": "databricks", "profile": "oss"}})
 
@@ -1301,7 +1301,7 @@ def test_promote_global_auth_respects_explicit_default(isolated_config) -> None:
     must NOT steal it — it only claims families with no existing default. Here
     an explicit anthropic key default is kept while databricks takes openai.
     """
-    from omnigent.cli import _promote_global_auth_to_provider, _save_global_config
+    from omnicraft.cli import _promote_global_auth_to_provider, _save_global_config
 
     _save_global_config(
         {
@@ -1331,7 +1331,7 @@ def test_promote_global_auth_respects_explicit_default(isolated_config) -> None:
 
 def test_promote_global_auth_noop_without_databricks_auth(isolated_config) -> None:
     """No databricks ``auth:`` block → nothing to backfill (returns None)."""
-    from omnigent.cli import _promote_global_auth_to_provider, _save_global_config
+    from omnicraft.cli import _promote_global_auth_to_provider, _save_global_config
 
     # An api_key auth block (not databricks) must not synthesize a databricks
     # provider, and a config with no auth: block at all is a clean no-op.
@@ -1350,8 +1350,8 @@ def _databricks_add_menu_index() -> int:
     :returns: The 1-based index of the ``databricks``-kind option within the
         Claude (anthropic) add menu, e.g. ``4``.
     """
-    from omnigent.onboarding.configure_models import add_menu_options_for_family
-    from omnigent.onboarding.provider_config import ANTHROPIC_FAMILY, DATABRICKS_KIND
+    from omnicraft.onboarding.configure_models import add_menu_options_for_family
+    from omnicraft.onboarding.provider_config import ANTHROPIC_FAMILY, DATABRICKS_KIND
 
     opts = add_menu_options_for_family(ANTHROPIC_FAMILY)
     return next(i for i, o in enumerate(opts) if o.kind == DATABRICKS_KIND) + 1
@@ -1391,11 +1391,11 @@ def test_configure_harnesses_add_databricks_normalizes_url_and_persists(
 
     # Patch at the source modules — the databricks branch imports these at call
     # time, so the attribute lookup resolves to these stubs.
-    monkeypatch.setattr("omnigent.onboarding.setup.login_databricks_workspace", _fake_login)
+    monkeypatch.setattr("omnicraft.onboarding.setup.login_databricks_workspace", _fake_login)
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_setup.configure_ucode_for_workspace", _fake_configure_ucode
+        "omnicraft.onboarding.ucode_setup.configure_ucode_for_workspace", _fake_configure_ucode
     )
-    monkeypatch.setattr("omnigent.onboarding.ucode_setup.ucode_workspace_exists", _fake_exists)
+    monkeypatch.setattr("omnicraft.onboarding.ucode_setup.ucode_workspace_exists", _fake_exists)
 
     db = _databricks_add_menu_index()
     # L1 1=Claude → L2 1=+Add → add menu <db>=Databricks → workspace URL (no
@@ -1442,16 +1442,16 @@ def test_configure_harnesses_add_databricks_fails_loud_when_ucode_records_no_sta
     the command exits non-zero and ``providers`` stays empty.
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.setup.login_databricks_workspace",
+        "omnicraft.onboarding.setup.login_databricks_workspace",
         lambda url, *, console=None: "my-ws",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_setup.configure_ucode_for_workspace",
+        "omnicraft.onboarding.ucode_setup.configure_ucode_for_workspace",
         lambda url, *, agents=None: None,
     )
     # ucode "succeeded" but left no state for this workspace.
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_setup.ucode_workspace_exists", lambda url: False
+        "omnicraft.onboarding.ucode_setup.ucode_workspace_exists", lambda url: False
     )
 
     db = _databricks_add_menu_index()
@@ -1476,19 +1476,19 @@ def test_configure_harnesses_add_databricks_under_codex_scopes_to_codex(
     whichever harness the user drilled into, so the Claude family is left
     untouched here.
     """
-    from omnigent.onboarding.configure_models import add_menu_options_for_family
-    from omnigent.onboarding.provider_config import DATABRICKS_KIND, OPENAI_FAMILY
+    from omnicraft.onboarding.configure_models import add_menu_options_for_family
+    from omnicraft.onboarding.provider_config import DATABRICKS_KIND, OPENAI_FAMILY
 
     ucode_calls: list[tuple[str, list[str] | None]] = []
     monkeypatch.setattr(
-        "omnigent.onboarding.setup.login_databricks_workspace",
+        "omnicraft.onboarding.setup.login_databricks_workspace",
         lambda url, *, console=None: "my-ws",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_setup.configure_ucode_for_workspace",
+        "omnicraft.onboarding.ucode_setup.configure_ucode_for_workspace",
         lambda url, *, agents=None: ucode_calls.append((url, agents)),
     )
-    monkeypatch.setattr("omnigent.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True)
+    monkeypatch.setattr("omnicraft.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True)
 
     # Databricks position within the Codex (openai) add menu, computed live.
     codex_opts = add_menu_options_for_family(OPENAI_FAMILY)
@@ -1514,7 +1514,7 @@ def test_uninstalled_harness_shows_x_and_not_installed(isolated_config, monkeypa
     row).
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: False
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: False
     )
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input="q\n")
     assert result.exit_code == 0, result.output
@@ -1603,7 +1603,7 @@ def _capture_setup_overview(
         )
         return -1
 
-    monkeypatch.setattr("omnigent.onboarding.interactive.select", _capture_select)
+    monkeypatch.setattr("omnicraft.onboarding.interactive.select", _capture_select)
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"])
     assert result.exit_code == 0, result.output
     return (
@@ -1643,7 +1643,7 @@ def test_overview_lists_all_harnesses_in_priority_order(isolated_config, monkeyp
     reintroduces a collapse row fails here. The menu also opts into the compact
     top-level rendering.
     """
-    from omnigent.onboarding import interactive
+    from omnicraft.onboarding import interactive
 
     options, selectable, descriptions, compact, max_visible = _capture_setup_overview(monkeypatch)
     expected = [
@@ -1739,7 +1739,7 @@ def test_overview_lists_kiro_row(isolated_config, monkeypatch) -> None:
     from rich.text import Text
 
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: False
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: False
     )
     options, selectable, descriptions, _, _max_visible = _capture_setup_overview(monkeypatch)
     names = _overview_row_names(options, selectable)
@@ -1748,7 +1748,7 @@ def test_overview_lists_kiro_row(isolated_config, monkeypatch) -> None:
     assert "cli.kiro.dev/install" in Text.from_markup(descriptions[kiro]).plain
 
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: True
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: True
     )
     options, selectable, descriptions, _, _max_visible = _capture_setup_overview(monkeypatch)
     names = _overview_row_names(options, selectable)
@@ -1776,7 +1776,7 @@ def test_overview_hermes_row_reflects_configured_model(isolated_config, monkeypa
     """
     from rich.text import Text
 
-    monkeypatch.setattr("omnigent.onboarding.hermes_auth.hermes_cli_installed", lambda: True)
+    monkeypatch.setattr("omnicraft.onboarding.hermes_auth.hermes_cli_installed", lambda: True)
     hermes_dir = os.path.join(isolated_config, ".hermes")
     os.makedirs(hermes_dir, exist_ok=True)
     hermes_config = os.path.join(hermes_dir, "config.yaml")
@@ -1818,14 +1818,14 @@ def test_overview_truncates_long_status_for_narrow_terminal(isolated_config, mon
 
     from rich.cells import cell_len
 
-    from omnigent.onboarding import interactive
-    from omnigent.onboarding.opencode_auth import OpenCodeAuthSummary
+    from omnicraft.onboarding import interactive
+    from omnicraft.onboarding.opencode_auth import OpenCodeAuthSummary
 
     monkeypatch.setattr(
-        "omnigent.cli.shutil.get_terminal_size", lambda fallback: os.terminal_size((40, 24))
+        "omnicraft.cli.shutil.get_terminal_size", lambda fallback: os.terminal_size((40, 24))
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.opencode_auth.opencode_auth_summary",
+        "omnicraft.onboarding.opencode_auth.opencode_auth_summary",
         lambda: OpenCodeAuthSummary(
             installed=True,
             stored_providers=("anthropic", "データブリックス", "🚀provider"),
@@ -1878,7 +1878,7 @@ def test_overview_dispatches_to_correct_manager(
     """
     called: list[str] = []
     monkeypatch.setattr(
-        f"omnigent.cli.{manager_attr}", lambda *a, **k: called.append(manager_attr)
+        f"omnicraft.cli.{manager_attr}", lambda *a, **k: called.append(manager_attr)
     )
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=f"{choice}\nq\n")
     assert result.exit_code == 0, result.output
@@ -1898,7 +1898,7 @@ def test_overview_status_color_distinguishes_missing_from_unconfigured(
     """
     # Installed but unconfigured → yellow ✗ (a usable harness awaiting setup).
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: True
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: True
     )
     options, selectable, _descriptions, _compact, _max_visible = _capture_setup_overview(
         monkeypatch
@@ -1908,7 +1908,7 @@ def test_overview_status_color_distinguishes_missing_from_unconfigured(
 
     # CLI absent → red ✗ (nothing to use yet).
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: False
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: False
     )
     options, selectable, _descriptions, _compact, _max_visible = _capture_setup_overview(
         monkeypatch
@@ -1932,7 +1932,7 @@ def test_installed_native_cli_auth_unknown_rows_are_not_configured(
     by ``test_overview_hermes_row_reflects_configured_model`` instead.)
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: True
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: True
     )
     options, selectable, descriptions, _compact, _max_visible = _capture_setup_overview(
         monkeypatch
@@ -1954,26 +1954,26 @@ def test_overview_descriptions_map_to_their_rows(isolated_config, monkeypatch) -
     """
     from rich.text import Text
 
-    from omnigent.onboarding.goose_auth import GooseConfigSummary
-    from omnigent.onboarding.hermes_auth import HermesConfigSummary
-    from omnigent.onboarding.opencode_auth import OpenCodeAuthSummary
+    from omnicraft.onboarding.goose_auth import GooseConfigSummary
+    from omnicraft.onboarding.hermes_auth import HermesConfigSummary
+    from omnicraft.onboarding.opencode_auth import OpenCodeAuthSummary
 
-    monkeypatch.setattr("omnigent.onboarding.cursor_auth.cursor_sdk_installed", lambda: True)
+    monkeypatch.setattr("omnicraft.onboarding.cursor_auth.cursor_sdk_installed", lambda: True)
     monkeypatch.setattr(
-        "omnigent.onboarding.antigravity_auth.antigravity_sdk_installed", lambda: True
+        "omnicraft.onboarding.antigravity_auth.antigravity_sdk_installed", lambda: True
     )
-    monkeypatch.setattr("omnigent.onboarding.copilot_auth.copilot_sdk_installed", lambda: True)
+    monkeypatch.setattr("omnicraft.onboarding.copilot_auth.copilot_sdk_installed", lambda: True)
     monkeypatch.setattr(
-        "omnigent.onboarding.opencode_auth.opencode_auth_summary",
+        "omnicraft.onboarding.opencode_auth.opencode_auth_summary",
         lambda: OpenCodeAuthSummary(installed=True, stored_providers=(), env_providers=()),
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.goose_auth.goose_config_summary",
+        "omnicraft.onboarding.goose_auth.goose_config_summary",
         lambda: GooseConfigSummary(installed=True, provider=None, model=None),
     )
     # Installed but no provider picked → the "Open to configure" warn hint.
     monkeypatch.setattr(
-        "omnigent.onboarding.hermes_auth.hermes_config_summary",
+        "omnicraft.onboarding.hermes_auth.hermes_config_summary",
         lambda: HermesConfigSummary(installed=True, provider=None, model=None),
     )
 
@@ -2008,11 +2008,11 @@ def test_drill_into_uninstalled_installs_then_proceeds(isolated_config, monkeypa
     the install or called it for the wrong harness fails here.
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: False
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: False
     )
     installed: list[str] = []
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.install_harness_cli",
+        "omnicraft.onboarding.harness_install.install_harness_cli",
         lambda family: installed.append(family) or True,
     )
     # L1 1=Claude → install prompt 1=Yes (install) → L2 credential menu q=back
@@ -2026,14 +2026,14 @@ def test_drill_into_uninstalled_installs_then_proceeds(isolated_config, monkeypa
 def test_decline_install_returns_without_installing(isolated_config, monkeypatch) -> None:
     """Choosing 'No' at the install prompt returns to the picker, no install."""
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: False
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: False
     )
 
     def _must_not_install(family: str) -> bool:
         raise AssertionError("install_harness_cli called despite declining")
 
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.install_harness_cli", _must_not_install
+        "omnicraft.onboarding.harness_install.install_harness_cli", _must_not_install
     )
     # L1 1=Claude → install prompt 2=No → L1 q=exit.
     stdin = "\n".join(["1", "2", "q"]) + "\n"
@@ -2052,7 +2052,7 @@ def test_pi_add_menu_offers_keys_gateway_databricks_but_no_subscription() -> Non
     codex subscriptions must NOT (a CLI login is unusable outside its own
     CLI — offering it would configure a credential pi silently can't use).
     """
-    from omnigent.onboarding.provider_config import PI_SURFACE
+    from omnicraft.onboarding.provider_config import PI_SURFACE
 
     options = add_menu_options_for_family(PI_SURFACE)
     kinds = {o.kind for o in options}
@@ -2075,7 +2075,7 @@ def test_configure_harnesses_pi_page_sets_explicit_pi_default(isolated_config) -
     scope, pi resolution must follow it, and BOTH family defaults must be
     untouched — the per-surface coexistence invariant extended to pi.
     """
-    from omnigent.onboarding.provider_config import default_provider_for_harness
+    from omnicraft.onboarding.provider_config import default_provider_for_harness
 
     config_path = os.path.join(isolated_config, "config.yaml")
     with open(config_path, "w") as f:
@@ -2184,8 +2184,8 @@ def test_configure_harnesses_add_databricks_under_pi_scopes_to_pi(
     routing Claude/Codex through a workspace ucode never configured for
     them would be the regression.
     """
-    from omnigent.onboarding.configure_models import add_menu_options_for_family
-    from omnigent.onboarding.provider_config import (
+    from omnicraft.onboarding.configure_models import add_menu_options_for_family
+    from omnicraft.onboarding.provider_config import (
         DATABRICKS_KIND,
         PI_SURFACE,
         default_provider_for_harness,
@@ -2193,14 +2193,14 @@ def test_configure_harnesses_add_databricks_under_pi_scopes_to_pi(
 
     ucode_calls: list[tuple[str, list[str] | None]] = []
     monkeypatch.setattr(
-        "omnigent.onboarding.setup.login_databricks_workspace",
+        "omnicraft.onboarding.setup.login_databricks_workspace",
         lambda url, *, console=None: "my-ws",
     )
     monkeypatch.setattr(
-        "omnigent.onboarding.ucode_setup.configure_ucode_for_workspace",
+        "omnicraft.onboarding.ucode_setup.configure_ucode_for_workspace",
         lambda url, *, agents=None: ucode_calls.append((url, agents)),
     )
-    monkeypatch.setattr("omnigent.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True)
+    monkeypatch.setattr("omnicraft.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True)
 
     # Databricks position within the Pi add menu, computed live.
     pi_opts = add_menu_options_for_family(PI_SURFACE)
@@ -2234,7 +2234,7 @@ def test_add_key_does_not_steal_pi_from_fallback_default(isolated_config) -> Non
     pi scope: pi's effective default already resolves, and stealing it
     would silently re-route pi to the brand-new key.
     """
-    from omnigent.onboarding.provider_config import default_provider_for_harness
+    from omnicraft.onboarding.provider_config import default_provider_for_harness
 
     config_path = os.path.join(isolated_config, "config.yaml")
     with open(config_path, "w") as f:
@@ -2279,7 +2279,7 @@ def test_credential_label_cli_config_uses_display_name() -> None:
     Failure means configure-harnesses shows the raw entry id instead of
     the friendly name isaac wrote into the provider table.
     """
-    from omnigent.onboarding.configure_models import credential_label
+    from omnicraft.onboarding.configure_models import credential_label
 
     label = credential_label(
         "cli-config", "codex-databricks", display_name="Databricks AI Gateway"
@@ -2292,7 +2292,7 @@ def test_credential_label_cli_config_falls_back_to_entry_name() -> None:
 
     Failure (empty/None label) would render a blank credential row.
     """
-    from omnigent.onboarding.configure_models import credential_label
+    from omnicraft.onboarding.configure_models import credential_label
 
     assert credential_label("cli-config", "codex-myproxy") == "codex-myproxy"
 
@@ -2303,7 +2303,7 @@ def test_build_cli_config_provider_entry_shapes() -> None:
     Full-equality assertions: a drifted key would make adoption write
     entries that fail to load on the next configure open.
     """
-    from omnigent.onboarding.configure_models import build_cli_config_provider_entry
+    from omnicraft.onboarding.configure_models import build_cli_config_provider_entry
 
     assert build_cli_config_provider_entry("codex", "Databricks", "Databricks AI Gateway") == {
         "kind": "cli-config",
@@ -2389,8 +2389,8 @@ def test_add_menu_readds_dismissed_cli_config_credential(isolated_config) -> Non
     detected-config row is the only way back. Re-adding must persist the
     entry, restore it as the codex default, and clear the dismissal.
     """
-    from omnigent.onboarding.configure_models import add_menu_options_for_family
-    from omnigent.onboarding.provider_config import OPENAI_FAMILY
+    from omnicraft.onboarding.configure_models import add_menu_options_for_family
+    from omnicraft.onboarding.provider_config import OPENAI_FAMILY
 
     _write_codex_config_toml(isolated_config)
     config_path = os.path.join(isolated_config, "config.yaml")
@@ -2443,7 +2443,7 @@ def _cursor_sdk_present(monkeypatch):
     :param monkeypatch: Pytest monkeypatch fixture.
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.cursor_auth.cursor_sdk_installed",
+        "omnicraft.onboarding.cursor_auth.cursor_sdk_installed",
         lambda: True,
     )
 
@@ -2545,7 +2545,7 @@ def _cursor_sdk_absent(monkeypatch):
     :param monkeypatch: Pytest monkeypatch fixture.
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.cursor_auth.cursor_sdk_installed",
+        "omnicraft.onboarding.cursor_auth.cursor_sdk_installed",
         lambda: False,
     )
 
@@ -2564,9 +2564,9 @@ def test_cursor_overview_install_command_is_selection_only(
     options, selectable, descriptions, _, _max_visible = _capture_setup_overview(monkeypatch)
     names = _overview_row_names(options, selectable)
     cursor = names.index("Cursor")
-    assert "omnigent[cursor]" in Text.from_markup(descriptions[cursor]).plain
+    assert "omnicraft[cursor]" in Text.from_markup(descriptions[cursor]).plain
     # The command lives in the description only — never the always-visible row.
-    assert "omnigent[cursor]" not in Text.from_markup(options[cursor]).plain
+    assert "omnicraft[cursor]" not in Text.from_markup(options[cursor]).plain
 
 
 def test_cursor_drillin_offers_install_when_sdk_missing(
@@ -2583,7 +2583,7 @@ def test_cursor_drillin_offers_install_when_sdk_missing(
     assert result.exit_code == 0, result.output
     out = result.output
     assert "isn't installed" in out
-    assert "omnigent[cursor]" in out
+    assert "omnicraft[cursor]" in out
 
 
 def test_cursor_key_settable_when_sdk_missing(isolated_config, _cursor_sdk_absent) -> None:
@@ -2607,7 +2607,7 @@ def test_cursor_key_settable_when_sdk_missing(isolated_config, _cursor_sdk_absen
 def test_cursor_install_now_invokes_runner_without_index(
     isolated_config, _cursor_sdk_absent, monkeypatch
 ) -> None:
-    """Choosing "install it now" shells the install with ``omnigent[cursor]``.
+    """Choosing "install it now" shells the install with ``omnicraft[cursor]``.
 
     Mocks the subprocess and asserts the argv targets the extra and carries NO
     hardcoded index URL / proxy. Forces the ``uv``-absent path for determinism.
@@ -2620,9 +2620,9 @@ def test_cursor_install_now_invokes_runner_without_index(
         calls.append(argv)
         return subprocess.CompletedProcess(args=argv, returncode=0)
 
-    monkeypatch.setattr("omnigent.onboarding.extra_install._is_uv_tool_install", lambda: False)
-    monkeypatch.setattr("omnigent.onboarding.extra_install.shutil.which", lambda name: None)
-    monkeypatch.setattr("omnigent.onboarding.cursor_auth.subprocess.run", _run)
+    monkeypatch.setattr("omnicraft.onboarding.extra_install._is_uv_tool_install", lambda: False)
+    monkeypatch.setattr("omnicraft.onboarding.extra_install.shutil.which", lambda name: None)
+    monkeypatch.setattr("omnicraft.onboarding.cursor_auth.subprocess.run", _run)
 
     # L1 3=Cursor → install offer 1=install now → key menu q=back → L1 q.
     stdin = "\n".join(["3", "1", "q", "q"]) + "\n"
@@ -2631,7 +2631,7 @@ def test_cursor_install_now_invokes_runner_without_index(
 
     assert len(calls) == 1, f"expected exactly one install invocation, got {calls}"
     argv = calls[0]
-    assert "omnigent[cursor]" in argv
+    assert "omnicraft[cursor]" in argv
     assert "install" in argv
     # No index URL / proxy is baked into committed code.
     assert not any("index" in part or "://" in part for part in argv)
@@ -2658,7 +2658,7 @@ def _antigravity_sdk_present(monkeypatch):
     :param monkeypatch: Pytest monkeypatch fixture.
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.antigravity_auth.antigravity_sdk_installed",
+        "omnicraft.onboarding.antigravity_auth.antigravity_sdk_installed",
         lambda: True,
     )
 
@@ -2789,7 +2789,7 @@ def _antigravity_sdk_absent(monkeypatch):
     :param monkeypatch: Pytest monkeypatch fixture.
     """
     monkeypatch.setattr(
-        "omnigent.onboarding.antigravity_auth.antigravity_sdk_installed",
+        "omnicraft.onboarding.antigravity_auth.antigravity_sdk_installed",
         lambda: False,
     )
 
@@ -2808,8 +2808,8 @@ def test_antigravity_overview_install_command_is_selection_only(
     options, selectable, descriptions, _, _max_visible = _capture_setup_overview(monkeypatch)
     names = _overview_row_names(options, selectable)
     antigravity = names.index("Antigravity")
-    assert "omnigent[antigravity]" in Text.from_markup(descriptions[antigravity]).plain
-    assert "omnigent[antigravity]" not in Text.from_markup(options[antigravity]).plain
+    assert "omnicraft[antigravity]" in Text.from_markup(descriptions[antigravity]).plain
+    assert "omnicraft[antigravity]" not in Text.from_markup(options[antigravity]).plain
 
 
 @pytest.fixture()
@@ -2826,7 +2826,7 @@ def _copilot_sdk_absent(monkeypatch):
     """
     for var in ("COPILOT_GITHUB_TOKEN", "GH_TOKEN", "GITHUB_TOKEN"):
         monkeypatch.delenv(var, raising=False)
-    monkeypatch.setattr("omnigent.onboarding.copilot_auth.copilot_sdk_installed", lambda: False)
+    monkeypatch.setattr("omnicraft.onboarding.copilot_auth.copilot_sdk_installed", lambda: False)
 
 
 def test_copilot_overview_install_command_is_selection_only(
@@ -2835,7 +2835,7 @@ def test_copilot_overview_install_command_is_selection_only(
     """With the copilot extra absent, the Copilot row's install command is its description.
 
     Mirrors the Cursor / Antigravity selection-only-hint contract for the third
-    soft-SDK-extra harness: the ``omnigent[copilot]`` install command is the
+    soft-SDK-extra harness: the ``omnicraft[copilot]`` install command is the
     per-row description (shown only when highlighted), never baked into the
     always-visible row label.
     """
@@ -2844,22 +2844,22 @@ def test_copilot_overview_install_command_is_selection_only(
     options, selectable, descriptions, _, _max_visible = _capture_setup_overview(monkeypatch)
     names = _overview_row_names(options, selectable)
     copilot = names.index("Copilot")
-    assert "omnigent[copilot]" in Text.from_markup(descriptions[copilot]).plain
+    assert "omnicraft[copilot]" in Text.from_markup(descriptions[copilot]).plain
     assert "pip install" not in Text.from_markup(options[copilot]).plain
 
 
 @pytest.mark.parametrize(
     "choice,sdk_probe,unexpected_header",
     [
-        ("3", "omnigent.onboarding.cursor_auth.cursor_sdk_installed", "Cursor — no API key yet"),
+        ("3", "omnicraft.onboarding.cursor_auth.cursor_sdk_installed", "Cursor — no API key yet"),
         (
             "7",
-            "omnigent.onboarding.antigravity_auth.antigravity_sdk_installed",
+            "omnicraft.onboarding.antigravity_auth.antigravity_sdk_installed",
             "Antigravity — no Gemini API key yet",
         ),
         (
             "10",
-            "omnigent.onboarding.copilot_auth.copilot_sdk_installed",
+            "omnicraft.onboarding.copilot_auth.copilot_sdk_installed",
             "Copilot — no GitHub token yet",
         ),
     ],
@@ -2897,7 +2897,7 @@ def test_antigravity_drillin_offers_install_when_sdk_missing(
     assert result.exit_code == 0, result.output
     out = result.output
     assert "isn't installed" in out
-    assert "omnigent[antigravity]" in out
+    assert "omnicraft[antigravity]" in out
 
 
 def test_antigravity_key_settable_when_sdk_missing(
@@ -2923,7 +2923,7 @@ def test_antigravity_key_settable_when_sdk_missing(
 def test_antigravity_install_now_invokes_runner_without_index(
     isolated_config, _antigravity_sdk_absent, monkeypatch
 ) -> None:
-    """Choosing "install it now" shells the install with ``omnigent[antigravity]``.
+    """Choosing "install it now" shells the install with ``omnicraft[antigravity]``.
 
     Mocks the subprocess and asserts the argv targets the extra and carries NO
     hardcoded index URL / proxy. Forces the ``uv``-absent path for a deterministic argv.
@@ -2936,9 +2936,9 @@ def test_antigravity_install_now_invokes_runner_without_index(
         calls.append(argv)
         return subprocess.CompletedProcess(args=argv, returncode=0)
 
-    monkeypatch.setattr("omnigent.onboarding.extra_install._is_uv_tool_install", lambda: False)
-    monkeypatch.setattr("omnigent.onboarding.extra_install.shutil.which", lambda name: None)
-    monkeypatch.setattr("omnigent.onboarding.antigravity_auth.subprocess.run", _run)
+    monkeypatch.setattr("omnicraft.onboarding.extra_install._is_uv_tool_install", lambda: False)
+    monkeypatch.setattr("omnicraft.onboarding.extra_install.shutil.which", lambda name: None)
+    monkeypatch.setattr("omnicraft.onboarding.antigravity_auth.subprocess.run", _run)
 
     # L1 7=Antigravity → install offer 1=install now →
     # key menu q=back → L1 q.
@@ -2948,7 +2948,7 @@ def test_antigravity_install_now_invokes_runner_without_index(
 
     assert len(calls) == 1, f"expected exactly one install invocation, got {calls}"
     argv = calls[0]
-    assert "omnigent[antigravity]" in argv
+    assert "omnicraft[antigravity]" in argv
     assert "install" in argv
     # No index URL / proxy is baked into committed code.
     assert not any("index" in part or "://" in part for part in argv)
@@ -2964,8 +2964,8 @@ def _other_key_add_menu_index(family: str) -> int:
     :param family: The harness surface whose add menu is inspected.
     :returns: The 1-based index of the catch-all ``other``-key option.
     """
-    from omnigent.onboarding.configure_models import add_menu_options_for_family
-    from omnigent.onboarding.provider_config import KEY_KIND
+    from omnicraft.onboarding.configure_models import add_menu_options_for_family
+    from omnicraft.onboarding.provider_config import KEY_KIND
 
     opts = add_menu_options_for_family(family)
     return next(i for i, o in enumerate(opts) if o.kind == KEY_KIND and o.other) + 1
@@ -2980,20 +2980,20 @@ def test_configure_harnesses_add_other_key_no_remaining_providers_aborts_cleanly
     Regression for #820: when every catch-all key provider is already configured,
     ``other_key_providers()`` returns ``[]`` and the secondary ``select`` was
     handed an empty option list, raising ``ValueError: select() requires at least
-    one option`` out of ``omnigent setup``. The add branch must detect the empty
+    one option`` out of ``omnicraft setup``. The add branch must detect the empty
     list, tell the user, and return — exit code 0, no traceback. Driven under Pi
     (the surface from the report), with the harness CLI forced installed so the
     drill-in reaches the add menu.
     """
-    from omnigent.onboarding.provider_config import PI_SURFACE
+    from omnicraft.onboarding.provider_config import PI_SURFACE
 
     # Force the harness CLI "installed" so the Pi drill-in shows the add menu
     # rather than the install prompt, and pretend the catch-all catalog is
     # exhausted (the real-world trigger: all of Groq/DeepSeek/… already added).
     monkeypatch.setattr(
-        "omnigent.onboarding.harness_install.harness_cli_installed", lambda family: True
+        "omnicraft.onboarding.harness_install.harness_cli_installed", lambda family: True
     )
-    monkeypatch.setattr("omnigent.onboarding.configure_models.other_key_providers", list)
+    monkeypatch.setattr("omnicraft.onboarding.configure_models.other_key_providers", list)
 
     other = _other_key_add_menu_index(PI_SURFACE)
     # L1 6=Pi → L2 1=+Add → add menu <other>=Other provider — API key → L2 q=back → L1 q=exit.
@@ -3078,8 +3078,8 @@ def test_credential_label_bedrock_not_duplicated() -> None:
     credential after the provider id used to render 'Bedrock Bedrock'. The
     generic default collapses to 'AWS Bedrock'; a custom name is qualified.
     """
-    from omnigent.onboarding.configure_models import credential_label
-    from omnigent.onboarding.provider_config import BEDROCK_KIND
+    from omnicraft.onboarding.configure_models import credential_label
+    from omnicraft.onboarding.provider_config import BEDROCK_KIND
 
     assert credential_label(BEDROCK_KIND, "bedrock") == "AWS Bedrock"
     assert credential_label(BEDROCK_KIND, "nexus") == "AWS Bedrock (nexus)"

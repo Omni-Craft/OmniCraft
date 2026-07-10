@@ -44,7 +44,7 @@ _TERMINAL_EVENTS = frozenset({"response.completed", "response.failed", "response
 
 
 class FullServerDriver:
-    """Drive turns through a live Omnigent server and runner."""
+    """Drive turns through a live OmniCraft server and runner."""
 
     transport = "full-server"
 

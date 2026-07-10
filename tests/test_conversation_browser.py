@@ -6,38 +6,38 @@ import subprocess
 
 import pytest
 
-import omnigent.conversation_browser as browser
+import omnicraft.conversation_browser as browser
 
 
 @pytest.mark.parametrize(
     "url,expected",
     [
-        # Databricks workspace API mount → the recognizable /omnigent SPA URL.
+        # Databricks workspace API mount → the recognizable /omnicraft SPA URL.
         (
-            "https://e2-dogfood.staging.cloud.databricks.com/api/2.0/omnigent",
-            "https://e2-dogfood.staging.cloud.databricks.com/omnigent",
+            "https://e2-dogfood.staging.cloud.databricks.com/api/2.0/omnicraft",
+            "https://e2-dogfood.staging.cloud.databricks.com/omnicraft",
         ),
         # A trailing ``?o=<org>`` selector on the API base is dropped.
         (
-            "https://ws.databricks.com/api/2.0/omnigent?o=123",
-            "https://ws.databricks.com/omnigent",
+            "https://ws.databricks.com/api/2.0/omnicraft?o=123",
+            "https://ws.databricks.com/omnicraft",
         ),
         # Trailing slash on the API mount still maps cleanly.
         (
-            "https://ws.databricks.com/api/2.0/omnigent/",
-            "https://ws.databricks.com/omnigent",
+            "https://ws.databricks.com/api/2.0/omnicraft/",
+            "https://ws.databricks.com/omnicraft",
         ),
         # Non-Databricks URLs pass through unchanged (sans trailing slash).
         ("http://127.0.0.1:6767", "http://127.0.0.1:6767"),
-        ("https://omnigent-02m5.onrender.com/", "https://omnigent-02m5.onrender.com"),
+        ("https://omnicraft-02m5.onrender.com/", "https://omnicraft-02m5.onrender.com"),
     ],
 )
 def test_display_server_url_maps_databricks_api_mount(url: str, expected: str) -> None:
     """
     ``display_server_url`` rewrites the Databricks API mount to the SPA URL.
 
-    What this proves: the startup banner shows the workspace ``/omnigent``
-    URL a user recognizes instead of the internal ``/api/2.0/omnigent``
+    What this proves: the startup banner shows the workspace ``/omnicraft``
+    URL a user recognizes instead of the internal ``/api/2.0/omnicraft``
     proxy path, while every other target is shown verbatim. A regression
     that stopped mapping would leak the API path back into the banner.
 
@@ -49,11 +49,11 @@ def test_display_server_url_maps_databricks_api_mount(url: str, expected: str) -
 @pytest.mark.parametrize(
     "url,expected",
     [
-        ("https://ws.databricks.com/api/2.0/omnigent", True),
-        ("https://ws.databricks.com/api/2.0/omnigent/", True),
-        ("https://ws.databricks.com/omnigent", False),  # the SPA URL, not the API mount
+        ("https://ws.databricks.com/api/2.0/omnicraft", True),
+        ("https://ws.databricks.com/api/2.0/omnicraft/", True),
+        ("https://ws.databricks.com/omnicraft", False),  # the SPA URL, not the API mount
         ("http://127.0.0.1:6767", False),
-        ("https://omnigent-02m5.onrender.com", False),
+        ("https://omnicraft-02m5.onrender.com", False),
     ],
 )
 def test_is_workspace_hosted_url(url: str, expected: bool) -> None:
@@ -61,7 +61,7 @@ def test_is_workspace_hosted_url(url: str, expected: bool) -> None:
     ``is_workspace_hosted_url`` is true only for the workspace API mount.
 
     What this proves: the predicate the banner uses to suppress the
-    server-version row fires for ``/api/2.0/omnigent`` and nothing else, so
+    server-version row fires for ``/api/2.0/omnicraft`` and nothing else, so
     non-Databricks targets keep showing their version.
 
     :returns: None.
@@ -235,19 +235,19 @@ def test_open_conversation_link_warns_when_opener_raises_oserror(
 def test_conversation_url_maps_workspace_hosted_server_to_ui_mount(tmp_path, monkeypatch) -> None:
     """Workspace-hosted servers link to the SPA mount with the org selector.
 
-    The server base is the API proxy (``/api/2.0/omnigent``) — linking
+    The server base is the API proxy (``/api/2.0/omnicraft``) — linking
     there returns JSON, not the web UI. The browser URL must land on
-    ``/omnigent`` and carry ``?o=<org>`` recorded by ``omnigent
+    ``/omnicraft`` and carry ``?o=<org>`` recorded by ``omnicraft
     login`` so multi-org workspaces open in the right one.
     """
-    from omnigent.cli_auth import store_databricks_auth
-    from omnigent.conversation_browser import conversation_url
+    from omnicraft.cli_auth import store_databricks_auth
+    from omnicraft.conversation_browser import conversation_url
 
     monkeypatch.setattr(
-        "omnigent.cli_auth._token_file_path",
+        "omnicraft.cli_auth._token_file_path",
         lambda: tmp_path / "auth_tokens.json",
     )
-    server = "https://example.databricks.com/api/2.0/omnigent"
+    server = "https://example.databricks.com/api/2.0/omnicraft"
     store_databricks_auth(
         server,
         "https://example.databricks.com",
@@ -256,7 +256,7 @@ def test_conversation_url_maps_workspace_hosted_server_to_ui_mount(tmp_path, mon
 
     url = conversation_url(server, "conv_abc123")
 
-    assert url == ("https://example.databricks.com/omnigent/c/conv_abc123?o=2850744067564480")
+    assert url == ("https://example.databricks.com/omnicraft/c/conv_abc123?o=2850744067564480")
 
 
 def test_conversation_url_workspace_hosted_without_org_record(tmp_path, monkeypatch) -> None:
@@ -265,24 +265,24 @@ def test_conversation_url_workspace_hosted_without_org_record(tmp_path, monkeypa
     Single-org workspaces resolve fine without it; inventing an org id
     would be worse than omitting it.
     """
-    from omnigent.conversation_browser import conversation_url
+    from omnicraft.conversation_browser import conversation_url
 
     monkeypatch.setattr(
-        "omnigent.cli_auth._token_file_path",
+        "omnicraft.cli_auth._token_file_path",
         lambda: tmp_path / "auth_tokens.json",
     )
 
-    url = conversation_url("https://example.databricks.com/api/2.0/omnigent", "conv_abc123")
+    url = conversation_url("https://example.databricks.com/api/2.0/omnicraft", "conv_abc123")
 
-    assert url == "https://example.databricks.com/omnigent/c/conv_abc123"
+    assert url == "https://example.databricks.com/omnicraft/c/conv_abc123"
 
 
 def test_conversation_url_plain_server_unchanged(tmp_path, monkeypatch) -> None:
     """Non-workspace servers keep the plain /c/<id> link shape."""
-    from omnigent.conversation_browser import conversation_url
+    from omnicraft.conversation_browser import conversation_url
 
     monkeypatch.setattr(
-        "omnigent.cli_auth._token_file_path",
+        "omnicraft.cli_auth._token_file_path",
         lambda: tmp_path / "auth_tokens.json",
     )
 

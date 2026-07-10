@@ -19,13 +19,13 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.entities.session_resources import SessionResourceView
-from omnigent.runner.app import (
+from omnicraft.entities.session_resources import SessionResourceView
+from omnicraft.runner.app import (
     ResolvedSpec,
     _auto_create_pi_terminal,
     _pi_native_model_from_spec,
 )
-from omnigent.spec.types import AgentSpec, ExecutorSpec
+from omnicraft.spec.types import AgentSpec, ExecutorSpec
 
 
 def _spec(model: str | None) -> AgentSpec:
@@ -101,8 +101,8 @@ async def test_auto_create_pi_terminal_threads_spec_model_into_models_json(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.pi_native_bridge as pi_bridge
-    import omnigent.pi_native_credentials as creds
+    import omnicraft.pi_native_bridge as pi_bridge
+    import omnicraft.pi_native_credentials as creds
 
     session_id = "conv_pi_model_e2e"
     workspace = tmp_path / "workspace"
@@ -110,11 +110,11 @@ async def test_auto_create_pi_terminal_threads_spec_model_into_models_json(
     # Redirect the bridge tree into tmp so the generated managed Pi config dir
     # (and its models.json) lands somewhere isolated and inspectable.
     monkeypatch.setattr(pi_bridge, "_BRIDGE_ROOT", tmp_path / "pi-native")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(workspace))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
     # Resolve a Pi executable without requiring the real binary on PATH.
-    monkeypatch.setattr("omnigent.pi_native.resolve_pi_executable", lambda: "/usr/bin/pi")
+    monkeypatch.setattr("omnicraft.pi_native.resolve_pi_executable", lambda: "/usr/bin/pi")
 
     # ``resolve_pi_native_provider``'s default config_loader is bound at def
     # time, so inject the test config by patching the module symbol the runner
@@ -174,7 +174,7 @@ async def test_auto_create_pi_terminal_threads_spec_model_into_models_json(
         spec_version=1,
         name="pi-model-e2e",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "pi-native"},
             model="claude-opus-4-7",
         ),
@@ -200,7 +200,7 @@ async def test_auto_create_pi_terminal_threads_spec_model_into_models_json(
     # The managed config dir env was set and its models.json selects the override.
     agent_dir = Path(launched["env"]["PI_CODING_AGENT_DIR"])
     models = json.loads((agent_dir / "models.json").read_text(encoding="utf-8"))
-    assert models["providers"]["omnigent"]["models"] == [{"id": "claude-opus-4-7"}]
+    assert models["providers"]["omnicraft"]["models"] == [{"id": "claude-opus-4-7"}]
 
 
 @pytest.mark.asyncio
@@ -218,17 +218,17 @@ async def test_auto_create_pi_terminal_no_spec_model_uses_provider_default(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.pi_native_bridge as pi_bridge
-    import omnigent.pi_native_credentials as creds
+    import omnicraft.pi_native_bridge as pi_bridge
+    import omnicraft.pi_native_credentials as creds
 
     session_id = "conv_pi_model_default"
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     monkeypatch.setattr(pi_bridge, "_BRIDGE_ROOT", tmp_path / "pi-native")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(workspace))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
-    monkeypatch.setattr("omnigent.pi_native.resolve_pi_executable", lambda: "/usr/bin/pi")
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.pi_native.resolve_pi_executable", lambda: "/usr/bin/pi")
 
     real_resolve = creds.resolve_pi_native_provider
     captured: dict[str, Any] = {}
@@ -280,7 +280,7 @@ async def test_auto_create_pi_terminal_no_spec_model_uses_provider_default(
     spec = AgentSpec(
         spec_version=1,
         name="pi-default",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "pi-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "pi-native"}),
     )
 
     await _auto_create_pi_terminal(
@@ -294,4 +294,4 @@ async def test_auto_create_pi_terminal_no_spec_model_uses_provider_default(
     assert captured["model"] is None
     agent_dir = Path(launched["env"]["PI_CODING_AGENT_DIR"])
     models = json.loads((agent_dir / "models.json").read_text(encoding="utf-8"))
-    assert models["providers"]["omnigent"]["models"] == [{"id": "claude-sonnet-4-6"}]
+    assert models["providers"]["omnicraft"]["models"] == [{"id": "claude-sonnet-4-6"}]

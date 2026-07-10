@@ -1,6 +1,6 @@
 """
 Tests for the built-in cost-budget policy
-(:mod:`omnigent.policies.builtins.cost`) — the ``cost_budget`` factory.
+(:mod:`omnicraft.policies.builtins.cost`) — the ``cost_budget`` factory.
 
 The policy's hard limit gates both the ``request`` and ``tool_call``
 phases: once reached, DENY (the whole turn on ``request``, or each tool
@@ -32,14 +32,14 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.builtins.cost import _ASK_APPROVED_KEY, cost_budget
-from omnigent.policies.function import FunctionPolicy, resolve_function_policy
-from omnigent.policies.registry import get_registry, load_registry, validate_factory_params
-from omnigent.policies.schema import PolicyEvent
-from omnigent.policies.types import EvaluationContext
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
+from omnicraft.policies.builtins.cost import _ASK_APPROVED_KEY, cost_budget
+from omnicraft.policies.function import FunctionPolicy, resolve_function_policy
+from omnicraft.policies.registry import get_registry, load_registry, validate_factory_params
+from omnicraft.policies.schema import PolicyEvent
+from omnicraft.policies.types import EvaluationContext
+from omnicraft.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
 
-_HANDLER = "omnigent.policies.builtins.cost.cost_budget"
+_HANDLER = "omnicraft.policies.builtins.cost.cost_budget"
 
 
 def _tool(
@@ -300,7 +300,7 @@ def test_unpriced_session_asks_fail_closed() -> None:
     ASK reason must name the model-pricing gap. The state_updates must
     carry the unpriced-approved key so an approval is remembered.
     """
-    from omnigent.policies.schema import SESSION_COST_UNPRICED_APPROVED_KEY
+    from omnicraft.policies.schema import SESSION_COST_UNPRICED_APPROVED_KEY
 
     policy = cost_budget(max_cost_usd=5.0)
     result = policy(_unpriced_tool())
@@ -335,7 +335,7 @@ def test_unpriced_session_allows_after_approval() -> None:
     next gate evaluation sees it and skips the unpriced check so the
     turn proceeds without re-asking.
     """
-    from omnigent.policies.schema import SESSION_COST_UNPRICED_APPROVED_KEY
+    from omnicraft.policies.schema import SESSION_COST_UNPRICED_APPROVED_KEY
 
     policy = cost_budget(max_cost_usd=5.0)
     approved_event = _unpriced_tool()

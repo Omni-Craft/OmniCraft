@@ -12,8 +12,8 @@ import {
   writeUiFontSizePx,
 } from "./uiFontPreferences";
 
-const STORAGE_KEY = "omnigent:ui-font-size";
-const FAMILY_STORAGE_KEY = "omnigent:ui-font-family";
+const STORAGE_KEY = "omnicraft:ui-font-size";
+const FAMILY_STORAGE_KEY = "omnicraft:ui-font-family";
 
 afterEach(() => {
   localStorage.clear();

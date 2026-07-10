@@ -11,8 +11,8 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent import claude_native_hook, native_policy_hook
-from omnigent.claude_native_bridge import (
+from omnicraft import claude_native_hook, native_policy_hook
+from omnicraft.claude_native_bridge import (
     build_hook_settings,
     prepare_bridge_dir,
     read_transcript_path,
@@ -31,8 +31,8 @@ def _trust_tmp_bridge_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> N
     :param tmp_path: Per-test temp directory.
     :returns: None.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path)
 
 
 def test_session_start_hook_records_transcript_state_without_output(
@@ -43,7 +43,7 @@ def test_session_start_hook_records_transcript_state_without_output(
     """
     SessionStart records Claude state without printing hook output.
 
-    This fails if the ``omnigent claude`` hook reintroduces
+    This fails if the ``omnicraft claude`` hook reintroduces
     ``systemMessage`` output, which Claude renders with the noisy
     ``SessionStart:startup says:`` prefix.
     """
@@ -53,7 +53,7 @@ def test_session_start_hook_records_transcript_state_without_output(
         "hook_event_name": "SessionStart",
         "transcript_path": str(transcript_path),
     }
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
 
     exit_code = claude_native_hook.main(
@@ -78,12 +78,12 @@ def test_session_start_hook_emits_conversation_url_system_message(
     """
     SessionStart emits Claude hook output when a conversation URL exists.
 
-    This fails if ``omnigent claude`` stops routing the web URL
+    This fails if ``omnicraft claude`` stops routing the web URL
     through Claude's hook output path, leaving users with no startup
-    pointer back to the Omnigent conversation.
+    pointer back to the OmniCraft conversation.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
         bridge_id="bridge_shared",
@@ -121,21 +121,21 @@ def test_session_start_hook_maps_workspace_hosted_server_to_ui_mount(
     """
     SessionStart links to the SPA mount for workspace-hosted servers.
 
-    ``ap_server_url`` is the API proxy base (``/api/2.0/omnigent``);
+    ``ap_server_url`` is the API proxy base (``/api/2.0/omnicraft``);
     pointing the "Open this session" message there returns JSON, not
-    the web UI. The message must land on the ``/omnigent`` SPA mount
+    the web UI. The message must land on the ``/omnicraft`` SPA mount
     with the ``?o=<org>`` selector — matching the CLI's ``Web UI:``
     line and the tmux status bar.
     """
-    from omnigent.cli_auth import store_databricks_auth
+    from omnicraft.cli_auth import store_databricks_auth
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(
-        "omnigent.cli_auth._token_file_path",
+        "omnicraft.cli_auth._token_file_path",
         lambda: tmp_path / "auth_tokens.json",
     )
-    server = "https://example.databricks.com/api/2.0/omnigent"
+    server = "https://example.databricks.com/api/2.0/omnicraft"
     store_databricks_auth(
         server,
         "https://example.databricks.com",
@@ -160,7 +160,7 @@ def test_session_start_hook_maps_workspace_hosted_server_to_ui_mount(
     assert json.loads(captured.out) == {
         "systemMessage": (
             "Open this session in OmniCraft: "
-            "https://example.databricks.com/omnigent/c/conv_abc?o=2850744067564480"
+            "https://example.databricks.com/omnicraft/c/conv_abc?o=2850744067564480"
         )
     }
 
@@ -171,7 +171,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    ``/clear`` SessionStart prints the URL for the replacement Omnigent session.
+    ``/clear`` SessionStart prints the URL for the replacement OmniCraft session.
 
     Claude renders hook stdout immediately, before the background
     forwarder can poll the hook log. This test fails if the banner
@@ -221,7 +221,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
             """
             Return the old session snapshot.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :returns: HTTP response object.
             """
             import httpx
@@ -233,7 +233,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
                     "id": "conv_old",
                     "agent_id": "ag_claude",
                     "runner_id": "runner_one",
-                    "labels": {"omnigent.claude_native.bridge_id": "bridge_shared"},
+                    "labels": {"omnicraft.claude_native.bridge_id": "bridge_shared"},
                 },
                 request=httpx.Request("GET", url),
             )
@@ -242,7 +242,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
             """
             Create the replacement session or transfer the terminal.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -265,7 +265,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
             """
             Bind the new session or clear the old runner binding.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -278,8 +278,8 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
                 request=httpx.Request("PATCH", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", _FakeHttpxClient)
     bridge_dir = prepare_bridge_dir(
         "conv_old",
@@ -313,7 +313,7 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
             "http://127.0.0.1:8787/v1/sessions",
             {
                 "agent_id": "ag_claude",
-                "labels": {"omnigent.claude_native.bridge_id": "bridge_shared"},
+                "labels": {"omnicraft.claude_native.bridge_id": "bridge_shared"},
             },
         ),
         ("PATCH", "http://127.0.0.1:8787/v1/sessions/conv_new", {"runner_id": "runner_one"}),
@@ -330,16 +330,16 @@ def test_clear_session_start_hook_rotates_before_printing_conversation_url(
             "http://127.0.0.1:8787/v1/sessions/conv_old",
             {
                 "runner_id": "",
-                "labels": {"omnigent.claude_native.bridge_id": "conv_old-cleared"},
+                "labels": {"omnicraft.claude_native.bridge_id": "conv_old-cleared"},
             },
         ),
     ]
     recorded = (bridge_dir / "hooks.jsonl").read_text(encoding="utf-8")
-    assert '"omnigent_clear_rotated_to":"conv_new"' in recorded
+    assert '"omnicraft_clear_rotated_to":"conv_new"' in recorded
     # The /clear rotation gates Claude's welcome banner and must fail
     # fast — it uses _SESSION_ROTATION_TIMEOUT_S, NOT the day-long
     # permission long-poll budget. If this regresses to
-    # _PERMISSION_TIMEOUT_S (86400) an unresponsive Omnigent server would hang
+    # _PERMISSION_TIMEOUT_S (86400) an unresponsive OmniCraft server would hang
     # the banner for a full day instead of returning None so the
     # background forwarder can rotate.
     rotation_timeout = _FakeHttpxClient.captured_timeouts[0]
@@ -353,7 +353,7 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    Claude ``/fork`` SessionStart prints the URL for the forked Omnigent session.
+    Claude ``/fork`` SessionStart prints the URL for the forked OmniCraft session.
 
     Claude reports ``/fork``/``/branch`` as ``SessionStart`` with
     ``source=resume``. This test fails if the hook no longer detects
@@ -404,7 +404,7 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
             """
             Return the old session snapshot.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :returns: HTTP response object.
             """
             import httpx
@@ -416,16 +416,16 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
                     "id": "conv_old",
                     "agent_id": "ag_claude",
                     "runner_id": "runner_one",
-                    "labels": {"omnigent.claude_native.bridge_id": "bridge_shared"},
+                    "labels": {"omnicraft.claude_native.bridge_id": "bridge_shared"},
                 },
                 request=httpx.Request("GET", url),
             )
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Fork the Omnigent session or transfer the terminal.
+            Fork the OmniCraft session or transfer the terminal.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -448,7 +448,7 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
             """
             Bind the forked session or clear the old runner binding.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -461,8 +461,8 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
                 request=httpx.Request("PATCH", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", _FakeHttpxClient)
     bridge_dir = prepare_bridge_dir(
         "conv_old",
@@ -527,14 +527,14 @@ def test_fork_session_start_hook_forks_before_printing_conversation_url(
         ("PATCH", "http://127.0.0.1:8787/v1/sessions/conv_old", {"runner_id": ""}),
     ]
     recorded = (bridge_dir / "hooks.jsonl").read_text(encoding="utf-8")
-    assert '"omnigent_previous_claude_session_id":"claude_old"' in recorded
-    assert '"omnigent_claude_session_was_seen":false' in recorded
-    assert '"omnigent_fork_detected":true' in recorded
-    assert '"omnigent_fork_rotated_to":"conv_fork"' in recorded
+    assert '"omnicraft_previous_claude_session_id":"claude_old"' in recorded
+    assert '"omnicraft_claude_session_was_seen":false' in recorded
+    assert '"omnicraft_fork_detected":true' in recorded
+    assert '"omnicraft_fork_rotated_to":"conv_fork"' in recorded
     # The /fork rotation gates Claude's welcome banner and must fail
     # fast — it uses _SESSION_ROTATION_TIMEOUT_S, NOT the day-long
     # permission long-poll budget. If this regresses to
-    # _PERMISSION_TIMEOUT_S (86400) an unresponsive Omnigent server would hang
+    # _PERMISSION_TIMEOUT_S (86400) an unresponsive OmniCraft server would hang
     # the banner for a full day instead of returning None so the
     # background forwarder can fork.
     rotation_timeout = _FakeHttpxClient.captured_timeouts[0]
@@ -548,15 +548,15 @@ def test_resume_session_start_without_branch_marker_does_not_fork(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    Ordinary Claude resumes do not create Omnigent forks.
+    Ordinary Claude resumes do not create OmniCraft forks.
 
     This fails if every ``SessionStart source=resume`` starts forking
-    Omnigent sessions, which would break normal Claude resume flows.
+    OmniCraft sessions, which would break normal Claude resume flows.
     """
 
     class _FailingHttpxClient:
         """
-        HTTP client stub that fails if fork detection makes Omnigent calls.
+        HTTP client stub that fails if fork detection makes OmniCraft calls.
 
         :param headers: Headers passed to :class:`httpx.Client`.
         :param timeout: Timeout passed to :class:`httpx.Client`.
@@ -589,8 +589,8 @@ def test_resume_session_start_without_branch_marker_does_not_fork(
             """
             del args
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", _FailingHttpxClient)
     bridge_dir = prepare_bridge_dir(
         "conv_old",
@@ -621,8 +621,8 @@ def test_resume_session_start_without_branch_marker_does_not_fork(
         "systemMessage": "Open this session in OmniCraft: http://127.0.0.1:8787/c/conv_old"
     }
     recorded = (bridge_dir / "hooks.jsonl").read_text(encoding="utf-8")
-    assert "omnigent_fork_detected" not in recorded
-    assert "omnigent_fork_rotated_to" not in recorded
+    assert "omnicraft_fork_detected" not in recorded
+    assert "omnicraft_fork_rotated_to" not in recorded
 
 
 def test_non_session_start_hook_does_not_emit_conversation_url_context(
@@ -635,11 +635,11 @@ def test_non_session_start_hook_does_not_emit_conversation_url_context(
 
     This fails if Stop/UserPromptSubmit hooks start producing stdout,
     which Claude could interpret as hook output for events that are only
-    supposed to update Omnigent bridge state.
+    supposed to update OmniCraft bridge state.
     """
     bridge_dir = tmp_path / "bridge"
     payload = {"hook_event_name": "Stop"}
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
 
     exit_code = claude_native_hook.main(
@@ -663,10 +663,10 @@ def test_permission_request_hook_posts_to_active_session_from_bridge_config(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    Permission command hook routes to the current active Omnigent session.
+    Permission command hook routes to the current active OmniCraft session.
 
     This fails if the hook bakes in the launch conversation id: after
-    Claude ``/clear`` rotates the bridge to a new Omnigent session, approval
+    Claude ``/clear`` rotates the bridge to a new OmniCraft session, approval
     requests would still appear on the old conversation.
     """
     posted: dict[str, object] = {}
@@ -709,9 +709,9 @@ def test_permission_request_hook_posts_to_active_session_from_bridge_config(
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Record the outgoing Omnigent request.
+            Record the outgoing OmniCraft request.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body.
             :returns: HTTP response object.
             """
@@ -725,8 +725,8 @@ def test_permission_request_hook_posts_to_active_session_from_bridge_config(
                 request=httpx.Request("POST", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", _FakeHttpxClient)
     bridge_dir = prepare_bridge_dir(
         "conv_old",
@@ -757,9 +757,9 @@ def test_permission_request_hook_posts_to_active_session_from_bridge_config(
     assert isinstance(sent, dict)
     # The hook payload is forwarded verbatim, plus the minted re-attach
     # id the server uses to re-park the prompt across severed polls.
-    assert {k: v for k, v in sent.items() if k != "_omnigent_elicitation_id"} == payload
-    assert re.fullmatch(r"elicit_claude_[0-9a-f]{32}", sent["_omnigent_elicitation_id"]), (
-        f"re-attach id outside the claude-hook namespace: {sent.get('_omnigent_elicitation_id')!r}"
+    assert {k: v for k, v in sent.items() if k != "_omnicraft_elicitation_id"} == payload
+    assert re.fullmatch(r"elicit_claude_[0-9a-f]{32}", sent["_omnicraft_elicitation_id"]), (
+        f"re-attach id outside the claude-hook namespace: {sent.get('_omnicraft_elicitation_id')!r}"
     )
     assert posted["headers"] == {"Authorization": "Bearer xyz"}
     assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "allow"
@@ -772,7 +772,7 @@ def _prepare_permission_bridge(tmp_path: Path, session_id: str) -> Path:
 
     :param tmp_path: Test-scoped temp directory (already patched as the
         trusted bridge parent by the caller).
-    :param session_id: Active Omnigent session id, e.g. ``"conv_x"``.
+    :param session_id: Active OmniCraft session id, e.g. ``"conv_x"``.
     :returns: The prepared bridge directory.
     """
     bridge_dir = prepare_bridge_dir(
@@ -799,7 +799,7 @@ def test_permission_request_hook_retries_transport_cut_with_same_id(
     This is the proxy-cut path that used to fail-ask into an invisible
     terminal prompt for headless sub-agents: one transport error ended
     the hook. The retry must reuse the minted
-    ``_omnigent_elicitation_id`` — a fresh id per attempt would park a
+    ``_omnicraft_elicitation_id`` — a fresh id per attempt would park a
     NEW elicitation and orphan the card the server kept alive through
     the re-park grace.
     """
@@ -844,7 +844,7 @@ def test_permission_request_hook_retries_transport_cut_with_same_id(
             """
             Fail the first attempt at the transport layer, then succeed.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body.
             :returns: HTTP 200 with a decision on the second attempt.
             :raises httpx.ReadError: On the first attempt.
@@ -864,8 +864,8 @@ def test_permission_request_hook_retries_transport_cut_with_same_id(
                 request=httpx.Request("POST", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", _FlakyHttpxClient)
     # Zero backoff keeps the retry loop instant in tests; production
     # waits between attempts.
@@ -882,11 +882,11 @@ def test_permission_request_hook_retries_transport_cut_with_same_id(
     # transport error fail-asked without retrying (the production bug);
     # 3+ would mean a success was retried.
     assert len(attempts) == 2, f"expected 2 attempts, got {len(attempts)}"
-    first_id = attempts[0]["_omnigent_elicitation_id"]
+    first_id = attempts[0]["_omnicraft_elicitation_id"]
     assert re.fullmatch(r"elicit_claude_[0-9a-f]{32}", str(first_id))
     # Same id on the retry is the whole re-attach contract — a new id
     # would orphan the elicitation the server kept pending.
-    assert attempts[1]["_omnigent_elicitation_id"] == first_id
+    assert attempts[1]["_omnicraft_elicitation_id"] == first_id
     # The verdict from the successful retry reaches Claude on stdout.
     decision = json.loads(captured.out)["hookSpecificOutput"]["decision"]
     assert decision == {"behavior": "allow"}
@@ -898,7 +898,7 @@ def test_permission_request_hook_does_not_retry_rejections(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    A 4xx from the Omnigent server is a deliberate answer — no retry.
+    A 4xx from the OmniCraft server is a deliberate answer — no retry.
 
     Retrying a rejection (bad payload, foreign elicitation id) would
     hammer the server with a request it already refused; the hook must
@@ -945,7 +945,7 @@ def test_permission_request_hook_does_not_retry_rejections(
             """
             Reject every attempt with HTTP 400.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body.
             :returns: HTTP 400 response.
             """
@@ -957,8 +957,8 @@ def test_permission_request_hook_does_not_retry_rejections(
                 request=httpx.Request("POST", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", _RejectingHttpxClient)
     monkeypatch.setattr(claude_native_hook, "_PERMISSION_RETRY_INITIAL_BACKOFF_S", 0.0)
     bridge_dir = _prepare_permission_bridge(tmp_path, "conv_reject")
@@ -978,7 +978,7 @@ def test_permission_request_hook_does_not_retry_rejections(
     assert "rejected" in captured.err
 
 
-def test_build_hook_settings_registers_policy_hooks_when_omnigent_server_url_set(
+def test_build_hook_settings_registers_policy_hooks_when_omnicraft_server_url_set(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -990,8 +990,8 @@ def test_build_hook_settings_registers_policy_hooks_when_omnigent_server_url_set
     be gated. This fails if the hook registration is dropped or guarded
     behind a different condition than ``ap_server_url``.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
         bridge_id="bridge_test",
@@ -1065,8 +1065,8 @@ def test_build_hook_settings_registers_message_display_hook(
     (streaming works for local servers too). Fails if the registration
     is dropped or pointed at the wrong module.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_test", workspace=tmp_path)
 
     # No ap_server_url: streaming must still be registered.
@@ -1077,7 +1077,7 @@ def test_build_hook_settings_registers_message_display_hook(
     )
     command = hooks["MessageDisplay"][0]["hooks"][0]["command"]
     # Routes to the dedicated lightweight module with this bridge dir...
-    assert "omnigent.claude_native_message_display_hook" in command
+    assert "omnicraft.claude_native_message_display_hook" in command
     assert str(bridge_dir) in command
     # ...and NOT through the heavier observer/policy subcommands (which
     # would import claude_native_bridge on every streamed chunk).
@@ -1085,18 +1085,18 @@ def test_build_hook_settings_registers_message_display_hook(
     assert "permission-request" not in command
 
 
-def test_build_hook_settings_omits_policy_hooks_without_omnigent_server_url(
+def test_build_hook_settings_omits_policy_hooks_without_omnicraft_server_url(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    ``build_hook_settings`` omits policy hooks when no Omnigent URL is set.
+    ``build_hook_settings`` omits policy hooks when no OmniCraft URL is set.
 
-    Without an Omnigent server there are no policies to evaluate; registering
+    Without an OmniCraft server there are no policies to evaluate; registering
     the hooks would cause no-op subprocesses on every tool call.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
         bridge_id="bridge_test",
@@ -1111,7 +1111,7 @@ def test_build_hook_settings_omits_policy_hooks_without_omnigent_server_url(
     for entry in hooks.get("PostToolUse", []):
         cmd = entry["hooks"][0]["command"]
         assert "evaluate-policy" not in cmd, (
-            "Policy evaluation hook should not be registered without Omnigent URL"
+            "Policy evaluation hook should not be registered without OmniCraft URL"
         )
 
 
@@ -1168,9 +1168,9 @@ def test_evaluate_policy_pre_tool_use_converts_and_returns_deny(
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Record the outgoing Omnigent request and return a DENY verdict.
+            Record the outgoing OmniCraft request and return a DENY verdict.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body (EvaluationRequest).
             :returns: HTTP response object with EvaluationResponse.
             """
@@ -1184,8 +1184,8 @@ def test_evaluate_policy_pre_tool_use_converts_and_returns_deny(
                 request=httpx.Request("POST", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(native_policy_hook.httpx, "Client", _FakeHttpxClient)
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
@@ -1273,8 +1273,8 @@ def test_evaluate_policy_stamps_live_model_from_context_json(
                 request=httpx.Request("POST", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", _FakeHttpxClient)
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_shared", workspace=tmp_path)
     write_active_session_id(bridge_dir, "conv_active")
@@ -1347,9 +1347,9 @@ def test_evaluate_policy_post_tool_use_converts_and_returns_context(
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Record the outgoing Omnigent request and return a DENY verdict.
+            Record the outgoing OmniCraft request and return a DENY verdict.
 
-            :param url: Target Omnigent URL.
+            :param url: Target OmniCraft URL.
             :param json: Request JSON body (EvaluationRequest).
             :returns: HTTP response with EvaluationResponse.
             """
@@ -1363,8 +1363,8 @@ def test_evaluate_policy_post_tool_use_converts_and_returns_context(
                 request=httpx.Request("POST", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", _FakeHttpxClient)
     bridge_dir = prepare_bridge_dir(
         "conv_abc",
@@ -1419,7 +1419,7 @@ def test_ask_user_question_hook_noop_in_non_bypass_mode(
     and owns the elicitation.  The ``ask-user-question`` PreToolUse hook must
     return empty output (no opinion) so the form is not shown twice.
 
-    This fails if the handler forwards the payload to Omnigent in non-bypass mode —
+    This fails if the handler forwards the payload to OmniCraft in non-bypass mode —
     which would cause a duplicate elicitation card in the web UI and race for
     the same answer.
     """
@@ -1455,7 +1455,7 @@ def test_ask_user_question_hook_noop_in_non_bypass_mode(
 
         def post(self, *_args: object, **_kwargs: object) -> object:
             """
-            Fail if Omnigent is called — must not happen in non-bypass mode.
+            Fail if OmniCraft is called — must not happen in non-bypass mode.
 
             :param _args: Ignored.
             :param _kwargs: Ignored.
@@ -1483,7 +1483,7 @@ def test_ask_user_question_hook_noop_in_non_bypass_mode(
         monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
         exit_code = claude_native_hook.main(["ask-user-question", "--bridge-dir", str(bridge_dir)])
         captured = capsys.readouterr()
-        # No Omnigent call, no output — "no opinion" so PermissionRequest takes over.
+        # No OmniCraft call, no output — "no opinion" so PermissionRequest takes over.
         assert exit_code == 0, f"Non-zero exit for mode={mode!r}"
         assert captured.out == "", f"Unexpected output for mode={mode!r}: {captured.out!r}"
         assert calls == [], f"AP client was constructed for mode={mode!r}"
@@ -1495,15 +1495,15 @@ def test_ask_user_question_hook_posts_and_returns_pre_tool_use_output_in_bypass_
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """
-    In bypassPermissions mode the hook posts to Omnigent and returns PreToolUse output.
+    In bypassPermissions mode the hook posts to OmniCraft and returns PreToolUse output.
 
     In bypass mode ``PermissionRequest`` never fires, so this PreToolUse hook
     is the only opportunity to surface ``AskUserQuestion`` in the web UI.  It
-    must POST the payload to the Omnigent session's permission-request endpoint, then
+    must POST the payload to the OmniCraft session's permission-request endpoint, then
     convert the ``PermissionRequest``-format response to ``PreToolUse`` format
     (lifting ``decision.updatedInput`` to the top-level ``updatedInput`` field).
 
-    Fails if: Omnigent is not called in bypass mode, the URL targets the wrong session,
+    Fails if: OmniCraft is not called in bypass mode, the URL targets the wrong session,
     the response is not converted from PermissionRequest to PreToolUse format,
     or the user's answers are not surfaced in ``updatedInput``.
     """
@@ -1559,7 +1559,7 @@ def test_ask_user_question_hook_posts_and_returns_pre_tool_use_output_in_bypass_
 
         def post(self, url: str, *, json: dict[str, object]) -> object:
             """
-            Record the Omnigent request and return a canned PermissionRequest response.
+            Record the OmniCraft request and return a canned PermissionRequest response.
 
             :param url: Target URL.
             :param json: Request body.
@@ -1599,7 +1599,7 @@ def test_ask_user_question_hook_posts_and_returns_pre_tool_use_output_in_bypass_
 
     captured = capsys.readouterr()
     assert exit_code == 0
-    # Omnigent must be called with the active session's URL.
+    # OmniCraft must be called with the active session's URL.
     assert posted["url"] == (
         "http://127.0.0.1:8787/v1/sessions/conv_bypass/hooks/permission-request"
     )
@@ -1607,8 +1607,8 @@ def test_ask_user_question_hook_posts_and_returns_pre_tool_use_output_in_bypass_
     # forwarded verbatim, plus the minted re-attach id.
     sent = posted["json"]
     assert isinstance(sent, dict)
-    assert {k: v for k, v in sent.items() if k != "_omnigent_elicitation_id"} == payload
-    assert re.fullmatch(r"elicit_claude_[0-9a-f]{32}", sent["_omnigent_elicitation_id"])
+    assert {k: v for k, v in sent.items() if k != "_omnicraft_elicitation_id"} == payload
+    assert re.fullmatch(r"elicit_claude_[0-9a-f]{32}", sent["_omnicraft_elicitation_id"])
     # Auth headers from bridge config are forwarded.
     assert posted["headers"] == {"Authorization": "Bearer token"}
     # Output must be PreToolUse-format, NOT PermissionRequest-format.
@@ -1733,8 +1733,8 @@ def test_evaluate_policy_pre_tool_use_fails_closed_when_verdict_unavailable(
     so a server outage / non-2xx / empty / malformed response must fail
     CLOSED (deny) instead of "no opinion" — the bypass reported in #536.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", make_failing_client(mode))
     monkeypatch.setattr(native_policy_hook, "_EVALUATE_POLICY_RETRY_BUDGET_S", 0.0)
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_shared", workspace=tmp_path)
@@ -1768,8 +1768,8 @@ def test_evaluate_policy_user_prompt_submit_fails_closed_on_error(
     sessions — a server outage must not let an over-budget or otherwise-
     blocked request proceed. The output must be ``decision: "block"``.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", make_failing_client("connect_error"))
     monkeypatch.setattr(native_policy_hook, "_EVALUATE_POLICY_RETRY_BUDGET_S", 0.0)
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_shared", workspace=tmp_path)
@@ -1800,8 +1800,8 @@ def test_evaluate_policy_post_tool_use_fails_open_on_error(
 
     Mirroring the runner-side ``FAIL_CLOSED_PHASES``.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(claude_native_hook.httpx, "Client", make_failing_client("connect_error"))
     monkeypatch.setattr(native_policy_hook, "_EVALUATE_POLICY_RETRY_BUDGET_S", 0.0)
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_shared", workspace=tmp_path)
@@ -1834,8 +1834,8 @@ def test_build_hook_settings_omits_apikeyhelper_when_none(
     never write the string ``"None"`` — a regression to an unconditional
     assignment would also corrupt the existing key/gateway/local flows.
     """
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_test", workspace=tmp_path)
 
     assert "apiKeyHelper" not in build_hook_settings(bridge_dir, api_key_helper=None)
@@ -1879,8 +1879,8 @@ def test_evaluate_policy_retries_5xx_and_succeeds(
                 request=req,
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     # Sleep is a no-op so retries are instant.
     monkeypatch.setattr(native_policy_hook.time, "sleep", lambda _: None)
     monkeypatch.setattr(native_policy_hook.httpx, "Client", _FlakyThenOkClient)
@@ -1943,19 +1943,19 @@ def test_evaluate_policy_reauths_on_expired_token_instead_of_failing_closed(
                 )
             return httpx.Response(200, text='{"result":"POLICY_ACTION_ALLOW"}', request=req)
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(native_policy_hook.httpx, "Client", _RedirectThenOkClient)
     # The hook re-mints through the runner's token factory; stub a fresh token.
     monkeypatch.setattr(
-        "omnigent.runner._entry._make_auth_token_factory",
+        "omnicraft.runner._entry._make_auth_token_factory",
         lambda server_url=None: lambda: "fresh-token",
     )
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_shared", workspace=tmp_path)
     write_active_session_id(bridge_dir, "conv_active")
     build_hook_settings(
         bridge_dir,
-        ap_server_url="https://omnigents.example.databricksapps.com",
+        ap_server_url="https://omnicrafts.example.databricksapps.com",
         ap_auth_headers={"Authorization": "Bearer stale-token", "X-Databricks-Org-Id": "o1"},
     )
     payload = {
@@ -2014,18 +2014,18 @@ def test_evaluate_policy_reauths_on_403_invalid_token(
                 return httpx.Response(403, text="Invalid Token", request=req)
             return httpx.Response(200, text='{"result":"POLICY_ACTION_ALLOW"}', request=req)
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(native_policy_hook.httpx, "Client", _ForbiddenThenOkClient)
     monkeypatch.setattr(
-        "omnigent.runner._entry._make_auth_token_factory",
+        "omnicraft.runner._entry._make_auth_token_factory",
         lambda server_url=None: lambda: "fresh-token",
     )
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_shared", workspace=tmp_path)
     write_active_session_id(bridge_dir, "conv_active")
     build_hook_settings(
         bridge_dir,
-        ap_server_url="https://omnigents.example.databricksapps.com",
+        ap_server_url="https://omnicrafts.example.databricksapps.com",
         ap_auth_headers={"Authorization": "Bearer stale-token", "X-Databricks-Org-Id": "o1"},
     )
     monkeypatch.setattr(
@@ -2085,18 +2085,18 @@ def test_evaluate_policy_fails_closed_when_reauth_unavailable(
                 request=httpx.Request("POST", url),
             )
 
-    monkeypatch.setattr("omnigent.claude_native_bridge._TRUSTED_PARENT", tmp_path)
-    monkeypatch.setattr("omnigent.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
+    monkeypatch.setattr("omnicraft.claude_native_bridge._TRUSTED_PARENT", tmp_path)
+    monkeypatch.setattr("omnicraft.claude_native_bridge._BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setattr(native_policy_hook.httpx, "Client", _RedirectClient)
     monkeypatch.setattr(
-        "omnigent.runner._entry._make_auth_token_factory",
+        "omnicraft.runner._entry._make_auth_token_factory",
         lambda server_url=None: None,
     )
     bridge_dir = prepare_bridge_dir("conv_abc", bridge_id="bridge_shared", workspace=tmp_path)
     write_active_session_id(bridge_dir, "conv_active")
     build_hook_settings(
         bridge_dir,
-        ap_server_url="https://omnigents.example.databricksapps.com",
+        ap_server_url="https://omnicrafts.example.databricksapps.com",
         ap_auth_headers={"Authorization": "Bearer stale-token"},
     )
     payload = {
@@ -2232,14 +2232,14 @@ def test_reattach_5xx_counts_as_hard_failure(monkeypatch: pytest.MonkeyPatch) ->
 
 
 def test_reattach_cap_is_env_overridable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``OMNIGENT_HOOK_MAX_RETRIES`` tunes the hard-failure cap.
+    """``OMNICRAFT_HOOK_MAX_RETRIES`` tunes the hard-failure cap.
 
     Operators fronting a flaky proxy can widen the budget. Re-import the
     module under the env override so the module-level constant is recomputed.
     """
     import importlib
 
-    monkeypatch.setenv("OMNIGENT_HOOK_MAX_RETRIES", "3")
+    monkeypatch.setenv("OMNICRAFT_HOOK_MAX_RETRIES", "3")
     reloaded = importlib.reload(claude_native_hook)
     try:
         client = _scripted_client(script=[("connect", 0.0)], monkeypatch=monkeypatch)
@@ -2257,24 +2257,24 @@ def test_reattach_cap_is_env_overridable(monkeypatch: pytest.MonkeyPatch) -> Non
     finally:
         # Restore the module for other tests (monkeypatch unsets the env var,
         # but the reloaded constant would persist without this).
-        monkeypatch.delenv("OMNIGENT_HOOK_MAX_RETRIES", raising=False)
+        monkeypatch.delenv("OMNICRAFT_HOOK_MAX_RETRIES", raising=False)
         importlib.reload(claude_native_hook)
 
 
 def test_reattach_bad_env_max_retries_falls_back(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A non-integer ``OMNIGENT_HOOK_MAX_RETRIES`` must not crash the hook.
+    """A non-integer ``OMNICRAFT_HOOK_MAX_RETRIES`` must not crash the hook.
 
     ``int("banana")`` at import time would raise and defeat the terminal
     fallback; the guarded parse keeps the default instead (#1782 review note).
     """
     import importlib
 
-    monkeypatch.setenv("OMNIGENT_HOOK_MAX_RETRIES", "banana")
+    monkeypatch.setenv("OMNICRAFT_HOOK_MAX_RETRIES", "banana")
     reloaded = importlib.reload(claude_native_hook)
     try:
         assert reloaded._PERMISSION_MAX_CONSECUTIVE_FAILURES == 8  # default preserved
     finally:
-        monkeypatch.delenv("OMNIGENT_HOOK_MAX_RETRIES", raising=False)
+        monkeypatch.delenv("OMNICRAFT_HOOK_MAX_RETRIES", raising=False)
         importlib.reload(claude_native_hook)
 
 
@@ -2360,7 +2360,7 @@ def test_reattach_fast_flapping_connection_is_hard_failure(
 
 
 def test_held_poll_floor_is_env_overridable(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``OMNIGENT_HOOK_HELD_POLL_FLOOR_S`` tunes the flap-vs-held boundary.
+    """``OMNICRAFT_HOOK_HELD_POLL_FLOOR_S`` tunes the flap-vs-held boundary.
 
     Operators behind an aggressive proxy whose idle timeout is under the 10s
     default can lower the floor so their legitimate slow-human severs stay
@@ -2369,26 +2369,26 @@ def test_held_poll_floor_is_env_overridable(monkeypatch: pytest.MonkeyPatch) -> 
     """
     import importlib
 
-    monkeypatch.setenv("OMNIGENT_HOOK_HELD_POLL_FLOOR_S", "3.5")
+    monkeypatch.setenv("OMNICRAFT_HOOK_HELD_POLL_FLOOR_S", "3.5")
     reloaded = importlib.reload(claude_native_hook)
     try:
         assert reloaded._PERMISSION_HELD_POLL_FLOOR_S == 3.5
     finally:
-        monkeypatch.delenv("OMNIGENT_HOOK_HELD_POLL_FLOOR_S", raising=False)
+        monkeypatch.delenv("OMNICRAFT_HOOK_HELD_POLL_FLOOR_S", raising=False)
         importlib.reload(claude_native_hook)
 
     # Malformed / non-finite overrides must not crash the hook or silently
     # disable flap detection — each falls back to the 10s default. "inf" would
     # make every sever a held poll; "nan" makes held_s < floor always False.
     for bad in ("not-a-number", "inf", "nan", "-inf"):
-        monkeypatch.setenv("OMNIGENT_HOOK_HELD_POLL_FLOOR_S", bad)
+        monkeypatch.setenv("OMNICRAFT_HOOK_HELD_POLL_FLOOR_S", bad)
         reloaded = importlib.reload(claude_native_hook)
         try:
             assert reloaded._PERMISSION_HELD_POLL_FLOOR_S == 10.0, (
                 f"bad floor {bad!r} not rejected"
             )
         finally:
-            monkeypatch.delenv("OMNIGENT_HOOK_HELD_POLL_FLOOR_S", raising=False)
+            monkeypatch.delenv("OMNICRAFT_HOOK_HELD_POLL_FLOOR_S", raising=False)
             importlib.reload(claude_native_hook)
 
 

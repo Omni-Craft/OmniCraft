@@ -1,6 +1,6 @@
-# Omnigent on Fly.io
+# OmniCraft on Fly.io
 
-Deploy Omnigent to Fly.io. Fly pulls the prebuilt image, runs it next to a
+Deploy OmniCraft to Fly.io. Fly pulls the prebuilt image, runs it next to a
 persistent volume, and serves it over HTTPS on `*.fly.dev`.
 
 > **Fly is CLI-first.** There's no embeddable one-click button like Render's;
@@ -9,7 +9,7 @@ persistent volume, and serves it over HTTPS on `*.fly.dev`.
 
 ## What gets provisioned
 
-- **omnigent** — a machine that pulls `ghcr.io/omnigent-ai/omnigent-server`,
+- **omnicraft** — a machine that pulls `ghcr.io/omnicraft-ai/omnicraft-server`,
   served on `https://<app>.fly.dev`.
 - **artifact_data** — a persistent volume mounted at `/data/artifacts`, holding
   the artifact store, the minted cookie secret, and (by default) the SQLite
@@ -55,7 +55,7 @@ no "deploy this external image" mode, so the default `[build] image = ...`
   dockerfile = "deploy/docker/Dockerfile.prebuilt"
 ```
 
-The shim is `FROM ghcr.io/omnigent-ai/omnigent-server` with nothing added, so
+The shim is `FROM ghcr.io/omnicraft-ai/omnicraft-server` with nothing added, so
 Fly **pulls the prebuilt image and re-tags it** — no source rebuild. Launch
 still won't auto-create the `artifact_data` volume or bump memory, so create
 the volume (above) and confirm 1 GB after Launch finishes.
@@ -90,16 +90,16 @@ provides on `*.fly.dev`):
 
 ```bash
 fly secrets set \
-  OMNIGENT_AUTH_PROVIDER=oidc \
-  OMNIGENT_OIDC_ISSUER=https://github.com \
-  OMNIGENT_OIDC_CLIENT_ID=<client-id> \
-  OMNIGENT_OIDC_CLIENT_SECRET=<client-secret> \
-  OMNIGENT_OIDC_REDIRECT_URI=https://<your-app>.fly.dev/auth/callback \
-  OMNIGENT_OIDC_COOKIE_SECRET=$(openssl rand -hex 32) \
+  OMNICRAFT_AUTH_PROVIDER=oidc \
+  OMNICRAFT_OIDC_ISSUER=https://github.com \
+  OMNICRAFT_OIDC_CLIENT_ID=<client-id> \
+  OMNICRAFT_OIDC_CLIENT_SECRET=<client-secret> \
+  OMNICRAFT_OIDC_REDIRECT_URI=https://<your-app>.fly.dev/auth/callback \
+  OMNICRAFT_OIDC_COOKIE_SECRET=$(openssl rand -hex 32) \
   -a <your-app>
 ```
 
-For Google Workspace, also set `OMNIGENT_OIDC_ALLOWED_DOMAINS` to restrict
+For Google Workspace, also set `OMNICRAFT_OIDC_ALLOWED_DOMAINS` to restrict
 logins to your domain.
 
 ## Cost

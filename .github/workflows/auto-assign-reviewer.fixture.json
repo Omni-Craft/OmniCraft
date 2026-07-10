@@ -23,7 +23,7 @@
     "               LAST matching area in this array wins per file. So broad prefixes",
     "               MUST come before their more-specific children:",
     "                 - 'web/' before 'web/electron/' and 'web/ios/'",
-    "                 - 'omnigent/inner/' before every 'omnigent/inner/<harness>_'.",
+    "                 - 'omnicraft/inner/' before every 'omnicraft/inner/<harness>_'.",
     "  owners     - candidate reviewers/assignees. Must be maintainers in",
     "               .github/MAINTAINER. 2+ each. NOTE: @hzub is intentionally NOT an",
     "               owner anywhere (a reviewer test relies on hzub being in MAINTAINER",
@@ -90,7 +90,7 @@
       "label": "comp:harnesses",
       "definition": "Core agent runtime and the harness/executor layer shared by all harnesses (loader, executor base, tool bridge, sandboxes). Harness-specific code has its own areas below.",
       "paths": [
-        "omnigent/inner/"
+        "omnicraft/inner/"
       ],
       "owners": [
         "SabhyaC26",
@@ -104,7 +104,7 @@
       "label": "comp:runner",
       "definition": "The agent runner: the execution engine that drives a turn.",
       "paths": [
-        "omnigent/runner/"
+        "omnicraft/runner/"
       ],
       "owners": [
         "SabhyaC26",
@@ -118,7 +118,7 @@
       "label": "comp:runner",
       "definition": "The agent runtime and execution scaffolding surrounding the runner.",
       "paths": [
-        "omnigent/runtime/"
+        "omnicraft/runtime/"
       ],
       "owners": [
         "TomeHirata",
@@ -130,9 +130,9 @@
     {
       "key": "server",
       "label": "comp:server",
-      "definition": "The Omnigent server: HTTP API, session creation and lifecycle, request routing.",
+      "definition": "The OmniCraft server: HTTP API, session creation and lifecycle, request routing.",
       "paths": [
-        "omnigent/server/"
+        "omnicraft/server/"
       ],
       "owners": [
         "dbczumar",
@@ -146,7 +146,7 @@
       "label": "comp:tui",
       "definition": "The setup / onboarding flow: first-run setup, provider auth, credential onboarding driven through the CLI.",
       "paths": [
-        "omnigent/onboarding/"
+        "omnicraft/onboarding/"
       ],
       "owners": [
         "SabhyaC26",
@@ -160,7 +160,7 @@
       "label": "comp:policies",
       "definition": "Safety policies, guardrails, and policy evaluation/elicitation.",
       "paths": [
-        "omnigent/policies/"
+        "omnicraft/policies/"
       ],
       "owners": [
         "TomeHirata",
@@ -173,7 +173,7 @@
       "label": "comp:repr",
       "definition": "Spec and schema layer: representation of agents/sessions and their serialized form.",
       "paths": [
-        "omnigent/spec/"
+        "omnicraft/spec/"
       ],
       "owners": [
         "SabhyaC26",
@@ -186,7 +186,7 @@
       "label": "comp:harnesses",
       "definition": "LLM provider and model-catalog layer: gateways, provider adapters, model selection.",
       "paths": [
-        "omnigent/llms/"
+        "omnicraft/llms/"
       ],
       "owners": [
         "PattaraS",
@@ -198,7 +198,7 @@
       "label": "comp:server",
       "definition": "The host / daemon: the long-running local process that hosts sessions and terminals.",
       "paths": [
-        "omnigent/host/"
+        "omnicraft/host/"
       ],
       "owners": [
         "fanzeyi",
@@ -211,7 +211,7 @@
       "label": "comp:runner",
       "definition": "The OS sandbox (bwrap/seatbelt isolation) and egress controls around agent execution.",
       "paths": [
-        "omnigent/sandbox/"
+        "omnicraft/sandbox/"
       ],
       "owners": [
         "SabhyaC26"
@@ -222,7 +222,7 @@
       "label": "comp:server",
       "definition": "Database and persistence layer for the server.",
       "paths": [
-        "omnigent/db/"
+        "omnicraft/db/"
       ],
       "owners": [
         "fanzeyi",
@@ -234,7 +234,7 @@
       "label": "comp:repr",
       "definition": "Stores: persistence and serialization of sessions, history, and artifacts.",
       "paths": [
-        "omnigent/stores/"
+        "omnicraft/stores/"
       ],
       "owners": [
         "serena-ruan",
@@ -247,7 +247,7 @@
       "label": "comp:tui",
       "definition": "Terminal management: PTY/terminal launch, read, and lifecycle.",
       "paths": [
-        "omnigent/terminals/"
+        "omnicraft/terminals/"
       ],
       "owners": [
         "dbczumar",
@@ -260,7 +260,7 @@
       "label": "comp:harnesses",
       "definition": "Built-in tools and the tool-bridge exposed to harnesses.",
       "paths": [
-        "omnigent/tools/"
+        "omnicraft/tools/"
       ],
       "owners": [
         "dbczumar",
@@ -273,7 +273,7 @@
       "label": "comp:repr",
       "definition": "Entity models: the core data model for agents, sessions, and related objects.",
       "paths": [
-        "omnigent/entities/"
+        "omnicraft/entities/"
       ],
       "owners": [
         "daniellok-db",
@@ -285,7 +285,7 @@
       "label": "comp:tui",
       "definition": "The interactive REPL and its terminal UI.",
       "paths": [
-        "omnigent/repl/"
+        "omnicraft/repl/"
       ],
       "owners": [
         "dhruv0811",
@@ -297,7 +297,7 @@
       "label": "comp:server",
       "definition": "Bundled resources and static assets used by the runtime.",
       "paths": [
-        "omnigent/resources/"
+        "omnicraft/resources/"
       ],
       "owners": [
         "fanzeyi",
@@ -337,8 +337,8 @@
       "label": "comp:harnesses",
       "definition": "The Claude harness family: the Claude SDK executor/harness (claude-sdk) and the native Claude Code terminal integration.",
       "paths": [
-        "omnigent/inner/claude_",
-        "omnigent/claude_native"
+        "omnicraft/inner/claude_",
+        "omnicraft/claude_native"
       ],
       "owners": [
         "SabhyaC26",
@@ -352,10 +352,10 @@
       "label": "comp:harnesses",
       "definition": "The Codex / OpenAI harness family: the OpenAI Agents SDK executor/harness, the open-responses SDK, and the native Codex integration.",
       "paths": [
-        "omnigent/inner/codex_",
-        "omnigent/inner/openai_",
-        "omnigent/inner/open_responses_sdk.py",
-        "omnigent/codex_native"
+        "omnicraft/inner/codex_",
+        "omnicraft/inner/openai_",
+        "omnicraft/inner/open_responses_sdk.py",
+        "omnicraft/codex_native"
       ],
       "owners": [
         "SabhyaC26",
@@ -369,8 +369,8 @@
       "label": "comp:harnesses",
       "definition": "The Cursor harness: SDK executor/harness and the native Cursor integration.",
       "paths": [
-        "omnigent/inner/cursor_",
-        "omnigent/cursor_native"
+        "omnicraft/inner/cursor_",
+        "omnicraft/cursor_native"
       ],
       "owners": [
         "SabhyaC26",
@@ -384,10 +384,10 @@
       "label": "comp:harnesses",
       "definition": "The Antigravity (Gemini) harness: SDK executor/harness, native integration, and Gemini/Antigravity auth.",
       "paths": [
-        "omnigent/inner/antigravity_",
-        "omnigent/antigravity_native",
-        "omnigent/onboarding/antigravity_auth.py",
-        "omnigent/onboarding/gemini_auth.py"
+        "omnicraft/inner/antigravity_",
+        "omnicraft/antigravity_native",
+        "omnicraft/onboarding/antigravity_auth.py",
+        "omnicraft/onboarding/gemini_auth.py"
       ],
       "owners": [
         "SabhyaC26",
@@ -401,9 +401,9 @@
       "label": "comp:harnesses",
       "definition": "The Goose harness: SDK executor/harness, native TUI/ACP integration, and Goose auth.",
       "paths": [
-        "omnigent/inner/goose_",
-        "omnigent/goose_native",
-        "omnigent/onboarding/goose_auth.py"
+        "omnicraft/inner/goose_",
+        "omnicraft/goose_native",
+        "omnicraft/onboarding/goose_auth.py"
       ],
       "owners": [
         "SabhyaC26",
@@ -417,8 +417,8 @@
       "label": "comp:harnesses",
       "definition": "The Hermes harness: SDK executor/harness and the native Hermes integration.",
       "paths": [
-        "omnigent/inner/hermes_",
-        "omnigent/hermes_native"
+        "omnicraft/inner/hermes_",
+        "omnicraft/hermes_native"
       ],
       "owners": [
         "SabhyaC26",
@@ -432,8 +432,8 @@
       "label": "comp:harnesses",
       "definition": "The Kimi harness: SDK executor/harness and the native Kimi integration.",
       "paths": [
-        "omnigent/inner/kimi_",
-        "omnigent/kimi_native"
+        "omnicraft/inner/kimi_",
+        "omnicraft/kimi_native"
       ],
       "owners": [
         "SabhyaC26",
@@ -447,8 +447,8 @@
       "label": "comp:harnesses",
       "definition": "The Kiro harness: SDK executor/harness and the native Kiro integration.",
       "paths": [
-        "omnigent/inner/kiro_",
-        "omnigent/kiro_native"
+        "omnicraft/inner/kiro_",
+        "omnicraft/kiro_native"
       ],
       "owners": [
         "SabhyaC26",
@@ -462,9 +462,9 @@
       "label": "comp:harnesses",
       "definition": "The OpenCode harness: SDK executor/harness, native integration, HTTP transport, and OpenCode auth.",
       "paths": [
-        "omnigent/inner/opencode_",
-        "omnigent/opencode_",
-        "omnigent/onboarding/opencode_auth.py"
+        "omnicraft/inner/opencode_",
+        "omnicraft/opencode_",
+        "omnicraft/onboarding/opencode_auth.py"
       ],
       "owners": [
         "SabhyaC26",
@@ -478,8 +478,8 @@
       "label": "comp:harnesses",
       "definition": "The Pi harness: SDK executor/harness and the native Pi integration.",
       "paths": [
-        "omnigent/inner/pi_",
-        "omnigent/pi_native"
+        "omnicraft/inner/pi_",
+        "omnicraft/pi_native"
       ],
       "owners": [
         "SabhyaC26",
@@ -493,8 +493,8 @@
       "label": "comp:harnesses",
       "definition": "The Qwen harness: SDK executor/harness and the native Qwen integration.",
       "paths": [
-        "omnigent/inner/qwen_",
-        "omnigent/qwen_native"
+        "omnicraft/inner/qwen_",
+        "omnicraft/qwen_native"
       ],
       "owners": [
         "SabhyaC26",
@@ -508,8 +508,8 @@
       "label": "comp:harnesses",
       "definition": "The GitHub Copilot harness: SDK executor/harness and Copilot auth.",
       "paths": [
-        "omnigent/inner/copilot_",
-        "omnigent/onboarding/copilot_auth.py"
+        "omnicraft/inner/copilot_",
+        "omnicraft/onboarding/copilot_auth.py"
       ],
       "owners": [
         "SabhyaC26",

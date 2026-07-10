@@ -1,5 +1,5 @@
 // Mirrors the response/error/usage types in
-// sdks/python-client/omnigent_client/_types.py.
+// sdks/python-client/omnicraft_client/_types.py.
 //
 // Hand-ported, minimal subset — only the surface that `blocks.ts` and
 // `events.ts` reference. The Python module also defines `Agent`,
@@ -7,7 +7,7 @@
 // HTTP client work in Phase 1+, not the reducer port.
 //
 // Session types (`Session`, `SessionEventInput`, `SessionStatus`)
-// mirror `omnigent/server/schemas.py` (`SessionResponse`,
+// mirror `omnicraft/server/schemas.py` (`SessionResponse`,
 // `SessionEventInput`, `SessionStatusEvent.status`).
 
 import type { ConversationItem } from "./conversationItems";
@@ -135,7 +135,7 @@ export type ContentBlock =
  * events can.
  *
  * Mirrors the union in `SessionStatusEvent.status`. See
- * `omnigent/server/schemas.py:SessionStatusEvent`.
+ * `omnicraft/server/schemas.py:SessionStatusEvent`.
  */
 export type SessionStatus = "idle" | "launching" | "running" | "waiting" | "failed";
 
@@ -157,7 +157,7 @@ export type SessionStatus = "idle" | "launching" | "running" | "waiting" | "fail
  *   and forwards the meta to the runner (see
  *   `_dispatch_skill_slash_command_to_runner`).
  *
- * Mirrors `omnigent.server.schemas.SessionEventInput`.
+ * Mirrors `omnicraft.server.schemas.SessionEventInput`.
  */
 export type SessionEventInput =
   | { type: "message"; data: { role: "user"; content: ContentBlock[] } }
@@ -204,19 +204,19 @@ export interface NestedSessionItem {
  * snake_case (`agent_id`, `created_at`) so callers reading the
  * snapshot must map at the boundary.
  *
- * `queuedItems` is documented in `omnigent/server/API.md` but is
+ * `queuedItems` is documented in `omnicraft/server/API.md` but is
  * NOT present on `SessionResponse` in `schemas.py` today (see
  * migration plan R5). Treated as optional here; absent until the
  * server schema is aligned.
  *
- * Mirrors `omnigent.server.schemas.SessionResponse`.
+ * Mirrors `omnicraft.server.schemas.SessionResponse`.
  */
 /**
  * Cumulative token/cost usage attributed to a single LLM model — one value
  * in `Session.usageByModel`. Counts are summed over the session subtree.
  * Each field is `null` when that bucket was not recorded for the model;
  * `totalCostUsd` is `null` when the model's turns were unpriced. Mirrors
- * `omnigent.server.schemas.ModelUsage`.
+ * `omnicraft.server.schemas.ModelUsage`.
  */
 export interface ModelUsage {
   inputTokens: number | null;
@@ -271,9 +271,9 @@ export interface Session {
    */
   title: string | null;
   /**
-   * Session-scoped guardrails labels (includes `omnigent.wrapper` /
-   * `omnigent.ui` markers the picker reads, and
-   * `omnigent.fork.source_id` on an unbound coding clone).
+   * Session-scoped guardrails labels (includes `omnicraft.wrapper` /
+   * `omnicraft.ui` markers the picker reads, and
+   * `omnicraft.fork.source_id` on an unbound coding clone).
    */
   labels?: Record<string, string>;
   /**
@@ -391,7 +391,7 @@ export interface Session {
    */
   subAgentName: string | null;
   /**
-   * Current Claude Code todo list for `omnigent claude` sessions.
+   * Current Claude Code todo list for `omnicraft claude` sessions.
    * Sourced from the server's `_session_todos_cache` at snapshot
    * build time so the panel survives page refresh. Empty array for
    * non-claude-native sessions or before the first turn creates todos.
@@ -469,7 +469,7 @@ export type SandboxLaunchStage =
 
 /**
  * Managed-sandbox launch progress — mirrors
- * `omnigent.server.schemas.SandboxStatus`. Drives the provisioning
+ * `omnicraft.server.schemas.SandboxStatus`. Drives the provisioning
  * indicator on the session page while the sandbox launches in the
  * background.
  */
@@ -482,7 +482,7 @@ export interface SandboxStatus {
 
 /**
  * One entry in ``Session.skills`` — mirrors
- * ``omnigent.server.schemas.SkillSummary``. Just the name +
+ * ``omnicraft.server.schemas.SkillSummary``. Just the name +
  * one-line description so the composer's suggestion menu can list
  * them; the full skill body is loaded server-side at invocation
  * time.

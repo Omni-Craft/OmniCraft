@@ -1,6 +1,6 @@
 """Fixtures for browser-driven e2e tests of the web SPA.
 
-The suite spawns a real ``omnigent server --agent`` subprocess against
+The suite spawns a real ``omnicraft server --agent`` subprocess against
 ``examples/hello_world.yaml`` and drives the rendered SPA with
 Playwright. The server is wired to a mock LLM server so the suite
 runs deterministically without real credentials. The suite is excluded
@@ -18,16 +18,16 @@ Local usage::
 
     # iterate against an already-running server (dev hosts/ports need opt-in)
     cd web && npm run dev &
-    omnigent server --agent examples/hello_world.yaml &
-    OMNIGENT_E2E_ALLOW_DEV_BASE_URL=1 \
+    omnicraft server --agent examples/hello_world.yaml &
+    OMNICRAFT_E2E_ALLOW_DEV_BASE_URL=1 \
       uv run pytest tests/e2e_ui --ui-base-url http://127.0.0.1:5173
 
-``omnigent server`` is documented at ``omnigent/cli.py:server``:
-it spins up uvicorn with the Omnigent app and spawns an out-of-process
+``omnicraft server`` is documented at ``omnicraft/cli.py:server``:
+it spins up uvicorn with the OmniCraft app and spawns an out-of-process
 runner that reconnects over the WebSocket tunnel. The fixture passes
 ``--database-uri`` and ``--artifact-location`` pointing at the
 pytest tmp dir so the test never touches the user's default
-``sqlite:///omnigent.db`` / ``./artifacts``.
+``sqlite:///omnicraft.db`` / ``./artifacts``.
 """
 
 from __future__ import annotations
@@ -64,9 +64,9 @@ from tests.codex_parity.sidecar_harness import (
 from tests.e2e_ui.url_safety import DEV_PORTS, unsafe_ui_base_url_reason
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-_ALLOW_DEV_BASE_URL_ENV = "OMNIGENT_E2E_ALLOW_DEV_BASE_URL"
+_ALLOW_DEV_BASE_URL_ENV = "OMNICRAFT_E2E_ALLOW_DEV_BASE_URL"
 _CODEX_GOAL_MIN_VERSION = (0, 139, 0)
-_PUBLIC_LOOPBACK_HOST = "omnigent-e2e-public.test"
+_PUBLIC_LOOPBACK_HOST = "omnicraft-e2e-public.test"
 
 
 def open_right_rail(page: Page) -> None:
@@ -114,19 +114,19 @@ def switch_markdown_view_mode(page: Page, file_viewer: Locator, mode: str) -> No
 # type (which other tests depend on).
 _server_state: dict[str, int | str] = {}
 _WEB_DIR = _REPO_ROOT / "web"
-_BUILD_OUTPUT = _REPO_ROOT / "omnigent" / "server" / "static" / "web-ui"
+_BUILD_OUTPUT = _REPO_ROOT / "omnicraft" / "server" / "static" / "web-ui"
 
-# ``omnigent server --agent`` runs the spec through the strict
+# ``omnicraft server --agent`` runs the spec through the strict
 # validator at registration time (no shim defaults applied), so the
 # YAML must carry an explicit ``executor`` block — otherwise the
 # server rejects with ``executor.config.harness: required when
-# executor.type is 'omnigent'``. The model name (gpt-4o-mini) is a plain
+# executor.type is 'omnicraft'``. The model name (gpt-4o-mini) is a plain
 # (non-``databricks-``) name on purpose: the openai-agents harness then
 # resolves no provider auth and falls back to ``OPENAI_BASE_URL`` (the
 # in-process mock) rather than routing to the Databricks gateway, which
 # would need real credentials CI does not have. A ``databricks-``-prefixed
 # model forces Databricks DEFAULT-profile auth (see
-# omnigent/runtime/workflow.py) and fails with DatabricksAuthError in CI.
+# omnicraft/runtime/workflow.py) and fails with DatabricksAuthError in CI.
 _TEST_AGENT_YAML = """\
 name: hello_world
 prompt: You are a friendly assistant. Say hello and answer questions.
@@ -150,9 +150,9 @@ def _build_hello_world_bundle() -> bytes:
     """Build a gzipped tarball from ``_TEST_AGENT_YAML``.
 
     Uses a non-``config.yaml`` archive name so the bundle routes
-    through the omnigent compat adapter (which translates
+    through the omnicraft compat adapter (which translates
     ``executor.harness`` → ``executor.config.harness`` and sets
-    ``executor.type: omnigent``). Using ``config.yaml`` would
+    ``executor.type: omnicraft``). Using ``config.yaml`` would
     go through the strict ``spec_version: 1`` parser which doesn't
     accept the shorthand.
 
@@ -185,7 +185,7 @@ _HEALTH_POLL_INTERVAL_S = 0.5
 # (test_switch_agent_files_tab.py). The in-place switch dialog lists
 # BUILT-IN agents only (``session_id IS NULL`` — see
 # ``switch_session_agent``), and built-ins can only be seeded at server
-# startup via ``OMNIGENT_BUILTIN_AGENT_DIRS``, so ``live_server`` writes
+# startup via ``OMNICRAFT_BUILTIN_AGENT_DIRS``, so ``live_server`` writes
 # these two specs to disk and threads them through that env var. Both run
 # the same openai-agents harness as ``hello_world`` (same provider family
 # → the picker's ``forkSwitchPreservesHistory`` gate offers them); the
@@ -239,7 +239,7 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store_true",
         default=False,
         help=(
-            "Reuse whatever's already in omnigent/server/static/web-ui/ "
+            "Reuse whatever's already in omnicraft/server/static/web-ui/ "
             "instead of rebuilding. Fails if no build is present."
         ),
     )
@@ -298,7 +298,7 @@ def browser_type_launch_args(
     # container's small /dev/shm. Neither flag changes rasterized output, so a
     # baseline stays identical to a sandboxed run. Env-gated so the unpinned
     # e2e-ui runners (non-root) are unaffected.
-    if os.environ.get("OMNIGENT_PW_NO_SANDBOX"):
+    if os.environ.get("OMNICRAFT_PW_NO_SANDBOX"):
         launch_args["args"] = [
             *launch_args.get("args", []),
             "--no-sandbox",
@@ -376,9 +376,9 @@ def _register_agent_yaml(
 ) -> str | None:
     """Register an agent via multipart ``POST /v1/sessions`` from a raw YAML body.
 
-    ``arcname`` defaults to ``config.yaml`` for native Omnigent specs. Pass a
-    ``*.yaml`` filename for omnigent-flavored single-file specs; the
-    compat loader only routes those through the omnigent translator when
+    ``arcname`` defaults to ``config.yaml`` for native OmniCraft specs. Pass a
+    ``*.yaml`` filename for omnicraft-flavored single-file specs; the
+    compat loader only routes those through the omnicraft translator when
     the extracted bundle has no root ``config.yaml``.
 
     Returns the new agent id on 201, or None on 409 (already registered against
@@ -456,7 +456,7 @@ def mock_llm_server_url(
 
     The mock server is a lightweight FastAPI/uvicorn subprocess that
     serves an OpenAI-compatible ``/v1/`` endpoint. The ``live_server``
-    fixture points the spawned omnigent server at this URL so all agent
+    fixture points the spawned omnicraft server at this URL so all agent
     LLM calls hit the mock rather than a real provider.
 
     :param tmp_path_factory: Pytest temp path factory for logs.
@@ -603,7 +603,7 @@ def _assert_pwa_build(build_output: Path) -> None:
     The standalone build must ship the installable-PWA assets, and the
     hand-rolled service worker must (a) embed the per-build fingerprint so its
     bytes change every deploy — or the update prompt never fires — and (b) NOT
-    cache or serve the app shell: Omnigent is a cloud app, so a stale cached
+    cache or serve the app shell: OmniCraft is a cloud app, so a stale cached
     shell would white-screen users after every deploy.
     """
     for name in ("index.html", "sw.js", "manifest.webmanifest", "version.json"):
@@ -658,7 +658,7 @@ def _assert_pwa_build(build_output: Path) -> None:
 @pytest.fixture(scope="session")
 def built_spa(request: pytest.FixtureRequest) -> None:
     """
-    Build the web SPA into ``omnigent/server/static/web-ui/``.
+    Build the web SPA into ``omnicraft/server/static/web-ui/``.
 
     Vite's ``emptyOutDir: true`` (see ``web/vite.config.ts``)
     nukes the output directory before writing, so concurrent
@@ -703,20 +703,20 @@ def _spawn_runner_against_external_server(
     """Spawn a runner subprocess that tunnels into an already-running server.
 
     Used when ``--ui-base-url`` is set: the user owns the
-    ``omnigent server`` process (and its pre-registered ``hello_world``
+    ``omnicraft server`` process (and its pre-registered ``hello_world``
     agent), but the runner-bound fixtures still need a runner id this
-    process controls. Mirrors :func:`omnigent.cli._start_cli_runner_process`
+    process controls. Mirrors :func:`omnicraft.cli._start_cli_runner_process`
     minus the click plumbing, then polls
     ``GET /v1/runners/{id}/status`` until the WS tunnel is up.
 
     The unauthenticated local server derives ``expected_runner_id``
     from the binding token via
-    :func:`omnigent.runner.identity.token_bound_runner_id`, so we use
+    :func:`omnicraft.runner.identity.token_bound_runner_id`, so we use
     the same derivation here rather than picking a human-friendly id.
     """
     import secrets
 
-    from omnigent.runner.identity import token_bound_runner_id
+    from omnicraft.runner.identity import token_bound_runner_id
 
     runner_tmp = tmp_path_factory.mktemp("e2e_ui_external_runner")
     log_path = runner_tmp / "runner.log"
@@ -726,14 +726,14 @@ def _spawn_runner_against_external_server(
     env = {
         **os.environ,
         "PYTHONPATH": f"{_REPO_ROOT}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
-        "OMNIGENT_RUNNER_ID": runner_id,
-        "OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
-        "OMNIGENT_RUNNER_PARENT_PID": str(os.getpid()),
+        "OMNICRAFT_RUNNER_ID": runner_id,
+        "OMNICRAFT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
+        "OMNICRAFT_RUNNER_PARENT_PID": str(os.getpid()),
         "RUNNER_SERVER_URL": base_url,
     }
     log_handle = open(log_path, "w")  # noqa: SIM115 — closed in finally
     proc = subprocess.Popen(
-        [sys.executable, "-m", "omnigent.runner._entry"],
+        [sys.executable, "-m", "omnicraft.runner._entry"],
         env=env,
         stdout=log_handle,
         stderr=subprocess.STDOUT,
@@ -805,7 +805,7 @@ def live_server(
     request: pytest.FixtureRequest,
 ) -> Iterator[str]:
     """
-    Spawn ``omnigent server --agent examples/hello_world.yaml`` and
+    Spawn ``omnicraft server --agent examples/hello_world.yaml`` and
     yield its base URL.
 
     The server picks a random free port so back-to-back sessions
@@ -826,7 +826,7 @@ def live_server(
     :param tmp_path_factory: Pytest temp path factory for the log,
         the SQLite DB, and the artifact dir — all per-session, so
         the test never reads from or writes to the user's default
-        ``./omnigent.db`` / ``./artifacts``.
+        ``./omnicraft.db`` / ``./artifacts``.
     :param request: pytest request — reads ``--ui-base-url`` to
         bypass the spawn entirely.
     :returns: The server's base URL, e.g. ``"http://127.0.0.1:51234"``.
@@ -860,23 +860,23 @@ def live_server(
         builtin_dirs.append(str(probe_path))
     import secrets as _secrets
 
-    from omnigent.runner.identity import token_bound_runner_id
+    from omnicraft.runner.identity import token_bound_runner_id
 
     binding_token = _secrets.token_urlsafe(32)
     runner_id = token_bound_runner_id(binding_token)
-    # PYTHONPATH forces the subprocess to import omnigent from
+    # PYTHONPATH forces the subprocess to import omnicraft from
     # the worktree, not whatever's pip-installed in .venv —
     # otherwise a branch with code changes would silently run
     # against stale code. Same trick the existing live_server
     # helper uses (tests/_helpers/live_server.py:160-167).
-    # OMNIGENT_RUNNER_TUNNEL_TOKEN lets the server accept
+    # OMNICRAFT_RUNNER_TUNNEL_TOKEN lets the server accept
     # exactly the sibling runner's WebSocket tunnel.
     mock_url = mock_llm_server_url
     env = {
         **os.environ,
         "PYTHONPATH": f"{_REPO_ROOT}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
-        "OMNIGENT_RUNNER_TUNNEL_TOKEN": binding_token,
-        "OMNIGENT_BUILTIN_AGENT_DIRS": os.pathsep.join(builtin_dirs),
+        "OMNICRAFT_RUNNER_TUNNEL_TOKEN": binding_token,
+        "OMNICRAFT_BUILTIN_AGENT_DIRS": os.pathsep.join(builtin_dirs),
         # Point the openai-agents harness at the mock LLM server so no
         # real provider credentials are needed.
         "OPENAI_BASE_URL": f"{mock_url}/v1",
@@ -896,10 +896,10 @@ def live_server(
             # presence-leave assertion in test_collab_realtime clears in ~1s
             # instead of the prod 15s dwell (which only exists to absorb the
             # ingress' ~5-min stream recycle a test server never hits).
-            # Mirrors ``python -m omnigent`` (omnigent/__main__.py).
+            # Mirrors ``python -m omnicraft`` (omnicraft/__main__.py).
             "-c",
-            "import omnigent.server.presence as _p; _p._LEAVE_GRACE_S = 1.0; "
-            + "from omnigent.cli import main; main()",
+            "import omnicraft.server.presence as _p; _p._LEAVE_GRACE_S = 1.0; "
+            + "from omnicraft.cli import main; main()",
             "server",
             "--host",
             "127.0.0.1",
@@ -926,9 +926,9 @@ def live_server(
     runner_env = {
         **os.environ,
         "PYTHONPATH": f"{_REPO_ROOT}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
-        "OMNIGENT_RUNNER_ID": runner_id,
-        "OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
-        "OMNIGENT_RUNNER_PARENT_PID": str(os.getpid()),
+        "OMNICRAFT_RUNNER_ID": runner_id,
+        "OMNICRAFT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
+        "OMNICRAFT_RUNNER_PARENT_PID": str(os.getpid()),
         "RUNNER_SERVER_URL": base_url,
         # Route the openai-agents harness to the mock LLM server so no
         # real provider credentials are needed for agent turns. Without
@@ -937,7 +937,7 @@ def live_server(
         "OPENAI_API_KEY": "mock-key",
     }
     runner_proc = subprocess.Popen(
-        [sys.executable, "-m", "omnigent.runner._entry"],
+        [sys.executable, "-m", "omnicraft.runner._entry"],
         env=runner_env,
         stdout=runner_log_handle,
         stderr=subprocess.STDOUT,
@@ -993,7 +993,7 @@ def live_server(
         log_handle.close()
         log_text = log_path.read_text() if log_path.exists() else ""
         raise RuntimeError(
-            f"`omnigent server` did not become healthy within "
+            f"`omnicraft server` did not become healthy within "
             f"{_HEALTH_TIMEOUT_S:.0f}s on {base_url} "
             f"(last_error={last_error}).\n"
             f"Server log at {log_path}:\n{log_text[-3000:]}"
@@ -1059,7 +1059,7 @@ def seeded_session(
     and test reordering can place the runner-killing test anywhere.
 
     :param live_server: Spawned server fixture — its
-        ``OMNIGENT_RUNNER_ID`` and pre-registered agent are reused.
+        ``OMNICRAFT_RUNNER_ID`` and pre-registered agent are reused.
     :param tmp_path_factory: Pytest temp path factory (for a respawn log).
     :returns: ``(base_url, session_id)``. Tests typically navigate to
         ``f"{base_url}/c/{session_id}"``.
@@ -1181,9 +1181,9 @@ def _ensure_runner_online(
     env = {
         **os.environ,
         "PYTHONPATH": f"{_REPO_ROOT}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
-        "OMNIGENT_RUNNER_ID": runner_id,
-        "OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
-        "OMNIGENT_RUNNER_PARENT_PID": str(os.getpid()),
+        "OMNICRAFT_RUNNER_ID": runner_id,
+        "OMNICRAFT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
+        "OMNICRAFT_RUNNER_PARENT_PID": str(os.getpid()),
         "RUNNER_SERVER_URL": base_url,
         # Mirror the live_server runner's mock-LLM routing so the
         # respawned runner's harness also hits the mock.
@@ -1192,7 +1192,7 @@ def _ensure_runner_online(
         ),
     }
     proc = subprocess.Popen(
-        [sys.executable, "-m", "omnigent.runner._entry"],
+        [sys.executable, "-m", "omnicraft.runner._entry"],
         env=env,
         stdout=log_handle,
         stderr=subprocess.STDOUT,
@@ -1284,9 +1284,9 @@ def extra_agent(live_server: str) -> Iterator[str]:
 
 _TERMINAL_AGENT_NAME = "terminal_demo"
 # Inline YAML for the right-panel terminal/browser test. This is an
-# omnigent-flavored single-file YAML (intentionally no
+# omnicraft-flavored single-file YAML (intentionally no
 # ``spec_version``): AP-native YAML currently ignores ``terminals:``,
-# while the omnigent-compat translator threads the declaration into
+# while the omnicraft-compat translator threads the declaration into
 # ``AgentSpec.terminals`` so the AP-side ``sys_terminal_*`` tools are
 # available. The terminal is named ``zsh`` because that is the user-facing
 # behavior the UI test covers, but it runs portable ``bash`` underneath so
@@ -1438,7 +1438,7 @@ def terminal_session(
         gzip.GzipFile(fileobj=buf, mode="wb", mtime=0) as gz,
         tarfile.open(fileobj=gz, mode="w") as tar,
     ):
-        # Use the omnigent shorthand YAML with a non-config.yaml
+        # Use the omnicraft shorthand YAML with a non-config.yaml
         # name so the bundle routes through the compat adapter, which
         # parses `terminals:`. The spec_version:1 parser silently
         # drops the terminals key.
@@ -1507,8 +1507,8 @@ def _two_agent_chat_yaml(verification_code: str, question_code: str) -> str:
     """Build the two-agent Hitchhiker's Guide chat spec for one test run.
 
     A parent agent (Arthur) with an inline ``type: agent`` sub-agent
-    (Deep Thought) — the omnigent-flavored shape parsed by
-    ``omnigent/inner/loader.py:_parse_tool``, same as the
+    (Deep Thought) — the omnicraft-flavored shape parsed by
+    ``omnicraft/inner/loader.py:_parse_tool``, same as the
     ``named-sub-agent-test`` e2e fixture. The parent is forbidden from
     answering the Ultimate Question itself, and both nonces appear ONLY
     in the sub-agent's prompt: if either code shows up in the parent's
@@ -1607,7 +1607,7 @@ def two_agent_chat_session(
     yaml_bytes = yaml_text.encode()
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
-        # Non-config.yaml arcname routes the bundle through the omnigent
+        # Non-config.yaml arcname routes the bundle through the omnicraft
         # compat adapter, whose loader parses the inline `type: agent`
         # tool. The spec_version:1 parser does not accept this shorthand.
         info = tarfile.TarInfo(name=f"{_TWO_AGENT_PARENT_NAME}.yaml")
@@ -1703,7 +1703,7 @@ guardrails:
     blast_radius:
       type: function
       function:
-        path: omnigent.inner.nessie.policies.blast_radius
+        path: omnicraft.inner.nessie.policies.blast_radius
         arguments:
           # A plain `git push` is recoverable-but-outward → ASK (vs the
           # always-DENY catastrophic set). This is the prompt the UI renders.
@@ -1834,7 +1834,7 @@ def runner_id(live_server: str) -> str:
 @pytest.fixture
 def server_pid(live_server: str) -> int:
     """
-    PID of the ``omnigent server`` process spawned by
+    PID of the ``omnicraft server`` process spawned by
     :func:`live_server`.
 
     Depends on ``live_server`` to guarantee the process is running.
@@ -1859,7 +1859,7 @@ def server_pid(live_server: str) -> int:
 #
 # ``native_claude_session`` is the native-CLI counterpart: it spins up a real
 # ``claude-native`` ("Claude Code") wrapper session — the same terminal-first
-# spec ``omnigent claude`` ships — and yields ``(base_url, session_id)``. The
+# spec ``omnicraft claude`` ships — and yields ``(base_url, session_id)``. The
 # runner auto-launches Claude Code in the session terminal on bind, including
 # the gateway auth it derives from the runner's own credentials and the
 # first-run trust/onboarding pre-accept, so no CLI client is needed. In CI the
@@ -1869,7 +1869,7 @@ def server_pid(live_server: str) -> int:
 #
 # ``native_codex_session`` is the sibling native-CLI fixture for the
 # ``codex-native`` ("Codex") wrapper: it spins up a real Codex wrapper session —
-# the same terminal-first spec ``omnigent codex`` ships — and yields
+# the same terminal-first spec ``omnicraft codex`` ships — and yields
 # ``(base_url, session_id)``. The runner auto-launches Codex in the session
 # terminal on bind (gateway auth derived from the runner's own credentials +
 # first-run pre-accept handled runner-side), exactly like the claude fixture.
@@ -1977,12 +1977,12 @@ def _create_native_claude_session(
 ) -> str:
     """Register the ``claude-native`` wrapper agent and bind its session.
 
-    Reuses the exact terminal-first spec ``omnigent claude`` ships
-    (:func:`omnigent.claude_native._materialize_claude_agent_spec`) so the
+    Reuses the exact terminal-first spec ``omnicraft claude`` ships
+    (:func:`omnicraft.claude_native._materialize_claude_agent_spec`) so the
     fixture never drifts from production, and stamps the same wrapper /
-    terminal-first labels (``omnigent.wrapper`` + ``omnigent.ui = terminal``)
+    terminal-first labels (``omnicraft.wrapper`` + ``omnicraft.ui = terminal``)
     the CLI writes. The spec carries no ``spec_version``, so it is bundled
-    under a ``*.yaml`` arcname to route through the omnigent compat translator
+    under a ``*.yaml`` arcname to route through the omnicraft compat translator
     (which preserves ``executor.harness`` + ``terminals:``); a ``config.yaml``
     arcname would hit the strict parser and reject it.
 
@@ -1996,7 +1996,7 @@ def _create_native_claude_session(
     :param terminal_launch_args: Pass-through ``claude`` CLI args persisted on
         the session (``conversations.terminal_launch_args``); the runner threads
         them into the terminal launch before its own bridge/MCP/hook wiring (see
-        ``_build_claude_native_base_args`` in ``omnigent/runner/app.py``). Used
+        ``_build_claude_native_base_args`` in ``omnicraft/runner/app.py``). Used
         by the plan-mode fixture to pass ``["--permission-mode", "plan"]`` so
         Claude boots into plan mode and reaches for ``ExitPlanMode``. ``None``
         launches with the production defaults.
@@ -2005,13 +2005,13 @@ def _create_native_claude_session(
     import json as _json
     import tempfile
 
-    from omnigent._wrapper_labels import (
+    from omnicraft._wrapper_labels import (
         CLAUDE_NATIVE_WRAPPER_VALUE,
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.claude_native import _materialize_claude_agent_spec
+    from omnicraft.claude_native import _materialize_claude_agent_spec
 
     with tempfile.TemporaryDirectory() as _tmp:
         spec_path = _materialize_claude_agent_spec(Path(_tmp))
@@ -2020,7 +2020,7 @@ def _create_native_claude_session(
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         data = yaml_text.encode()
-        # Non-config.yaml arcname → omnigent compat translator (the spec has
+        # Non-config.yaml arcname → omnicraft compat translator (the spec has
         # no spec_version), matching the terminal_session fixture.
         info = tarfile.TarInfo("claude-native-ui.yaml")
         info.size = len(data)
@@ -2143,12 +2143,12 @@ def native_claude_plan_session(
 def _create_native_codex_session(base_url: str, runner_id: str) -> str:
     """Register the ``codex-native`` wrapper agent and bind its session.
 
-    Reuses the exact terminal-first spec ``omnigent codex`` ships
-    (:func:`omnigent.codex_native._materialize_codex_agent_spec`) so the
+    Reuses the exact terminal-first spec ``omnicraft codex`` ships
+    (:func:`omnicraft.codex_native._materialize_codex_agent_spec`) so the
     fixture never drifts from production, and stamps the same wrapper /
-    terminal-first labels (``omnigent.wrapper`` + ``omnigent.ui = terminal``)
+    terminal-first labels (``omnicraft.wrapper`` + ``omnicraft.ui = terminal``)
     the CLI writes. The spec carries no ``spec_version``, so it is bundled
-    under a ``*.yaml`` arcname to route through the omnigent compat translator
+    under a ``*.yaml`` arcname to route through the omnicraft compat translator
     (which preserves ``executor.harness`` + ``terminals:``); a ``config.yaml``
     arcname would hit the strict parser and reject it.
 
@@ -2165,13 +2165,13 @@ def _create_native_codex_session(base_url: str, runner_id: str) -> str:
     import json as _json
     import tempfile
 
-    from omnigent._wrapper_labels import (
+    from omnicraft._wrapper_labels import (
         CODEX_NATIVE_WRAPPER_VALUE,
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.codex_native import _materialize_codex_agent_spec
+    from omnicraft.codex_native import _materialize_codex_agent_spec
 
     with tempfile.TemporaryDirectory() as _tmp:
         spec_path = _materialize_codex_agent_spec(Path(_tmp), model=None)
@@ -2180,7 +2180,7 @@ def _create_native_codex_session(base_url: str, runner_id: str) -> str:
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         data = yaml_text.encode()
-        # Non-config.yaml arcname → omnigent compat translator (the spec has
+        # Non-config.yaml arcname → omnicraft compat translator (the spec has
         # no spec_version), matching the terminal_session fixture.
         info = tarfile.TarInfo("codex-native-ui.yaml")
         info.size = len(data)
@@ -2193,9 +2193,9 @@ def _create_native_codex_session(base_url: str, runner_id: str) -> str:
     # Runner-owned Codex terminals hard-require a workspace: unlike the
     # claude-native path (which falls back to Path.cwd()),
     # _codex_session_workspace raises if neither the session's stored
-    # ``workspace`` nor OMNIGENT_RUNNER_WORKSPACE is set. Pin it on THIS
+    # ``workspace`` nor OMNICRAFT_RUNNER_WORKSPACE is set. Pin it on THIS
     # session only (via metadata.workspace) rather than exporting
-    # OMNIGENT_RUNNER_WORKSPACE on the shared runner — a runner-wide value
+    # OMNICRAFT_RUNNER_WORKSPACE on the shared runner — a runner-wide value
     # changes file-surface advertisement for every other session on the runner
     # (it regressed the mobile file-drawer suite). The repo root is the same cwd
     # claude falls back to, and is a valid dir on the runner's filesystem.
@@ -2248,10 +2248,10 @@ def native_codex_session(
 
 
 @contextlib.contextmanager
-def _temp_omnigent_mock_config(
+def _temp_omnicraft_mock_config(
     mock_llm_server_url: str, harness: str
 ) -> Generator[None, None, None]:
-    """Temporarily write a mock provider config to ~/.omnigent/config.yaml.
+    """Temporarily write a mock provider config to ~/.omnicraft/config.yaml.
 
     The runner reads this at terminal-creation time, so it only needs to be
     in place between the PATCH that binds a session to the runner (which
@@ -2262,7 +2262,7 @@ def _temp_omnigent_mock_config(
         ``"http://127.0.0.1:51235"``. No /v1 suffix — each SDK appends it.
     :param harness: ``"claude"`` or ``"codex"``.
     """
-    config_dir = Path.home() / ".omnigent"
+    config_dir = Path.home() / ".omnicraft"
     config_path = config_dir / "config.yaml"
     config_dir.mkdir(parents=True, exist_ok=True)
     original = config_path.read_text() if config_path.exists() else None
@@ -2312,10 +2312,10 @@ def native_claude_mock_session(
     """A runner-bound claude-native session whose LLM backend depends on env.
 
     When ``LLM_API_KEY`` is set in the environment (local dev / CI with real
-    credentials), the existing ``~/.omnigent/config.yaml`` is left untouched so
+    credentials), the existing ``~/.omnicraft/config.yaml`` is left untouched so
     the runner boots Claude Code against the real gateway. When ``LLM_API_KEY``
     is absent, a mock anthropic provider config is written to
-    ``~/.omnigent/config.yaml`` and restored on teardown.
+    ``~/.omnicraft/config.yaml`` and restored on teardown.
 
     :param live_server: Spawned server fixture; its runner is reused.
     :param mock_llm_server_url: Session-scoped mock LLM server base URL.
@@ -2326,7 +2326,7 @@ def native_claude_mock_session(
     runner_id = str(_server_state["runner_id"])
     use_mock = not os.environ.get("LLM_API_KEY")
     if use_mock:
-        ctx: Any = _temp_omnigent_mock_config(mock_llm_server_url, "claude")
+        ctx: Any = _temp_omnicraft_mock_config(mock_llm_server_url, "claude")
     else:
         ctx = contextlib.nullcontext()
     with ctx:
@@ -2364,7 +2364,7 @@ def native_codex_mock_session(
     runner_id = str(_server_state["runner_id"])
     use_mock = not os.environ.get("LLM_API_KEY")
     if use_mock:
-        ctx: Any = _temp_omnigent_mock_config(mock_llm_server_url, "codex")
+        ctx: Any = _temp_omnicraft_mock_config(mock_llm_server_url, "codex")
     else:
         ctx = contextlib.nullcontext()
     with ctx:
@@ -2421,7 +2421,7 @@ def mocked_native_codex_goal_session(
 
     This intentionally does not reuse the session-scoped ``live_server``:
     native Codex reads provider config and bridge roots in subprocesses, so
-    the mock ``OMNIGENT_CONFIG_HOME`` / ``HOME`` / source ``CODEX_HOME`` must
+    the mock ``OMNICRAFT_CONFIG_HOME`` / ``HOME`` / source ``CODEX_HOME`` must
     be present before the AP server and runner start. Keeping a dedicated
     server prevents those mock-only env vars from affecting unrelated UI tests
     in the same shard.
@@ -2471,7 +2471,7 @@ def mocked_native_codex_goal_session(
 
     import secrets as _secrets
 
-    from omnigent.runner.identity import token_bound_runner_id
+    from omnicraft.runner.identity import token_bound_runner_id
 
     binding_token = _secrets.token_urlsafe(32)
     runner_id = token_bound_runner_id(binding_token)
@@ -2479,20 +2479,20 @@ def mocked_native_codex_goal_session(
     shared_env = {
         **os.environ,
         "PYTHONPATH": f"{_REPO_ROOT}{os.pathsep}{os.environ.get('PYTHONPATH', '')}",
-        "OMNIGENT_CONFIG_HOME": str(config_home),
-        "OMNIGENT_CODEX_NATIVE_STATE_DIR": str(state_dir),
+        "OMNICRAFT_CONFIG_HOME": str(config_home),
+        "OMNICRAFT_CODEX_NATIVE_STATE_DIR": str(state_dir),
         "CODEX_HOME": str(source_codex_home),
         "HOME": str(home_dir),
     }
     server_env = {
         **shared_env,
-        "OMNIGENT_RUNNER_TUNNEL_TOKEN": binding_token,
+        "OMNICRAFT_RUNNER_TUNNEL_TOKEN": binding_token,
     }
     runner_env = {
         **shared_env,
-        "OMNIGENT_RUNNER_ID": runner_id,
-        "OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
-        "OMNIGENT_RUNNER_PARENT_PID": str(os.getpid()),
+        "OMNICRAFT_RUNNER_ID": runner_id,
+        "OMNICRAFT_RUNNER_TUNNEL_BINDING_TOKEN": binding_token,
+        "OMNICRAFT_RUNNER_PARENT_PID": str(os.getpid()),
         "RUNNER_SERVER_URL": base_url,
     }
 
@@ -2506,8 +2506,8 @@ def mocked_native_codex_goal_session(
             [
                 sys.executable,
                 "-c",
-                "import omnigent.server.presence as _p; _p._LEAVE_GRACE_S = 1.0; "
-                + "from omnigent.cli import main; main()",
+                "import omnicraft.server.presence as _p; _p._LEAVE_GRACE_S = 1.0; "
+                + "from omnicraft.cli import main; main()",
                 "server",
                 "--host",
                 "127.0.0.1",
@@ -2525,7 +2525,7 @@ def mocked_native_codex_goal_session(
             stderr=subprocess.STDOUT,
         )
         runner_proc = subprocess.Popen(
-            [sys.executable, "-m", "omnigent.runner._entry"],
+            [sys.executable, "-m", "omnicraft.runner._entry"],
             env=runner_env,
             stdout=runner_log_handle,
             stderr=subprocess.STDOUT,
@@ -2599,10 +2599,10 @@ def mocked_native_codex_goal_session(
 # ---------------------------------------------------------------------------
 # ``native_cursor_session`` is the sibling native-CLI fixture for the
 # ``cursor-native`` ("Cursor") wrapper: it spins up a real Cursor wrapper
-# session — the same terminal-first spec ``omnigent cursor`` ships — and yields
+# session — the same terminal-first spec ``omnicraft cursor`` ships — and yields
 # ``(base_url, session_id)``. The runner auto-launches ``cursor-agent`` in the
 # session terminal on bind (``_auto_create_cursor_terminal`` in
-# ``omnigent/runner/app.py``), exactly like the claude/codex fixtures.
+# ``omnicraft/runner/app.py``), exactly like the claude/codex fixtures.
 #
 # Two things differ from claude/codex, both stemming from cursor-agent owning
 # its own auth/approval:
@@ -2629,17 +2629,17 @@ def _create_native_cursor_session(
 ) -> str:
     """Register the ``cursor-native`` wrapper agent and bind its session.
 
-    Reuses the exact terminal-first spec ``omnigent cursor`` ships
-    (:func:`omnigent.cursor_native._materialize_cursor_agent_spec`) so the
+    Reuses the exact terminal-first spec ``omnicraft cursor`` ships
+    (:func:`omnicraft.cursor_native._materialize_cursor_agent_spec`) so the
     fixture never drifts from production, and stamps the same wrapper /
-    terminal-first labels (``omnigent.wrapper`` + ``omnigent.ui = terminal``)
+    terminal-first labels (``omnicraft.wrapper`` + ``omnicraft.ui = terminal``)
     the CLI writes. The spec carries no ``spec_version``, so it is bundled
-    under a ``*.yaml`` arcname to route through the omnigent compat translator
+    under a ``*.yaml`` arcname to route through the omnicraft compat translator
     (which preserves ``executor.harness`` + ``terminals:``); a ``config.yaml``
     arcname would hit the strict parser and reject it.
 
     Binding the session to the runner triggers the runner's cursor-native
-    auto-bootstrap (:func:`omnigent.runner.app._auto_create_cursor_terminal`):
+    auto-bootstrap (:func:`omnicraft.runner.app._auto_create_cursor_terminal`):
     it launches ``cursor-agent`` in the session terminal — with the ``-f``
     force/trust arg threaded via ``terminal_launch_args`` so the unattended
     tmux pane never blocks on Cursor's workspace-trust / per-tool prompts — and
@@ -2653,13 +2653,13 @@ def _create_native_cursor_session(
     import json as _json
     import tempfile
 
-    from omnigent._wrapper_labels import (
+    from omnicraft._wrapper_labels import (
         CURSOR_NATIVE_WRAPPER_VALUE,
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.cursor_native import _materialize_cursor_agent_spec
+    from omnicraft.cursor_native import _materialize_cursor_agent_spec
 
     with tempfile.TemporaryDirectory() as _tmp:
         spec_path = _materialize_cursor_agent_spec(Path(_tmp))
@@ -2668,7 +2668,7 @@ def _create_native_cursor_session(
     buf = io.BytesIO()
     with tarfile.open(fileobj=buf, mode="w:gz") as tar:
         data = yaml_text.encode()
-        # Non-config.yaml arcname → omnigent compat translator (the spec has
+        # Non-config.yaml arcname → omnicraft compat translator (the spec has
         # no spec_version), matching the terminal_session fixture.
         info = tarfile.TarInfo("cursor-native-ui.yaml")
         info.size = len(data)
@@ -2708,11 +2708,11 @@ def _create_native_goose_session(base_url: str, runner_id: str) -> str:
     """Register the ``goose-native`` wrapper agent and bind its session.
 
     Mirrors :func:`_create_native_cursor_session`: reuses the exact terminal-first
-    spec ``omnigent goose`` ships
-    (:func:`omnigent.goose_native._materialize_goose_agent_spec`) and stamps the
+    spec ``omnicraft goose`` ships
+    (:func:`omnicraft.goose_native._materialize_goose_agent_spec`) and stamps the
     same wrapper / terminal-first labels. Binding triggers the runner's
     goose-native auto-bootstrap
-    (:func:`omnigent.runner.app._auto_create_goose_terminal`), which launches
+    (:func:`omnicraft.runner.app._auto_create_goose_terminal`), which launches
     ``goose session`` in the session terminal and starts the forwarder that
     mirrors the TUI transcript back as conversation items. Goose's tool-approval
     gating is its own ``GOOSE_MODE`` (no ``-f`` equivalent), so no launch args.
@@ -2724,13 +2724,13 @@ def _create_native_goose_session(base_url: str, runner_id: str) -> str:
     import json as _json
     import tempfile
 
-    from omnigent._wrapper_labels import (
+    from omnicraft._wrapper_labels import (
         GOOSE_NATIVE_WRAPPER_VALUE,
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.goose_native import _materialize_goose_agent_spec
+    from omnicraft.goose_native import _materialize_goose_agent_spec
 
     with tempfile.TemporaryDirectory() as _tmp:
         spec_path = _materialize_goose_agent_spec(Path(_tmp))
@@ -2798,11 +2798,11 @@ def _create_native_kiro_session(base_url: str, runner_id: str) -> str:
     """Register the ``kiro-native`` wrapper agent and bind its session.
 
     Mirrors :func:`_create_native_goose_session`: reuses the terminal-first spec
-    ``omnigent kiro`` ships
-    (:func:`omnigent.kiro_native._materialize_kiro_agent_spec`) and stamps the
+    ``omnicraft kiro`` ships
+    (:func:`omnicraft.kiro_native._materialize_kiro_agent_spec`) and stamps the
     same wrapper / terminal-first labels. Binding triggers the runner's
     kiro-native auto-bootstrap
-    (:func:`omnigent.runner.app._auto_create_kiro_terminal`), which launches the
+    (:func:`omnicraft.runner.app._auto_create_kiro_terminal`), which launches the
     ``kiro-cli`` TUI in the session terminal and starts the forwarder that mirrors
     the TUI transcript back as conversation items.
 
@@ -2813,13 +2813,13 @@ def _create_native_kiro_session(base_url: str, runner_id: str) -> str:
     import json as _json
     import tempfile
 
-    from omnigent._wrapper_labels import (
+    from omnicraft._wrapper_labels import (
         KIRO_NATIVE_WRAPPER_VALUE,
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.kiro_native import _materialize_kiro_agent_spec
+    from omnicraft.kiro_native import _materialize_kiro_agent_spec
 
     with tempfile.TemporaryDirectory() as _tmp:
         spec_path = _materialize_kiro_agent_spec(Path(_tmp), model=None)
@@ -2887,11 +2887,11 @@ def _create_native_hermes_session(base_url: str, runner_id: str) -> str:
     """Register the ``hermes-native`` wrapper agent and bind its session.
 
     Mirrors :func:`_create_native_goose_session`: reuses the exact terminal-first
-    spec ``omnigent hermes`` ships
-    (:func:`omnigent.hermes_native._materialize_hermes_agent_spec`) and stamps the
+    spec ``omnicraft hermes`` ships
+    (:func:`omnicraft.hermes_native._materialize_hermes_agent_spec`) and stamps the
     same wrapper / terminal-first labels. Binding triggers the runner's
     hermes-native auto-bootstrap
-    (:func:`omnigent.runner.app._auto_create_hermes_terminal`), which launches the
+    (:func:`omnicraft.runner.app._auto_create_hermes_terminal`), which launches the
     ``hermes`` TUI in the session terminal and starts the forwarder that mirrors
     the TUI transcript back as conversation items.
 
@@ -2902,13 +2902,13 @@ def _create_native_hermes_session(base_url: str, runner_id: str) -> str:
     import json as _json
     import tempfile
 
-    from omnigent._wrapper_labels import (
+    from omnicraft._wrapper_labels import (
         HERMES_NATIVE_WRAPPER_VALUE,
         UI_MODE_LABEL_KEY,
         UI_MODE_TERMINAL_VALUE,
         WRAPPER_LABEL_KEY,
     )
-    from omnigent.hermes_native import _materialize_hermes_agent_spec
+    from omnicraft.hermes_native import _materialize_hermes_agent_spec
 
     with tempfile.TemporaryDirectory() as _tmp:
         spec_path = _materialize_hermes_agent_spec(Path(_tmp))
@@ -3017,7 +3017,7 @@ def native_cursor_approval_session(
 
     Identical to :func:`native_cursor_session` but omits the force/trust flag,
     so ``cursor-agent`` raises its real per-tool approval prompts. The runner-
-    side mirror (:mod:`omnigent.cursor_native_permissions`) surfaces those as
+    side mirror (:mod:`omnicraft.cursor_native_permissions`) surfaces those as
     web ``response.elicitation_request`` cards — what the approval-ordering test
     drives. The first-run workspace-trust modal is dismissed by the executor's
     inject path on the first composer turn.

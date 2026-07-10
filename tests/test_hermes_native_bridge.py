@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent import hermes_native_bridge as b
+from omnicraft import hermes_native_bridge as b
 
 
 def test_bridge_dir_is_per_session_and_under_root() -> None:
@@ -286,14 +286,14 @@ def test_write_policy_hook_config_creates_expected_files(tmp_path) -> None:
 
     # Wrapper shell script exists and is owner-only (it bakes a one-shot auth
     # token, so the secret is never world-readable).
-    wrapper = hermes_home / "omnigent-policy-hook.sh"
+    wrapper = hermes_home / "omnicraft-policy-hook.sh"
     assert wrapper.is_file()
     assert wrapper.stat().st_mode & 0o777 == 0o700
     wrapper_text = wrapper.read_text()
     # Values are shlex-quoted (shell-safe URLs/ids need no quotes).
-    assert "_OMNIGENT_SERVER_URL=http://localhost:6767" in wrapper_text
-    assert "_OMNIGENT_SESSION_ID=session-123" in wrapper_text
-    assert "_OMNIGENT_AUTH_HEADERS=" in wrapper_text
+    assert "_OMNICRAFT_SERVER_URL=http://localhost:6767" in wrapper_text
+    assert "_OMNICRAFT_SESSION_ID=session-123" in wrapper_text
+    assert "_OMNICRAFT_AUTH_HEADERS=" in wrapper_text
     assert sys.executable in wrapper_text
     assert "hermes_policy_hook.py" in wrapper_text
 
@@ -311,7 +311,7 @@ def test_write_policy_hook_config_creates_expected_files(tmp_path) -> None:
     assert allowlist["approvals"][0]["command"] == str(wrapper)
 
     # MCP server registered.
-    mcp = config["mcp_servers"]["omnigent"]
+    mcp = config["mcp_servers"]["omnicraft"]
     assert mcp["command"] == sys.executable
     assert "serve-mcp" in mcp["args"]
     assert "--bridge-dir" in mcp["args"]

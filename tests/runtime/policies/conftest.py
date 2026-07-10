@@ -13,10 +13,10 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.function import FunctionPolicy
-from omnigent.policies.types import PolicyResult
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef, PhaseSelector, PolicyAction
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.policies.function import FunctionPolicy
+from omnicraft.policies.types import PolicyResult
+from omnicraft.spec.types import FunctionPolicySpec, FunctionRef, PhaseSelector, PolicyAction
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 

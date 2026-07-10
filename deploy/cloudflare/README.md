@@ -1,6 +1,6 @@
-# Omnigent on Cloudflare (Containers + D1 + R2)
+# OmniCraft on Cloudflare (Containers + D1 + R2)
 
-Run the Omnigent server on **Cloudflare Containers**, with **D1** as the
+Run the OmniCraft server on **Cloudflare Containers**, with **D1** as the
 database and **R2** as the durable artifact store. This is the serverless,
 scale-to-zero option: no VM or Postgres to manage, a public `*.workers.dev`
 URL (or your domain), and the container sleeps when idle.
@@ -12,7 +12,7 @@ URL (or your domain), and the container sleeps when idle.
 
 > [!NOTE]
 > This path uses a small SQLAlchemy dialect shim (`sitecustomize.py`) because
-> Cloudflare D1 isn't yet first-class in Omnigent. It works end to end — it's how
+> Cloudflare D1 isn't yet first-class in OmniCraft. It works end to end — it's how
 > this directory was validated — and the normal on-boot migrations run unmodified.
 > The R2 artifact store, by contrast, already uses a first-class backend
 > (`S3ArtifactStore`) added alongside this directory.
@@ -24,12 +24,12 @@ URL (or your domain), and the container sleeps when idle.
 browser ───────────────►  Worker (src/index.js)
                               │   getContainer("singleton").fetch(req)
                               ▼
-                          Container  ──►  the omnigent server (port 8000)
+                          Container  ──►  the omnicraft server (port 8000)
                           (1 instance)        │            │
                           DATABASE_URL ───────┘            │  S3 API (boto3)
                           cloudflare_d1://…                ▼
-                                 │                  OMNIGENT_ARTIFACT_URI
-                                 ▼                  s3://omnigent-artifacts
+                                 │                  OMNICRAFT_ARTIFACT_URI
+                                 ▼                  s3://omnicraft-artifacts
                           Cloudflare D1                    │
                           (SQLite, the DB)                 ▼
                                                     Cloudflare R2
@@ -37,8 +37,8 @@ browser ───────────────►  Worker (src/index.js)
 ```
 
 - **Worker** — a thin front that proxies every request to **one** container
-  instance (Omnigent keeps an in-memory runner registry, so it's single-replica).
-- **Container** — the official `ghcr.io/omnigent-ai/omnigent-server` image plus
+  instance (OmniCraft keeps an in-memory runner registry, so it's single-replica).
+- **Container** — the official `ghcr.io/omnicraft-ai/omnicraft-server` image plus
   the D1 SQLAlchemy dialect, a shim that re-registers it as a proper SQLite
   dialect, and `boto3` (this directory's `Dockerfile`).
 - **D1** is the database. The server reaches it through the
@@ -46,8 +46,8 @@ browser ───────────────►  Worker (src/index.js)
   `DATABASE_URL` is `cloudflare_d1://<account>:<api-token>@<database-id>`.
 - **R2** is the artifact store. Cloudflare container disk is **ephemeral**, so
   artifacts (agent bundles, user files) go to R2 over its **S3 API** via
-  Omnigent's native `S3ArtifactStore`, selected with
-  `OMNIGENT_ARTIFACT_URI=s3://<bucket>`. No FUSE mount, no sidecar.
+  OmniCraft's native `S3ArtifactStore`, selected with
+  `OMNICRAFT_ARTIFACT_URI=s3://<bucket>`. No FUSE mount, no sidecar.
 
 ## What's in here
 
@@ -77,14 +77,14 @@ npx wrangler login
 ### 1. Create the D1 database
 
 ```bash
-npx wrangler d1 create omnigent
+npx wrangler d1 create omnicraft
 # note the "database_id" it prints — call it <DATABASE_ID>
 ```
 
 ### 2. Create the R2 bucket
 
 ```bash
-npx wrangler r2 bucket create omnigent-artifacts
+npx wrangler r2 bucket create omnicraft-artifacts
 ```
 
 ### 3. A D1 API token (for `DATABASE_URL`)
@@ -126,7 +126,7 @@ In `wrangler.jsonc`, set `AWS_ENDPOINT_URL_S3` to your account's R2 endpoint
 npx wrangler secret put DATABASE_URL
 
 # Session cookie secret — any 64-hex string
-openssl rand -hex 32 | npx wrangler secret put OMNIGENT_ACCOUNTS_COOKIE_SECRET
+openssl rand -hex 32 | npx wrangler secret put OMNICRAFT_ACCOUNTS_COOKIE_SECRET
 
 # R2 S3 credentials from step 4
 npx wrangler secret put AWS_ACCESS_KEY_ID
@@ -137,13 +137,13 @@ npx wrangler secret put AWS_SECRET_ACCESS_KEY
 
 ```bash
 npx wrangler deploy
-# -> https://omnigent.<your-subdomain>.workers.dev
+# -> https://omnicraft.<your-subdomain>.workers.dev
 ```
 
 The container cold-starts on the first request (~10s), then stays warm:
 
 ```bash
-curl https://omnigent.<your-subdomain>.workers.dev/health   # {"status":"ok"}
+curl https://omnicraft.<your-subdomain>.workers.dev/health   # {"status":"ok"}
 ```
 
 On a brand-new D1, the **first** boot runs all migrations before the server
@@ -157,8 +157,8 @@ Then connect a machine to actually run agents (the server is just the control
 plane):
 
 ```bash
-omnigent login https://omnigent.<your-subdomain>.workers.dev
-omnigent host  --server https://omnigent.<your-subdomain>.workers.dev
+omnicraft login https://omnicraft.<your-subdomain>.workers.dev
+omnicraft host  --server https://omnicraft.<your-subdomain>.workers.dev
 ```
 
 ## Verifying durability

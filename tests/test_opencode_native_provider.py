@@ -10,14 +10,14 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.opencode_native_provider import (
+from omnicraft.opencode_native_provider import (
     DEFAULT_DATABRICKS_GATEWAY_MODEL,
     OpenCodeGatewayResolution,
     _gateway_endpoint_for_model,
     _strip_jsonc_comments,
     _strip_trailing_commas,
     build_opencode_model_default_config,
-    build_opencode_omnigent_mcp_server,
+    build_opencode_omnicraft_mcp_server,
     build_opencode_provider_config,
     maybe_merge_user_provider_config,
     resolve_databricks_gateway,
@@ -25,22 +25,22 @@ from omnigent.opencode_native_provider import (
 )
 
 
-def test_build_omnigent_mcp_server_points_serve_mcp_at_bridge_dir() -> None:
-    block = build_opencode_omnigent_mcp_server(Path("/tmp/bridge-xyz"))
-    assert set(block) == {"omnigent"}
-    entry = block["omnigent"]
+def test_build_omnicraft_mcp_server_points_serve_mcp_at_bridge_dir() -> None:
+    block = build_opencode_omnicraft_mcp_server(Path("/tmp/bridge-xyz"))
+    assert set(block) == {"omnicraft"}
+    entry = block["omnicraft"]
     assert entry["type"] == "local"
     assert entry["enabled"] is True
     cmd = entry["command"]
     # Launches the SHARED serve-mcp relay, pointed at THIS bridge dir.
     assert cmd[-3:] == ["serve-mcp", "--bridge-dir", "/tmp/bridge-xyz"]
-    assert "omnigent.claude_native_bridge" in cmd
+    assert "omnicraft.claude_native_bridge" in cmd
     assert entry.get("environment", {}).get("PYTHONUNBUFFERED") == "1"
 
 
-def test_build_omnigent_mcp_server_honors_python_executable() -> None:
-    block = build_opencode_omnigent_mcp_server(Path("/tmp/b"), python_executable="/custom/python")
-    assert block["omnigent"]["command"][0] == "/custom/python"
+def test_build_omnicraft_mcp_server_honors_python_executable() -> None:
+    block = build_opencode_omnicraft_mcp_server(Path("/tmp/b"), python_executable="/custom/python")
+    assert block["omnicraft"]["command"][0] == "/custom/python"
 
 
 def test_build_model_default_config_pins_model_without_provider_block() -> None:
@@ -165,7 +165,7 @@ def test_resolve_gateway_none_when_no_token(monkeypatch: pytest.MonkeyPatch) -> 
 def test_build_mcp_block_stdio_and_http() -> None:
     from types import SimpleNamespace as N
 
-    from omnigent.opencode_native_provider import build_opencode_mcp_block
+    from omnicraft.opencode_native_provider import build_opencode_mcp_block
 
     servers = [
         N(
@@ -210,7 +210,7 @@ def test_build_mcp_block_stdio_and_http() -> None:
 def test_build_mcp_block_http_databricks_injects_bearer(monkeypatch: pytest.MonkeyPatch) -> None:
     from types import SimpleNamespace as N
 
-    import omnigent.opencode_native_provider as prov
+    import omnicraft.opencode_native_provider as prov
 
     monkeypatch.setattr(prov, "_databricks_bearer_token", lambda _p: "tok123")
     servers = [

@@ -1,18 +1,18 @@
 {
-  "name": "omnigent-desktop-electron",
+  "name": "omnicraft-desktop-electron",
   "productName": "OmniCraft",
   "version": "0.3.0",
   "description": "Shell desktop do OmniCraft (edição Electron) — um wrapper nativo leve sobre a interface web servida pelo servidor.",
   "private": true,
   "main": "src/main.js",
-  "homepage": "https://omnigent.ai",
+  "homepage": "https://omnicraft.ai",
   "repository": {
     "type": "git",
-    "url": "https://github.com/omnigent-ai/omnigent.git"
+    "url": "https://github.com/omnicraft-ai/omnicraft.git"
   },
   "author": {
     "name": "Databricks, Inc.",
-    "email": "support@omnigent.ai"
+    "email": "support@omnicraft.ai"
   },
   "scripts": {
     "start": "electron .",
@@ -29,7 +29,7 @@
     "electron-builder": "^26.0.0"
   },
   "build": {
-    "appId": "ai.omnigent.desktop",
+    "appId": "ai.omnicraft.desktop",
     "productName": "OmniCraft",
     "directories": {
       "output": "dist"
@@ -37,8 +37,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "omnigent-ai",
-        "repo": "omnigent"
+        "owner": "omnicraft-ai",
+        "repo": "omnicraft"
       }
     ],
     "afterPack": "build/afterPack.js",
@@ -61,7 +61,7 @@
       "category": "public.app-category.developer-tools",
       "icon": "icons/icon.icns",
       "identity": "Databricks, Inc. (8RMX4WU6F8)",
-      "provisioningProfile": "signing/omnigent.provisionprofile",
+      "provisioningProfile": "signing/omnicraft.provisionprofile",
       "hardenedRuntime": true,
       "entitlements": "signing/entitlements.mac.plist",
       "entitlementsInherit": "signing/entitlements.mac.inherit.plist",
@@ -100,7 +100,7 @@
     "linux": {
       "icon": "icons/icon.png",
       "category": "Development",
-      "maintainer": "Databricks, Inc. <support@omnigent.ai>",
+      "maintainer": "Databricks, Inc. <support@omnicraft.ai>",
       "target": [
         "AppImage",
         "deb"

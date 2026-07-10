@@ -1,7 +1,7 @@
 import type { AvailableAgent } from "@/hooks/useAvailableAgents";
 
-export const WRAPPER_LABEL_KEY = "omnigent.wrapper";
-export const UI_MODE_LABEL_KEY = "omnigent.ui";
+export const WRAPPER_LABEL_KEY = "omnicraft.wrapper";
+export const UI_MODE_LABEL_KEY = "omnicraft.ui";
 export const UI_MODE_TERMINAL_VALUE = "terminal";
 
 export type NativeCodingAgentIconKind =
@@ -63,7 +63,7 @@ export const NATIVE_CODING_AGENTS = [
     // (allow-by-default) and `plan` primary agents, switched at runtime via Tab
     // inside the TUI — and `opencode attach` (how the runner launches it) has
     // no `--agent` flag to preset one anyway. The runner already forces
-    // `permission: "ask"` so tools route through the Omnigent policy engine, so
+    // `permission: "ask"` so tools route through the OmniCraft policy engine, so
     // a launch-time picker would mirror nothing. (Previously declared Codex's
     // `approvalMode`, whose `--sandbox`/`--ask-for-approval` presets aren't
     // understood by `opencode attach` and crashed the TUI on any non-default
@@ -168,7 +168,7 @@ const BY_WRAPPER: Map<string, NativeCodingAgentSpec> = new Map(
 );
 
 // Reversed harness spellings that fold to a canonical native `harness`.
-// Mirrors omnigent.harness_aliases.NATIVE_HARNESSES on the server, which
+// Mirrors omnicraft.harness_aliases.NATIVE_HARNESSES on the server, which
 // accepts both the canonical and reversed native spellings (claude/codex
 // only use the canonical form, so they need no reversed entry here).
 const HARNESS_ALIASES: Record<string, string> = {

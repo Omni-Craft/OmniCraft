@@ -1,4 +1,4 @@
-"""Tests for :class:`omnigent.inner.cursor_executor.CursorExecutor`.
+"""Tests for :class:`omnicraft.inner.cursor_executor.CursorExecutor`.
 
 The cursor harness drives the Cursor Python SDK (``cursor-sdk``). The SDK is
 replaced with an injected fake module (so no real bridge subprocess, API key, or
@@ -20,14 +20,14 @@ from typing import Any
 
 import pytest
 
-from omnigent.inner.cursor_executor import (
+from omnicraft.inner.cursor_executor import (
     CursorExecutor,
     _build_cursor_prompt,
     _normalize_cursor_usage,
     _resolve_model,
     _sdk_message_to_events,
 )
-from omnigent.inner.executor import (
+from omnicraft.inner.executor import (
     ExecutorError,
     Message,
     ReasoningChunk,
@@ -217,7 +217,7 @@ def test_resolve_model_warns_when_dropping_a_pinned_model(
     otherwise a user who pinned a non-Cursor model has no idea it was ignored."""
     import logging
 
-    with caplog.at_level(logging.WARNING, logger="omnigent.inner.cursor_executor"):
+    with caplog.at_level(logging.WARNING, logger="omnicraft.inner.cursor_executor"):
         assert _resolve_model("databricks-claude-opus-4-8") == "auto"
     assert any(
         r.levelno == logging.WARNING and "not a Cursor model" in r.getMessage()
@@ -225,7 +225,7 @@ def test_resolve_model_warns_when_dropping_a_pinned_model(
     )
     # No warning when there was no explicit model to honor.
     caplog.clear()
-    with caplog.at_level(logging.WARNING, logger="omnigent.inner.cursor_executor"):
+    with caplog.at_level(logging.WARNING, logger="omnicraft.inner.cursor_executor"):
         assert _resolve_model(None) == "auto"
     assert not caplog.records
 
@@ -515,7 +515,7 @@ async def test_custom_tools_built_from_tool_specs(monkeypatch: pytest.MonkeyPatc
 
 async def test_custom_tool_execute_bridges_to_tool_executor() -> None:
     """The SDK callback (a sync ``execute`` on a worker thread) must hop back to
-    the main loop and resolve Omnigent's async ``_tool_executor``."""
+    the main loop and resolve OmniCraft's async ``_tool_executor``."""
     executor = CursorExecutor(api_key="crsr_x")
     seen: dict[str, Any] = {}
 
@@ -699,7 +699,7 @@ async def test_custom_tool_execute_flags_nested_list_error_with_iserror() -> Non
 async def test_custom_tool_execute_times_out_to_iserror(monkeypatch: pytest.MonkeyPatch) -> None:
     """A tool that never completes must not block the daemon thread forever — the
     bounded wait surfaces a timeout tool error instead of hanging."""
-    monkeypatch.setattr("omnigent.inner.cursor_executor._TOOL_CALL_TIMEOUT_S", 0.05)
+    monkeypatch.setattr("omnicraft.inner.cursor_executor._TOOL_CALL_TIMEOUT_S", 0.05)
 
     async def slow(name: str, args: dict[str, Any]) -> Any:
         await asyncio.sleep(30)
@@ -1073,7 +1073,7 @@ async def test_run_turn_captures_usage_from_turn_ended_update(
 
     notified: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        "omnigent.inner.cursor_executor._notify_usage_from_dict",
+        "omnicraft.inner.cursor_executor._notify_usage_from_dict",
         lambda *, model, usage: notified.append({"model": model, "usage": usage}),
     )
 
@@ -1111,7 +1111,7 @@ async def test_run_turn_usage_none_when_no_turn_ended_update(
 
     notified: list[dict[str, Any]] = []
     monkeypatch.setattr(
-        "omnigent.inner.cursor_executor._notify_usage_from_dict",
+        "omnicraft.inner.cursor_executor._notify_usage_from_dict",
         lambda *, model, usage: notified.append({"model": model, "usage": usage}),
     )
 
@@ -1549,18 +1549,18 @@ async def test_ensure_session_writes_hooks_json(
     assert hooks[0]["timeout"] == 86400
     cmd = hooks[0]["command"]
     # The command points to the wrapper shell script, not the Python hook directly.
-    assert "omnigent-hook.sh" in cmd
+    assert "omnicraft-hook.sh" in cmd
 
     # Verify the wrapper script exists and contains the env vars + exec.
-    wrapper = tmp_path / ".cursor" / "omnigent-hook.sh"
+    wrapper = tmp_path / ".cursor" / "omnicraft-hook.sh"
     assert wrapper.exists()
     wrapper_text = wrapper.read_text()
     # Values are shlex-quoted (shell-safe URLs/ids need no quotes).
-    assert "_OMNIGENT_SERVER_URL=http://127.0.0.1:6767" in wrapper_text
-    assert "_OMNIGENT_SESSION_ID=conv_test123" in wrapper_text
+    assert "_OMNICRAFT_SERVER_URL=http://127.0.0.1:6767" in wrapper_text
+    assert "_OMNICRAFT_SESSION_ID=conv_test123" in wrapper_text
     assert "cursor_policy_hook.py" in wrapper_text
     # The wrapper bakes a one-shot auth + workspace-routing header...
-    assert "_OMNIGENT_AUTH_HEADERS=" in wrapper_text
+    assert "_OMNICRAFT_AUTH_HEADERS=" in wrapper_text
     # ...so it must be owner-only (the baked token is never world-readable).
     assert wrapper.stat().st_mode & 0o777 == 0o700
 
@@ -1610,7 +1610,7 @@ async def test_hooks_json_cleaned_up_on_close(
     _ = [e async for e in executor.run_turn([_user("hi")], [], "SYS")]
 
     hooks_file = tmp_path / ".cursor" / "hooks.json"
-    wrapper = tmp_path / ".cursor" / "omnigent-hook.sh"
+    wrapper = tmp_path / ".cursor" / "omnicraft-hook.sh"
     assert hooks_file.exists()
     assert wrapper.exists()
 
@@ -1639,19 +1639,19 @@ def test_cursor_policy_hook_allow(monkeypatch: pytest.MonkeyPatch) -> None:
     import io
     from unittest.mock import patch
 
-    monkeypatch.setenv("_OMNIGENT_SERVER_URL", "http://localhost:6767")
-    monkeypatch.setenv("_OMNIGENT_SESSION_ID", "conv_test")
+    monkeypatch.setenv("_OMNICRAFT_SERVER_URL", "http://localhost:6767")
+    monkeypatch.setenv("_OMNICRAFT_SESSION_ID", "conv_test")
 
     stdin_data = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}})
 
-    from omnigent.inner import cursor_policy_hook
+    from omnicraft.inner import cursor_policy_hook
 
     stdout = io.StringIO()
     with (
         patch.object(sys, "stdin", io.StringIO(stdin_data)),
         patch.object(sys, "stdout", stdout),
         patch(
-            "omnigent.native_policy_hook.post_evaluate_with_retry",
+            "omnicraft.native_policy_hook.post_evaluate_with_retry",
             return_value=_fake_evaluate_response("POLICY_ACTION_ALLOW"),
         ),
     ):
@@ -1666,19 +1666,19 @@ def test_cursor_policy_hook_deny(monkeypatch: pytest.MonkeyPatch) -> None:
     import io
     from unittest.mock import patch
 
-    monkeypatch.setenv("_OMNIGENT_SERVER_URL", "http://localhost:6767")
-    monkeypatch.setenv("_OMNIGENT_SESSION_ID", "conv_test")
+    monkeypatch.setenv("_OMNICRAFT_SERVER_URL", "http://localhost:6767")
+    monkeypatch.setenv("_OMNICRAFT_SESSION_ID", "conv_test")
 
     stdin_data = json.dumps({"tool_name": "Bash", "tool_input": {"command": "rm -rf /"}})
 
-    from omnigent.inner import cursor_policy_hook
+    from omnicraft.inner import cursor_policy_hook
 
     stdout = io.StringIO()
     with (
         patch.object(sys, "stdin", io.StringIO(stdin_data)),
         patch.object(sys, "stdout", stdout),
         patch(
-            "omnigent.native_policy_hook.post_evaluate_with_retry",
+            "omnicraft.native_policy_hook.post_evaluate_with_retry",
             return_value=_fake_evaluate_response("POLICY_ACTION_DENY", "dangerous command"),
         ),
     ):
@@ -1695,19 +1695,19 @@ def test_cursor_policy_hook_network_error_fails_open(monkeypatch: pytest.MonkeyP
     import io
     from unittest.mock import patch
 
-    monkeypatch.setenv("_OMNIGENT_SERVER_URL", "http://localhost:6767")
-    monkeypatch.setenv("_OMNIGENT_SESSION_ID", "conv_test")
+    monkeypatch.setenv("_OMNICRAFT_SERVER_URL", "http://localhost:6767")
+    monkeypatch.setenv("_OMNICRAFT_SESSION_ID", "conv_test")
 
     stdin_data = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}})
 
-    from omnigent.inner import cursor_policy_hook
+    from omnicraft.inner import cursor_policy_hook
 
     stdout = io.StringIO()
     with (
         patch.object(sys, "stdin", io.StringIO(stdin_data)),
         patch.object(sys, "stdout", stdout),
         patch(
-            "omnigent.native_policy_hook.post_evaluate_with_retry",
+            "omnicraft.native_policy_hook.post_evaluate_with_retry",
             return_value=(None, "connection error: simulated"),
         ),
     ):
@@ -1722,10 +1722,10 @@ def test_cursor_policy_hook_no_env_fails_open(monkeypatch: pytest.MonkeyPatch) -
     import io
     from unittest.mock import patch
 
-    monkeypatch.delenv("_OMNIGENT_SERVER_URL", raising=False)
-    monkeypatch.delenv("_OMNIGENT_SESSION_ID", raising=False)
+    monkeypatch.delenv("_OMNICRAFT_SERVER_URL", raising=False)
+    monkeypatch.delenv("_OMNICRAFT_SESSION_ID", raising=False)
 
-    from omnigent.inner import cursor_policy_hook
+    from omnicraft.inner import cursor_policy_hook
 
     stdout = io.StringIO()
     with (
@@ -1743,19 +1743,19 @@ def test_cursor_policy_hook_ask_fails_closed(monkeypatch: pytest.MonkeyPatch) ->
     import io
     from unittest.mock import patch
 
-    monkeypatch.setenv("_OMNIGENT_SERVER_URL", "http://localhost:6767")
-    monkeypatch.setenv("_OMNIGENT_SESSION_ID", "conv_test")
+    monkeypatch.setenv("_OMNICRAFT_SERVER_URL", "http://localhost:6767")
+    monkeypatch.setenv("_OMNICRAFT_SESSION_ID", "conv_test")
 
     stdin_data = json.dumps({"tool_name": "Write", "tool_input": {}})
 
-    from omnigent.inner import cursor_policy_hook
+    from omnicraft.inner import cursor_policy_hook
 
     stdout = io.StringIO()
     with (
         patch.object(sys, "stdin", io.StringIO(stdin_data)),
         patch.object(sys, "stdout", stdout),
         patch(
-            "omnigent.native_policy_hook.post_evaluate_with_retry",
+            "omnicraft.native_policy_hook.post_evaluate_with_retry",
             return_value=_fake_evaluate_response("POLICY_ACTION_ASK", "needs approval"),
         ),
     ):
@@ -1771,19 +1771,19 @@ def test_cursor_policy_hook_uses_long_read_timeout(monkeypatch: pytest.MonkeyPat
     import io
     from unittest.mock import MagicMock, patch
 
-    monkeypatch.setenv("_OMNIGENT_SERVER_URL", "http://localhost:6767")
-    monkeypatch.setenv("_OMNIGENT_SESSION_ID", "conv_test")
+    monkeypatch.setenv("_OMNICRAFT_SERVER_URL", "http://localhost:6767")
+    monkeypatch.setenv("_OMNICRAFT_SESSION_ID", "conv_test")
 
     stdin_data = json.dumps({"tool_name": "Bash", "tool_input": {}})
 
-    from omnigent.inner import cursor_policy_hook
+    from omnicraft.inner import cursor_policy_hook
 
     mock_fn = MagicMock(return_value=_fake_evaluate_response("POLICY_ACTION_ALLOW"))
     stdout = io.StringIO()
     with (
         patch.object(sys, "stdin", io.StringIO(stdin_data)),
         patch.object(sys, "stdout", stdout),
-        patch("omnigent.native_policy_hook.post_evaluate_with_retry", mock_fn),
+        patch("omnicraft.native_policy_hook.post_evaluate_with_retry", mock_fn),
     ):
         cursor_policy_hook.main()
 

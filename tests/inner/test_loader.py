@@ -11,10 +11,10 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from omnigent.inner.datamodel import ExecutorSpec, OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.loader import load_agent_def
-from omnigent.inner.policies import FunctionPolicy, PromptPolicy
-from omnigent.inner.tools import (
+from omnicraft.inner.datamodel import ExecutorSpec, OSEnvSandboxSpec, OSEnvSpec
+from omnicraft.inner.loader import load_agent_def
+from omnicraft.inner.policies import FunctionPolicy, PromptPolicy
+from omnicraft.inner.tools import (
     AgentTool,
     CancellableFunctionTool,
     FunctionTool,
@@ -516,11 +516,11 @@ tools:
 
 class TestInstructionsField(unittest.TestCase):
     """
-    ``instructions:`` field handling in omnigent-flavored YAML.
+    ``instructions:`` field handling in omnicraft-flavored YAML.
 
-    Native Omnigent YAMLs have always supported ``instructions: <path>``
+    Native OmniCraft YAMLs have always supported ``instructions: <path>``
     (path relative to the bundle dir, falling through to inline
-    text if not a file). Omnigent-flavored YAMLs silently
+    text if not a file). OmniCraft-flavored YAMLs silently
     dropped the field — the loader didn't read it, the translator
     didn't see it. Bug from kasey_uhlenhuth's report. These tests
     pin the cross-format parity.
@@ -542,7 +542,7 @@ class TestInstructionsField(unittest.TestCase):
     def test_instructions_inline_text_when_no_matching_file(self):
         """A value that doesn't match any sibling file is treated as inline.
 
-        Matches the native Omnigent behavior — silent fall-through to
+        Matches the native OmniCraft behavior — silent fall-through to
         inline avoids breaking specs whose authors typed an
         instruction that happens to look pathy.
         """
@@ -582,7 +582,7 @@ class TestInstructionsField(unittest.TestCase):
     def test_instructions_resolves_relative_to_yaml_dir_not_cwd(self):
         """Path resolution anchors on the YAML's parent dir, not os.getcwd().
 
-        A user can run ``omnigent run /elsewhere/agent.yaml`` from
+        A user can run ``omnicraft run /elsewhere/agent.yaml`` from
         anywhere; the ``instructions: AGENTS.md`` reference must
         find ``/elsewhere/AGENTS.md``, not ``./AGENTS.md`` from
         the user's current working directory.
@@ -645,10 +645,10 @@ def test_instructions_rejects_path_traversal() -> None:
 
 
 class TestLoaderOsEnvValidation(unittest.TestCase):
-    """Validate that ``inner.loader`` mirrors Omnigent parser sandbox checks.
+    """Validate that ``inner.loader`` mirrors OmniCraft parser sandbox checks.
 
-    The legacy ``load_agent_def`` is what the CLI ``omnigent run``
-    actually invokes (via the omnigent-compat shim). If the legacy
+    The legacy ``load_agent_def`` is what the CLI ``omnicraft run``
+    actually invokes (via the omnicraft-compat shim). If the legacy
     loader silently accepts a misconfigured sandbox (egress_rules on a
     non-enforcing backend, start_in_scratch without an active sandbox,
     etc.), the user gets a spec that **looks** hardened but isn't —
@@ -824,9 +824,9 @@ os_env:
                 os.unlink(f.name)
 
     def test_load_agent_def_parses_credential_proxy(self):
-        """Single-file omnigent YAML must parse ``credential_proxy``.
+        """Single-file omnicraft YAML must parse ``credential_proxy``.
 
-        Regression: this loader (the path ``omnigent run agent.yaml``
+        Regression: this loader (the path ``omnicraft run agent.yaml``
         takes, distinct from the bundle ``parse(config.yaml)`` path)
         had no ``credential_proxy`` parsing, so the field was silently
         dropped and the secretless proxy never armed even though the
@@ -939,7 +939,7 @@ os_env:
         SSL_CERT_FILE and verifies TLS via the keychain, so it rejects the
         egress MITM CA and every ``gh`` call fails at runtime with
         ``certificate is not trusted``. The single-file loader (the
-        ``omnigent run agent.yaml`` path) must fail loud at load time with the
+        ``omnicraft run agent.yaml`` path) must fail loud at load time with the
         same explanation as the bundle parser — sharing one detection helper so
         the two paths can't drift.
         """
@@ -1005,7 +1005,7 @@ def test_factory_params_with_unresolvable_handler_does_not_crash() -> None:
 def test_load_agent_def_allows_custom_handler_by_default() -> None:
     """Trusted loading (the default) keeps supporting custom handlers.
 
-    This is the operator/local ``omnigent run`` path — the custom
+    This is the operator/local ``omnicraft run`` path — the custom
     FunctionPolicy feature. An unregistered, non-built-in handler must
     load without error when ``enforce_handler_allowlist`` is not set, so
     the bundle guard does not regress local custom policies.
@@ -1060,7 +1060,7 @@ def test_load_agent_def_enforce_allows_registered_handler() -> None:
             "policies": {
                 "ask_os": {
                     "type": "function",
-                    "handler": "omnigent.policies.builtins.safety.ask_on_os_tools",
+                    "handler": "omnicraft.policies.builtins.safety.ask_on_os_tools",
                 }
             },
         },

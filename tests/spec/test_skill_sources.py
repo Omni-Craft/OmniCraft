@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.spec.skill_sources import (
+from omnicraft.spec.skill_sources import (
     SkillSourceContext,
     _harness_family,
     resolve_harness_skills,
@@ -331,7 +331,7 @@ def test_pi_provider_is_bundle_only_noop(tmp_path: Path) -> None:
     """
     Pi loads skills from the bundle (already carried by ``spec.skills``,
     the base layer) and auto-discovers host skills internally — but
-    omnigent can't enumerate Pi's host-skill layout to name/resolve them,
+    omnicraft can't enumerate Pi's host-skill layout to name/resolve them,
     so the provider surfaces nothing extra (under-report rather than list
     a command that won't resolve).
     """
@@ -418,7 +418,7 @@ def test_codex_menu_set_matches_executor_linked_set(tmp_path: Path) -> None:
     SAME skill set from the SAME sources (both via codex_skill_sources +
     select_codex_skill_dirs) — so a / menu entry is always actually linked.
     """
-    from omnigent.inner.codex_executor import (
+    from omnicraft.inner.codex_executor import (
         codex_skill_sources,
         select_codex_skill_dirs,
     )

@@ -1,6 +1,6 @@
-# Deploying Omnigent
+# Deploying OmniCraft
 
-Omnigent ships several ways to deploy the server, organized by
+OmniCraft ships several ways to deploy the server, organized by
 target platform. Pick the one that matches your environment.
 
 Deploying buys you a stable URL: sessions become reachable from any device,
@@ -11,11 +11,11 @@ the machines that register as hosts (see [Execution model](#execution-model)).
 ## Deploy in one click
 
 No local tooling needed. Pick a platform, click the button, and your
-Omnigent server is live with HTTPS in a few minutes.
+OmniCraft server is live with HTTPS in a few minutes.
 
 | Platform | Button | Docs |
 |---|---|---|
-| **Render** | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/omnigent-ai/omnigent) | [`render/README.md`](render/README.md) |
+| **Render** | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/omnicraft-ai/omnicraft) | [`render/README.md`](render/README.md) |
 | **Railway** | *(button pending; see below)* | [`railway/README.md`](railway/README.md) |
 
 <!-- TODO(oss-release): publish the Railway template at railway.com/new/template
@@ -28,7 +28,7 @@ Both provision a managed Postgres database automatically and default to the
 built-in `accounts` auth provider, so a fresh deploy is multi-user with no
 external IdP. First boot auto-creates an admin (password in the service
 logs); invite teammates from the web UI. Prefer your own IdP? Switch to OIDC
-after deploy by setting the `OMNIGENT_OIDC_*` vars (auth stays enabled; the
+after deploy by setting the `OMNICRAFT_OIDC_*` vars (auth stays enabled; the
 issuer is what flips the mode); see the platform README for both
 walkthroughs.
 
@@ -98,7 +98,7 @@ deploy/
 │
 └── docker/            ← common Docker image + compose stack
     ├── Dockerfile         multi-stage slim image (node web build → python builder → runtime)
-    ├── docker-compose.yaml   omnigent + postgres for any Docker host
+    ├── docker-compose.yaml   omnicraft + postgres for any Docker host
     ├── entrypoint.py
     ├── .env.example
     ├── README.md
@@ -122,10 +122,10 @@ deploy/
 | Deploy on a Databricks workspace (Lakebase + UC Volumes), self-managed | Databricks Apps | [`databricks/README.md`](databricks/README.md): uses Asset Bundles |
 
 > **On Databricks?** The fully managed
-> [Omnigent on Databricks](https://docs.databricks.com/aws/en/omnigent/)
+> [OmniCraft on Databricks](https://docs.databricks.com/aws/en/omnicraft/)
 > (Beta) is the recommended path: Databricks operates the server for
 > you, wired to workspace identity, Foundation Models, AI Gateway, and
-> MLflow Tracing. Enable the **Omnigent** preview in your workspace
+> MLflow Tracing. Enable the **OmniCraft** preview in your workspace
 > settings. The self-managed Databricks Apps bundle above is for when
 > you need control the managed service does not expose yet.
 
@@ -179,7 +179,7 @@ Modal app pins `memory=1024` for the same reason.
 
 ## Execution model
 
-Omnigent runs in two pieces that talk to each other over a
+OmniCraft runs in two pieces that talk to each other over a
 WebSocket tunnel:
 
 - **Server**: the FastAPI app you deploy here. Handles HTTP / SSE
@@ -191,7 +191,7 @@ WebSocket tunnel:
 
 The deploy options here are all about the server. Runners aren't
 deployed; every user launches one on their own machine with
-`omnigent run …  --server <url>` or `omnigent claude  --server <url>`.
+`omnicraft run …  --server <url>` or `omnicraft claude  --server <url>`.
 
 This separation is why the server image is small (no `tmux`, no
 harness SDKs, no LLM API keys in the image) and why no agent code
@@ -203,7 +203,7 @@ Once the server is up, sign in from your machine. The token is reused by
 `run`, `attach`, and `host`:
 
 ```bash
-omnigent login https://your-host
+omnicraft login https://your-host
 ```
 
 `login` detects the server's auth mode automatically. Built-in accounts,
@@ -216,13 +216,13 @@ Then register the machine as a host, so sessions created in the web UI can
 run on it:
 
 ```bash
-omnigent host https://your-host
+omnicraft host https://your-host
 ```
 
 Or point a one-off run at the server directly:
 
 ```bash
-omnigent run path/to/agent.yaml --server https://your-host
+omnicraft run path/to/agent.yaml --server https://your-host
 ```
 
 ## Run hosts in cloud sandboxes
@@ -230,18 +230,18 @@ omnigent run path/to/agent.yaml --server https://your-host
 Don't want a laptop to be the host? Run the host in a cloud sandbox instead.
 
 **From the CLI (Modal, Daytona, Islo, or E2B).** Install the provider extra when
-needed (`pip install 'omnigent[modal]'`, `'omnigent[daytona]'`, or
-`'omnigent[e2b]'`; Islo uses the built-in HTTP client), authenticate
+needed (`pip install 'omnicraft[modal]'`, `'omnicraft[daytona]'`, or
+`'omnicraft[e2b]'`; Islo uses the built-in HTTP client), authenticate
 (`modal token new`, `DAYTONA_API_KEY`, `ISLO_API_KEY`, or `E2B_API_KEY`), then:
 
 ```bash
-omnigent sandbox create --provider modal     # or --provider daytona / islo / e2b
-omnigent sandbox connect --provider modal --sandbox-id <id> --server https://your-host
+omnicraft sandbox create --provider modal     # or --provider daytona / islo / e2b
+omnicraft sandbox connect --provider modal --sandbox-id <id> --server https://your-host
 ```
 
 > [!NOTE]
 > Modal caps sandbox lifetime at 24 hours. Re-run `create` + `connect` to
-> roll the host onto a fresh sandbox. Daytona and Islo have no Omnigent-imposed
+> roll the host onto a fresh sandbox. Daytona and Islo have no OmniCraft-imposed
 > lifetime cap; Daytona free-tier orgs restrict egress to an allowlist; see
 > [`daytona/README.md`](daytona/README.md) for the relay workaround. E2B
 > shares Modal's 24-hour cap **and** boots from a pre-built E2B *template*
@@ -254,7 +254,7 @@ session with `"host_type": "managed"` (e.g.
 server provision a sandbox, start a host in it, and run the session there.
 No laptop, no CLI steps per session; the sandbox is terminated when the
 session is deleted. Configuration is a `sandbox:` section in the server
-config (`omnigent server -c config.yaml`, or `<data_dir>/config.yaml`):
+config (`omnicraft server -c config.yaml`, or `<data_dir>/config.yaml`):
 
 ```yaml
 sandbox:
@@ -270,9 +270,9 @@ Each sandbox authenticates back with a server-minted, per-launch token, so
 no user credentials ever enter the sandbox.
 
 **The host image.** Sandboxes boot from the official prebaked host image
-(`ghcr.io/omnigent-ai/omnigent-host:latest`, published by CI from the `host`
+(`ghcr.io/omnicraft-ai/omnicraft-host:latest`, published by CI from the `host`
 target of [`docker/Dockerfile`](docker/Dockerfile)), so the host starts in
-seconds instead of installing Omnigent at boot. The image ships the
+seconds instead of installing OmniCraft at boot. The image ships the
 coding-harness CLIs (`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run
 in the sandbox with nothing extra to install. To run sandboxes from your own
 image instead (a fork, or extra tooling baked in), build the same `host`
@@ -280,8 +280,8 @@ target and point the config at it:
 
 ```bash
 docker build -f docker/Dockerfile --target host \
-  -t docker.io/<you>/omnigent-host:latest .
-docker push docker.io/<you>/omnigent-host:latest
+  -t docker.io/<you>/omnicraft-host:latest .
+docker push docker.io/<you>/omnicraft-host:latest
 ```
 
 ```yaml
@@ -289,13 +289,13 @@ sandbox:
   provider: modal
   server_url: https://your-host
   modal:
-    image: docker.io/<you>/omnigent-host:latest
+    image: docker.io/<you>/omnicraft-host:latest
 ```
 
-For private registries, set `OMNIGENT_MODAL_REGISTRY_SECRET` on the server
+For private registries, set `OMNICRAFT_MODAL_REGISTRY_SECRET` on the server
 to the name of a Modal secret holding `REGISTRY_USERNAME` /
-`REGISTRY_PASSWORD`; for CLI-launched sandboxes, `OMNIGENT_MODAL_HOST_IMAGE`
-(or `OMNIGENT_DAYTONA_HOST_IMAGE` / `OMNIGENT_ISLO_HOST_IMAGE`) overrides the
+`REGISTRY_PASSWORD`; for CLI-launched sandboxes, `OMNICRAFT_MODAL_HOST_IMAGE`
+(or `OMNICRAFT_DAYTONA_HOST_IMAGE` / `OMNICRAFT_ISLO_HOST_IMAGE`) overrides the
 image ref.
 
 **LLM credentials for managed sessions.** A fresh sandbox has no API keys.
@@ -304,15 +304,15 @@ and list it in the config. Its env vars are injected into every managed
 sandbox, and the in-sandbox host forwards the standard harness credential
 vars (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
 `CLAUDE_CODE_OAUTH_TOKEN`, `CODEX_ACCESS_TOKEN`, `OPENAI_API_KEY`,
-`OPENAI_BASE_URL`, `GEMINI_API_KEY`, plus their `OMNIGENT_`-prefixed
+`OPENAI_BASE_URL`, `GEMINI_API_KEY`, plus their `OMNICRAFT_`-prefixed
 aliases) to its runners:
 
 ```bash
-modal secret create omnigent-llm \
-  OMNIGENT_ANTHROPIC_API_KEY=sk-ant-… OPENAI_API_KEY=sk-…
+modal secret create omnicraft-llm \
+  OMNICRAFT_ANTHROPIC_API_KEY=sk-ant-… OPENAI_API_KEY=sk-…
 ```
 
-Prefer `OMNIGENT_ANTHROPIC_API_KEY` for Claude Code API-key auth. Omnigent
+Prefer `OMNICRAFT_ANTHROPIC_API_KEY` for Claude Code API-key auth. OmniCraft
 resolves it into Claude Code's `apiKeyHelper`, avoiding a raw
 `ANTHROPIC_API_KEY` in the Claude CLI process.
 
@@ -321,7 +321,7 @@ sandbox:
   provider: modal
   server_url: https://your-host
   modal:
-    secrets: [omnigent-llm]
+    secrets: [omnicraft-llm]
 ```
 
 For Daytona and Islo, list server environment variable names under
@@ -342,7 +342,7 @@ token as `CLAUDE_CODE_OAUTH_TOKEN` in the secret. A **ChatGPT
 Business/Enterprise plan** works the same way via a
 [Codex access token](https://developers.openai.com/codex/enterprise/access-tokens)
 stored as `CODEX_ACCESS_TOKEN`. For gateway setups or other env vars beyond
-the standard set, add `OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` to the
+the standard set, add `OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` to the
 secret to name the extra vars the host should forward to runners.
 
 **Private repositories.** Managed sessions can clone a repository as the
@@ -359,22 +359,22 @@ guide lives at [`daytona/README.md`](daytona/README.md); the Islo guide
 
 ## Auth
 
-Auth is driven by a single switch, `OMNIGENT_AUTH_ENABLED`. The framework
-default (a bare local `omnigent server`) leaves it off: single-user
+Auth is driven by a single switch, `OMNICRAFT_AUTH_ENABLED`. The framework
+default (a bare local `omnicraft server`) leaves it off: single-user
 `header` mode, no login. The containerized deploys here (Docker / HF / Render /
-Railway / Modal / Fly) set `OMNIGENT_AUTH_ENABLED=1` by default in their
+Railway / Modal / Fly) set `OMNICRAFT_AUTH_ENABLED=1` by default in their
 entrypoints,
 since a network-exposed instance should be authenticated. With the switch on,
-the mode is chosen by your config: supply the `OMNIGENT_OIDC_*` vars and you
+the mode is chosen by your config: supply the `OMNICRAFT_OIDC_*` vars and you
 get `oidc`, otherwise you get the built-in `accounts` flow.
-`OMNIGENT_AUTH_PROVIDER` is an explicit escape hatch that pins the mode and
+`OMNICRAFT_AUTH_PROVIDER` is an explicit escape hatch that pins the mode and
 overrides this auto-selection.
 
 | Mode | When to use | What's needed |
 |---|---|---|
-| `accounts` (deploy default) | Standalone deploy, no external IdP: built-in username/password with first-user-is-admin bootstrap and UI-based invites. Opt in with `OMNIGENT_AUTH_ENABLED=1` (and no OIDC vars). | Set `OMNIGENT_ACCOUNTS_COOKIE_SECRET` (or let `bootstrap.sh` mint it) and `OMNIGENT_ACCOUNTS_BASE_URL` (public URL). On first boot, set the admin password via the web Create-admin form, the terminal prompt, or `--admin-password` / `OMNIGENT_ACCOUNTS_INIT_ADMIN_PASSWORD`. |
-| `oidc` | Standalone deploy with your own IdP: server handles the full login flow | Set `OMNIGENT_AUTH_ENABLED=1` and the `OMNIGENT_OIDC_*` env vars; the presence of `OMNIGENT_OIDC_ISSUER` selects OIDC (or pin `OMNIGENT_AUTH_PROVIDER=oidc`). Requires HTTPS (the session cookie uses the `__Host-` prefix). |
-| `header` | Behind an existing SSO proxy (oauth2-proxy, AWS ALB OIDC, Cloudflare Access, Tailscale Funnel, …) that injects an identity header | The default when `OMNIGENT_AUTH_ENABLED` is off; or pin `OMNIGENT_AUTH_PROVIDER=header`. Reads `X-Forwarded-Email` by default; set `OMNIGENT_AUTH_HEADER` for proxies that use another name (e.g. `Cf-Access-Authenticated-User-Email`), and `OMNIGENT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:` for Google IAP. Proxy MUST strip any inbound copy of the header from clients. Missing headers are always rejected. |
+| `accounts` (deploy default) | Standalone deploy, no external IdP: built-in username/password with first-user-is-admin bootstrap and UI-based invites. Opt in with `OMNICRAFT_AUTH_ENABLED=1` (and no OIDC vars). | Set `OMNICRAFT_ACCOUNTS_COOKIE_SECRET` (or let `bootstrap.sh` mint it) and `OMNICRAFT_ACCOUNTS_BASE_URL` (public URL). On first boot, set the admin password via the web Create-admin form, the terminal prompt, or `--admin-password` / `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD`. |
+| `oidc` | Standalone deploy with your own IdP: server handles the full login flow | Set `OMNICRAFT_AUTH_ENABLED=1` and the `OMNICRAFT_OIDC_*` env vars; the presence of `OMNICRAFT_OIDC_ISSUER` selects OIDC (or pin `OMNICRAFT_AUTH_PROVIDER=oidc`). Requires HTTPS (the session cookie uses the `__Host-` prefix). |
+| `header` | Behind an existing SSO proxy (oauth2-proxy, AWS ALB OIDC, Cloudflare Access, Tailscale Funnel, …) that injects an identity header | The default when `OMNICRAFT_AUTH_ENABLED` is off; or pin `OMNICRAFT_AUTH_PROVIDER=header`. Reads `X-Forwarded-Email` by default; set `OMNICRAFT_AUTH_HEADER` for proxies that use another name (e.g. `Cf-Access-Authenticated-User-Email`), and `OMNICRAFT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:` for Google IAP. Proxy MUST strip any inbound copy of the header from clients. Missing headers are always rejected. |
 
 > [!NOTE]
 > **Managed sandboxes need `header`/`oidc` or single-user auth.** Each session's
@@ -391,12 +391,12 @@ Microsoft), point the server at your identity provider. In `docker/.env` (or
 your platform's env settings):
 
 ```dotenv
-# Auth is already on (OMNIGENT_AUTH_ENABLED=1) by default in the deploys here.
+# Auth is already on (OMNICRAFT_AUTH_ENABLED=1) by default in the deploys here.
 # Adding an OIDC issuer flips the mode to single sign-on. No extra flag.
-OMNIGENT_OIDC_ISSUER=https://accounts.google.com     # or https://github.com / your Okta / Entra URL
-OMNIGENT_DOMAIN=agents.yourcompany.com               # your server's domain
-OMNIGENT_OIDC_CLIENT_ID=…
-OMNIGENT_OIDC_CLIENT_SECRET=…
+OMNICRAFT_OIDC_ISSUER=https://accounts.google.com     # or https://github.com / your Okta / Entra URL
+OMNICRAFT_DOMAIN=agents.yourcompany.com               # your server's domain
+OMNICRAFT_OIDC_CLIENT_ID=…
+OMNICRAFT_OIDC_CLIENT_SECRET=…
 ```
 
 ```bash
@@ -420,14 +420,14 @@ admins: [you@yourcompany.com]         # who can manage members
 
 > [!TIP]
 > Need to let in one outsider, say a contractor on a personal account? Set
-> `OMNIGENT_OIDC_ALLOW_INVITES=1` and send them a one-time invite link,
+> `OMNICRAFT_OIDC_ALLOW_INVITES=1` and send them a one-time invite link,
 > instead of opening up the whole allowlist.
 
 **Already have a team on built-in accounts?** One command brings everyone
 across when you switch, so they keep their sessions and admin rights:
 
 ```bash
-omnigent debug migrate-accounts-to-oidc <database-url> --domain yourcompany.com
+omnicraft debug migrate-accounts-to-oidc <database-url> --domain yourcompany.com
 ```
 
 For the provider-specific walkthroughs (GitHub OAuth, Google Workspace,
@@ -440,32 +440,32 @@ generic OIDC), see
 > Don't deploy a shared server in header-auth mode unless you run a trusted
 > reverse proxy.
 
-`header` mode (`OMNIGENT_AUTH_PROVIDER=header`) takes the caller's identity
+`header` mode (`OMNICRAFT_AUTH_PROVIDER=header`) takes the caller's identity
 from a trusted request header — `X-Forwarded-Email` by default. It exists for
 deployments that sit behind an SSO proxy (oauth2-proxy, Cloudflare Access, an
 ALB/OIDC listener, Databricks Apps) that authenticates the user and injects
 that header on every request.
 
 Proxies that authenticate with a different header name set
-`OMNIGENT_AUTH_HEADER` to that name instead of standing up an extra hop to
+`OMNICRAFT_AUTH_HEADER` to that name instead of standing up an extra hop to
 rename it. For example, behind **Cloudflare Access** (which provides the
 authenticated email in `Cf-Access-Authenticated-User-Email`):
 
 ```dotenv
-OMNIGENT_AUTH_PROVIDER=header
-OMNIGENT_AUTH_HEADER=Cf-Access-Authenticated-User-Email
+OMNICRAFT_AUTH_PROVIDER=header
+OMNICRAFT_AUTH_HEADER=Cf-Access-Authenticated-User-Email
 ```
 
 Some proxies namespace the identity they inject. **Google IAP** forwards the
 email in `X-Goog-Authenticated-User-Email` prefixed with `accounts.google.com:`
 (e.g. `accounts.google.com:user@example.com`). Set
-`OMNIGENT_AUTH_HEADER_STRIP_PREFIX` to drop that prefix and recover the bare
+`OMNICRAFT_AUTH_HEADER_STRIP_PREFIX` to drop that prefix and recover the bare
 email:
 
 ```dotenv
-OMNIGENT_AUTH_PROVIDER=header
-OMNIGENT_AUTH_HEADER=X-Goog-Authenticated-User-Email
-OMNIGENT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:
+OMNICRAFT_AUTH_PROVIDER=header
+OMNICRAFT_AUTH_HEADER=X-Goog-Authenticated-User-Email
+OMNICRAFT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:
 ```
 
 In header mode **the server trusts whatever that header says**. If no proxy

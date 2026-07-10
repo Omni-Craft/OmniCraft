@@ -5,7 +5,7 @@ JSON-encoded list of pass-through CLI args for a native terminal wrapper
 (claude / codex). NULL means no native launch args — the common case for
 non-native sessions and for rows that pre-date the feature. The column is now
 a binary (``BLOB``/``BYTEA``) type storing the value zstd-compressed
-(``omnigent.db.compression``). These tests exercise the schema directly (raw
+(``omnicraft.db.compression``). These tests exercise the schema directly (raw
 SQL, no ORM) so column drift is caught independently of the store wrapper.
 """
 
@@ -18,7 +18,7 @@ import pytest
 import sqlalchemy as sa
 from sqlalchemy.engine import Engine
 
-from omnigent.db.utils import clear_engine_cache, get_or_create_engine
+from omnicraft.db.utils import clear_engine_cache, get_or_create_engine
 
 
 @pytest.fixture
@@ -50,7 +50,7 @@ def test_terminal_launch_args_column_present_and_nullable(db_engine: Engine) -> 
     — non-native and pre-feature rows have no launch args and would
     otherwise be rejected on read. (3) The type must be binary
     (``BLOB``/``BYTEA``): the column is stored zstd-compressed by
-    ``omnigent.db.compression``, whose framed bytes can contain NUL and
+    ``omnicraft.db.compression``, whose framed bytes can contain NUL and
     would be rejected by a ``TEXT`` column on PostgreSQL.
     """
     cols = sa.inspect(db_engine).get_columns("conversations")

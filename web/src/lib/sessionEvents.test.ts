@@ -1,6 +1,6 @@
 // Pin the wire envelopes for `session.*` SSE events.
 //
-// Each event in `omnigent/server/schemas.py` uses either a FLAT
+// Each event in `omnicraft/server/schemas.py` uses either a FLAT
 // envelope (`{type, ...fields}`) or a NESTED envelope (`{type, data:
 // {...}}`). The parser in `sse.ts` must lift each into the same
 // camelCase TS interface; bugs in that lift are silent (the reducer
@@ -1001,7 +1001,7 @@ describe("session.usage (FLAT envelope)", () => {
   });
 
   it("accepts cost-only broadcasts (relay path, no context fields)", () => {
-    // The Omnigent relay path emits a session.usage carrying only the
+    // The OmniCraft relay path emits a session.usage carrying only the
     // cumulative cost — context_tokens/window ride on response.completed.
     const out = parse("session.usage", {
       type: "session.usage",

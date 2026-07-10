@@ -1,6 +1,6 @@
 """Fast smoke test for the HTTP-journey benchmark harness.
 
-Runs the real harness (boots an ``omnigent server``, no runner / no LLM /
+Runs the real harness (boots an ``omnicraft server``, no runner / no LLM /
 no Databricks) with tiny counts and asserts the report shape and threshold
 logic. Runs on the normal CI lane — no creds, no ``databricks`` marker.
 
@@ -16,10 +16,10 @@ from typing import cast
 
 import pytest
 
-from dev.benchmarks.omnigent import run as bench_run
-from dev.benchmarks.omnigent.journeys import ALL_JOURNEYS
-from dev.benchmarks.omnigent.measure import RunResult, aggregate, check_thresholds
-from dev.benchmarks.omnigent.schema import SCHEMA_VERSION, build_report
+from dev.benchmarks.omnicraft import run as bench_run
+from dev.benchmarks.omnicraft.journeys import ALL_JOURNEYS
+from dev.benchmarks.omnicraft.measure import RunResult, aggregate, check_thresholds
+from dev.benchmarks.omnicraft.schema import SCHEMA_VERSION, build_report
 
 _SMOKE_JOURNEYS = [
     "list_sessions",
@@ -219,9 +219,9 @@ async def test_benchmark_smoke_runner_journeys() -> None:
 
 def test_seed_creates_listable_corpus(tmp_path: Path) -> None:
     """Seed a tiny corpus and confirm it is listable as "local" with history."""
-    from dev.benchmarks.omnigent import seed as seed_mod
-    from omnigent.server.auth import RESERVED_USER_LOCAL
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from dev.benchmarks.omnicraft import seed as seed_mod
+    from omnicraft.server.auth import RESERVED_USER_LOCAL
+    from omnicraft.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
 

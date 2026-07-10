@@ -245,7 +245,7 @@ function makeDesignModeInputHandler(gestureState) {
 }
 
 /**
- * Register every `omnigent:browser-*` IPC handler. Idempotent per process is
+ * Register every `omnicraft:browser-*` IPC handler. Idempotent per process is
  * NOT guaranteed — call exactly once from main.js's registerIpc.
  *
  * @param {object} deps
@@ -284,7 +284,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   // Open (create-if-absent) or navigate a conversation's view, and measure it
   // into place. `force` reloads even on the same URL (agent "bring me back"
   // intent). Returns the registry's structured `{ ok, created, error }`.
-  ipcMain.handle("omnigent:browser-open-or-navigate", (event, args) => {
+  ipcMain.handle("omnicraft:browser-open-or-navigate", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const { conversationId, url, bounds, opts } = args ?? {};
@@ -307,7 +307,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
 
   // Attach the named conversation's view to the host window (detaching the
   // previous active one), or detach everything when conversationId is null.
-  ipcMain.handle("omnigent:browser-set-active", (event, args) => {
+  ipcMain.handle("omnicraft:browser-set-active", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const conversationId = args?.conversationId ?? null;
@@ -316,7 +316,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   });
 
   // Reposition the active conversation's view to freshly-measured bounds.
-  ipcMain.handle("omnigent:browser-resize", (event, args) => {
+  ipcMain.handle("omnicraft:browser-resize", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const { conversationId, bounds } = args ?? {};
@@ -330,7 +330,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   });
 
   // Capture the conversation's view as a base64 PNG.
-  ipcMain.handle("omnigent:browser-screenshot", async (event, args) => {
+  ipcMain.handle("omnicraft:browser-screenshot", async (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const { conversationId } = args ?? {};
@@ -348,7 +348,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   // Run relay-template JS in the conversation's view. PRIVATE to the relay's
   // fixed templates (snapshot / click / type) — NOT an agent-facing generic
   // `evaluate` (trust boundary; see README).
-  ipcMain.handle("omnigent:browser-execute", async (event, args) => {
+  ipcMain.handle("omnicraft:browser-execute", async (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const { conversationId, js } = args ?? {};
@@ -367,7 +367,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
 
   // Whether a view currently exists for a conversation. Lets a (re)mounting
   // pane re-attach an already-created view without waiting for a create event.
-  ipcMain.handle("omnigent:browser-has-view", (event, args) => {
+  ipcMain.handle("omnicraft:browser-has-view", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { exists: false };
     const { conversationId } = args ?? {};
@@ -375,7 +375,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   });
 
   // Destroy the conversation's view (explicit close — unmount only detaches).
-  ipcMain.handle("omnigent:browser-close", (event, args) => {
+  ipcMain.handle("omnicraft:browser-close", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const { conversationId, reason } = args ?? {};
@@ -387,7 +387,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   // Back / forward / reload. Each returns fresh nav-state so the caller updates
   // button-disabled immediately without waiting for the did-navigate event.
 
-  ipcMain.handle("omnigent:browser-go-back", (event, args) => {
+  ipcMain.handle("omnicraft:browser-go-back", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const entry = g.registry.get(args?.conversationId);
@@ -396,7 +396,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
     return { ok: true, ...readNavState(entry.view.webContents) };
   });
 
-  ipcMain.handle("omnigent:browser-go-forward", (event, args) => {
+  ipcMain.handle("omnicraft:browser-go-forward", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const entry = g.registry.get(args?.conversationId);
@@ -405,7 +405,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
     return { ok: true, ...readNavState(entry.view.webContents) };
   });
 
-  ipcMain.handle("omnigent:browser-reload", (event, args) => {
+  ipcMain.handle("omnicraft:browser-reload", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const entry = g.registry.get(args?.conversationId);
@@ -421,7 +421,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   // ── Toolbar: DevTools toggle ─────────────────────────────────────────────
   // Toggle DevTools docked 'bottom' — it shares the view's bounds, so the
   // syncBounds loop already covers it and Chromium splits page + devtools.
-  ipcMain.handle("omnigent:open-browser-devtools", (event, args) => {
+  ipcMain.handle("omnicraft:open-browser-devtools", (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const entry = g.registry.get(args?.conversationId);
@@ -444,7 +444,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   // popup. Listeners are stored per-entry (and detached by the registry's
   // close()) so a late background-conversation marker can't leak into another UI.
 
-  ipcMain.handle("omnigent:browser-enable-design-mode", async (event, args) => {
+  ipcMain.handle("omnicraft:browser-enable-design-mode", async (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const { conversationId } = args ?? {};
@@ -480,7 +480,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
     }
   });
 
-  ipcMain.handle("omnigent:browser-disable-design-mode", async (event, args) => {
+  ipcMain.handle("omnicraft:browser-disable-design-mode", async (event, args) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     const { conversationId } = args ?? {};
@@ -500,7 +500,7 @@ function registerBrowserIpc({ ipcMain, isPinnedOriginSender, getRegistryForEvent
   // Forward a submit's result envelope into the page for green/red feedback.
   // `id` matches the page's submitId so a late callback can't paint over a fresh
   // popup. Fields are defensively coerced before crossing back into the page.
-  ipcMain.handle("omnigent:browser-signal-design-result", async (event, payload) => {
+  ipcMain.handle("omnicraft:browser-signal-design-result", async (event, payload) => {
     const g = gateRegistry(event);
     if (g.error) return { ok: false, error: g.error };
     if (!payload || typeof payload !== "object") return { ok: false, error: "bad payload" };

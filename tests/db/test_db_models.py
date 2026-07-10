@@ -1,4 +1,4 @@
-"""Tests for SQLAlchemy ORM models (omnigent/db/db_models.py).
+"""Tests for SQLAlchemy ORM models (omnicraft/db/db_models.py).
 
 Verifies that each ORM model can be instantiated, persisted, read back,
 and that relationships, defaults, nullable columns, and constraints
@@ -13,7 +13,7 @@ import time
 import pytest
 from sqlalchemy.exc import IntegrityError, OperationalError
 
-from omnigent.db.db_models import (
+from omnicraft.db.db_models import (
     SqlAccountToken,
     SqlAgent,
     SqlComment,
@@ -27,7 +27,7 @@ from omnigent.db.db_models import (
     SqlUser,
     SqlUserDailyCost,
 )
-from omnigent.db.enum_codecs import (
+from omnicraft.db.enum_codecs import (
     encode_account_token_kind,
     encode_agent_kind,
     encode_comment_status,
@@ -38,7 +38,7 @@ from omnigent.db.enum_codecs import (
     encode_policy_scope,
     encode_policy_type,
 )
-from omnigent.db.utils import get_or_create_engine, make_managed_session_maker
+from omnicraft.db.utils import get_or_create_engine, make_managed_session_maker
 
 # ── helpers ───────────────────────────────────────────
 
@@ -685,7 +685,7 @@ class TestSqlPolicy:
             scope=encode_policy_scope("default"),
             created_at=_now(),
             type=encode_policy_type("python"),
-            handler="omnigent.policies.cost_guard:handler",
+            handler="omnicraft.policies.cost_guard:handler",
             enabled=True,
         )
         with managed() as session:

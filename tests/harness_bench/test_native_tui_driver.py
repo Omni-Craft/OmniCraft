@@ -157,7 +157,7 @@ def test_tool_turn_deny_attaches_policy_and_observes_denied_event() -> None:
     assert result.tool_call_denied
     assert len(client.attached_policies) == 1
     attached = client.attached_policies[0]
-    assert attached["handler"] == "omnigent.policies.builtins.cel.cel_policy"
+    assert attached["handler"] == "omnicraft.policies.builtins.cel.cel_policy"
     expr = attached["factory_params"]["expression"]
     assert 'event.type == "tool_call"' in expr
     assert '"result": "DENY"' in expr
@@ -341,7 +341,7 @@ async def test_probes_read_native_tool_result_as_supported() -> None:
 
 def test_format_matches_server_wire_name() -> None:
     """The driver keys on the exact wire name the server publishes."""
-    from omnigent.server.routes.sessions import _format_sse
+    from omnicraft.server.routes.sessions import _format_sse
     from tests.harness_bench.native_tui_driver import _POLICY_DENIED_EVENT
 
     sse = _format_sse(_POLICY_DENIED_EVENT, {"type": _POLICY_DENIED_EVENT})

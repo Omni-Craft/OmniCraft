@@ -1,9 +1,9 @@
-# Omnigent on Islo
+# OmniCraft on Islo
 
 [Islo](https://islo.dev) sandboxes give you disposable cloud machines for
-running Omnigent hosts, two ways:
+running OmniCraft hosts, two ways:
 
-- **CLI-launched**: `omnigent sandbox create` / `connect` provisions a
+- **CLI-launched**: `omnicraft sandbox create` / `connect` provisions a
   sandbox from your terminal, ships your local checkout into it, and
   registers it as a host with your server.
 - **Server-managed**: the server provisions a sandbox automatically when
@@ -12,7 +12,7 @@ running Omnigent hosts, two ways:
 
 Sandboxes boot from the official prebaked host image, so startup is
 seconds. Unlike Modal and Daytona, the Islo launcher talks to the Islo
-HTTP API directly through `httpx` (already an Omnigent dependency), so
+HTTP API directly through `httpx` (already an OmniCraft dependency), so
 there is **no provider SDK extra to install** — just an API key.
 
 What makes Islo different from the other providers, and shapes the rest
@@ -24,7 +24,7 @@ of this guide:
   credentials (see [Model credentials](#model-credentials-llm-keys)) and
   has no equivalent on Modal or Daytona.
 - **No local port forward.** Islo can't forward a sandbox→laptop callback
-  port, so the interactive in-sandbox `omnigent login` / App OAuth step is
+  port, so the interactive in-sandbox `omnicraft login` / App OAuth step is
   skipped automatically (as on Modal and Daytona).
 - **No lifetime cap.** Islo sandboxes run until deleted (like Daytona,
   unlike Modal's 24 h).
@@ -38,7 +38,7 @@ the **server** process for managed sandboxes:
 ```bash
 curl -fsSL https://islo.dev/install.sh | sh   # install the islo CLI
 islo login                                     # browser OAuth (one-time)
-islo api-key create omnigent --show            # prints an islo_key_… value
+islo api-key create omnicraft --show            # prints an islo_key_… value
 export ISLO_API_KEY=islo_key_…
 # Optional: a non-default API endpoint
 # export ISLO_BASE_URL=https://api.islo.dev
@@ -50,7 +50,7 @@ key is the only required credential — no SDK, no `~/.config` file.
 
 > [!NOTE]
 > **Islo cannot forward a local callback port into the sandbox.** The
-> interactive `omnigent login` browser flow (and the in-sandbox App OAuth
+> interactive `omnicraft login` browser flow (and the in-sandbox App OAuth
 > callback) needs a sandbox→laptop port forward, which Islo doesn't
 > provide — so the CLI skips that step automatically, exactly as it does
 > for Modal and Daytona. For a server that requires authentication, inject
@@ -59,9 +59,9 @@ key is the only required credential — no SDK, no `~/.config` file.
 
 ## The host image
 
-Sandboxes boot from `ghcr.io/omnigent-ai/omnigent-host:latest`, published
+Sandboxes boot from `ghcr.io/omnicraft-ai/omnicraft-host:latest`, published
 by CI from the `host` target of
-[`deploy/docker/Dockerfile`](../docker/Dockerfile) with Omnigent and its
+[`deploy/docker/Dockerfile`](../docker/Dockerfile) with OmniCraft and its
 dependencies preinstalled — including the coding-harness CLIs (`claude`,
 `codex`, `pi`, `kiro-cli`), so agents on any harness run without an in-sandbox
 install.
@@ -72,14 +72,14 @@ same target and push it anywhere Islo can pull from:
 ```bash
 docker build -f deploy/docker/Dockerfile --target host \
   --platform linux/amd64 \
-  -t docker.io/<you>/omnigent-host:latest .
-docker push docker.io/<you>/omnigent-host:latest
+  -t docker.io/<you>/omnicraft-host:latest .
+docker push docker.io/<you>/omnicraft-host:latest
 ```
 
-Then point Omnigent at it — `OMNIGENT_ISLO_HOST_IMAGE` for the CLI flow,
+Then point OmniCraft at it — `OMNICRAFT_ISLO_HOST_IMAGE` for the CLI flow,
 or `sandbox.islo.image` in the server config for the managed flow. For a
 private registry, configure the pull credentials on the Islo side (Islo
-pulls the image, not Omnigent).
+pulls the image, not OmniCraft).
 
 > [!IMPORTANT]
 > **Native terminals need `bubblewrap`.** The `claude-native` /
@@ -95,7 +95,7 @@ pulls the image, not Omnigent).
 Provision a sandbox and ship your local checkout into it:
 
 ```bash
-omnigent sandbox create --provider islo
+omnicraft sandbox create --provider islo
 ```
 
 This pulls the host image, builds wheels from your local checkout, and
@@ -103,12 +103,12 @@ overlays them on top — so the sandbox runs *your* code, not whatever the
 image was built from. Then register it as a host with your server:
 
 ```bash
-omnigent sandbox connect --provider islo \
+omnicraft sandbox connect --provider islo \
   --sandbox-id <id-printed-by-create> \
   --server https://your-host
 ```
 
-`connect` runs `omnigent host` inside the sandbox and holds the
+`connect` runs `omnicraft host` inside the sandbox and holds the
 connection open in your terminal — Ctrl-C tears it down. New sessions
 targeting that host now run in the sandbox.
 
@@ -122,7 +122,7 @@ sandbox keeps billing until removed via `islo rm <id>` or the
 [dashboard](https://app.islo.dev)).
 
 To inject LLM/git credentials into a CLI-launched sandbox, set
-`OMNIGENT_ISLO_SANDBOX_ENV` in your shell to a comma-separated list of
+`OMNICRAFT_ISLO_SANDBOX_ENV` in your shell to a comma-separated list of
 variable names (e.g. `ANTHROPIC_API_KEY,GIT_TOKEN`) before running
 `create` — the named variables are copied from your environment into the
 sandbox at provision time. A listed name that is **not** set fails the
@@ -131,16 +131,16 @@ auth failure inside the sandbox).
 
 ### Connecting to an authenticated server
 
-`connect` runs `omnigent host` inside the sandbox, and that host must
+`connect` runs `omnicraft host` inside the sandbox, and that host must
 present credentials when it dials back to a server that requires
-authentication. The interactive `omnigent login` browser flow can't run
+authentication. The interactive `omnicraft login` browser flow can't run
 inside an Islo sandbox (no callback port forward), so inject the keys for
-the relevant server instead — name them in `OMNIGENT_ISLO_SANDBOX_ENV`
+the relevant server instead — name them in `OMNICRAFT_ISLO_SANDBOX_ENV`
 before `create`:
 
 ```bash
-export OMNIGENT_ISLO_SANDBOX_ENV=DATABRICKS_HOST,DATABRICKS_TOKEN
-omnigent sandbox create --provider islo
+export OMNICRAFT_ISLO_SANDBOX_ENV=DATABRICKS_HOST,DATABRICKS_TOKEN
+omnicraft sandbox create --provider islo
 ```
 
 The in-sandbox host mints a fresh bearer token from those credentials on
@@ -156,7 +156,7 @@ those authenticate with a server-minted per-launch token automatically.
 
 ## Server-managed sandboxes
 
-Add a `sandbox:` section to the server config (`omnigent server -c
+Add a `sandbox:` section to the server config (`omnicraft server -c
 config.yaml`, or `<data_dir>/config.yaml`):
 
 ```yaml
@@ -196,7 +196,7 @@ sandbox opens two kinds of connections back to the server:
 - one **runner tunnel** per session (`/v1/runners/<token>/tunnel`), opened
   by the runner subprocess the host spawns. The runner authenticates with
   *whatever server credential it can resolve* — a proxy-injected identity
-  (header / OIDC), or a stored `omnigent login` token (local hosts only; a
+  (header / OIDC), or a stored `omnicraft login` token (local hosts only; a
   fresh managed sandbox has none) — **not** the per-launch host token.
 
 The consequence:
@@ -208,7 +208,7 @@ The consequence:
   image, the launcher cleared the seeded `apiKeyHelper`, the host *and*
   runner tunnels connected, and a native Claude terminal ran on the
   injected `CLAUDE_CODE_OAUTH_TOKEN` subscription.
-- **The built-in `accounts` provider (`OMNIGENT_AUTH_ENABLED=1`)** — the
+- **The built-in `accounts` provider (`OMNICRAFT_AUTH_ENABLED=1`)** — the
   runner tunnel additionally requires a *user* identity, which the
   per-launch host token does not carry, so the runner dial-back is refused
   (`403`) even though the host tunnel connects. This is a framework-level
@@ -219,7 +219,7 @@ So for a managed Islo deployment, front the server with **header or OIDC
 auth** (a reverse proxy / IdP injects the user identity on every request,
 including the runner WebSocket — see
 [`deploy/README.md#auth`](../README.md#auth)), or run it single-user. The
-`accounts` provider is fine for CLI-launched hosts (you `omnigent login`,
+`accounts` provider is fine for CLI-launched hosts (you `omnicraft login`,
 and that token is what the in-sandbox host forwards), but not yet for the
 managed runner dial-back.
 
@@ -230,7 +230,7 @@ sandbox:
   provider: islo
   server_url: https://your-host
   islo:
-    image: docker.io/<you>/omnigent-host:latest   # default: official image
+    image: docker.io/<you>/omnicraft-host:latest   # default: official image
     env: [OPENAI_API_KEY, GIT_TOKEN]               # copy from server env
     base_url: https://api.islo.dev                 # non-default API endpoint
     gateway_profile: default                       # Islo gateway for egress + credential injection
@@ -282,7 +282,7 @@ plan/subscription auth — `--tool claude` gives an Anthropic API key, not a
 Claude Pro/Max subscription; `--tool openai` gives an OpenAI API key, not
 a ChatGPT plan. To use a subscription or plan token on any harness (a
 Claude Pro/Max token, a Codex access token), use
-[Option B](#option-b--omnigent-env-injection-your-own-key-or-a-subscription).
+[Option B](#option-b--omnicraft-env-injection-your-own-key-or-a-subscription).
 
 > [!IMPORTANT]
 > If `islo status` shows **"No integrations connected"** for a provider,
@@ -293,7 +293,7 @@ Claude Pro/Max token, a Codex access token), use
 #### Path A under managed hosts
 
 This is where the gateway shines: when the **server** launches sandboxes,
-you configure **no model credential on the Omnigent side at all**. The
+you configure **no model credential on the OmniCraft side at all**. The
 flow:
 
 ```
@@ -306,11 +306,11 @@ server ──ISLO_API_KEY──▶ Islo API "create sandbox" ──▶ sandbox u
    agent's claude → api.anthropic.com (phantom key) ──▶ Islo gateway swaps in the real key
 ```
 
-The Omnigent server only ever holds `ISLO_API_KEY` — the credential it
+The OmniCraft server only ever holds `ISLO_API_KEY` — the credential it
 uses to *create* sandboxes. Because every managed sandbox is created under
 that Islo account, and integrations are connected at the **account/team**
 level, each one inherits the connected Claude credential through the
-gateway automatically. The only Omnigent-side knob is which gateway a
+gateway automatically. The only OmniCraft-side knob is which gateway a
 managed sandbox uses:
 
 ```yaml
@@ -323,9 +323,9 @@ sandbox:
 
 Two consequences worth internalizing:
 
-- **No model secret lives in the Omnigent server's config or
+- **No model secret lives in the OmniCraft server's config or
   environment** — nothing to leak there. Contrast [Option B under managed
-  hosts](#option-b--omnigent-env-injection-your-own-key-or-a-subscription),
+  hosts](#option-b--omnicraft-env-injection-your-own-key-or-a-subscription),
   where the key sits in `sandbox.islo.env` (copied from the server's env
   into each sandbox).
 - **The integration must be connected on the same Islo account the
@@ -333,9 +333,9 @@ Two consequences worth internalizing:
   dedicated service/CI Islo account, run `islo login --tool claude` while
   authenticated as *that* account — not a personal laptop login.
 
-### Option B — Omnigent env injection (your own key or a subscription)
+### Option B — OmniCraft env injection (your own key or a subscription)
 
-Bring your own credential by naming it in `OMNIGENT_ISLO_SANDBOX_ENV`
+Bring your own credential by naming it in `OMNICRAFT_ISLO_SANDBOX_ENV`
 (CLI) or `sandbox.islo.env` (managed); the launcher copies the value from
 the launching environment into the sandbox, and the in-sandbox host
 forwards the standard harness credential vars to its runners:
@@ -355,7 +355,7 @@ recipes](../modal/README.md#llm-credentials-for-managed-sandboxes). For a
 Claude **subscription** specifically, run `claude setup-token` on your own
 machine (one-time browser auth) and inject the resulting long-lived token
 as `CLAUDE_CODE_OAUTH_TOKEN`. For env vars beyond the standard set, inject
-`OMNIGENT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
+`OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 
 > [!NOTE]
 > **Your injected Claude credential automatically wins over Islo's phantom
@@ -391,7 +391,7 @@ openai`, or inject `OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN`).
 ### Git credentials (private repositories)
 
 Inject an HTTPS token as `GIT_TOKEN` (GitLab: add `GIT_USERNAME=oauth2`)
-via `OMNIGENT_ISLO_SANDBOX_ENV` / `sandbox.islo.env`. The host image's git
+via `OMNICRAFT_ISLO_SANDBOX_ENV` / `sandbox.islo.env`. The host image's git
 credential helper answers HTTPS auth from it for both the launch-time
 clone and the agent's later `fetch` / `push`, writing nothing to disk. Use
 HTTPS repository URLs. Details by provider match the [Modal git
@@ -419,7 +419,7 @@ guide](../modal/README.md#git-credentials-private-repositories).
   (below) to keep the agent away from it.
 - **The agent terminal is sandboxed away from those secrets.** Native
   harness terminals run under a bubblewrap OS-sandbox that masks dotfiles
-  (`~/.ssh`, `~/.aws`, the injected `~/.omnigent` server token) and pins
+  (`~/.ssh`, `~/.aws`, the injected `~/.omnicraft` server token) and pins
   the agent to its workspace — defense-in-depth *inside* the Islo sandbox,
   independent of Islo's own isolation. This is why the image must ship
   `bwrap` (see [the host image](#the-host-image)).
@@ -466,7 +466,7 @@ free credits. Rates: [islo.dev](https://islo.dev).
   `apiKeyHelper` set."** You injected your own Claude credential (Option B)
   but Islo's phantom `apiKeyHelper` is still present — the launcher strips it
   automatically at provision, so this means the strip didn't run: confirm the
-  credential is named in `OMNIGENT_ISLO_SANDBOX_ENV` / `sandbox.islo.env` (the
+  credential is named in `OMNICRAFT_ISLO_SANDBOX_ENV` / `sandbox.islo.env` (the
   signal the launcher keys on), and check the provision log for the
   "clearing Islo's seeded apiKeyHelper" line.
 - **Requests retry then fail with no obvious error.** `islo status` shows
@@ -474,9 +474,9 @@ free credits. Rates: [islo.dev](https://islo.dev).
   nothing. Connect one (Option A) or switch to Option B.
 - **"managed host did not come online within 120s."** Check that
   `server_url` is publicly reachable from Islo's cloud, then inspect the
-  in-sandbox host log: `~/.omnigent/logs/host-runner/*.log`.
+  in-sandbox host log: `~/.omnicraft/logs/host-runner/*.log`.
 - **Agent has no credentials.** Verify the injected var names match the
-  forwarded set above (or are named in `OMNIGENT_RUNNER_ENV_PASSTHROUGH`),
+  forwarded set above (or are named in `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`),
   and that each name was actually set in the launching environment.
 
 ## Environment variable reference
@@ -485,7 +485,7 @@ free credits. Rates: [islo.dev](https://islo.dev).
 |---|---|---|
 | `ISLO_API_KEY` | CLI machine / server | Islo API credentials (required) |
 | `ISLO_BASE_URL` | CLI machine / server | Non-default Islo API endpoint (default `https://api.islo.dev`) |
-| `OMNIGENT_ISLO_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.islo.image` takes precedence for managed) |
-| `OMNIGENT_ISLO_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.islo.env` takes precedence for managed) |
-| `OMNIGENT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
+| `OMNICRAFT_ISLO_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.islo.image` takes precedence for managed) |
+| `OMNICRAFT_ISLO_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.islo.env` takes precedence for managed) |
+| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
 | `GIT_TOKEN` / `GIT_USERNAME` | inside the sandbox (injected) | HTTPS credentials for private repository clone / fetch / push |

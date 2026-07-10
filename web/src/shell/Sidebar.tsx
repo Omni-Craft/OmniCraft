@@ -359,7 +359,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   // for the settings section nav (see settingsNav.tsx) — entering settings
   // shouldn't replace the whole sidebar.
   const { inSettings } = useSettingsRoute();
-  // Remember the pre-settings location so "Back to Omnigent" returns to the
+  // Remember the pre-settings location so "Back to OmniCraft" returns to the
   // conversation the user was viewing, not the home page. Tracked here since
   // the sidebar stays mounted across the transition into settings.
   useTrackSettingsReturn();

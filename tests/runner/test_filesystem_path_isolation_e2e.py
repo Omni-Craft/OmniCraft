@@ -16,11 +16,11 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.entities import DEFAULT_ENVIRONMENT_ID
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.os_env import create_os_environment
-from omnigent.runner import create_runner_app
-from omnigent.runner.resource_registry import SessionResourceRegistry
+from omnicraft.entities import DEFAULT_ENVIRONMENT_ID
+from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from omnicraft.inner.os_env import create_os_environment
+from omnicraft.runner import create_runner_app
+from omnicraft.runner.resource_registry import SessionResourceRegistry
 from tests.runner.helpers import NullServerClient
 
 _SECRET = "TOP-SECRET-CREDENTIAL-do-not-leak"

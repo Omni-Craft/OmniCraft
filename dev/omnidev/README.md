@@ -1,17 +1,17 @@
 # omnidev
 
-Dev tooling for Omnigent, in one binary with two independent capabilities:
+Dev tooling for OmniCraft, in one binary with two independent capabilities:
 
 1. A per-repo dev **pod supervisor** (bare `omnidev`) — the default.
 2. **Install management** (`omnidev install`/`update`/`check`) — install and
-   keep a git-based omnigent up to date. See
-   [Managing your omnigent install](#managing-your-omnigent-install). These
+   keep a git-based omnicraft up to date. See
+   [Managing your omnicraft install](#managing-your-omnicraft-install). These
    subcommands need no checkout and run anywhere.
 
 ## Pod supervisor
 
 A per-repo dev **pod** supervisor, as a single long-running terminal UI. It
-replaces the three-terminal local dev flow (`omnigent server`, `omnigent host`,
+replaces the three-terminal local dev flow (`omnicraft server`, `omnicraft host`,
 `npm run dev`) with one process that:
 
 - runs each checkout in an **isolated pod** — its own state dir, database,
@@ -19,7 +19,7 @@ replaces the three-terminal local dev flow (`omnigent server`, `omnigent host`,
   collide;
 - **supervises** the backend server, the host daemon, and the Vite frontend,
   restarting any that crash (with backoff);
-- **reloads the backend** (server → host) when you edit `omnigent/**/*.py`;
+- **reloads the backend** (server → host) when you edit `omnicraft/**/*.py`;
   the frontend self-reloads through Vite HMR;
 - gives you **scrollable per-process log panes** plus a combined view.
 
@@ -34,7 +34,7 @@ cargo run            # launches the TUI for the surrounding checkout
 ```
 
 Run it from anywhere inside the checkout — it walks up to the repo root
-(the `.jj`/`.git` marker) and requires `omnigent/` and
+(the `.jj`/`.git` marker) and requires `omnicraft/` and
 `web/` to be present. Build a release binary with `cargo build --release`
 (lands at `target/release/omnidev`).
 
@@ -42,9 +42,9 @@ Run it from anywhere inside the checkout — it walks up to the repo root
 
 | Process | Command | Notes |
 |---|---|---|
-| server | `uv run omnigent server --host 127.0.0.1 --port <p> --database-uri … --artifact-location …` | Waited on via `GET /health`. |
-| host   | `uv run omnigent host --server http://127.0.0.1:<p>` | Started once the server is healthy. |
-| vite   | `npm run dev -- --host <host> --port <p> --strictPort` (cwd `web/`) | `OMNIGENT_URL` points its proxy at the pod's server. |
+| server | `uv run omnicraft server --host 127.0.0.1 --port <p> --database-uri … --artifact-location …` | Waited on via `GET /health`. |
+| host   | `uv run omnicraft host --server http://127.0.0.1:<p>` | Started once the server is healthy. |
+| vite   | `npm run dev -- --host <host> --port <p> --strictPort` (cwd `web/`) | `OMNICRAFT_URL` points its proxy at the pod's server. |
 
 Before Vite starts (and on a manual Vite restart), omnidev runs `npm install`
 in `web/` when needed — `node_modules/` is missing, or `package.json` /
@@ -55,19 +55,19 @@ Open the UI at the `ui` URL shown in the header (the Vite dev server).
 
 ## Isolation
 
-Only Omnigent's own state is isolated per pod — enough that concurrent pods
+Only OmniCraft's own state is isolated per pod — enough that concurrent pods
 never share a database, server pidfile, or `config.yaml` — via
-`OMNIGENT_DATA_DIR`, `OMNIGENT_DATABASE_URI`, `OMNIGENT_URL`, and
-`OMNIGENT_CONFIG_HOME`. Everything else (your real `HOME`, credentials, and
-uv/npm caches) is inherited, because the agents Omnigent runs need it. This is
+`OMNICRAFT_DATA_DIR`, `OMNICRAFT_DATABASE_URI`, `OMNICRAFT_URL`, and
+`OMNICRAFT_CONFIG_HOME`. Everything else (your real `HOME`, credentials, and
+uv/npm caches) is inherited, because the agents OmniCraft runs need it. This is
 deliberately lighter than the hermetic `scripts/backend-smoke.sh` sandbox,
 which repoints `HOME`/`XDG_*` to touch nothing real.
 
 Each pod gets its own `config.yaml` under `<pod>/config/`, pointed to by
-`OMNIGENT_CONFIG_HOME`. On first create it's **seeded** from your real
-`~/.omnigent/config.yaml` (if present) so the pod works out of the box — it
+`OMNICRAFT_CONFIG_HOME`. On first create it's **seeded** from your real
+`~/.omnicraft/config.yaml` (if present) so the pod works out of the box — it
 keeps your providers — after which the two are independent: server-config edits
-inside a pod (via the UI or `omnigent config`) don't touch your real config.
+inside a pod (via the UI or `omnicraft config`) don't touch your real config.
 `--clean` wipes the pod dir, so the next run re-seeds from your real config.
 
 The pod dir defaults to
@@ -100,7 +100,7 @@ rejects multipart uploads (403) and refuses the live WebSocket stream.
 
 `--trust-lan-origins` fixes that: omnidev enumerates this machine's LAN IPv4
 addresses and trusts the matching `http://<ip>:<vite-port>` origins via the
-server's `OMNIGENT_WS_ALLOWED_ORIGINS` allowlist (merged with any value you
+server's `OMNICRAFT_WS_ALLOWED_ORIGINS` allowlist (merged with any value you
 already export). It stays exact-match — only those origins are trusted, nothing
 is disabled — so it's for dev pods, not deployed servers. The trusted origins
 are printed in the combined log at startup.
@@ -110,7 +110,7 @@ omnidev --vite-host 0.0.0.0 --trust-lan-origins
 ```
 
 This covers IPv4 LAN addresses; mDNS `.local` hostnames and HTTPS origins are
-not auto-trusted (add those to `OMNIGENT_WS_ALLOWED_ORIGINS` yourself).
+not auto-trusted (add those to `OMNICRAFT_WS_ALLOWED_ORIGINS` yourself).
 
 ## Keys
 
@@ -125,18 +125,18 @@ not auto-trusted (add those to `OMNIGENT_WS_ALLOWED_ORIGINS` yourself).
 | `c` | Clear the focused pane |
 | `q` / `Ctrl-C` | Quit and tear down all processes |
 
-## Managing your omnigent install
+## Managing your omnicraft install
 
-For people who *run* omnigent (installed from git via `uv tool install`) rather
+For people who *run* omnicraft (installed from git via `uv tool install`) rather
 than develop it. This wraps the fiddly PEP 508 install syntax and adds a daily
-update check — filling a gap, since omnigent's own update notice only works for
+update check — filling a gap, since omnicraft's own update notice only works for
 PyPI-wheel installs and skips git installs.
 
 These subcommands manage the global tool and work from **any directory** (no
 checkout needed).
 
 ```
-omnidev install     # uv tool install omnigent from git (databricks extra, main)
+omnidev install     # uv tool install omnicraft from git (databricks extra, main)
 omnidev update      # reinstall the latest of the tracked ref/extras
 omnidev check       # check for an update; prompt to update on a TTY
 omnidev refresh     # refresh the check cache from the network (usually detached)
@@ -168,10 +168,10 @@ every shell startup and print a "command not found" error whenever omnidev is
 absent.)
 
 On each interactive shell it runs `omnidev check --quiet`, which reads a cached
-result (`${XDG_CACHE_HOME:-~/.cache}/omnidev/omnigent-check.json`) and, when
+result (`${XDG_CACHE_HOME:-~/.cache}/omnidev/omnicraft-check.json`) and, when
 stale (>24h), refreshes it in a detached background process — so shell startup
 never blocks on the network. When a newer commit is available it prints a notice
-and, on a terminal, prompts `Update omnigent now? [y/N]`; on yes it runs
+and, on a terminal, prompts `Update omnicraft now? [y/N]`; on yes it runs
 `omnidev update` in the foreground. Declining suppresses that same commit until a
-newer one lands. Set `OMNIGENT_NO_UPDATE_CHECK` in your environment if you want
-to silence omnigent's own separate notice.
+newer one lands. Set `OMNICRAFT_NO_UPDATE_CHECK` in your environment if you want
+to silence omnicraft's own separate notice.

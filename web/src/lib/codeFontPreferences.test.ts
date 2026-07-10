@@ -14,8 +14,8 @@ import {
   writeCodeFontSizePx,
 } from "./codeFontPreferences";
 
-const SIZE_STORAGE_KEY = "omnigent:code-font-size";
-const FAMILY_STORAGE_KEY = "omnigent:code-font-family";
+const SIZE_STORAGE_KEY = "omnicraft:code-font-size";
+const FAMILY_STORAGE_KEY = "omnicraft:code-font-family";
 
 afterEach(() => {
   localStorage.clear();

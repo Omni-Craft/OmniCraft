@@ -27,7 +27,7 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.host.frames import (
+from omnicraft.host.frames import (
     HostCreateWorktreeFrame,
     HostHelloFrame,
     HostLaunchRunnerFrame,
@@ -35,18 +35,18 @@ from omnigent.host.frames import (
     HostStatFrame,
     decode_host_frame,
 )
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.server.auth import RESERVED_USER_LOCAL
-from omnigent.server.host_registry import HostConnection
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.runtime.agent_cache import AgentCache
+from omnicraft.server.app import create_app
+from omnicraft.server.auth import RESERVED_USER_LOCAL
+from omnicraft.server.host_registry import HostConnection
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.artifact_store.local import LocalArtifactStore
+from omnicraft.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.host_store import HostStore
+from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from omnicraft.stores.host_store import HostStore
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio

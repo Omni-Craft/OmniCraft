@@ -10,9 +10,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from omnigent import kiro_native_permissions as knp
-from omnigent.kiro_native_bridge import acp_record_path
-from omnigent.kiro_native_permissions import (
+from omnicraft import kiro_native_permissions as knp
+from omnicraft.kiro_native_bridge import acp_record_path
+from omnicraft.kiro_native_permissions import (
     kiro_permission_elicitation_id,
     parse_permission_request,
 )

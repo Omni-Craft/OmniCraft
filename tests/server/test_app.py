@@ -1,7 +1,7 @@
 """Tests for utility endpoints on the FastAPI app (health + version).
 
 These endpoints are defined inline in ``create_app()`` in
-``omnigent/server/app.py`` rather than in a route sub-module, so
+``omnicraft/server/app.py`` rather than in a route sub-module, so
 they live here following the source ↔ test directory mirroring rule.
 """
 
@@ -15,11 +15,11 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server import app as server_app
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from omnicraft.runtime.agent_cache import AgentCache
+from omnicraft.server import app as server_app
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.artifact_store.local import LocalArtifactStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
 
 
 @pytest.mark.asyncio
@@ -36,7 +36,7 @@ async def test_health_returns_ok(client: httpx.AsyncClient) -> None:
 async def test_version_returns_source_of_truth_version(
     client: httpx.AsyncClient,
 ) -> None:
-    """GET /api/version returns ``omnigent.version.VERSION``.
+    """GET /api/version returns ``omnicraft.version.VERSION``.
 
     The endpoint surfaces the shared source-of-truth constant, authoritative
     regardless of how the package was installed. We deliberately do NOT assert
@@ -45,7 +45,7 @@ async def test_version_returns_source_of_truth_version(
     install, or ``"source"`` placeholder metadata) — asserting equality would
     re-couple to exactly the metadata this change moved off of.
     """
-    from omnigent.version import VERSION
+    from omnicraft.version import VERSION
 
     resp = await client.get("/api/version")
     assert resp.status_code == 200
@@ -55,13 +55,13 @@ async def test_version_returns_source_of_truth_version(
     # fetchVersion() falls back to "unknown" in every bug report.
     assert "version" in body
     assert body["version"] == VERSION, (
-        f"Expected version {VERSION!r} from omnigent.version.VERSION, got {body['version']!r}."
+        f"Expected version {VERSION!r} from omnicraft.version.VERSION, got {body['version']!r}."
     )
 
 
 def test_server_version_reads_version_constant() -> None:
-    """The server version is the shared ``omnigent.version.VERSION`` constant."""
-    from omnigent.version import VERSION
+    """The server version is the shared ``omnicraft.version.VERSION`` constant."""
+    from omnicraft.version import VERSION
 
     assert server_app._server_version() == VERSION
 
@@ -100,7 +100,7 @@ def _register_live_runner(app: FastAPI, runner_id: str) -> None:
         registry on ``app.state.tunnel_registry``).
     :param runner_id: Runner id to register, e.g. ``"rnr_live"``.
     """
-    from omnigent.runner.transports.ws_tunnel.frames import HelloFrame
+    from omnicraft.runner.transports.ws_tunnel.frames import HelloFrame
 
     app.state.tunnel_registry.register(
         runner_id,
@@ -136,9 +136,9 @@ def _build_liveness_app(
     :returns: A :class:`_LivenessApp` carrying the app to drive
         ``/health`` against and the store to seed conversations in.
     """
-    from omnigent.server.app import create_app
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
+    from omnicraft.server.app import create_app
+    from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from omnicraft.stores.host_store import HostStore
 
     conversation_store = SqlAlchemyConversationStore(db_uri)
     host_store = HostStore(db_uri)
@@ -213,7 +213,7 @@ async def test_health_batch_reports_strict_runner_and_host_liveness(
     stopped = conversation_store.create_conversation(
         runner_id="rnr_dead4", host_id="host_live", workspace="/tmp/ws"
     )
-    conversation_store.set_labels(stopped.id, {"omnigent.stopped": "true"})
+    conversation_store.set_labels(stopped.id, {"omnicraft.stopped": "true"})
 
     ids = ",".join(
         [
@@ -339,7 +339,7 @@ async def test_health_reports_host_version_from_live_registry(
     session info popover renders next to the server version. This is the
     non-``None`` counterpart to the DB-only rows in the batch test.
     """
-    from omnigent.host.frames import HostHelloFrame
+    from omnicraft.host.frames import HostHelloFrame
 
     wired = _build_liveness_app(db_uri, tmp_path)
     app = wired.app
@@ -378,7 +378,7 @@ async def test_info_includes_server_version(
     constant (same source as ``/api/version``) — so the web UI can show it
     in the session info popover's version footer without a second fetch.
     """
-    from omnigent.version import VERSION
+    from omnicraft.version import VERSION
 
     resp = await client.get("/v1/info")
     assert resp.status_code == 200
@@ -417,7 +417,7 @@ async def test_health_unbound_fork_of_coding_session_reads_offline(
     previously short-circuited to "online" unconditionally. The
     fork-source label (set when the source had a workspace) flips that:
 
-    - a fork carrying ``omnigent.fork.source_id`` reads offline, so the
+    - a fork carrying ``omnicraft.fork.source_id`` reads offline, so the
       first message routes into the directory picker instead of dropping
       against a runner that can't start;
     - a fork without it (chat-only source, CUJ 2) stays online and
@@ -427,12 +427,12 @@ async def test_health_unbound_fork_of_coding_session_reads_offline(
     ``_bulk_runner_online``: if that branch reverts to ``True`` for all
     unbound sessions, the coding-fork assertion fails.
     """
-    from omnigent.server.app import create_app
-    from omnigent.stores.conversation_store.sqlalchemy_store import (
+    from omnicraft.server.app import create_app
+    from omnicraft.stores.conversation_store.sqlalchemy_store import (
         SqlAlchemyConversationStore,
     )
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
+    from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from omnicraft.stores.host_store import HostStore
 
     conversation_store = SqlAlchemyConversationStore(db_uri)
     host_store = HostStore(db_uri)
@@ -441,7 +441,7 @@ async def test_health_unbound_fork_of_coding_session_reads_offline(
     # Unbound forks: no runner_id, no host_id. The label is the only
     # difference between them.
     coding_fork = conversation_store.create_conversation()
-    conversation_store.set_labels(coding_fork.id, {"omnigent.fork.source_id": "conv_src"})
+    conversation_store.set_labels(coding_fork.id, {"omnicraft.fork.source_id": "conv_src"})
     chat_fork = conversation_store.create_conversation()
 
     app = create_app(
@@ -531,7 +531,7 @@ def polly_src_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 def _independent_seed_stores(tmp_path: Path, label: str) -> _SeedStores:
     """A fresh, migrated, independent set of seed stores under ``tmp_path``."""
-    from omnigent.db.utils import get_or_create_engine
+    from omnicraft.db.utils import get_or_create_engine
 
     uri = f"sqlite:///{tmp_path / f'{label}.db'}"
     get_or_create_engine(uri)  # run migrations, same path as production
@@ -550,7 +550,7 @@ def test_builtin_agent_id_is_stable_across_independent_stores(tmp_path: Path) ->
     """A built-in's id is identical across two independent fresh stores — the
     contract the multi-tenant deployment needs. A revert to the random
     ``generate_agent_id()`` makes the two ids differ and fails this test."""
-    from omnigent.db.utils import builtin_agent_id
+    from omnicraft.db.utils import builtin_agent_id
 
     a = _independent_seed_stores(tmp_path, "a")
     b = _independent_seed_stores(tmp_path, "b")
@@ -568,7 +568,7 @@ def test_ensure_extra_builtin_agents_skips_bad_path_and_seeds_good(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A bad entry in OMNIGENT_BUILTIN_AGENT_DIRS is logged + skipped, not fatal.
+    """A bad entry in OMNICRAFT_BUILTIN_AGENT_DIRS is logged + skipped, not fatal.
 
     Operator-supplied paths may be wrong (typo, stale mount). One bad entry
     must not crash server startup nor block a valid entry from registering.
@@ -606,7 +606,7 @@ def test_ensure_default_qwen_agent_seeds_card(seed_stores: _SeedStores) -> None:
     Seeding registers qwen-native-ui as a built-in the picker can render.
 
     The new-session picker reads built-ins from ``GET /v1/agents``; without this
-    seeder Qwen Code only appears after the ``omnigent qwen`` CLI first registers
+    seeder Qwen Code only appears after the ``omnicraft qwen`` CLI first registers
     it, so it was absent from the Web UI dropdown.
     """
     server_app._ensure_default_qwen_agent(
@@ -1001,9 +1001,9 @@ def _build_api_only_app(db_uri: str, tmp_path: Path, monkeypatch: pytest.MonkeyP
     mount the SPA), so point ``_WEB_UI_DIST`` at an empty path to force the
     API-only fallback branch under test.
     """
-    from omnigent.server.app import create_app
-    from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-    from omnigent.stores.host_store import HostStore
+    from omnicraft.server.app import create_app
+    from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+    from omnicraft.stores.host_store import HostStore
 
     monkeypatch.setattr(server_app, "_WEB_UI_DIST", tmp_path / "no-web-ui")
     artifact_store = LocalArtifactStore(str(tmp_path / "artifacts"))
@@ -1032,7 +1032,7 @@ async def test_api_only_root_serves_html_200_to_any_client(
             assert resp.status_code == 200, headers
             assert resp.headers["content-type"].startswith("text/html"), headers
             assert "web UI" in resp.text
-            assert "OMNIGENT_SKIP_WEB_UI" in resp.text
+            assert "OMNICRAFT_SKIP_WEB_UI" in resp.text
 
 
 @pytest.mark.asyncio

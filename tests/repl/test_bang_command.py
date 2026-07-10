@@ -15,8 +15,8 @@ import pathlib
 import pytest
 from prompt_toolkit.document import Document
 
-from omnigent.repl import _repl
-from omnigent.repl._repl import (
+from omnicraft.repl import _repl
+from omnicraft.repl._repl import (
     _BANG_INPUT_STYLE,
     _bang_shell_argv,
     _BangInputLexer,
@@ -137,7 +137,7 @@ async def test_run_respects_cwd(tmp_path: pathlib.Path) -> None:
 
 @pytest.mark.posix_only
 async def test_run_echoes_command_in_logo_green() -> None:
-    # The echoed "! <cmd>" line is rendered in the omnigent-logo green so it
+    # The echoed "! <cmd>" line is rendered in the omnicraft-logo green so it
     # matches the green composer input.
     host = _FakeHost()
     await _run_bang_command("echo hi", host, _FakeFmt())
@@ -202,7 +202,7 @@ def test_build_context_notes_overflow_path() -> None:
 
 
 def test_bang_input_style_is_the_logo_green() -> None:
-    # The omnigent-logo green (#26a079) must be the exact hex used.
+    # The omnicraft-logo green (#26a079) must be the exact hex used.
     assert "#26a079" in _BANG_INPUT_STYLE
 
 

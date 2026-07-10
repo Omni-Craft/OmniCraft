@@ -160,7 +160,7 @@ describe("useIdleNotifications turn-end transitions", () => {
     expect(showMock.mock.calls[0][0]).toMatchObject({
       title: "a",
       body: "O agente terminou e está pronto para sua entrada.",
-      tag: "omnigent:session:a",
+      tag: "omnicraft:session:a",
     });
   });
 
@@ -289,7 +289,7 @@ describe("useIdleNotifications elicitation transitions", () => {
     expect(showMock.mock.calls[0][0]).toMatchObject({
       title: "a",
       body: "O agente está pedindo sua entrada.",
-      tag: "omnigent:session:a",
+      tag: "omnicraft:session:a",
     });
   });
 

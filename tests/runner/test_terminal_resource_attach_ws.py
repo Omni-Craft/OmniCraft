@@ -19,15 +19,15 @@ import pytest
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from omnigent.entities.session_resources import SessionResourceView
-from omnigent.inner.terminal import TerminalInstance
-from omnigent.runner import create_runner_app
-from omnigent.runner.resource_registry import (
-    OMNIGENT_REPL_TERMINAL_ROLE,
+from omnicraft.entities.session_resources import SessionResourceView
+from omnicraft.inner.terminal import TerminalInstance
+from omnicraft.runner import create_runner_app
+from omnicraft.runner.resource_registry import (
+    OMNICRAFT_REPL_TERMINAL_ROLE,
     QWEN_NATIVE_TERMINAL_ROLE,
     SessionResourceRegistry,
 )
-from omnigent.terminals import TerminalRegistry
+from omnicraft.terminals import TerminalRegistry
 from tests.runner.helpers import NullServerClient, make_test_terminal_instance
 
 
@@ -67,7 +67,7 @@ def _patch_attach_spawn(
         on_spawn(tmux_path, argv, env)
         raise RuntimeError("child exited")
 
-    monkeypatch.setattr("omnigent.terminals.ws_bridge._fork_exec_pty", fake_fork_exec)
+    monkeypatch.setattr("omnicraft.terminals.ws_bridge._fork_exec_pty", fake_fork_exec)
 
 
 def test_runner_resource_attach_spawns_tmux_for_running_terminal(
@@ -194,12 +194,12 @@ def test_runner_resource_attach_selects_control_bridge_on_transport_query(
         calls.append("pty")
         await websocket.close()
 
-    monkeypatch.setattr("omnigent.runner.app.bridge_tmux_control_to_websocket", fake_control)
-    monkeypatch.setattr("omnigent.runner.app.bridge_tmux_pty_to_websocket", fake_pty)
+    monkeypatch.setattr("omnicraft.runner.app.bridge_tmux_control_to_websocket", fake_control)
+    monkeypatch.setattr("omnicraft.runner.app.bridge_tmux_pty_to_websocket", fake_pty)
     # Point config resolution at an empty scratch dir so the no-query case is
-    # deterministic regardless of the developer's real ~/.omnigent/config.yaml.
+    # deterministic regardless of the developer's real ~/.omnicraft/config.yaml.
     # With no terminal.transport configured, control mode is the product default.
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
 
     base = "/v1/sessions/conv_abc/resources/terminals/terminal_bash_s1/attach"
     client = TestClient(app)
@@ -320,7 +320,7 @@ def test_runner_resource_attach_recreates_dead_repl_terminal(
     A dead embedded REPL terminal is recreated on attach, not rejected.
 
     Pins the "[empty] terminal" bug: the REPL pane dies whenever the
-    ``omnigent attach`` process exits (user Ctrl+C, crash at deferred
+    ``omnicraft attach`` process exits (user Ctrl+C, crash at deferred
     start), but the registry keeps the stale entry, so before the fix
     every later attach closed 4404 and the web Terminal view stayed a
     dead, blank pane for the rest of the session. The attach route must
@@ -352,7 +352,7 @@ def test_runner_resource_attach_recreates_dead_repl_terminal(
     # Role stamped at auto-create time in production (resource_role);
     # seeded directly here to avoid spawning real tmux.
     resource_registry._terminal_roles[("conv_abc", "terminal_tui_main")] = (
-        OMNIGENT_REPL_TERMINAL_ROLE
+        OMNICRAFT_REPL_TERMINAL_ROLE
     )
 
     app = create_runner_app(
@@ -384,7 +384,7 @@ def test_runner_resource_attach_recreates_dead_repl_terminal(
         :param session_id: Session being recreated, e.g. ``"conv_abc"``.
         :param rr: The runner's resource registry (unused by the stub).
         :param publish_event: Per-session SSE emitter (unused).
-        :param server_client: Omnigent server client (unused).
+        :param server_client: OmniCraft server client (unused).
         :param agent_spec: Resolved session agent spec threaded by the
             recreate path so the REPL terminal inherits the agent sandbox
             (unused by the stub).
@@ -399,7 +399,7 @@ def test_runner_resource_attach_recreates_dead_repl_terminal(
             name="tui",
         )
 
-    monkeypatch.setattr("omnigent.runner.app._auto_create_repl_terminal", fake_auto_create)
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_repl_terminal", fake_auto_create)
 
     attach_argvs: list[list[str]] = []
 
@@ -506,7 +506,7 @@ def test_runner_resource_attach_recreates_dead_qwen_terminal(
         :param session_id: Session being recreated, e.g. ``"conv_abc"``.
         :param rr: The runner's resource registry (unused by the stub).
         :param publish_event: Per-session SSE emitter (unused).
-        :param server_client: Omnigent server client (unused).
+        :param server_client: OmniCraft server client (unused).
         :param ensure_comment_relay: Comment relay hook threaded by the
             recreate path (unused by the stub).
         :returns: Terminal resource view for the fresh pane.
@@ -520,7 +520,7 @@ def test_runner_resource_attach_recreates_dead_qwen_terminal(
             name="qwen",
         )
 
-    monkeypatch.setattr("omnigent.runner.app._auto_create_qwen_terminal", fake_auto_create)
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_qwen_terminal", fake_auto_create)
 
     attach_argvs: list[list[str]] = []
 
@@ -561,7 +561,7 @@ def test_runner_resource_attach_dead_non_repl_terminal_keeps_4404(
     A dead agent-created terminal is meaningful state (the command
     ended); silently relaunching it would erase that signal and rerun
     its command. With the resource registry wired but no
-    ``omnigent-repl`` role stamped, the dead-pane attach must close
+    ``omnicraft-repl`` role stamped, the dead-pane attach must close
     4404 and must not touch the REPL auto-create.
 
     :param tmp_path: Pytest tmp directory.
@@ -599,10 +599,10 @@ def test_runner_resource_attach_dead_non_repl_terminal_keeps_4404(
         """
         raise AssertionError(
             "REPL auto-create was invoked for a non-REPL terminal — the "
-            "recreate path must be gated on OMNIGENT_REPL_TERMINAL_ROLE."
+            "recreate path must be gated on OMNICRAFT_REPL_TERMINAL_ROLE."
         )
 
-    monkeypatch.setattr("omnigent.runner.app._auto_create_repl_terminal", must_not_recreate)
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_repl_terminal", must_not_recreate)
 
     with TestClient(app).websocket_connect(
         "/v1/sessions/conv_abc/resources/terminals/terminal_bash_s1/attach"
@@ -637,9 +637,9 @@ def test_runner_resource_attach_closes_4404_when_pty_ends(
     """PTY EOF mid-attach surfaces as 4404, not as a normal close.
 
     Models the user-reported failure mode: claude exits / tmux dies
-    while the browser (or ``omnigent claude --server``) is attached.
+    while the browser (or ``omnicraft claude --server``) is attached.
     Without the dedicated close code, the client's reconnect loop in
-    ``omnigent/claude_native.py`` interprets the close as a transient
+    ``omnicraft/claude_native.py`` interprets the close as a transient
     bounce and spins forever on "Claude session connection closed by
     server; reconnecting...". The fix has the bridge close with the
     same ``WS_CLOSE_TERMINAL_NOT_FOUND`` (4404) it already uses for
@@ -678,8 +678,8 @@ def test_runner_resource_attach_closes_4404_when_pty_ends(
         # runner does not own.
         return 999_999, bridge_fd
 
-    monkeypatch.setattr("omnigent.terminals.ws_bridge.pty.fork", fake_fork)
-    monkeypatch.setattr("omnigent.terminals.ws_bridge.os.kill", lambda *_args, **_kw: None)
+    monkeypatch.setattr("omnicraft.terminals.ws_bridge.pty.fork", fake_fork)
+    monkeypatch.setattr("omnicraft.terminals.ws_bridge.os.kill", lambda *_args, **_kw: None)
 
     try:
         with TestClient(app).websocket_connect(

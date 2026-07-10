@@ -11,8 +11,8 @@ from typing import Any
 
 import pytest
 
-import omnigent.kiro_native_bridge as bridge
-from omnigent.kiro_native_bridge import (
+import omnicraft.kiro_native_bridge as bridge
+from omnicraft.kiro_native_bridge import (
     KIRO_ACP_RECORD_PATH_ENV_VAR,
     KIRO_NATIVE_BRIDGE_DIR_ENV_VAR,
     acp_record_path,
@@ -435,17 +435,17 @@ def test_draft_in_input_region_ignores_matching_history_and_baseline() -> None:
 def test_draft_in_input_region_ignores_kiro_chrome_for_short_messages() -> None:
     """One-character prompts must not match cwd, branch, or placeholder chrome."""
     baseline = (
-        "kiro_default · auto · ◔ 3%             ~/Work/omnigent · "
+        "kiro_default · auto · ◔ 3%             ~/Work/omnicraft · "
         "(feat/kiro-cli-harness)\n\n ask a question or describe a task ↵"
     )
     pane_after_submit = (
         "c\n\n🙂\n────────────────\nkiro_default · auto · ◔ 4%             "
-        "~/Work/omnigent · (feat/kiro-cli-harness)\n\n "
+        "~/Work/omnicraft · (feat/kiro-cli-harness)\n\n "
         "ask a question or describe a task ↵\n/copy to clipboard"
     )
     pane_with_draft = (
         "old answer\n────────────────\nkiro_default · auto · ◔ 3%             "
-        "~/Work/omnigent · (feat/kiro-cli-harness)\n\n c"
+        "~/Work/omnicraft · (feat/kiro-cli-harness)\n\n c"
     )
 
     assert not bridge._draft_in_input_region(pane_after_submit, "c", baseline)
@@ -506,23 +506,23 @@ def test_build_kiro_mcp_config_targets_serve_mcp(tmp_path: Path) -> None:
     bridge_dir = tmp_path / "bridge"
     server = bridge.build_kiro_mcp_config(bridge_dir, python_executable="/usr/bin/python3")[
         "mcpServers"
-    ]["omnigent"]
+    ]["omnicraft"]
     assert server["command"] == "/usr/bin/python3"
     assert server["args"] == [
         "-I",
         "-m",
-        "omnigent.claude_native_bridge",
+        "omnicraft.claude_native_bridge",
         "serve-mcp",
         "--bridge-dir",
         str(bridge_dir),
     ]
     # Defaults to the running interpreter when no executable is given.
-    default_cmd = bridge.build_kiro_mcp_config(bridge_dir)["mcpServers"]["omnigent"]["command"]
+    default_cmd = bridge.build_kiro_mcp_config(bridge_dir)["mcpServers"]["omnicraft"]["command"]
     assert default_cmd == sys.executable
 
 
 def test_write_kiro_workspace_mcp_config_merges_preserving_user_servers(tmp_path: Path) -> None:
-    """The Omnigent server is merged into <workspace>/.kiro/settings/mcp.json
+    """The OmniCraft server is merged into <workspace>/.kiro/settings/mcp.json
     without clobbering a user's pre-existing workspace servers."""
     workspace = tmp_path / "repo"
     settings = workspace / ".kiro" / "settings"
@@ -537,8 +537,8 @@ def test_write_kiro_workspace_mcp_config_merges_preserving_user_servers(tmp_path
 
     assert path == workspace / ".kiro" / "settings" / "mcp.json"
     written = json.loads(path.read_text())
-    assert set(written["mcpServers"]) == {"user_server", "omnigent"}
-    assert "serve-mcp" in written["mcpServers"]["omnigent"]["args"]
+    assert set(written["mcpServers"]) == {"user_server", "omnicraft"}
+    assert "serve-mcp" in written["mcpServers"]["omnicraft"]["args"]
     # serve-mcp's token file is written alongside.
     assert (bridge_dir / "bridge.json").exists()
 

@@ -15,12 +15,12 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.server.routes import sessions as sessions_mod
-from omnigent.server.routes.sessions import (
+from omnicraft.server.routes import sessions as sessions_mod
+from omnicraft.server.routes.sessions import (
     _recover_subagent_status_forward_via_parent,
     _RunnerForwardResult,
 )
-from omnigent.stores.conversation_store import ConversationNotFoundError
+from omnicraft.stores.conversation_store import ConversationNotFoundError
 
 
 def _conv(

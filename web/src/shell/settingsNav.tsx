@@ -148,7 +148,7 @@ export function useSettingsRoute(): { inSettings: boolean; section: SettingsSect
 }
 
 // Last location the user was on before entering /settings — path + search so
-// the conversation (and its ?file= etc.) is preserved. "Back to Omnigent"
+// the conversation (and its ?file= etc.) is preserved. "Back to OmniCraft"
 // returns here instead of the home page. Module-scoped: the sidebar stays
 // mounted across the settings transition, so the value captured on the last
 // non-settings render survives into settings.
@@ -171,7 +171,7 @@ export function useTrackSettingsReturn(): void {
 /**
  * Settings nav rendered INSIDE the sidebar card (replacing the conversation
  * list on /settings). Keeps the card chrome — a top row with "Back to
- * Omnigent" and the same collapse control the conversations view uses.
+ * OmniCraft" and the same collapse control the conversations view uses.
  */
 export function SettingsSidebarBody({
   onNavClick,

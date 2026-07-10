@@ -6,7 +6,7 @@
     ``GET /v1/sessions`` list items (built by ``_build_session_list_item``).
 
 Read state is per-user and in-memory on the server (module-level dicts in
-``omnigent.server.routes.sessions``); each test resets those globals so
+``omnicraft.server.routes.sessions``); each test resets those globals so
 state doesn't leak between cases. Runs without auth (``permission_store``
 is ``None``), so the caller is the single-user ``None`` identity and the
 PUT's access check short-circuits.
@@ -21,10 +21,10 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from starlette.testclient import TestClient
 
-from omnigent.entities import Conversation
-from omnigent.errors import OmnigentError
-from omnigent.server.routes import sessions as sessions_mod
-from omnigent.server.routes.sessions import create_sessions_router
+from omnicraft.entities import Conversation
+from omnicraft.errors import OmniCraftError
+from omnicraft.server.routes import sessions as sessions_mod
+from omnicraft.server.routes.sessions import create_sessions_router
 
 
 class _ConversationStore:
@@ -51,8 +51,8 @@ def _build_app() -> FastAPI:
     )
     app = FastAPI()
 
-    @app.exception_handler(OmnigentError)
-    async def _handle(request: Request, exc: OmnigentError) -> JSONResponse:
+    @app.exception_handler(OmniCraftError)
+    async def _handle(request: Request, exc: OmniCraftError) -> JSONResponse:
         del request
         return JSONResponse(
             status_code=exc.http_status,

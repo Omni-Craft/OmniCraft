@@ -52,14 +52,14 @@ function resolve(fn) {
   return match;
 }
 const cases = [
-  ["omnigent/inner/foo.py", "inner"],
-  ["omnigent/inner/claude_sdk_executor.py", "harness-claude"],
-  ["omnigent/inner/kimi_executor.py", "harness-kimi"],
-  ["omnigent/inner/kiro_native_harness.py", "harness-kiro"],
+  ["omnicraft/inner/foo.py", "inner"],
+  ["omnicraft/inner/claude_sdk_executor.py", "harness-claude"],
+  ["omnicraft/inner/kimi_executor.py", "harness-kimi"],
+  ["omnicraft/inner/kiro_native_harness.py", "harness-kiro"],
   ["web/src/main.tsx", "web"],
   ["web/ios/App.swift", "mobile-app"],
   ["web/electron/main.ts", "desktop-app"],
-  ["omnigent/server/api.py", "server"],
+  ["omnicraft/server/api.py", "server"],
 ];
 for (const [fn, key] of cases) {
   const m = resolve(fn);

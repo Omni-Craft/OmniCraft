@@ -1,4 +1,4 @@
-"""Tests for the version source of truth (``omnigent.version``)."""
+"""Tests for the version source of truth (``omnicraft.version``)."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 import tomllib
 
-from omnigent.version import VERSION
+from omnicraft.version import VERSION
 
 
 def test_version_is_a_nonempty_string() -> None:
@@ -36,6 +36,6 @@ def test_version_matches_pyproject() -> None:
     data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
     pyproject_version = data["project"]["version"]
     assert pyproject_version == VERSION, (
-        f"pyproject.toml version {pyproject_version!r} != omnigent.version.VERSION "
+        f"pyproject.toml version {pyproject_version!r} != omnicraft.version.VERSION "
         f"{VERSION!r}; run `python scripts/sync_version_py.py`"
     )

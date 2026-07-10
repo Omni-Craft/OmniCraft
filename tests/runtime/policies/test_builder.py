@@ -29,16 +29,16 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runtime.policies.builder import build_policy_engine
-from omnigent.spec.parser import parse
-from omnigent.spec.types import (
+from omnicraft.runtime.policies.builder import build_policy_engine
+from omnicraft.spec.parser import parse
+from omnicraft.spec.types import (
     AgentSpec,
     GuardrailsSpec,
     LabelDef,
     Phase,
     PhaseSelector,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 from tests.runtime.policies.conftest import make_fixed_function_policy_spec
@@ -599,7 +599,7 @@ def test_policy_seed_uses_policy_cost_while_display_uses_total_cost(
     that posts only ``total_cost_usd`` (codex/relay style) must still count
     toward the parent's enforcement total via fallback.
     """
-    from omnigent.runtime.policies.builder import load_session_usage
+    from omnicraft.runtime.policies.builder import load_session_usage
 
     parent = conversation_store.create_conversation()
     child = conversation_store.create_conversation(
@@ -778,7 +778,7 @@ def test_load_session_usage_merges_by_model_across_subtree(
     subtree ``total_cost_usd`` (no double-count / drop), and the display-only
     ``by_model`` must not leak into the policy engine's usage seed.
     """
-    from omnigent.runtime.policies.builder import load_session_usage
+    from omnicraft.runtime.policies.builder import load_session_usage
 
     parent = conversation_store.create_conversation()
     child = conversation_store.create_conversation(
@@ -876,7 +876,7 @@ def test_build_injects_subtree_usage_only_when_policy_present(
     This guards against unnecessary DB traversals (the conditional
     injection pattern) — if the policy isn't used, we skip the lookup.
     """
-    from omnigent.spec.types import GuardrailsSpec
+    from omnicraft.spec.types import GuardrailsSpec
 
     parent = conversation_store.create_conversation()
     child = conversation_store.create_conversation(
@@ -926,7 +926,7 @@ def test_build_subagent_subtree_usage_excludes_parent_and_siblings(
     This is the key semantic difference from cost_budget (which sees
     session-wide) vs. subagent_cost_budget (which sees only its own subtree).
     """
-    from omnigent.runtime.policies.builder import load_session_usage
+    from omnicraft.runtime.policies.builder import load_session_usage
 
     parent = conversation_store.create_conversation()
     child = conversation_store.create_conversation(
@@ -967,7 +967,7 @@ def test_normalize_usage_for_engine_drops_display_fields() -> None:
     enforcement cost (falling back to ``total_cost_usd`` when no enforcement
     cost exists).
     """
-    from omnigent.runtime.policies.builder import _normalize_usage_for_engine
+    from omnicraft.runtime.policies.builder import _normalize_usage_for_engine
 
     # Case 1: Has both policy_cost (enforcement) and by_model (display).
     usage = {

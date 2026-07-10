@@ -4,7 +4,7 @@
 // long-lived connection: the client tells the server which session ids it's
 // displaying (the "watch-set"), and the server pushes a snapshot followed by
 // diffs whenever those sessions change. See the server endpoint docstring in
-// `omnigent/server/routes/sessions.py` for the wire protocol.
+// `omnicraft/server/routes/sessions.py` for the wire protocol.
 //
 // This module owns only the transport (connect, reconnect, send watch-set,
 // dispatch frames). SessionUpdatesProvider wires the parsed frames into the
@@ -57,7 +57,7 @@ function nextReconnectDelay(failedAttempts: number): number {
  *
  * Delegates to the host seam (`resolveWebSocketUrl`), exactly like the
  * terminal-attach socket: standalone builds the URL from the page origin
- * (whether served by the Omnigent server directly or through the Vite dev proxy),
+ * (whether served by the OmniCraft server directly or through the Vite dev proxy),
  * and an embedding host rebases it onto its proxied WS surface.
  *
  * @returns The fully-qualified WebSocket URL.

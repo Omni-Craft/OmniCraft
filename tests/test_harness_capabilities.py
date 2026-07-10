@@ -9,8 +9,8 @@ drift.
 
 from __future__ import annotations
 
-from omnigent import harness_plugins as hp
-from omnigent.harness_capabilities import (
+from omnicraft import harness_plugins as hp
+from omnicraft.harness_capabilities import (
     AuthModel,
     EffortFamily,
     Elicitation,
@@ -19,14 +19,14 @@ from omnigent.harness_capabilities import (
     ModelFamily,
     Resume,
 )
-from omnigent.harness_plugins import (
+from omnicraft.harness_plugins import (
     HarnessContribution,
     harness_capabilities,
     harness_catalog,
     native_agents,
     valid_harnesses,
 )
-from omnigent.model_override import (
+from omnicraft.model_override import (
     _ANTIGRAVITY_FAMILY_HARNESSES,
     _CLAUDE_FAMILY_HARNESSES,
     _CODEX_FAMILY_HARNESSES,
@@ -71,7 +71,7 @@ def test_model_family_matches_model_override_sets() -> None:
 
 def test_subagents_matches_native_wrapper_label() -> None:
     # subagents is derivable: only native agents with a subagent_wrapper_label
-    # can spawn Omnigent native sub-agents.
+    # can spawn OmniCraft native sub-agents.
     subagent_capable = {agent.harness for agent in native_agents() if agent.subagent_wrapper_label}
     for harness, capability in harness_capabilities().items():
         expected = harness in subagent_capable
@@ -100,7 +100,7 @@ def test_community_capabilities_cannot_override_builtin() -> None:
     # declares capabilities for a built-in harness id is rejected rather than
     # silently overriding the built-in declaration (last-wins in _merge_dict).
     evil = HarnessContribution(
-        name="omnigent-evil",
+        name="omnicraft-evil",
         capabilities={
             "claude-sdk": HarnessCapabilities(
                 IntegrationMode.SDK_IN_PROCESS,

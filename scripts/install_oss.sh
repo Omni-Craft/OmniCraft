@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# Omnigent installer.
+# OmniCraft installer.
 #
-# Installs the published `omnigent` wheel from PyPI with uv, wires up PATH,
+# Installs the published `omnicraft` wheel from PyPI with uv, wires up PATH,
 # and points you at first-run. The wheel bundles the prebuilt web UI, so the
 # default install needs no Node/npm and runs no build.
 #
@@ -23,7 +23,7 @@
 set -eu
 
 # Published PyPI package, the default install. --version pins a release.
-PACKAGE_NAME="omnigent"
+PACKAGE_NAME="omnicraft"
 VERSION=
 # Comma-separated optional-dependency extras to install with the package
 # (e.g. "databricks"), accumulated from one or more --extra flags. Empty =>
@@ -55,7 +55,7 @@ init_style() {
     BOLD="${ESC}[1m"
     DIM="${ESC}[2m"
     # Brand accent — Otto's magenta-pink (#F43BA6), matching the Python CLI
-    # palette in omnigent/inner/ui.py so the installer and the tool agree.
+    # palette in omnicraft/inner/ui.py so the installer and the tool agree.
     MAGENTA="${ESC}[38;2;244;59;166m"
     GREEN="${ESC}[32m"
     YELLOW="${ESC}[33m"
@@ -63,8 +63,8 @@ init_style() {
   fi
 }
 
-# The Otto + "omnigent" wordmark lockup, printed once at the top of an
-# interactive install. Mirrors omnigent.inner.wordmark.lockup_lines(); the
+# The Otto + "omnicraft" wordmark lockup, printed once at the top of an
+# interactive install. Mirrors omnicraft.inner.wordmark.lockup_lines(); the
 # whole lockup is painted in the brand magenta (flat — no gradient in sh).
 # Skipped off a TTY (use_terminal_ui) so piped/CI installs stay clean.
 print_banner() {
@@ -125,8 +125,8 @@ run_with_spinner() {
     return
   fi
 
-  log_file="${TMPDIR:-/tmp}/omnigent-oss-installer.$$.log"
-  status_file="${TMPDIR:-/tmp}/omnigent-oss-installer.$$.status"
+  log_file="${TMPDIR:-/tmp}/omnicraft-oss-installer.$$.log"
+  status_file="${TMPDIR:-/tmp}/omnicraft-oss-installer.$$.status"
   rm -f "$log_file" "$status_file"
 
   (
@@ -384,7 +384,7 @@ check_npm() {
   fi
 }
 
-# `omnigent claude` / `omnigent codex` launch through a local tmux terminal
+# `omnicraft claude` / `omnicraft codex` launch through a local tmux terminal
 # and won't start without it, so surface it up front and offer to install it.
 # Emit the package-manager command that installs $1 on this Linux box, or
 # nothing when no known package manager is present. Shared by the tmux and
@@ -413,31 +413,31 @@ check_tmux() {
   case "$(uname -s)" in
     Darwin)
       if command -v brew >/dev/null 2>&1; then
-        if prompt_yes_no "tmux is missing (needed for \`omnigent claude\` / \`omnigent codex\`). Install it with brew?"; then
-          run_with_spinner "brew install tmux" brew install tmux || warn "brew install tmux failed — install tmux manually before \`omnigent claude\`."
+        if prompt_yes_no "tmux is missing (needed for \`omnicraft claude\` / \`omnicraft codex\`). Install it with brew?"; then
+          run_with_spinner "brew install tmux" brew install tmux || warn "brew install tmux failed — install tmux manually before \`omnicraft claude\`."
           return
         fi
       fi
-      warn "tmux not found — \`omnigent claude\` / \`omnigent codex\` need it. Install with: brew install tmux"
+      warn "tmux not found — \`omnicraft claude\` / \`omnicraft codex\` need it. Install with: brew install tmux"
       ;;
     Linux)
       install_cmd="$(linux_pkg_install_cmd tmux)"
-      if [ -n "$install_cmd" ] && prompt_yes_no "tmux is missing (needed for \`omnigent claude\` / \`omnigent codex\`). Install it now ($install_cmd)?"; then
+      if [ -n "$install_cmd" ] && prompt_yes_no "tmux is missing (needed for \`omnicraft claude\` / \`omnicraft codex\`). Install it now ($install_cmd)?"; then
         # Run directly (not via run_with_spinner) so sudo can prompt for a password.
         sh -c "$install_cmd" || warn "tmux install failed — run manually: $install_cmd"
         command -v tmux >/dev/null 2>&1 && step "tmux installed"
         return
       fi
       if [ -n "$install_cmd" ]; then
-        warn "tmux not found — \`omnigent claude\` / \`omnigent codex\` need it. Install with: $install_cmd"
+        warn "tmux not found — \`omnicraft claude\` / \`omnicraft codex\` need it. Install with: $install_cmd"
       else
-        warn "tmux not found — \`omnigent claude\` / \`omnigent codex\` need it. Install it with your package manager."
+        warn "tmux not found — \`omnicraft claude\` / \`omnicraft codex\` need it. Install it with your package manager."
       fi
       ;;
   esac
 }
 
-# The native `omnigent claude` / `omnigent codex` / `pi` harnesses wrap each
+# The native `omnicraft claude` / `omnicraft codex` / `pi` harnesses wrap each
 # agent terminal in a bubblewrap (`bwrap`) OS-sandbox; on Linux that isolation
 # is mandatory and fail-loud, so a missing `bwrap` binary makes those terminals
 # fail to start. macOS sandboxes with the built-in seatbelt backend and needs
@@ -451,19 +451,19 @@ check_bubblewrap() {
   fi
 
   install_cmd="$(linux_pkg_install_cmd bubblewrap)"
-  if [ -n "$install_cmd" ] && prompt_yes_no "bubblewrap is missing (needed to sandbox native \`omnigent claude\` / \`omnigent codex\` terminals). Install it now ($install_cmd)?"; then
+  if [ -n "$install_cmd" ] && prompt_yes_no "bubblewrap is missing (needed to sandbox native \`omnicraft claude\` / \`omnicraft codex\` terminals). Install it now ($install_cmd)?"; then
     run_with_spinner "install bubblewrap" sh -c "$install_cmd" || warn "bubblewrap install failed — run manually: $install_cmd"
     return
   fi
   if [ -n "$install_cmd" ]; then
-    warn "bubblewrap (bwrap) not found — native \`omnigent claude\` / \`omnigent codex\` terminals need it on Linux. Install with: $install_cmd"
+    warn "bubblewrap (bwrap) not found — native \`omnicraft claude\` / \`omnicraft codex\` terminals need it on Linux. Install with: $install_cmd"
   else
-    warn "bubblewrap (bwrap) not found — native \`omnigent claude\` / \`omnigent codex\` terminals need it on Linux. Install it with your package manager."
+    warn "bubblewrap (bwrap) not found — native \`omnicraft claude\` / \`omnicraft codex\` terminals need it on Linux. Install it with your package manager."
   fi
 }
 
-install_omnigent() {
-  # Default: the published PyPI wheel (`omnigent`, optionally `omnigent==X`).
+install_omnicraft() {
+  # Default: the published PyPI wheel (`omnicraft`, optionally `omnicraft==X`).
   # The wheel ships the prebuilt web UI, so there is no npm/Node step and no
   # source build — the fast, reliable path. `--repo` switches INSTALL_URL to a
   # git ref, which builds from source (and needs npm, checked above).
@@ -476,20 +476,20 @@ install_omnigent() {
   fi
   if building_from_source; then
     # A PEP 508 direct reference attaches extras to a git source install:
-    # "omnigent[databricks] @ git+https://...". Without extras, keep the bare
+    # "omnicraft[databricks] @ git+https://...". Without extras, keep the bare
     # URL (the long-standing form uv accepts directly).
     if [ -n "$extras_suffix" ]; then
       target="${PACKAGE_NAME}${extras_suffix} @ ${INSTALL_URL}"
     else
       target="$INSTALL_URL"
     fi
-    step "Installing Omnigent from source${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
+    step "Installing OmniCraft from source${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
   elif [ -n "$VERSION" ]; then
     target="${PACKAGE_NAME}${extras_suffix}==${VERSION}"
-    step "Installing Omnigent $VERSION${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
+    step "Installing OmniCraft $VERSION${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
   else
     target="${PACKAGE_NAME}${extras_suffix}"
-    step "Installing Omnigent${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
+    step "Installing OmniCraft${extras_suffix:+ $extras_suffix} (Python $PYTHON_VERSION)"
   fi
   # --force so re-running upgrades instead of no-op'ing; -q hides uv's
   # "Installed N executables" summary (the package also ships an `omni` alias).
@@ -543,8 +543,8 @@ maybe_add_bin_to_path() {
 
   path_line="export PATH=\"$bin_dir:\$PATH\""
   profile="$(pick_profile)"
-  begin_marker="# >>> Omnigent installer >>>"
-  end_marker="# <<< Omnigent installer <<<"
+  begin_marker="# >>> OmniCraft installer >>>"
+  end_marker="# <<< OmniCraft installer <<<"
 
   warn "$bin_dir is not on PATH."
   if [ "$NON_INTERACTIVE" = true ]; then
@@ -557,7 +557,7 @@ maybe_add_bin_to_path() {
       step "PATH is already configured in $profile"
       return
     fi
-    fail "$profile already has an Omnigent installer block. Update it manually to: $path_line"
+    fail "$profile already has an OmniCraft installer block. Update it manually to: $path_line"
   fi
 
   if ! prompt_yes_no "Add $bin_dir to PATH in $profile?"; then
@@ -574,31 +574,31 @@ maybe_add_bin_to_path() {
   step "Added $bin_dir to PATH in $profile"
 }
 
-verify_omnigent() {
+verify_omnicraft() {
   bin_dir="$1"
-  cli_path="$bin_dir/omnigent"
+  cli_path="$bin_dir/omnicraft"
 
   if [ ! -x "$cli_path" ]; then
-    cli_path="$(command -v omnigent 2>/dev/null || true)"
+    cli_path="$(command -v omnicraft 2>/dev/null || true)"
   fi
 
   if [ -z "$cli_path" ]; then
-    fail "Omnigent installed, but the omnigent command was not found."
+    fail "OmniCraft installed, but the omnicraft command was not found."
   fi
 
   "$cli_path" --help >/dev/null
   step "Verified $cli_path"
 
-  # `omni` is a shorthand alias installed alongside `omnigent`; check it so a
+  # `omni` is a shorthand alias installed alongside `omnicraft`; check it so a
   # packaging regression that drops it surfaces here rather than later.
   for alias_cmd in omni; do
     if [ ! -x "$bin_dir/$alias_cmd" ] && ! command -v "$alias_cmd" >/dev/null 2>&1; then
-      warn "the $alias_cmd alias was not installed (expected a console-script entry point alongside omnigent)."
+      warn "the $alias_cmd alias was not installed (expected a console-script entry point alongside omnicraft)."
     fi
   done
 }
 
-# No setup step here by design: the first `omnigent` run configures a model
+# No setup step here by design: the first `omnicraft` run configures a model
 # credential and offers to install the harness CLI you pick.
 print_next_steps() {
   bin_dir="$1"
@@ -608,17 +608,17 @@ print_next_steps() {
     command_prefix="PATH=\"$bin_dir:\$PATH\" "
   fi
 
-  printf '\n%sOmnigent installed successfully.%s\n\n' "$BOLD" "$RESET"
+  printf '\n%sOmniCraft installed successfully.%s\n\n' "$BOLD" "$RESET"
   printf 'Start chatting — first run sets up a model and a local web UI:\n'
-  printf '  %s%somnigent%s\n\n' "$command_prefix" "$MAGENTA" "$RESET"
+  printf '  %s%somnicraft%s\n\n' "$command_prefix" "$MAGENTA" "$RESET"
   printf 'Or launch a specific coding harness:\n'
-  printf '  %somnigent claude          # Claude Code\n' "$command_prefix"
-  printf '  %somnigent codex           # Codex\n\n' "$command_prefix"
+  printf '  %somnicraft claude          # Claude Code\n' "$command_prefix"
+  printf '  %somnicraft codex           # Codex\n\n' "$command_prefix"
   printf 'Manage model credentials any time:\n'
-  printf '  %somnigent setup\n\n' "$command_prefix"
+  printf '  %somnicraft setup\n\n' "$command_prefix"
   printf '%sUsing a Databricks workspace as your model provider? Install the\n' "$DIM"
   printf 'Databricks CLI (https://docs.databricks.com/aws/en/dev-tools/cli/install)\n'
-  printf 'and add it via: omnigent setup -> Databricks.%s\n' "$RESET"
+  printf 'and add it via: omnicraft setup -> Databricks.%s\n' "$RESET"
 }
 
 main() {
@@ -632,9 +632,9 @@ main() {
   check_npm
   check_tmux
   check_bubblewrap
-  install_omnigent
+  install_omnicraft
   bin_dir="$(uv_tool_bin_dir)"
-  verify_omnigent "$bin_dir"
+  verify_omnicraft "$bin_dir"
   maybe_add_bin_to_path "$bin_dir"
   print_next_steps "$bin_dir"
 }

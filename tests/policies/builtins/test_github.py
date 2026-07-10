@@ -1,6 +1,6 @@
 """
 Tests for the built-in GitHub access policy
-(:mod:`omnigent.policies.builtins.github`) — the single ``github_policy``
+(:mod:`omnicraft.policies.builtins.github`) — the single ``github_policy``
 factory covering both the MCP tool-call surface and the git/gh shell surface.
 
 Layers:
@@ -26,15 +26,15 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.builtins.github import github_policy
-from omnigent.policies.function import FunctionPolicy, resolve_function_policy
-from omnigent.policies.registry import get_registry, load_registry, validate_factory_params
-from omnigent.policies.schema import PolicyEvent, PolicyResponse
-from omnigent.policies.types import EvaluationContext
-from omnigent.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
+from omnicraft.policies.builtins.github import github_policy
+from omnicraft.policies.function import FunctionPolicy, resolve_function_policy
+from omnicraft.policies.registry import get_registry, load_registry, validate_factory_params
+from omnicraft.policies.schema import PolicyEvent, PolicyResponse
+from omnicraft.policies.types import EvaluationContext
+from omnicraft.spec.types import FunctionPolicySpec, FunctionRef, Phase, PolicyAction
 from tests.policies.builtins.helpers import tool_call_event as tc
 
-_HANDLER = "omnigent.policies.builtins.github.github_policy"
+_HANDLER = "omnicraft.policies.builtins.github.github_policy"
 _REPO = "octo/hello"
 _REPO_URL = "https://github.com/octo/hello/pull/1"
 
@@ -686,7 +686,7 @@ def test_shell_gh_extended_groups_read_actions_are_reads(command: str) -> None:
         "gh browse --repo octo/secret",
         "gh copilot explain 'what is git'",
         "gh licenses list",
-        "gh search repos omnigent",
+        "gh search repos omnicraft",
         "gh status",
     ],
 )

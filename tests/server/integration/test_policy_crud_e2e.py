@@ -20,20 +20,20 @@ import pytest
 import pytest_asyncio
 from fastapi import FastAPI
 
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.server.auth import LEVEL_EDIT
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
-from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+from omnicraft.runtime.agent_cache import AgentCache
+from omnicraft.server.app import create_app
+from omnicraft.server.auth import LEVEL_EDIT
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.artifact_store.local import LocalArtifactStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from omnicraft.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from omnicraft.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 from tests.server.conftest import ControllableMockClient
 
 pytestmark = pytest.mark.asyncio
 
-_HANDLER = "omnigent.policies.builtins.safety.ask_on_os_tools"
+_HANDLER = "omnicraft.policies.builtins.safety.ask_on_os_tools"
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -89,7 +89,7 @@ def auth_app(
     :param tmp_path: Pytest temp dir for artifacts.
     :returns: A :class:`FastAPI` instance with auth and policy routes.
     """
-    from omnigent.server.auth import UnifiedAuthProvider
+    from omnicraft.server.auth import UnifiedAuthProvider
 
     artifact_store = LocalArtifactStore(str(tmp_path / "artifacts"))
     return create_app(
@@ -120,8 +120,8 @@ async def auth_client(
     :param tmp_path: Pytest temp dir for the harness process manager.
     :yields: A ready-to-use :class:`httpx.AsyncClient`.
     """
-    from omnigent.runtime import set_harness_process_manager
-    from omnigent.runtime.harnesses.process_manager import HarnessProcessManager
+    from omnicraft.runtime import set_harness_process_manager
+    from omnicraft.runtime.harnesses.process_manager import HarnessProcessManager
 
     pm = HarnessProcessManager(tmp_parent=tmp_path / "harness_pm")
     await pm.start()

@@ -3,7 +3,7 @@ Cross-backend behavioral parity tests for the spawn-time sandboxes.
 
 These tests assert the observable contract every active sandbox
 backend must uphold, run through the live
-:func:`omnigent.inner.os_env.create_os_environment` path so they
+:func:`omnicraft.inner.os_env.create_os_environment` path so they
 exercise the helper subprocess end-to-end. They are parametrized
 over the active backend on the current host
 (:func:`tests.inner.sandbox.conftest.active_sandbox_type`):
@@ -33,8 +33,8 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
-from omnigent.inner.os_env import create_os_environment
+from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+from omnicraft.inner.os_env import create_os_environment
 from tests.inner.sandbox.conftest import run_async
 
 # ---------------------------------------------------------------------------

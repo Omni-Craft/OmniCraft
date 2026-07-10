@@ -448,8 +448,8 @@ function renderToolRunFragment(
   return renderItem(fragment.tool, runStart + fragment.index, false);
 }
 
-const _ADVISE_MODELS_NAMES = new Set(["sys_advise_models", "mcp__omnigent__sys_advise_models"]);
-const _SESSION_SEND_NAMES = new Set(["sys_session_send", "mcp__omnigent__sys_session_send"]);
+const _ADVISE_MODELS_NAMES = new Set(["sys_advise_models", "mcp__omnicraft__sys_advise_models"]);
+const _SESSION_SEND_NAMES = new Set(["sys_session_send", "mcp__omnicraft__sys_session_send"]);
 
 function isPersistentToolCard(item: RenderItem): boolean {
   return (

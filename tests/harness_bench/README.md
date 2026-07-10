@@ -128,7 +128,7 @@ web application consumes, not browser rendering; UI presentation belongs in
 | `bench.py` | Orchestration, concurrency, prerequisite handling, and shared-server wiring |
 | `report.py` | Terminal, Markdown, and JSON renderers |
 
-Reusable production helpers live in `omnigent.config` and the existing runtime
+Reusable production helpers live in `omnicraft.config` and the existing runtime
 utility modules rather than being duplicated in the bench.
 
 ## Extending the bench

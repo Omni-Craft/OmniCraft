@@ -1,4 +1,4 @@
-"""Tests for the opaque-column compression codec (``omnigent.db.compression``).
+"""Tests for the opaque-column compression codec (``omnicraft.db.compression``).
 
 Covers the frame format, the raw/zstd threshold, and — critically — that
 values written before a column was migrated (unframed ``TEXT``) still decode
@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from omnigent.db.compression import _MIN_COMPRESS_BYTES, decode, encode
+from omnicraft.db.compression import _MIN_COMPRESS_BYTES, decode, encode
 
 
 def test_none_round_trips() -> None:

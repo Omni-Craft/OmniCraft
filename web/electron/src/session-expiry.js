@@ -1,6 +1,6 @@
 // Recovering the desktop window when its outer auth session expires.
 //
-// A workspace-hosted Omnigent sits behind the Databricks SSO gate. When that
+// A workspace-hosted OmniCraft sits behind the Databricks SSO gate. When that
 // session's cookie lapses, the gate answers the SPA's API calls with a 303
 // redirect to its own ``login.html`` instead of the expected JSON. The SPA
 // can't parse the login page as data and dies on a "Failed to load: Fetch

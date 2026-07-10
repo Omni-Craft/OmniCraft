@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.host.identity import load_or_create_host_identity
+from omnicraft.host.identity import load_or_create_host_identity
 
 
 def test_create_identity_when_no_config(tmp_path: Path) -> None:
@@ -112,8 +112,8 @@ def test_env_override_returns_identity_without_touching_config(
     must not read or write config.yaml (managed sandboxes are
     disposable; the server owns their identity).
     """
-    monkeypatch.setenv("OMNIGENT_HOST_ID", "host_env_override")
-    monkeypatch.setenv("OMNIGENT_HOST_NAME", "managed-env")
+    monkeypatch.setenv("OMNICRAFT_HOST_ID", "host_env_override")
+    monkeypatch.setenv("OMNICRAFT_HOST_NAME", "managed-env")
     config_path = tmp_path / "config.yaml"
 
     identity = load_or_create_host_identity(config_path)
@@ -129,8 +129,8 @@ def test_env_override_requires_both_vars(tmp_path: Path, monkeypatch: pytest.Mon
     Setting only one identity env var is a launcher bug — fail loud
     instead of mixing a server-chosen id with a generated name.
     """
-    monkeypatch.setenv("OMNIGENT_HOST_ID", "host_env_override")
-    monkeypatch.delenv("OMNIGENT_HOST_NAME", raising=False)
+    monkeypatch.setenv("OMNICRAFT_HOST_ID", "host_env_override")
+    monkeypatch.delenv("OMNICRAFT_HOST_NAME", raising=False)
 
     with pytest.raises(ValueError, match="must be set together"):
         load_or_create_host_identity(tmp_path / "config.yaml")

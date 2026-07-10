@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-import omnigent.runner.app as app
+import omnicraft.runner.app as app
 
 _ITEMS: list[dict[str, Any]] = [
     {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "hi"}]},
@@ -71,7 +71,7 @@ async def test_rehydrate_seeds_transcript_with_model() -> None:
     ok = await app._rehydrate_opencode_session_from_transcript(
         opencode_client=oc,
         opencode_session_id="ses_1",
-        omnigent_session_id="conv_1",
+        omnicraft_session_id="conv_1",
         server_client=_FakeServerClient(_ITEMS),
         model_override="anthropic/claude-sonnet-4-5",
     )
@@ -88,7 +88,7 @@ async def test_rehydrate_no_server_client_returns_false() -> None:
     ok = await app._rehydrate_opencode_session_from_transcript(
         opencode_client=oc,
         opencode_session_id="s",
-        omnigent_session_id="c",
+        omnicraft_session_id="c",
         server_client=None,
         model_override=None,
     )
@@ -101,7 +101,7 @@ async def test_rehydrate_empty_transcript_returns_false() -> None:
     ok = await app._rehydrate_opencode_session_from_transcript(
         opencode_client=oc,
         opencode_session_id="s",
-        omnigent_session_id="c",
+        omnicraft_session_id="c",
         server_client=_FakeServerClient([]),
         model_override=None,
     )

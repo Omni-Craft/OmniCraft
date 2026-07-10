@@ -1,6 +1,6 @@
 """
 Tests for the built-in ``enforce_sandbox`` policy
-(:mod:`omnigent.policies.builtins.safety`).
+(:mod:`omnicraft.policies.builtins.safety`).
 
 Covers:
 
@@ -21,8 +21,8 @@ from typing import Any
 
 import pytest
 
-from omnigent.policies.builtins.safety import enforce_sandbox
-from omnigent.policies.schema import PolicyEvent
+from omnicraft.policies.builtins.safety import enforce_sandbox
+from omnicraft.policies.schema import PolicyEvent
 from tests.policies.builtins.helpers import tool_call_event as tc
 
 

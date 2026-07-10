@@ -4,14 +4,14 @@ Validates every change in PR #1303 against a real `opencode serve`. Each area
 has **preconditions → steps → expected**. Items marked **[live-verified]** were
 already confirmed against opencode 1.17.7 during development; re-run them as a
 regression smoke. Items marked **[needs web]** can only be confirmed end-to-end
-with the running Omnigent web UI.
+with the running OmniCraft web UI.
 
 ## 0. Setup (once)
 
 1. `omni setup` → OpenCode section: add a provider, pick a default model
    (confirm the model actually used matches the selection, not `big-pickle`).
-2. Have a workspace with the Omnigent web UI reachable.
-3. Keep two terminals handy: the Omnigent server logs and (optionally) an
+2. Have a workspace with the OmniCraft web UI reachable.
+3. Keep two terminals handy: the OmniCraft server logs and (optionally) an
    attached opencode TUI for the bidirectional/race tests.
 4. Create an `opencode-native` session from the web UI and send one trivial
    prompt ("say hi") — confirm the assistant reply mirrors into the web chat
@@ -39,21 +39,21 @@ with the running Omnigent web UI.
 
 ---
 
-## 2a. MCP — Omnigent builtin relay  [needs web: model must call a sys_* tool]
+## 2a. MCP — OmniCraft builtin relay  [needs web: model must call a sys_* tool]
 
-This is the real "connects to Omnigent MCP" — opencode's model calling Omnigent
+This is the real "connects to OmniCraft MCP" — opencode's model calling OmniCraft
 builtins (`sys_session_*`, `sys_agent_*`, `load_skill`, `web_fetch`,
 `list_comments`, policy tools).
 - Steps: in an opencode-native session, ask the model to do something that needs
   a builtin — e.g. "list my other sessions" (`sys_session_list`) or "load the
   X skill" (`load_skill`).
 - Expected:
-  - opencode's `opencode.json` `mcp` block has an `omnigent` `{type:"local"}`
-    entry whose command is `… -m omnigent.claude_native_bridge serve-mcp
+  - opencode's `opencode.json` `mcp` block has an `omnicraft` `{type:"local"}`
+    entry whose command is `… -m omnicraft.claude_native_bridge serve-mcp
     --bridge-dir <bridge>`; the bridge dir holds `bridge.json` (token) +
     `tool_relay.json` (the relay tool list + URL).
   - The model can call the builtin and gets a real result (proxied through the
-    Omnigent server, so policy applies — a builtin call shows up at the TOOL_CALL
+    OmniCraft server, so policy applies — a builtin call shows up at the TOOL_CALL
     engine like any other tool; ensure your policy ALLOWs infra tools so they
     don't spuriously prompt).
   - Tear-down: deleting the session closes the relay (no orphaned localhost
@@ -68,9 +68,9 @@ builtins (`sys_session_*`, `sys_agent_*`, `load_skill`, `web_fetch`,
 - Expected:
   - opencode's per-session `opencode.json` contains the agent servers in the
     `mcp` block (stdio→`local`, http→`remote` with the bearer header) **alongside**
-    the `omnigent` relay entry, **and** `permission:{"*":"ask"}`.
+    the `omnicraft` relay entry, **and** `permission:{"*":"ask"}`.
   - The MCP tools are visible/callable by the model.
-  - Because `permission:ask` is set, the tool call routes through the Omnigent
+  - Because `permission:ask` is set, the tool call routes through the OmniCraft
     TOOL_CALL **policy engine** (see §7) rather than running silently.
 
 ---
@@ -94,7 +94,7 @@ builtins (`sys_session_*`, `sys_agent_*`, `load_skill`, `web_fetch`,
 - Steps: take a session with real history, then resume it where opencode lost
   the server-side session (restart the runner / resume on another host).
 - Expected:
-  - The Omnigent transcript is rehydrated as a **`noReply` context message**
+  - The OmniCraft transcript is rehydrated as a **`noReply` context message**
     (a rendered text preamble of prior turns) — history is present, and the
     seed does **not** trigger a spurious model turn.
   - The next user prompt continues with that context.
@@ -113,20 +113,20 @@ builtins (`sys_session_*`, `sys_agent_*`, `load_skill`, `web_fetch`,
 
 ## 6. In-harness session-cmd sync  [needs web + TUI]
 
-**TUI → Omnigent (model mirror):**
+**TUI → OmniCraft (model mirror):**
 - Steps: attach the opencode TUI; type `/model` and switch the model.
 - Expected: the web session reflects the new model (`session.next.model.switched`
   → `external_model_change`).
 
-**Omnigent → opencode (model switch):**
-- Steps: change the model from the Omnigent web UI (model pill) on an
+**OmniCraft → opencode (model switch):**
+- Steps: change the model from the OmniCraft web UI (model pill) on an
   opencode-native session, then send a web turn.
 - Expected: bridge state `model_override` updates; the NEXT web-injected prompt
   uses the new model (opencode model is per-prompt, so it applies forward, not
   retroactively). A null/blank model clears the override.
 
-**Omnigent → opencode (clear):**
-- Steps: trigger `/clear` from Omnigent on an opencode-native session.
+**OmniCraft → opencode (clear):**
+- Steps: trigger `/clear` from OmniCraft on an opencode-native session.
 - Expected: a brand-new opencode session is created and the terminal relaunches
   on it (old forwarder/server cancelled); prior context is gone. opencode has no
   reset endpoint, so this is a fresh-session relaunch — verify the new session
@@ -186,7 +186,7 @@ to `/policies/evaluate` → the cost-budget gate reads the session cost (from th
 
 ### 7b. Policy plugin — REQUEST + TOOL_RESULT phases  [needs web: live turns]
 
-The `omnigent-policy.js` plugin (loaded via `opencode.json` `plugin:[…]`) bridges
+The `omnicraft-policy.js` plugin (loaded via `opencode.json` `plugin:[…]`) bridges
 opencode's lifecycle hooks to `/policies/evaluate` for the phases the reactive
 `permission.asked` path can't reach. Verify the plugin loaded: opencode's startup
 log should mention the plugin, and `opencode.json` should list it under `plugin`.
@@ -202,9 +202,9 @@ log should mention the plugin, and `opencode.json` should list it under `plugin`
   - Preconditions: a tool-result policy that DENYs (e.g. redact on a sensitive
     classification label).
   - Steps: have the model call a tool whose output trips it.
-  - Expected: the model receives `[Omnigent policy: tool result withheld]`
+  - Expected: the model receives `[OmniCraft policy: tool result withheld]`
     instead of the real output (the tool already ran; its result is withheld).
-- Fail-open: with the Omnigent server unreachable, prompts/tools still flow
+- Fail-open: with the OmniCraft server unreachable, prompts/tools still flow
   (transport errors fail open — confirm no lockout), and enforcement resumes when
   the server returns.
 - Known limit: the plugin's auth token is a launch snapshot; on a long

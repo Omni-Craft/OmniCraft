@@ -1,11 +1,11 @@
 """Tests for the CLI-side daemon-launch polling helpers.
 
-Covers ``omnigent.host.daemon_launch``: the online-wait loops must poll
+Covers ``omnicraft.host.daemon_launch``: the online-wait loops must poll
 through *transient* transport errors (connection refused while the local
 server is still binding, a dropped keepalive) instead of crashing on the
 first one, and must surface the last transport error when the deadline
 expires. A regression here reproduces the CI failure where a single
-refused status poll killed ``omnigent run`` with a bare
+refused status poll killed ``omnicraft run`` with a bare
 ``httpx.ConnectError`` even though the deadline had 50+ seconds left.
 """
 
@@ -15,8 +15,8 @@ import click
 import httpx
 import pytest
 
-from omnigent.host import daemon_launch
-from omnigent.host.daemon_launch import (
+from omnicraft.host import daemon_launch
+from omnicraft.host.daemon_launch import (
     runner_is_online,
     wait_for_host_online,
     wait_for_runner_online,
@@ -99,7 +99,7 @@ class _HtmlThenOnline:
         if self.requests_seen <= self.html_polls:
             return httpx.Response(
                 200,
-                text="<!doctype html><title>omnigent</title>",
+                text="<!doctype html><title>omnicraft</title>",
                 headers={"content-type": "text/html"},
             )
         return httpx.Response(200, json=self.body)
@@ -121,7 +121,7 @@ class _AlwaysHtml:
         self.requests_seen += 1
         return httpx.Response(
             200,
-            text="<!doctype html><title>omnigent</title>",
+            text="<!doctype html><title>omnicraft</title>",
             headers={"content-type": "text/html"},
         )
 

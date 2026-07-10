@@ -2,13 +2,13 @@
 
 **Status:** implemented
 **Supersedes:** [`cursor-native-tui-mirror-plan.md`](./cursor-native-tui-mirror-plan.md) (pane-scrape design)
-**Code:** `omnigent/cursor_native_permissions.py`, the `cursor-permission-request` hook in
-`omnigent/server/routes/sessions.py`, runner wiring in `omnigent/runner/app.py`,
+**Code:** `omnicraft/cursor_native_permissions.py`, the `cursor-permission-request` hook in
+`omnicraft/server/routes/sessions.py`, runner wiring in `omnicraft/runner/app.py`,
 `web/.../ApprovalCard.tsx`.
 
 ## Goal / behavior
 
-Surface an Omnigent **elicitation card whenever the `cursor-agent` TUI gates a tool call or
+Surface an OmniCraft **elicitation card whenever the `cursor-agent` TUI gates a tool call or
 asks a question**, answerable from the web **or** the embedded TUI. Cursor's own native gate
 stays the source of truth — **no `--force`, no JS-bundle modification**. The failure mode is
 benign: if detection ever breaks, the embedded TUI prompt still works and the user answers

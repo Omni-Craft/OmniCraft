@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.artifact_store.local import LocalArtifactStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
+from omnicraft.stores.policy_store.sqlalchemy_store import SqlAlchemyPolicyStore
 
 
 @pytest.fixture()

@@ -35,10 +35,10 @@ def _profile_from_config() -> str | None:
        ``runtime/workflow.py`` ``DATABRICKS_KIND`` branch), so the bench must too
        or a no-flag run would go offline where ``omni run`` goes live.
 
-    All imports are lazy so importing this module never drags in ``omnigent.cli``
+    All imports are lazy so importing this module never drags in ``omnicraft.cli``
     at load time.
     """
-    from omnigent.config import load_effective_config, load_global_config
+    from omnicraft.config import load_effective_config, load_global_config
 
     try:
         global_config = load_global_config()
@@ -61,7 +61,7 @@ def _profile_from_config() -> str | None:
 
     # Reuse the runtime resolver so bench and normal launches select identically.
     try:
-        from omnigent.onboarding.provider_config import (
+        from omnicraft.onboarding.provider_config import (
             DATABRICKS_KIND,
             default_provider_for_harness,
         )
@@ -89,7 +89,7 @@ def resolve_bench_env(explicit_profile: str | None) -> BenchRuntimeEnv:
        exported gateway token work with no profile configured.
     2. **Profile.** ``explicit_profile`` (the ``--profile`` flag) wins; else the
        config-derived profile (``auth:``/``profile`` in
-       ``~/.omnigent/config.yaml``). May be ``None`` (the resolver then uses the
+       ``~/.omnicraft/config.yaml``). May be ``None`` (the resolver then uses the
        SDK / ``[DEFAULT]`` path, as ``omni run`` does).
     3. **Compose** ``OPENAI_*`` from
        :func:`resolve_databricks_workspace` — OAuth-profile aware, fails loud on
@@ -111,7 +111,7 @@ def resolve_bench_env(explicit_profile: str | None) -> BenchRuntimeEnv:
             base["DATABRICKS_CONFIG_PROFILE"] = profile
         return BenchRuntimeEnv(base_env=base, db_profile=profile)
 
-    from omnigent.runtime.credentials.databricks import resolve_databricks_workspace
+    from omnicraft.runtime.credentials.databricks import resolve_databricks_workspace
 
     creds = resolve_databricks_workspace(profile)
     base["OPENAI_BASE_URL"] = f"{creds.host}/serving-endpoints"
@@ -127,7 +127,7 @@ def bench_creds_skip_reason(explicit_profile: str | None) -> str | None:
     Mirrors :func:`resolve_bench_env`'s precedence without minting a token, so a
     driver's ``unavailable()`` can skip a live run cleanly (no creds) rather than
     fail mid-provision. A ``--profile`` is no longer required: an ambient
-    ``OPENAI_*`` or a configured ``~/.omnigent`` profile is enough, matching
+    ``OPENAI_*`` or a configured ``~/.omnicraft`` profile is enough, matching
     ``omni run``.
 
     :param explicit_profile: The ``--profile`` value, or ``None`` to derive.
@@ -139,7 +139,7 @@ def bench_creds_skip_reason(explicit_profile: str | None) -> str | None:
     if not profile:
         return (
             "no gateway creds: pass --profile, configure a profile in "
-            "~/.omnigent/config.yaml (like `omni run`), or export OPENAI_API_KEY + "
+            "~/.omnicraft/config.yaml (like `omni run`), or export OPENAI_API_KEY + "
             "OPENAI_BASE_URL"
         )
     from tests.e2e.helpers import lookup_databricks_host

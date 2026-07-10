@@ -48,13 +48,13 @@ describe("filterConversations", () => {
   it("matches native wrapper default labels for untitled sessions", () => {
     const conversations = [
       conversation("conv_native", null, new Date(2026, 4, 14, 9), {
-        labels: { "omnigent.wrapper": "claude-code-native-ui" },
+        labels: { "omnicraft.wrapper": "claude-code-native-ui" },
       }),
       conversation("conv_codex", null, new Date(2026, 4, 14, 8), {
-        labels: { "omnigent.wrapper": "codex-native-ui" },
+        labels: { "omnicraft.wrapper": "codex-native-ui" },
       }),
       conversation("conv_pi", null, new Date(2026, 4, 14, 8), {
-        labels: { "omnigent.wrapper": "pi-native-ui" },
+        labels: { "omnicraft.wrapper": "pi-native-ui" },
       }),
       conversation("conv_other", null, new Date(2026, 4, 14, 8)),
     ];
@@ -161,42 +161,42 @@ describe("orderByPinnedSequence", () => {
 describe("getConversationAgentType", () => {
   it("returns 'Claude Code' for claude-native-ui sessions", () => {
     const conv = conversation("conv_native", null, new Date(2026, 4, 14, 9), {
-      labels: { "omnigent.wrapper": "claude-code-native-ui" },
+      labels: { "omnicraft.wrapper": "claude-code-native-ui" },
     });
     // claude-code-native-ui is the wrapper label assigned to sessions started
-    // via `omnigent claude`. Any other label value must not match.
+    // via `omnicraft claude`. Any other label value must not match.
     expect(getConversationAgentType(conv)).toBe("Claude Code");
   });
 
   it("returns 'Codex' for codex-native-ui sessions", () => {
     const conv = conversation("conv_codex", null, new Date(2026, 4, 14, 9), {
-      labels: { "omnigent.wrapper": "codex-native-ui" },
+      labels: { "omnicraft.wrapper": "codex-native-ui" },
     });
     // codex-native-ui is the wrapper label assigned to sessions started
-    // via `omnigent codex`. It gets its own filter bucket and row icon.
+    // via `omnicraft codex`. It gets its own filter bucket and row icon.
     expect(getConversationAgentType(conv)).toBe("Codex");
   });
 
   it("returns 'Pi' for pi-native-ui sessions", () => {
     const conv = conversation("conv_pi", null, new Date(2026, 4, 14, 9), {
-      labels: { "omnigent.wrapper": "pi-native-ui" },
+      labels: { "omnicraft.wrapper": "pi-native-ui" },
     });
     expect(getConversationAgentType(conv)).toBe("Pi");
   });
 
   it("returns 'Kiro' for kiro-native-ui sessions", () => {
     const conv = conversation("conv_kiro", null, new Date(2026, 4, 14, 9), {
-      labels: { "omnigent.wrapper": "kiro-native-ui" },
+      labels: { "omnicraft.wrapper": "kiro-native-ui" },
     });
     expect(getConversationAgentType(conv)).toBe("Kiro");
   });
 
   it("returns 'Antigravity' for antigravity-native-ui sessions", () => {
     const conv = conversation("conv_agy", null, new Date(2026, 4, 14, 9), {
-      labels: { "omnigent.wrapper": "antigravity-native-ui" },
+      labels: { "omnicraft.wrapper": "antigravity-native-ui" },
     });
     // antigravity-native-ui is the wrapper label assigned to sessions started
-    // via `omnigent antigravity` or the web-UI Antigravity picker. It gets its
+    // via `omnicraft antigravity` or the web-UI Antigravity picker. It gets its
     // own filter bucket and friendly sidebar name.
     expect(getConversationAgentType(conv)).toBe("Antigravity");
   });
@@ -223,19 +223,19 @@ describe("getConversationAgentType", () => {
     // wrapper label wins so the filter bucket stays consistent with the row icon.
     const claudeConv: Conversation = {
       ...conversation("conv_both", null, new Date(2026, 4, 14, 9), {
-        labels: { "omnigent.wrapper": "claude-code-native-ui" },
+        labels: { "omnicraft.wrapper": "claude-code-native-ui" },
       }),
       agent_name: "some_agent",
     };
     const codexConv: Conversation = {
       ...conversation("conv_both_codex", null, new Date(2026, 4, 14, 9), {
-        labels: { "omnigent.wrapper": "codex-native-ui" },
+        labels: { "omnicraft.wrapper": "codex-native-ui" },
       }),
       agent_name: "some_agent",
     };
     const piConv: Conversation = {
       ...conversation("conv_both_pi", null, new Date(2026, 4, 14, 9), {
-        labels: { "omnigent.wrapper": "pi-native-ui" },
+        labels: { "omnicraft.wrapper": "pi-native-ui" },
       }),
       agent_name: "some_agent",
     };
@@ -259,42 +259,42 @@ describe("getConversationIconKind", () => {
     expect(
       getConversationIconKind(
         conversation("conv_claude", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "claude-code-native-ui" },
+          labels: { "omnicraft.wrapper": "claude-code-native-ui" },
         }),
       ),
     ).toBe("claude");
     expect(
       getConversationIconKind(
         conversation("conv_codex", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "codex-native-ui" },
+          labels: { "omnicraft.wrapper": "codex-native-ui" },
         }),
       ),
     ).toBe("codex");
     expect(
       getConversationIconKind(
         conversation("conv_opencode", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "opencode-native-ui" },
+          labels: { "omnicraft.wrapper": "opencode-native-ui" },
         }),
       ),
     ).toBe("opencode");
     expect(
       getConversationIconKind(
         conversation("conv_pi", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "pi-native-ui" },
+          labels: { "omnicraft.wrapper": "pi-native-ui" },
         }),
       ),
     ).toBe("pi");
     expect(
       getConversationIconKind(
         conversation("conv_kiro", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "kiro-native-ui" },
+          labels: { "omnicraft.wrapper": "kiro-native-ui" },
         }),
       ),
     ).toBe("kiro");
     expect(
       getConversationIconKind(
         conversation("conv_agy", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "antigravity-native-ui" },
+          labels: { "omnicraft.wrapper": "antigravity-native-ui" },
         }),
       ),
     ).toBe("antigravity");
@@ -328,7 +328,7 @@ describe("conversationDisplayLabel", () => {
     expect(
       conversationDisplayLabel(
         conversation("conv_abcdefghijklmnopqrstuvwxyz", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "claude-code-native-ui" },
+          labels: { "omnicraft.wrapper": "claude-code-native-ui" },
         }),
       ),
     ).toBe("Claude Code");
@@ -338,7 +338,7 @@ describe("conversationDisplayLabel", () => {
     expect(
       conversationDisplayLabel(
         conversation("conv_abcdefghijklmnopqrstuvwxyz", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "codex-native-ui" },
+          labels: { "omnicraft.wrapper": "codex-native-ui" },
         }),
       ),
     ).toBe("Codex");
@@ -348,7 +348,7 @@ describe("conversationDisplayLabel", () => {
     expect(
       conversationDisplayLabel(
         conversation("conv_abcdefghijklmnopqrstuvwxyz", null, new Date(2026, 4, 14, 9), {
-          labels: { "omnigent.wrapper": "pi-native-ui" },
+          labels: { "omnicraft.wrapper": "pi-native-ui" },
         }),
       ),
     ).toBe("Pi");
@@ -361,7 +361,7 @@ describe("conversationDisplayLabel", () => {
           "conv_abcdefghijklmnopqrstuvwxyz",
           "investigate the regression",
           new Date(2026, 4, 14, 9),
-          { labels: { "omnigent.wrapper": "claude-code-native-ui" } },
+          { labels: { "omnicraft.wrapper": "claude-code-native-ui" } },
         ),
       ),
     ).toBe("investigate the regression");

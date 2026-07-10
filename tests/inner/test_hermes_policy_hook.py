@@ -1,6 +1,6 @@
 """Tests for the Hermes pre_tool_call policy hook's relay-tool skip.
 
-Omnigent relay tools (surfaced into Hermes as ``mcp_omnigent_*``) are gated when
+OmniCraft relay tools (surfaced into Hermes as ``mcp_omnicraft_*``) are gated when
 the relay dispatches them back through the server's tool path. The hook must NOT
 gate them a second time (that parks a duplicate approval card whose long-poll
 hangs, wedging the turn). Hermes' own tools are still gated here.
@@ -13,13 +13,13 @@ import json
 
 import pytest
 
-from omnigent.inner import hermes_policy_hook
+from omnicraft.inner import hermes_policy_hook
 
 
 @pytest.fixture
 def wired_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("_OMNIGENT_SERVER_URL", "http://localhost:6767")
-    monkeypatch.setenv("_OMNIGENT_SESSION_ID", "conv_test")
+    monkeypatch.setenv("_OMNICRAFT_SERVER_URL", "http://localhost:6767")
+    monkeypatch.setenv("_OMNICRAFT_SESSION_ID", "conv_test")
 
 
 def _run(monkeypatch: pytest.MonkeyPatch, tool_name: str) -> tuple[dict, bool]:
@@ -35,7 +35,7 @@ def _run(monkeypatch: pytest.MonkeyPatch, tool_name: str) -> tuple[dict, bool]:
 
         return _R()
 
-    monkeypatch.setattr("omnigent.native_policy_hook.post_evaluate_with_retry", _spy, raising=True)
+    monkeypatch.setattr("omnicraft.native_policy_hook.post_evaluate_with_retry", _spy, raising=True)
     monkeypatch.setattr(
         "sys.stdin",
         io.StringIO(json.dumps({"tool_name": tool_name, "tool_input": {}})),
@@ -49,9 +49,9 @@ def _run(monkeypatch: pytest.MonkeyPatch, tool_name: str) -> tuple[dict, bool]:
 @pytest.mark.parametrize(
     "tool_name",
     [
-        "mcp_omnigent_sys_session_get_info",  # hermes single-underscore form
-        "mcp_omnigent_sys_os_write",
-        "mcp__omnigent__list_comments",  # native double-underscore form
+        "mcp_omnicraft_sys_session_get_info",  # hermes single-underscore form
+        "mcp_omnicraft_sys_os_write",
+        "mcp__omnicraft__list_comments",  # native double-underscore form
     ],
 )
 def test_relay_tools_are_skipped(
@@ -71,6 +71,6 @@ def test_native_and_other_mcp_tools_are_still_gated(
     monkeypatch: pytest.MonkeyPatch, wired_env: None, tool_name: str
 ) -> None:
     _result, server_called = _run(monkeypatch, tool_name)
-    # Hermes' own tools (and non-Omnigent MCP servers) do NOT round-trip the
+    # Hermes' own tools (and non-OmniCraft MCP servers) do NOT round-trip the
     # relay, so the hook stays their policy gate.
     assert server_called is True

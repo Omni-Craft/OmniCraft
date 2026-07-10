@@ -321,17 +321,17 @@ export function AppShell() {
   // sessions OR the per-session snapshot (``activeSession``) for ALL
   // sessions including children. The sidebar list omits child (sub-agent)
   // rows, so for a user-added agent ``activeConv`` is null and only the
-  // snapshot carries ``omnigent.ui``/``omnigent.wrapper`` — without
+  // snapshot carries ``omnicraft.ui``/``omnicraft.wrapper`` — without
   // this merge an added claude-native agent loses its terminal-first
   // toggle. Snapshot wins on conflict; spreading undefined is a no-op.
   const sessionLabels = { ...activeConv?.labels, ...activeSession?.labels };
-  const terminalFirst = sessionLabels["omnigent.ui"] === "terminal";
-  const isClaudeNative = sessionLabels["omnigent.wrapper"] === "claude-code-native-ui";
+  const terminalFirst = sessionLabels["omnicraft.ui"] === "terminal";
+  const isClaudeNative = sessionLabels["omnicraft.wrapper"] === "claude-code-native-ui";
   // Native-CLI wrapper of either family. Keys harness behavior gates
   // (composer slash commands, `/model`); terminal-first SDK sessions
-  // (embedded Omnigent REPL terminal) have NO wrapper label and must
+  // (embedded OmniCraft REPL terminal) have NO wrapper label and must
   // keep regular chat behavior. See TerminalFirstContext.tsx.
-  const isNativeWrapper = isNativeWrapperLabel(sessionLabels["omnigent.wrapper"]);
+  const isNativeWrapper = isNativeWrapperLabel(sessionLabels["omnicraft.wrapper"]);
   const todos = useChatStore((s) => s.todos);
   const todosCompleted = todos.filter((t) => t.status === "completed").length;
   // Used for the header "Back to parent" link, which is hidden on
@@ -373,8 +373,8 @@ export function AppShell() {
   // Claude-native sub-agents have no terminal of their own — the parent
   // owns the tmux pane.
   const isClaudeNativeSubagent =
-    activeSession?.labels?.["omnigent.wrapper"] === "claude-code-native-ui-subagent" ||
-    activeConv?.labels?.["omnigent.wrapper"] === "claude-code-native-ui-subagent";
+    activeSession?.labels?.["omnicraft.wrapper"] === "claude-code-native-ui-subagent" ||
+    activeConv?.labels?.["omnicraft.wrapper"] === "claude-code-native-ui-subagent";
   // Hide the rail Shells tab only for claude-native sub-agents — they
   // have no terminals of their own (the parent owns the tmux pane).
   // Native top-level sessions get the same Shells rail as SDK ones;
@@ -539,7 +539,7 @@ export function AppShell() {
   useEffect(() => {
     if (!isElectronShell()) return;
     const w = window as unknown as {
-      omnigentDesktop?: {
+      omnicraftDesktop?: {
         onBrowserElementSelected?: (
           cb: (p: { conversationId?: string; screenshot?: string | null }) => void,
         ) => () => void;
@@ -560,7 +560,7 @@ export function AppShell() {
         ) => Promise<{ ok: boolean; error?: string }>;
       };
     };
-    const desktop = w.omnigentDesktop;
+    const desktop = w.omnicraftDesktop;
     if (!desktop) return;
 
     const unsubSelected = desktop.onBrowserElementSelected?.((payload) => {
@@ -640,7 +640,7 @@ export function AppShell() {
     (key: string | null) => {
       setPanelInitialKeyState(key);
       if (!conversationId) return;
-      const storageKey = `omnigent.web.panel-key:${conversationId}`;
+      const storageKey = `omnicraft.web.panel-key:${conversationId}`;
       if (key === null) {
         sessionStorage.removeItem(storageKey);
       } else {
@@ -674,7 +674,7 @@ export function AppShell() {
     }
     const persisted = readSessionWorkspaceState(conversationId);
 
-    const stored = sessionStorage.getItem(`omnigent.web.panel-key:${conversationId}`);
+    const stored = sessionStorage.getItem(`omnicraft.web.panel-key:${conversationId}`);
     setPanelInitialKeyState(stored);
 
     // Restore the Files view scope. A deep-link ?view= param wins and forces

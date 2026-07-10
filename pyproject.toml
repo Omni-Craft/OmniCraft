@@ -3,10 +3,10 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "omnigent"
-# Keep in sync with omnigent/version.py's VERSION constant.
+name = "omnicraft"
+# Keep in sync with omnicraft/version.py's VERSION constant.
 version = "0.5.0.dev0"
-description = "Omnigent: declarative agent authoring and runtime framework"
+description = "OmniCraft: declarative agent authoring and runtime framework"
 readme = "README.md"
 requires-python = ">=3.12"
 authors = [
@@ -23,12 +23,12 @@ classifiers = [
 ]
 dependencies = [
     # SDK path-deps, version-locked: the three packages release together at
-    # one version, so a published `omnigent==X` must resolve the SDK wheels
-    # built alongside it (release-omnigent.yml verifies these pins match the
+    # one version, so a published `omnicraft==X` must resolve the SDK wheels
+    # built alongside it (release-omnicraft.yml verifies these pins match the
     # release tag). Local/editable installs still resolve via tool.uv.sources.
-    "omnigent-client==0.5.0.dev0",
-    "omnigent-ui-sdk==0.5.0.dev0",
-    # Merged from omnigent + omnigent.
+    "omnicraft-client==0.5.0.dev0",
+    "omnicraft-ui-sdk==0.5.0.dev0",
+    # Merged from omnicraft + omnicraft.
     "pyyaml>=6.0,<7",
     "openai>=1.0,<3",
     # >=14: the `e2b` extra's SDK (>=2.26) needs rich>=14 (was >=13,<14).
@@ -43,7 +43,7 @@ dependencies = [
     "httpx>=0.27,<1",
     "ftfy>=6.0",
     # Portable zombie-aware PID liveness checks for the host daemon
-    # lifecycle (omnigent/host/local_server.py).
+    # lifecycle (omnicraft/host/local_server.py).
     "psutil>=5.9,<8",
     # CEL (Common Expression Language) for inline policy evaluation.
     # Non-Turing-complete, side-effect-free, guaranteed to terminate.
@@ -52,18 +52,18 @@ dependencies = [
     # when the library is absent.
     'cel-expr-python>=0.1; platform_machine != "aarch64" and (sys_platform != "darwin" or platform_machine != "x86_64")',
     # OS keychain for storing model-provider API keys (OSS model
-    # selection). Used by omnigent/onboarding/secrets.py; falls back to
+    # selection). Used by omnicraft/onboarding/secrets.py; falls back to
     # a 0600 file when no keyring backend is available (e.g. headless).
     "keyring>=24,<26",
     # Round-trip (comment/format-preserving) TOML editing of the user's
     # ~/.codex/config.toml when removing a Databricks provider
-    # (omnigent/onboarding/ucode_cleanup.py). stdlib tomllib is read-only.
+    # (omnicraft/onboarding/ucode_cleanup.py). stdlib tomllib is read-only.
     "tomlkit>=0.12,<1",
-    # omnigent deps (runtime, spec, server, persistent terminal, etc.).
+    # omnicraft deps (runtime, spec, server, persistent terminal, etc.).
     "alembic>=1.0,<2",
     "anyio>=4.0,<5",
     "cachetools>=5.0,<7",
-    # _HostGroup (omnigent/cli.py) rewrites a leading positional server URL
+    # _HostGroup (omnicraft/cli.py) rewrites a leading positional server URL
     # into `--server` before Click parses it, so it no longer depends on
     # Click's internal `protected_args` (made read-only in click 8.2, slated
     # for removal in click 9). Upper bound `<10` only guards against an
@@ -71,13 +71,13 @@ dependencies = [
     "click>=8.0,<10",
     "fastapi>=0.100,<1",
     # pexpect/pyte back the POSIX tmux/PTY terminal stack, which is disabled
-    # on Windows (no usable PTY); omnigent never imports them on the core
+    # on Windows (no usable PTY); omnicraft never imports them on the core
     # path, so skip them there to avoid shipping an unusable dependency.
     "pexpect>=4.9,<5; platform_system != 'Windows'",
     "pyte>=0.8,<1; platform_system != 'Windows'",
     "pydantic>=2.0,<3",
     "sqlalchemy>=2.0,<3",
-    # Client-side compression for opaque text columns (omnigent/db/compression.py),
+    # Client-side compression for opaque text columns (omnicraft/db/compression.py),
     # so per-conversation JSON/text is stored uniformly compressed across SQLite,
     # PostgreSQL, and MySQL rather than depending on each backend's storage engine.
     "zstandard>=0.22,<1",
@@ -96,7 +96,7 @@ dependencies = [
     "PyJWT[crypto]>=2.8,<3",
     "argon2-cffi>=23.1,<24",
     # PEP 440 version comparison for the update check / `omni upgrade`
-    # (omnigent/update_check.py, omnigent/cli.py): compares the installed
+    # (omnicraft/update_check.py, omnicraft/cli.py): compares the installed
     # version against the latest PyPI release. Previously only a
     # transitive dep; pinned here now that we import it directly.
     "packaging>=23,<26",
@@ -112,18 +112,18 @@ openai-agents = []
 # CI / dev installs use `--extra all` and the test suite, deploy tooling,
 # and databricks_mcps servers import it.
 all = ["databricks-sdk>=0.56.0,<1"]
-# From omnigent.
+# From omnicraft.
 bedrock = ["boto3>=1.30,<2", "botocore>=1.30,<2"]
 # S3-compatible artifact store (AWS S3, Cloudflare R2, MinIO, …). Selected
-# with ``OMNIGENT_ARTIFACT_URI=s3://bucket/prefix``; the store imports boto3
+# with ``OMNICRAFT_ARTIFACT_URI=s3://bucket/prefix``; the store imports boto3
 # lazily, so only users of this backend need the extra.
 s3 = ["boto3>=1.30,<2", "botocore>=1.30,<2"]
 vertex = ["google-auth>=2.0,<3"]
-# Modal sandbox launcher (`omnigent sandbox --provider modal`). The
+# Modal sandbox launcher (`omnicraft sandbox --provider modal`). The
 # launcher module ships in the base package and imports the SDK lazily,
 # so only users of the provider need this extra.
 modal = ["modal>=1.0,<2"]
-# Daytona sandbox launcher (`omnigent sandbox --provider daytona` and
+# Daytona sandbox launcher (`omnicraft sandbox --provider daytona` and
 # server-managed `sandbox.provider: daytona`).
 # Same lazy-import posture as the modal extra. Pre-1.0 SDK: pin minor.
 daytona = ["daytona>=0.180,<1"]
@@ -132,15 +132,15 @@ daytona = ["daytona>=0.180,<1"]
 # pool. Same lazy-import posture as the modal/daytona extras. Pre-1.0 SDK: pin
 # minor.
 boxlite = ["boxlite>=0.9.5,<1"]
-# CoreWeave Sandbox launcher (`omnigent sandbox --provider cwsandbox` and
+# CoreWeave Sandbox launcher (`omnicraft sandbox --provider cwsandbox` and
 # server-managed `sandbox.provider: cwsandbox`).
 # Same lazy-import posture as above. Pre-1.0 SDK: pin minor.
 cwsandbox = ["cwsandbox>=0.24,<1"]
-# E2B sandbox launcher (`omnigent sandbox --provider e2b` and
+# E2B sandbox launcher (`omnicraft sandbox --provider e2b` and
 # server-managed `sandbox.provider: e2b`).
 # Same lazy-import posture as above.
 e2b = ["e2b>=2.26,<3"]
-# NVIDIA OpenShell launcher (`omnigent sandbox --provider openshell`).
+# NVIDIA OpenShell launcher (`omnicraft sandbox --provider openshell`).
 # Self-hosted gRPC gateway; the SDK pulls grpcio + protobuf. Same
 # lazy-import posture as above. Pre-1.0 SDK: pin minor.
 openshell = ["openshell>=0.0.7,<1"]
@@ -151,7 +151,7 @@ openshell = ["openshell>=0.0.7,<1"]
 kubernetes = ["kubernetes>=36,<37"]
 # The tracing extra is now a no-op shim kept for backwards compatibility.
 # Tracing is built on OpenTelemetry directly (opentelemetry-exporter-otlp-*
-# are in the default install). `omnigent[tracing]` still works — it just
+# are in the default install). `omnicraft[tracing]` still works — it just
 # no longer pulls in the heavy mlflow dependency.
 tracing = []
 agents-sdk = [
@@ -169,7 +169,7 @@ antigravity = ["google-antigravity>=0.1,<1"]
 copilot = ["github-copilot-sdk>=1,<2"]
 # Cursor SDK harness (`harness: cursor`). Optional like antigravity: the
 # harness imports the cursor-sdk lazily on first turn, so only `--harness
-# cursor` users need this extra (`omnigent[cursor]`). Was a baseline dependency;
+# cursor` users need this extra (`omnicraft[cursor]`). Was a baseline dependency;
 # now opt-in to keep the default install lean.
 cursor = ["cursor-sdk>=0.1.7"]
 # Hindsight long-term memory built-in tools (hindsight_retain / _recall /
@@ -183,7 +183,7 @@ databricks = [
     "opentelemetry-distro>=0,<1",
     "psycopg[binary]>=3.1,<4",
     "pymysql>=1.1,<2",
-    # Databricks-specific MCP servers. Not imported by core Omnigent
+    # Databricks-specific MCP servers. Not imported by core OmniCraft
     # code, so it is opt-in here rather than a default dependency.
     "databricks-mcp>=0.1.0",
 ]
@@ -252,42 +252,41 @@ dev = [
 ]
 
 [project.scripts]
-# Unified entry point. `omnigent` is the click-based CLI that absorbs
-# the legacy argparse commands from `omnigent/inner/cli.py` plus the
-# omnigent `ap` subcommands. See designs/UNIFICATION.md § CLI
+# Unified entry point. `omnicraft` is the click-based CLI that absorbs
+# the legacy argparse commands from `omnicraft/inner/cli.py` plus the
+# omnicraft `ap` subcommands. See designs/UNIFICATION.md § CLI
 # absorption. `omni` is installed as a short alias — both resolve to
-# the same entry point. (No former-name aliases: only `omnigent` and
+# the same entry point. (No former-name aliases: only `omnicraft` and
 # `omni` ship, internal and OSS alike.)
-omnicraft = "omnigent.cli:main"
-omnigent = "omnigent.cli:main"
-omni = "omnigent.cli:main"
+omnicraft = "omnicraft.cli:main"
+omni = "omnicraft.cli:main"
 
 # uv path-deps for the sibling SDK packages (renamed in Stage 3).
 [tool.uv.sources]
-omnigent-client = { path = "sdks/python-client", editable = true }
-omnigent-ui-sdk = { path = "sdks/ui", editable = true }
+omnicraft-client = { path = "sdks/python-client", editable = true }
+omnicraft-ui-sdk = { path = "sdks/ui", editable = true }
 
 [tool.setuptools]
 include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-# Discovers the `omnigent` package (including `omnigent.inner.*` and
-# all omnigent subpackages absorbed during unification).
-include = ["omnigent*"]
+# Discovers the `omnicraft` package (including `omnicraft.inner.*` and
+# all omnicraft subpackages absorbed during unification).
+include = ["omnicraft*"]
 
 [tool.setuptools.package-data]
-"omnigent.db" = ["alembic.ini"]
-"omnigent.db.migrations" = ["script.py.mako"]
-"omnigent.resources.examples" = ["*.yaml", "*.sh", "debby/**/*", "polly/**/*"]
-"omnigent.resources.pi_native" = ["*.js"]
+"omnicraft.db" = ["alembic.ini"]
+"omnicraft.db.migrations" = ["script.py.mako"]
+"omnicraft.resources.examples" = ["*.yaml", "*.sh", "debby/**/*", "polly/**/*"]
+"omnicraft.resources.pi_native" = ["*.js"]
 # include UI assets in build, plus the static API-only landing page served
 # at "/" when no web UI bundle is present
-"omnigent.server" = ["static/web-ui/**/*", "static/api_only_landing.html"]
+"omnicraft.server" = ["static/web-ui/**/*", "static/api_only_landing.html"]
 
 [tool.pytest.ini_options]
 # auto mode: async tests without @pytest.mark.asyncio() are auto-
-# collected as asyncio. Inner (omnigent-legacy) tests rely on
+# collected as asyncio. Inner (omnicraft-legacy) tests rely on
 # this. SDK tests (tests/frontends/sdk/) use explicit markers;
 # both work under auto.
 asyncio_mode = "auto"
@@ -311,10 +310,10 @@ addopts = "--ignore=tests/e2e --ignore=tests/e2e_ui --ignore=tests/e2e_live --ig
 timeout = 300
 timeout_method = "thread"
 # SDK tests under ``tests/frontends/sdk/`` import the
-# ``omnigent_client`` and ``omnigent_ui_sdk`` packages that
+# ``omnicraft_client`` and ``omnicraft_ui_sdk`` packages that
 # live in ``sdks/python-client/`` and ``sdks/ui/`` respectively.
 # Without this pythonpath the imports fail at collection time
-# with ``ModuleNotFoundError: No module named 'omnigent_client'``
+# with ``ModuleNotFoundError: No module named 'omnicraft_client'``
 # unless the SDKs are installed editable into the venv. Listing
 # both relative paths here keeps the test suite self-contained.
 pythonpath = [".", "sdks/python-client", "sdks/ui"]
@@ -329,7 +328,7 @@ markers = [
     "in_process_sessions: run a server integration test with the legacy in-process sessions path instead of sessions-native runner dispatch.",
     "nightly: runs only in the scheduled/dispatch pass of its suite; PR and push runs exclude it via -m 'not nightly'. Remove the marker to promote a burned-in test to the PR gate.",
     "min_server_version(version): skip this test when the live server under test is older than `version` (PEP 440 release-tuple comparison, so a `.devN` of X satisfies X). Used by the server-version backwards-compat CI (docs/SERVER_VERSION_COMPAT_CI.md); inert in normal runs where the server is current.",
-    "min_runner_version(version): skip this test when the pinned runner/host under test is older than `version` (PEP 440 release-tuple comparison, so a `.devN` of X satisfies X). Used by the runner/host backwards-compat CI (Config 2); inert in normal runs (no OMNIGENT_COMPAT_RUNNER_VERSION set).",
+    "min_runner_version(version): skip this test when the pinned runner/host under test is older than `version` (PEP 440 release-tuple comparison, so a `.devN` of X satisfies X). Used by the runner/host backwards-compat CI (Config 2); inert in normal runs (no OMNICRAFT_COMPAT_RUNNER_VERSION set).",
     "mock_only: tests/integration test that only works in mock-LLM mode (no --llm-api-key). Skipped by tests/integration/conftest.py when a real --llm-api-key is supplied (the real-LLM Integration jobs). Use for tests whose mock LLM is scripted with a fixed tool-call sequence — a real LLM cannot reproduce the scripted markers.",
     "visual: UI diff visual-regression snapshot (pytest-playwright-visual-snapshot). Runs only in the pinned-runner gate (.github/workflows/ui-snapshot.yml); the main e2e_ui suite excludes it via -m 'not visual' since it runs on the unpinned ubuntu-latest.",
     "posix_only: test relies on POSIX-only behaviour (fork, PTY, tmux, Unix sockets, signals); auto-skipped on Windows by tests/conftest.py.",
@@ -344,7 +343,7 @@ playwright_visual_snapshot_failures_path = "tests/e2e_ui/visual/snapshot_failure
 
 [tool.coverage.run]
 # Measure the shipped package only; tests live under tests/.
-source = ["omnigent"]
+source = ["omnicraft"]
 # Each CI shard sets COVERAGE_FILE=artifacts/.coverage.<group> and writes
 # one data file (pytest-cov already combines the xdist workers within a
 # shard). `relative_files` stores paths relative to the repo root so the
@@ -356,7 +355,7 @@ relative_files = true
 show_missing = true
 # Report-only for now: no `fail_under`, so coverage never fails a build.
 # The code-coverage workflow reports against a plain `git checkout` that
-# has no generated files (e.g. omnigent/_build_info.py, written during
+# has no generated files (e.g. omnicraft/_build_info.py, written during
 # `uv sync` in the CI shards). Without this, `coverage report`/`xml` exit
 # 1 on "No source for code" and fail the step under `set -e`; ignore those
 # unreadable-source files instead.
@@ -370,11 +369,11 @@ line-length = 99
 # migration that belongs in its own cleanup PR.
 target-version = "py310"
 # Vendored upstream code — not ours to restyle.
-#  - ``omnigent/inner/databricks_mcps/google``: Google MCP server source.
+#  - ``omnicraft/inner/databricks_mcps/google``: Google MCP server source.
 #  - ``assistant-ui/``: assistant-ui.com React/Python suite imported as a
 #    vendored snapshot; tracked upstream, no in-tree edits.
 extend-exclude = [
-    "omnigent/inner/databricks_mcps/google",
+    "omnicraft/inner/databricks_mcps/google",
     "assistant-ui",
 ]
 
@@ -417,10 +416,10 @@ ignore = [
 # Classify first-party imports by NAME, not by file existence. Ruff's
 # default detection resolves each module against the filesystem, so an
 # import of an optional submodule absent from a given checkout (e.g.
-# omnigent.onboarding.internal_beta) would be reclassified as third-party
+# omnicraft.onboarding.internal_beta) would be reclassified as third-party
 # there, demanding a different import order per checkout. Pinning the
 # package name keeps one canonical order everywhere.
-known-first-party = ["omnigent"]
+known-first-party = ["omnicraft"]
 
 [tool.ruff.lint.per-file-ignores]
 # Tests legitimately accept parameters they don't use (pytest fixtures,
@@ -448,25 +447,25 @@ known-first-party = ["omnigent"]
     "ARG001", "ARG002", "ARG004", "ARG005", "BLE001",
     "RUF012", "B007", "B008", "SIM117",
 ]
-# Graduation backlog for code migrated from omnigent during the
-# unification. Pre-unification Omnigent' ruff config only selected
+# Graduation backlog for code migrated from omnicraft during the
+# unification. Pre-unification OmniCraft' ruff config only selected
 # ``E, F, I, UP`` — none of the ARG/BLE/B/SIM/... rules — so these
 # files have a backlog of unused-arg, blind-except, and bugbear issues
 # that were invisible before. Graduate each subpath out of this list
 # as it's cleaned up.
-"omnigent/llms/**/*.py" = [
+"omnicraft/llms/**/*.py" = [
     "ARG001", "ARG002", "BLE001", "B008", "RUF012",
 ]
-"omnigent/onboarding/**/*.py" = [
+"omnicraft/onboarding/**/*.py" = [
     "ARG001", "ARG002", "BLE001", "B008", "RUF012",
 ]
-"omnigent/runtime/**/*.py" = [
+"omnicraft/runtime/**/*.py" = [
     "ARG001", "ARG002", "BLE001", "B008", "RUF012",
 ]
-"omnigent/terminals/**/*.py" = [
+"omnicraft/terminals/**/*.py" = [
     "ARG001", "ARG002", "BLE001", "B008", "RUF012",
 ]
-"omnigent/tools/**/*.py" = [
+"omnicraft/tools/**/*.py" = [
     "ARG001", "ARG002", "BLE001", "B008", "RUF012",
 ]
 # The native Antigravity (agy) transcript forwarder / supervisor is a
@@ -475,7 +474,7 @@ known-first-party = ["omnigent"]
 # top-level catch is a deliberate, documented boundary catch — BLE001 is
 # waived for these top-level antigravity_native modules (see the inline
 # comments at each catch site).
-"omnigent/antigravity_native*.py" = ["BLE001"]
+"omnicraft/antigravity_native*.py" = ["BLE001"]
 "sdks/**/*.py" = [
     "ARG001", "ARG002", "BLE001", "B008", "RUF012",
 ]
@@ -492,9 +491,9 @@ disallow_any_explicit = true
 # setup.py — build-time scaffolding that imports the (untyped) setuptools
 # build_py and subclasses it; not application code, so excluded from mypy
 # rather than pulling in types-setuptools just for one shim file.
-exclude = ["^omnigent/inner/databricks_mcps/google/", "^setup\\.py$"]
+exclude = ["^omnicraft/inner/databricks_mcps/google/", "^setup\\.py$"]
 # Incremental rollout: load imported modules for type info but don't
-# report their errors. Remove once every omnigent/ module is clean.
+# report their errors. Remove once every omnicraft/ module is clean.
 follow_imports = "silent"
 
 [[tool.mypy.overrides]]
@@ -632,50 +631,50 @@ ignore_missing_imports = true
 module = "modal_app"
 disallow_untyped_decorators = false
 
-# omnigent-derived repl code has its own relaxed typing config.
+# omnicraft-derived repl code has its own relaxed typing config.
 [[tool.mypy.overrides]]
-module = "omnigent.repl.*"
+module = "omnicraft.repl.*"
 disallow_untyped_defs = false
 disallow_untyped_decorators = false
 warn_return_any = false
 check_untyped_defs = false
 
-# omnigent-derived code that pre-unification omnigent never
+# omnicraft-derived code that pre-unification omnicraft never
 # subjected to ``disallow_any_explicit`` (its pyproject.toml didn't
 # set that flag). Keep the rest of strict mypy on — just relax the
 # explicit-Any ban until these modules can be graduated.
 [[tool.mypy.overrides]]
 module = [
-    "omnigent.runtime.*",
-    "omnigent.server.*",
-    "omnigent.tools.*",
-    "omnigent.entities.*",
-    "omnigent.stores.*",
-    "omnigent.db.*",
-    "omnigent.llms.*",
-    "omnigent.onboarding.*",
-    "omnigent.terminals.*",
-    "omnigent.client_tools.*",
-    "omnigent.spec.omnigent",
-    "omnigent.spec._omnigent_compat",
+    "omnicraft.runtime.*",
+    "omnicraft.server.*",
+    "omnicraft.tools.*",
+    "omnicraft.entities.*",
+    "omnicraft.stores.*",
+    "omnicraft.db.*",
+    "omnicraft.llms.*",
+    "omnicraft.onboarding.*",
+    "omnicraft.terminals.*",
+    "omnicraft.client_tools.*",
+    "omnicraft.spec.omnicraft",
+    "omnicraft.spec._omnicraft_compat",
     "dump_openapi",
 ]
 disallow_any_explicit = false
 
 [[tool.mypy.overrides]]
-module = "omnigent_ui_sdk.*"
+module = "omnicraft_ui_sdk.*"
 ignore_missing_imports = true
 follow_imports = "skip"
 
 # SDK shim aliases — ignore their own import resolution issues. These
-# are re-exports of omnigent_client/omnigent_ui_sdk (post-Stage-3)
+# are re-exports of omnicraft_client/omnicraft_ui_sdk (post-Stage-3)
 # via sys.modules aliasing.
 [[tool.mypy.overrides]]
-module = "omnigent_client.*"
+module = "omnicraft_client.*"
 ignore_missing_imports = true
 disallow_any_explicit = false
 
-# Tests in the mypy allowlist predate the stricter omnigent
+# Tests in the mypy allowlist predate the stricter omnicraft
 # Any rule.
 [[tool.mypy.overrides]]
 module = "tests.*"

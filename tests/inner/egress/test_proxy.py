@@ -1,4 +1,4 @@
-"""Tests for omnigent.inner.egress.proxy — MITM proxy with rule enforcement."""
+"""Tests for omnicraft.inner.egress.proxy — MITM proxy with rule enforcement."""
 
 from __future__ import annotations
 
@@ -12,14 +12,14 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.inner.credential_proxy import (
+from omnicraft.inner.credential_proxy import (
     SYNTHETIC_CREDENTIAL_PREFIX,
     CredentialRewriteRule,
 )
-from omnigent.inner.egress.ca import ensure_ca, ensure_ca_bundle
-from omnigent.inner.egress.certs import HostCertCache
-from omnigent.inner.egress.proxy import EgressProxy
-from omnigent.inner.egress.rules import parse_rules
+from omnicraft.inner.egress.ca import ensure_ca, ensure_ca_bundle
+from omnicraft.inner.egress.certs import HostCertCache
+from omnicraft.inner.egress.proxy import EgressProxy
+from omnicraft.inner.egress.rules import parse_rules
 
 
 @pytest.fixture()
@@ -495,11 +495,11 @@ async def test_s2_dns_rebinding_fail_then_loopback_is_blocked_e2e(
 
 def _basic_auth_header_bytes(token: str) -> bytes:
     """Construct the header bytes a well-behaved HTTP client emits
-    when the proxy URL is ``http://omnigent:<token>@host:port``.
+    when the proxy URL is ``http://omnicraft:<token>@host:port``.
     """
     import base64
 
-    return b"Basic " + base64.b64encode(f"omnigent:{token}".encode())
+    return b"Basic " + base64.b64encode(f"omnicraft:{token}".encode())
 
 
 @pytest.mark.asyncio
@@ -535,7 +535,7 @@ async def test_s4_proxy_returns_407_without_proxy_authorization(
             f"request. Got: {response[:200]!r}. Regression: a "
             f"same-UID attacker can now use the proxy."
         )
-        assert b'Proxy-Authenticate: Basic realm="omnigent"' in response
+        assert b'Proxy-Authenticate: Basic realm="omnicraft"' in response
     finally:
         await proxy.stop()
 
@@ -681,9 +681,9 @@ def test_s4_check_proxy_auth_is_case_insensitive_on_header_name() -> None:
     proxy._auth_token = "tok"
     import base64
 
-    proxy._expected_auth_value = b"Basic " + base64.b64encode(b"omnigent:tok")
+    proxy._expected_auth_value = b"Basic " + base64.b64encode(b"omnicraft:tok")
 
-    expected = b"Basic " + base64.b64encode(b"omnigent:tok")
+    expected = b"Basic " + base64.b64encode(b"omnicraft:tok")
     lower = b"proxy-authorization: " + expected + b"\r\n\r\n"
     mixed = b"Proxy-Authorization: " + expected + b"\r\n\r\n"
     upper = b"PROXY-AUTHORIZATION: " + expected + b"\r\n\r\n"

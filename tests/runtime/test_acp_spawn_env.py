@@ -1,4 +1,4 @@
-"""Tests for ``_build_acp_spawn_env`` in ``omnigent/runtime/workflow.py``.
+"""Tests for ``_build_acp_spawn_env`` in ``omnicraft/runtime/workflow.py``.
 
 The builder resolves the picked ``acp:<slug>`` (carried in
 ``spec.executor.config["harness"]``) to a user-configured agent in the ``acp:``
@@ -17,8 +17,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from omnigent.runtime.workflow import _build_acp_spawn_env
-from omnigent.spec.types import AgentSpec, ExecutorSpec, LLMConfig
+from omnicraft.runtime.workflow import _build_acp_spawn_env
+from omnicraft.spec.types import AgentSpec, ExecutorSpec, LLMConfig
 
 _AGENTS = [
     {"name": "Gemini CLI", "command": "gemini --experimental-acp"},
@@ -28,8 +28,8 @@ _AGENTS = [
 
 @pytest.fixture(autouse=True)
 def _isolate_config(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """Point OMNIGENT_CONFIG_HOME at a temp dir so the real config can't leak in."""
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path))
+    """Point OMNICRAFT_CONFIG_HOME at a temp dir so the real config can't leak in."""
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
     return tmp_path
 
 
@@ -47,7 +47,7 @@ def _make_spec(*, harness: str, model: str | None = None) -> AgentSpec:
         spec_version=1,
         name="test-acp",
         instructions="You are a test agent.",
-        executor=ExecutorSpec(type="omnigent", config=config, model=model),
+        executor=ExecutorSpec(type="omnicraft", config=config, model=model),
         llm=LLMConfig(model=model) if model is not None else None,
     )
 

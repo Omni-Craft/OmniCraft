@@ -4,7 +4,7 @@
  * Renders into the AppShell chat outlet (see App.tsx) so the conversations
  * sidebar stays put when you enter settings — only the main area swaps to
  * this view. Inside, a section nav (left) drives a content panel (right),
- * modeled on a desktop-app settings window; a "← Back to Omnigent" link
+ * modeled on a desktop-app settings window; a "← Back to OmniCraft" link
  * returns to the composer.
  *
  * Sections:
@@ -1031,7 +1031,7 @@ function ShortcutsSection() {
 }
 
 /**
- * Desktop-only: shows which Omnigent CLI binary the shell resolved
+ * Desktop-only: shows which OmniCraft CLI binary the shell resolved
  * (auto-detected or a custom override). Read-only — setting a custom path is
  * done on the connect/setup screen (the trusted surface that allows free-text
  * entry); the SPA exposes no path setter. A safe "reset to auto-detected" stays

@@ -62,7 +62,7 @@ describe("EditorPanelController", () => {
     controller.ensure();
 
     expect(createSpy).toHaveBeenCalledTimes(1);
-    expect(fake.panel.webview.html).toContain('id="omnigent-frame"');
+    expect(fake.panel.webview.html).toContain('id="omnicraft-frame"');
     expect(fake.panel.webview.html).toContain('src="http://127.0.0.1:6767"');
   });
 
@@ -84,7 +84,7 @@ describe("EditorPanelController", () => {
     expect(fake.panel.webview.html).toContain("Resolving");
 
     controller.setResolved(LOCAL_TARGET);
-    expect(fake.panel.webview.html).toContain('id="omnigent-frame"');
+    expect(fake.panel.webview.html).toContain('id="omnicraft-frame"');
     expect(createSpy).toHaveBeenCalledTimes(1);
   });
 

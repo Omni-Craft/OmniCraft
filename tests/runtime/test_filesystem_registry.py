@@ -1,4 +1,4 @@
-"""Tests for :mod:`omnigent.runtime.filesystem_registry`.
+"""Tests for :mod:`omnicraft.runtime.filesystem_registry`.
 
 Covers the ``list_changed_files`` merge logic for :class:`AgentEditFilesystemRegistry`
 — specifically the invariant that a file first created in a session keeps status
@@ -17,7 +17,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.runtime.filesystem_registry import (
+from omnicraft.runtime.filesystem_registry import (
     AgentEditFilesystemRegistry,
     GitFilesystemRegistry,
     GitStatusUnavailable,
@@ -537,7 +537,7 @@ def test_git_list_changed_files_raises_on_timeout(tmp_path: Path, monkeypatch) -
     def _raise_timeout(*_args, **_kwargs):
         raise subprocess.TimeoutExpired(cmd="git status", timeout=5)
 
-    monkeypatch.setattr("omnigent.runtime.filesystem_registry.subprocess.run", _raise_timeout)
+    monkeypatch.setattr("omnicraft.runtime.filesystem_registry.subprocess.run", _raise_timeout)
 
     reg = GitFilesystemRegistry(watch_path=tmp_path, git_root=tmp_path)
     with pytest.raises(GitStatusUnavailable, match="timed out"):
@@ -561,7 +561,7 @@ def test_git_list_changed_files_raises_on_nonzero_exit(tmp_path: Path, monkeypat
             stderr=b"fatal: detected dubious ownership in repository",
         )
 
-    monkeypatch.setattr("omnigent.runtime.filesystem_registry.subprocess.run", _nonzero)
+    monkeypatch.setattr("omnicraft.runtime.filesystem_registry.subprocess.run", _nonzero)
 
     reg = GitFilesystemRegistry(watch_path=tmp_path, git_root=tmp_path)
     with pytest.raises(GitStatusUnavailable, match="exited 128"):
@@ -581,7 +581,7 @@ def test_git_get_changed_file_raises_on_timeout(tmp_path: Path, monkeypatch) -> 
     def _raise_timeout(*_args, **_kwargs):
         raise subprocess.TimeoutExpired(cmd="git status", timeout=5)
 
-    monkeypatch.setattr("omnigent.runtime.filesystem_registry.subprocess.run", _raise_timeout)
+    monkeypatch.setattr("omnicraft.runtime.filesystem_registry.subprocess.run", _raise_timeout)
 
     reg = GitFilesystemRegistry(watch_path=tmp_path, git_root=tmp_path)
     with pytest.raises(GitStatusUnavailable, match="timed out"):
@@ -601,7 +601,7 @@ def test_git_get_changed_file_raises_on_nonzero_exit(tmp_path: Path, monkeypatch
             stderr=b"fatal: detected dubious ownership in repository",
         )
 
-    monkeypatch.setattr("omnigent.runtime.filesystem_registry.subprocess.run", _nonzero)
+    monkeypatch.setattr("omnicraft.runtime.filesystem_registry.subprocess.run", _nonzero)
 
     reg = GitFilesystemRegistry(watch_path=tmp_path, git_root=tmp_path)
     with pytest.raises(GitStatusUnavailable, match="exited 128"):

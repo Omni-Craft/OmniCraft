@@ -11,7 +11,7 @@ from __future__ import annotations
 import subprocess
 from typing import ClassVar
 
-from omnigent.onboarding.sandboxes.base import RemoteCommandResult, SandboxLauncher
+from omnicraft.onboarding.sandboxes.base import RemoteCommandResult, SandboxLauncher
 
 
 class _RecordingLauncher(SandboxLauncher):
@@ -37,7 +37,7 @@ class _RecordingLauncher(SandboxLauncher):
         return RemoteCommandResult(returncode=0, stdout=stdout, stderr="")
 
     def run_background(
-        self, sandbox_id: str, command: str, *, log_path: str = "/tmp/omnigent-host.log"
+        self, sandbox_id: str, command: str, *, log_path: str = "/tmp/omnicraft-host.log"
     ) -> RemoteCommandResult:
         # Capture the raw (pre-wrap) command so a test can prove a real shell
         # honors its env prefix, independent of the setsid/nohup wrapper.
@@ -52,26 +52,26 @@ def test_run_background_wraps_command_in_sh_c() -> None:
     literally named ``ENV=val`` ("No such file or directory") — re-parsing under
     ``sh -c`` lets the inner shell apply the assignment before running ``cmd``.
     Regression: managed Daytona/Modal hosts never came online because the
-    in-sandbox ``omnigent host`` launch died on its ``OMNIGENT_HOST_TOKEN=…``
+    in-sandbox ``omnicraft host`` launch died on its ``OMNICRAFT_HOST_TOKEN=…``
     prefix.
     """
     launcher = _RecordingLauncher()
 
-    launcher.run_background("sb-1", "FOO=bar omnigent host --server https://srv")
+    launcher.run_background("sb-1", "FOO=bar omnicraft host --server https://srv")
 
     [cmd] = launcher.commands
     assert cmd == (
-        "setsid nohup sh -c 'FOO=bar omnigent host --server https://srv' "
-        "> /tmp/omnigent-host.log 2>&1 < /dev/null & echo launched"
+        "setsid nohup sh -c 'FOO=bar omnicraft host --server https://srv' "
+        "> /tmp/omnicraft-host.log 2>&1 < /dev/null & echo launched"
     )
 
 
 def test_start_host_env_prefix_is_honored_by_a_real_shell() -> None:
     """
     The env-prefixed command ``start_host`` hands to ``run_background`` must
-    apply its ``OMNIGENT_HOST_*`` assignments when re-parsed by a shell — the
+    apply its ``OMNICRAFT_HOST_*`` assignments when re-parsed by a shell — the
     exact thing the ``sh -c`` wrapper restores. Run the raw command through a
-    real ``sh -c`` (the inner shell of the wrapper) with ``omnigent host``
+    real ``sh -c`` (the inner shell of the wrapper) with ``omnicraft host``
     swapped for a probe that echoes the injected vars; the broken bare-``nohup``
     form would never reach this assignment-honoring shell.
     """
@@ -91,9 +91,9 @@ def test_start_host_env_prefix_is_honored_by_a_real_shell() -> None:
     # simple command would expand in the parent shell, before the temporary
     # assignment takes effect — and print empty).
     probe = raw.replace(
-        "omnigent host --server https://srv",
+        "omnicraft host --server https://srv",
         "sh -c 'printf %s:%s:%s "
-        '"$OMNIGENT_HOST_TOKEN" "$OMNIGENT_HOST_ID" "$OMNIGENT_HOST_NAME"\'',
+        '"$OMNICRAFT_HOST_TOKEN" "$OMNICRAFT_HOST_ID" "$OMNICRAFT_HOST_NAME"\'',
     )
     out = subprocess.run(
         ["sh", "-c", probe], capture_output=True, text=True, check=True

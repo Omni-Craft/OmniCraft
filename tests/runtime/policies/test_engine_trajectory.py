@@ -16,21 +16,21 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities.conversation import (
+from omnicraft.entities.conversation import (
     MessageData,
     NewConversationItem,
 )
-from omnigent.policies.base import Policy
-from omnigent.policies.types import EvaluationContext, PolicyResult
-from omnigent.runtime.policies.engine import _TRAJECTORY_WINDOW, PolicyEngine
-from omnigent.spec.types import (
+from omnicraft.policies.base import Policy
+from omnicraft.policies.types import EvaluationContext, PolicyResult
+from omnicraft.runtime.policies.engine import _TRAJECTORY_WINDOW, PolicyEngine
+from omnicraft.spec.types import (
     DEFAULT_ASK_TIMEOUT,
     Phase,
     PhaseSelector,
     PolicyAction,
     PolicySpec,
 )
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 

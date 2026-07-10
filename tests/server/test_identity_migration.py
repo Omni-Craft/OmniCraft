@@ -1,8 +1,8 @@
 """Tests for the accounts → OIDC identity remap.
 
-Covers :func:`omnigent.server.identity_migration.remap_identities` and
+Covers :func:`omnicraft.server.identity_migration.remap_identities` and
 ``build_domain_mapping`` against a real SQLite database, plus the
-``omnigent debug migrate-accounts-to-oidc`` CLI wrapper via Click's
+``omnicraft debug migrate-accounts-to-oidc`` CLI wrapper via Click's
 ``CliRunner``.
 
 The load-bearing properties: every user-id-bearing column is repointed,
@@ -18,26 +18,26 @@ from click.testing import CliRunner
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from omnigent.cli import cli
-from omnigent.db.db_models import (
+from omnicraft.cli import cli
+from omnicraft.db.db_models import (
     SqlAccountToken,
     SqlComment,
     SqlHost,
     SqlPolicy,
 )
-from omnigent.db.enum_codecs import (
+from omnicraft.db.enum_codecs import (
     encode_account_token_kind,
     encode_comment_status,
     encode_host_status,
     encode_policy_scope,
     encode_policy_type,
 )
-from omnigent.db.utils import get_or_create_engine
-from omnigent.server.accounts_store import SqlAlchemyAccountStore
-from omnigent.server.identity_migration import build_domain_mapping, remap_identities
-from omnigent.server.passwords import hash_password
-from omnigent.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
-from omnigent.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
+from omnicraft.db.utils import get_or_create_engine
+from omnicraft.server.accounts_store import SqlAlchemyAccountStore
+from omnicraft.server.identity_migration import build_domain_mapping, remap_identities
+from omnicraft.server.passwords import hash_password
+from omnicraft.stores.conversation_store.sqlalchemy_store import SqlAlchemyConversationStore
+from omnicraft.stores.permission_store.sqlalchemy_store import SqlAlchemyPermissionStore
 
 
 def _conversation(db_uri: str) -> str:

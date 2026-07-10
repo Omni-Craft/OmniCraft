@@ -65,7 +65,7 @@ def _patch_session_as_claude_native(
 
         payload["labels"] = {
             **payload.get("labels", {}),
-            "omnigent.wrapper": "claude-code-native-ui",
+            "omnicraft.wrapper": "claude-code-native-ui",
         }
         payload["harness"] = "claude"
         # A concrete newer-generation id: must light up the opt-in "Sonnet 5"
@@ -163,7 +163,7 @@ def test_claude_native_picker_prefers_session_override_over_sticky_model(
     seeded_session: tuple[str, str],
 ) -> None:
     """The active row follows the session override, not another session's pick."""
-    page.add_init_script("window.localStorage.setItem('omnigent.picker.model', 'sonnet')")
+    page.add_init_script("window.localStorage.setItem('omnicraft.picker.model', 'sonnet')")
     base_url, session_id = seeded_session
     _patch_session_as_claude_native(page, session_id, model_override="sonnet_5")
 

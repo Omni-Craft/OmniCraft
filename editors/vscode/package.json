@@ -1,14 +1,14 @@
 {
-  "name": "omnigent-vscode",
-  "displayName": "Omnigent",
-  "description": "Open your running local Omnigent server inside VS Code, in an editor-beside iframe.",
+  "name": "omnicraft-vscode",
+  "displayName": "OmniCraft",
+  "description": "Open your running local OmniCraft server inside VS Code, in an editor-beside iframe.",
   "version": "0.1.0",
   "publisher": "databricks",
   "license": "Apache-2.0",
-  "icon": "media/omnigent-icon.png",
+  "icon": "media/omnicraft-icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/omnigent-ai/omnigent.git",
+    "url": "https://github.com/omnicraft-ai/omnicraft.git",
     "directory": "editors/vscode"
   },
   "engines": {
@@ -18,56 +18,56 @@
   "activationEvents": [],
   "contributes": {
     "configuration": {
-      "title": "Omnigent",
+      "title": "OmniCraft",
       "properties": {
-        "omnigent.serverUrl": {
+        "omnicraft.serverUrl": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Manual Omnigent server URL override for a **localhost** server (e.g. `http://127.0.0.1:6767`). Leave empty to auto-discover a locally running Omnigent server. Non-localhost URLs are not supported in this build."
+          "markdownDescription": "Manual OmniCraft server URL override for a **localhost** server (e.g. `http://127.0.0.1:6767`). Leave empty to auto-discover a locally running OmniCraft server. Non-localhost URLs are not supported in this build."
         }
       }
     },
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "omnigent-container",
-          "title": "Omnigent",
-          "icon": "media/omnigent-icon.svg"
+          "id": "omnicraft-container",
+          "title": "OmniCraft",
+          "icon": "media/omnicraft-icon.svg"
         }
       ]
     },
     "views": {
-      "omnigent-container": [
+      "omnicraft-container": [
         {
           "type": "tree",
-          "id": "omnigent.home",
-          "name": "Omnigent"
+          "id": "omnicraft.home",
+          "name": "OmniCraft"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "omnigent.home",
-        "contents": "Open the running Omnigent server UI in an editor tab.\n[Open Omnigent](command:omnigent.open)\nStart a local server with `omnigent server`, or set `omnigent.serverUrl` to a localhost URL."
+        "view": "omnicraft.home",
+        "contents": "Open the running OmniCraft server UI in an editor tab.\n[Open OmniCraft](command:omnicraft.open)\nStart a local server with `omnicraft server`, or set `omnicraft.serverUrl` to a localhost URL."
       }
     ],
     "commands": [
       {
-        "command": "omnigent.open",
-        "title": "Omnigent: Open",
-        "icon": "media/omnigent-icon.svg"
+        "command": "omnicraft.open",
+        "title": "OmniCraft: Open",
+        "icon": "media/omnicraft-icon.svg"
       }
     ],
     "menus": {
       "editor/title": [
         {
-          "command": "omnigent.open",
+          "command": "omnicraft.open",
           "group": "navigation@99"
         }
       ],
       "commandPalette": [
         {
-          "command": "omnigent.open"
+          "command": "omnicraft.open"
         }
       ]
     }

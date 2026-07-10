@@ -7,7 +7,7 @@ name: Flake stress (E2E UI)
 # probability for the target.
 #
 # Why a SEPARATE workflow from flake-stress.yml / flake-stress-e2e.yml:
-#   * flake-stress.yml sets OMNIGENT_SKIP_WEB_UI=true and has no npm registry,
+#   * flake-stress.yml sets OMNICRAFT_SKIP_WEB_UI=true and has no npm registry,
 #     so it can't build the web SPA the UI tests serve.
 #   * flake-stress-e2e.yml targets the LLM-backed tests/e2e/ and injects
 #     Databricks gateway credentials.
@@ -54,7 +54,7 @@ permissions:
 env:
   # No SPA build during `uv sync`: the build is a dedicated step below
   # (mirrors e2e-ui.yml; the setup.py build would be a redundant npm hit).
-  OMNIGENT_SKIP_WEB_UI: "true"
+  OMNICRAFT_SKIP_WEB_UI: "true"
   # Scrub harness credentials the test server must not pick up. The whole
   # e2e_ui suite runs against the in-process mock LLM, so no real key is ever
   # needed (the conftest's live_server fixture points the spawned server's

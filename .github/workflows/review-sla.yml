@@ -24,7 +24,7 @@ concurrency:
 
 jobs:
   sweep:
-    if: github.repository == 'omnigent-ai/omnigent'
+    if: github.repository == 'omnicraft-ai/omnicraft'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

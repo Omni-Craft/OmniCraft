@@ -3,7 +3,7 @@
 Verifies the `_stream_message_to_harness` shared helper covers both
 ``POST /v1/responses`` (legacy) and ``POST /v1/sessions/{conv}/events``
 (sessions-native). Both paths must inject MCP schemas, stamp the
-``omnigent_runner_dispatched`` marker on intercepted events, and
+``omnicraft_runner_dispatched`` marker on intercepted events, and
 route MCP dispatch to the runner manager.
 """
 
@@ -26,31 +26,31 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from omnigent import (
+from omnicraft import (
     claude_native_bridge,
     codex_native_bridge,
     cursor_native_bridge,
     kiro_native_bridge,
     qwen_native_bridge,
 )
-from omnigent.antigravity_native_bridge import (
+from omnicraft.antigravity_native_bridge import (
     ANTIGRAVITY_NATIVE_BRIDGE_ID_LABEL_KEY,
 )
-from omnigent.antigravity_native_bridge import (
+from omnicraft.antigravity_native_bridge import (
     is_placeholder_conversation_id as bridge_mod_is_placeholder,
 )
-from omnigent.claude_native_bridge import (
+from omnicraft.claude_native_bridge import (
     BRIDGE_ID_LABEL_KEY,
     bridge_dir_for_bridge_id,
     bridge_dir_for_conversation_id,
     prepare_bridge_dir,
     read_permission_hook_config,
 )
-from omnigent.entities.session_resources import SessionResourceView, terminal_resource_id
-from omnigent.inner.terminal import TerminalInstance
-from omnigent.runner import create_runner_app
-from omnigent.runner import tool_dispatch as _tool_dispatch
-from omnigent.runner.app import (
+from omnicraft.entities.session_resources import SessionResourceView, terminal_resource_id
+from omnicraft.inner.terminal import TerminalInstance
+from omnicraft.runner import create_runner_app
+from omnicraft.runner import tool_dispatch as _tool_dispatch
+from omnicraft.runner.app import (
     _RUNNER_DISPATCHED_FIELD,
     _WAKE_POST_MAX_ATTEMPTS,
     ResolvedSpec,
@@ -73,18 +73,18 @@ from omnigent.runner.app import (
     _terminal_lookup_miss_log_state,
     _wake_post_is_retryable,
 )
-from omnigent.runner.mcp_manager import McpSchemasResult
-from omnigent.runner.resource_registry import (
+from omnicraft.runner.mcp_manager import McpSchemasResult
+from omnicraft.runner.resource_registry import (
     ANTIGRAVITY_NATIVE_TERMINAL_ROLE,
     CLAUDE_NATIVE_TERMINAL_ROLE,
     CODEX_NATIVE_TERMINAL_ROLE,
     KIRO_NATIVE_TERMINAL_ROLE,
-    OMNIGENT_REPL_TERMINAL_ROLE,
+    OMNICRAFT_REPL_TERMINAL_ROLE,
     PI_NATIVE_TERMINAL_ROLE,
     SessionResourceRegistry,
 )
-from omnigent.spec.types import AgentSpec, ExecutorSpec, LocalToolInfo, MCPServerConfig
-from omnigent.terminals import TerminalRegistry
+from omnicraft.spec.types import AgentSpec, ExecutorSpec, LocalToolInfo, MCPServerConfig
+from omnicraft.terminals import TerminalRegistry
 from tests.runner.helpers import NullServerClient
 
 # ── Fakes for the runner's collaborators ──────────────────────────────
@@ -289,7 +289,7 @@ class _ReadTimeoutTransport(httpx.AsyncBaseTransport):
 
         :param request: Outbound request from ``httpx.AsyncClient``.
         :returns: Never returns; raises ``httpx.ReadTimeout``.
-        :raises httpx.ReadTimeout: Always raised to simulate Omnigent slowness.
+        :raises httpx.ReadTimeout: Always raised to simulate OmniCraft slowness.
         """
         self.requests.append(request)
         raise httpx.ReadTimeout("session lookup timed out", request=request)
@@ -452,7 +452,7 @@ async def test_session_labels_for_runner_spawn_timeout_is_quiet(
     Timed-out optional label resolution returns the spawn fallback quietly.
 
     Native harness spawn can recover by using the session id when labels
-    cannot be fetched. A slow Omnigent session lookup therefore must not emit a
+    cannot be fetched. A slow OmniCraft session lookup therefore must not emit a
     warning with traceback; that was noisy and misleading for a best-effort
     lookup.
 
@@ -461,7 +461,7 @@ async def test_session_labels_for_runner_spawn_timeout_is_quiet(
     """
     transport = _ReadTimeoutTransport()
     async with httpx.AsyncClient(transport=transport, base_url="http://ap") as client:
-        with caplog.at_level(logging.DEBUG, logger="omnigent.runner.app"):
+        with caplog.at_level(logging.DEBUG, logger="omnicraft.runner.app"):
             labels = await _session_labels_for_runner_spawn(
                 server_client=client,
                 session_id="conv_slow",
@@ -512,7 +512,7 @@ async def test_session_labels_for_runner_spawn_empty_200_body_recovers(
 
     transport = httpx.MockTransport(_handler)
     async with httpx.AsyncClient(transport=transport, base_url="http://ap") as client:
-        with caplog.at_level(logging.WARNING, logger="omnigent.runner.app"):
+        with caplog.at_level(logging.WARNING, logger="omnicraft.runner.app"):
             labels = await _session_labels_for_runner_spawn(
                 server_client=client,
                 session_id="conv_empty",
@@ -625,7 +625,7 @@ async def test_runner_session_tool_schemas_use_resolved_bundle_workdir(tmp_path:
     tool_dir = bundle_dir / "tools" / "python"
     tool_dir.mkdir(parents=True)
     (tool_dir / "bundle_tool.py").write_text(
-        "from omnigent_client.tools import tool\n\n"
+        "from omnicraft_client.tools import tool\n\n"
         "@tool\n"
         "def bundle_tool(text: str) -> str:\n"
         "    return text\n"
@@ -755,7 +755,7 @@ async def test_sessions_native_dispatches_native_tool_with_bundle_workdir(
     tool_dir = bundle_dir / "tools" / "python"
     tool_dir.mkdir(parents=True)
     (tool_dir / "bundle_tool.py").write_text(
-        "from omnigent_client.tools import tool\n\n"
+        "from omnicraft_client.tools import tool\n\n"
         "@tool\n"
         "def bundle_tool(text: str) -> str:\n"
         "    return text\n"
@@ -1387,9 +1387,9 @@ async def test_sessions_native_path_injects_mcp_schemas() -> None:
 
 @pytest.mark.asyncio
 async def test_action_required_marker_round_trips_to_relayed_frame() -> None:
-    """The runner stamps ``omnigent_runner_dispatched`` on action_required frames.
+    """The runner stamps ``omnicraft_runner_dispatched`` on action_required frames.
 
-    The Omnigent executor's ``_runner_dispatches`` predicate reads this marker
+    The OmniCraft executor's ``_runner_dispatches`` predicate reads this marker
     to skip server-side dispatch. Without the stamp it'd race the
     runner's dispatch and return "unknown server-side tool."
     """
@@ -1417,7 +1417,7 @@ async def test_action_required_marker_round_trips_to_relayed_frame() -> None:
         f"action_required event must be stamped with the dispatch marker; "
         f"stream text was {stream_text!r}"
     )
-    # Runner dispatched the MCP tool through the Omnigent server proxy (AP mode).
+    # Runner dispatched the MCP tool through the OmniCraft server proxy (AP mode).
     assert server_client.call_tool_invocations == [("jira_search_issues", {})], (
         f"runner must dispatch the MCP tool via ProxyMcpManager (AP server); "
         f"got {server_client.call_tool_invocations}"
@@ -1609,7 +1609,7 @@ async def test_create_session_threads_workspace_to_pi_cwd(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Pi pre-spawn receives the session workspace, not the bundle dir."""
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "config-home"))
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "config-home"))
     session_id = "conv_pi_worktree"
     runner_workspace = tmp_path / "runner-workspace"
     runner_workspace.mkdir()
@@ -1677,7 +1677,7 @@ async def test_create_session_threads_runner_workspace_to_pi_cwd_when_session_wo
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Pi pre-spawn falls back to runner workspace when session workspace is empty."""
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "config-home"))
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "config-home"))
     session_id = "conv_pi_runner_workspace"
     runner_workspace = tmp_path / "runner-workspace"
     runner_workspace.mkdir()
@@ -1755,10 +1755,10 @@ async def test_codex_top_level_session_needs_runner_terminal_for_all_session_sha
 
     A top-level CLI session has no ``host_id`` and no parent, but the
     runner must still create the app-server and TUI terminal. If the old
-    host-id gate returns ``False`` here, ``omnigent codex`` falls back to
+    host-id gate returns ``False`` here, ``omnicraft codex`` falls back to
     a CLI-owned app-server.
     """
-    from omnigent.runner.app import _codex_session_needs_runner_terminal
+    from omnicraft.runner.app import _codex_session_needs_runner_terminal
 
     class _Client:
         async def get(self, url: str, *, timeout: float) -> httpx.Response:
@@ -1777,7 +1777,7 @@ async def test_auto_create_codex_terminal_uses_persisted_resume_launch_config(
 
     The CLI now persists launch intent and asks the runner to ensure the
     terminal. This test exercises the runner helper directly: it must read
-    ``terminal_launch_args`` and ``external_session_id`` from the Omnigent snapshot,
+    ``terminal_launch_args`` and ``external_session_id`` from the OmniCraft snapshot,
     start the app-server itself, launch the TUI as ``codex ... resume
     --remote <runner-ws> <thread>``, and run the known-thread forwarder. If
     this regresses, the CLI falls back into split ownership or loses user
@@ -1787,16 +1787,16 @@ async def test_auto_create_codex_terminal_uses_persisted_resume_launch_config(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.codex_native_app_server as codex_app_mod
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.codex_native_app_server as codex_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_codex_resume"
     thread_id = "019e96aa-0be2-7343-8d3b-6f914d60936b"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
     bridge_dir = codex_native_bridge.bridge_dir_for_bridge_id(session_id)
     codex_native_bridge.write_bridge_state(
         bridge_dir,
@@ -1997,7 +1997,7 @@ async def test_auto_create_codex_terminal_uses_persisted_resume_launch_config(
         spec_version=1,
         name="codex",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex-native", "model": "gpt-5-default"},
         ),
     )
@@ -2065,7 +2065,7 @@ async def test_auto_create_codex_terminal_fork_clones_rollout_and_resumes(
     When the clone has no ``external_session_id`` but carries the fork
     labels, the runner must clone the SOURCE's rollout into the clone's
     own ``CODEX_HOME`` under a freshly minted thread id, pre-set that id
-    on the Omnigent session, and launch ``codex resume <minted_id>`` (not the
+    on the OmniCraft session, and launch ``codex resume <minted_id>`` (not the
     source thread). A regression launches fresh (no ``resume`` subcommand)
     and the clone loses the source's Codex history.
 
@@ -2073,11 +2073,11 @@ async def test_auto_create_codex_terminal_fork_clones_rollout_and_resumes(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.codex_native_app_server as codex_app_mod
-    import omnigent.runner.app as runner_app_mod
-    from omnigent import codex_native
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
-    from omnigent.stores.conversation_store import (
+    import omnicraft.codex_native_app_server as codex_app_mod
+    import omnicraft.runner.app as runner_app_mod
+    from omnicraft import codex_native
+    from omnicraft.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    from omnicraft.stores.conversation_store import (
         FORK_SOURCE_EXTERNAL_SESSION_LABEL_KEY,
         FORK_SOURCE_LABEL_KEY,
     )
@@ -2089,10 +2089,10 @@ async def test_auto_create_codex_terminal_fork_clones_rollout_and_resumes(
     workspace.mkdir()
 
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(workspace))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
     bridge_dir = bridge_dir_for_bridge_id(session_id)
     codex_native_bridge.write_bridge_state(
         bridge_dir,
@@ -2280,7 +2280,7 @@ async def test_auto_create_codex_terminal_fork_clones_rollout_and_resumes(
         spec_version=1,
         name="codex",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex-native", "model": "gpt-5-default"},
         ),
     )
@@ -2331,8 +2331,8 @@ async def test_auto_create_codex_terminal_fork_builds_rollout_from_items_and_res
 
     When the clone carries the carry-history directive but has NO source
     Codex thread to clone (an SDK source, so no rollout on disk), the runner
-    must build the clone's rollout from its OWN copied Omnigent items under a
-    freshly minted thread id, pre-set that id on the Omnigent session, and launch
+    must build the clone's rollout from its OWN copied OmniCraft items under a
+    freshly minted thread id, pre-set that id on the OmniCraft session, and launch
     ``codex resume <minted_id>``. A regression launches fresh and the clone
     loses the SDK source's conversation history.
 
@@ -2340,11 +2340,11 @@ async def test_auto_create_codex_terminal_fork_builds_rollout_from_items_and_res
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.codex_native_app_server as codex_app_mod
-    import omnigent.runner.app as runner_app_mod
-    from omnigent import codex_native
-    from omnigent.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
-    from omnigent.stores.conversation_store import (
+    import omnicraft.codex_native_app_server as codex_app_mod
+    import omnicraft.runner.app as runner_app_mod
+    from omnicraft import codex_native
+    from omnicraft.codex_native_bridge import bridge_dir_for_bridge_id, codex_home_for_bridge_dir
+    from omnicraft.stores.conversation_store import (
         FORK_CARRY_HISTORY_LABEL_KEY,
         FORK_SOURCE_LABEL_KEY,
     )
@@ -2356,16 +2356,16 @@ async def test_auto_create_codex_terminal_fork_builds_rollout_from_items_and_res
     workspace.mkdir()
 
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(workspace))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
 
     patched_external_ids: list[str] = []
 
     class _ItemsForkSnapshotClient:
         """Server client: clone snapshot (carry-history, no source thread)
-        plus the copied Omnigent items the rollout is built from."""
+        plus the copied OmniCraft items the rollout is built from."""
 
         async def get(
             self,
@@ -2525,7 +2525,7 @@ async def test_auto_create_codex_terminal_fork_builds_rollout_from_items_and_res
         spec_version=1,
         name="codex",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex-native", "model": "gpt-5-default"},
         ),
     )
@@ -2557,7 +2557,7 @@ async def test_auto_create_codex_terminal_fork_builds_rollout_from_items_and_res
 
     # The rollout was BUILT (not cloned) in the clone's CODEX_HOME under the
     # minted id, carrying the source conversation's codeword — proving the
-    # copied Omnigent items, not a source rollout, seeded the history.
+    # copied OmniCraft items, not a source rollout, seeded the history.
     clone_home = codex_home_for_bridge_dir(bridge_dir_for_bridge_id(session_id))
     built = list(clone_home.glob(f"sessions/**/rollout-*-{minted}.jsonl"))
     assert len(built) == 1, f"expected one built rollout under {clone_home}, found {built}"
@@ -2567,7 +2567,7 @@ async def test_auto_create_codex_terminal_fork_builds_rollout_from_items_and_res
     assert meta["cwd"] == str(workspace.resolve())
     assert codeword in body, (
         "Built rollout must carry the source conversation's text from the "
-        "copied Omnigent items; missing it means history was not seeded."
+        "copied OmniCraft items; missing it means history was not seeded."
     )
 
 
@@ -2596,13 +2596,13 @@ async def test_auto_create_codex_terminal_uses_worktree_workspace_not_bundle_dir
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.codex_native_app_server as codex_app_mod
-    import omnigent.runner.app as runner_app_mod
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    import omnicraft.codex_native_app_server as codex_app_mod
+    import omnicraft.runner.app as runner_app_mod
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     session_id = "conv_codex_worktree"
     # Three distinct dirs so the assertion can only pass for the worktree:
-    #   runner_env  — OMNIGENT_RUNNER_WORKSPACE (claude-native's source)
+    #   runner_env  — OMNICRAFT_RUNNER_WORKSPACE (claude-native's source)
     #   bundle_dir  — ResolvedSpec.workdir (what the bug used)
     #   worktree    — the session's stored workspace (correct answer)
     runner_env = tmp_path / "runner_workspace"
@@ -2613,10 +2613,10 @@ async def test_auto_create_codex_terminal_uses_worktree_workspace_not_bundle_dir
     worktree.mkdir(parents=True)
 
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(runner_env))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(runner_env))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
     bridge_dir = codex_native_bridge.bridge_dir_for_bridge_id(session_id)
     codex_native_bridge.write_bridge_state(
         bridge_dir,
@@ -2780,7 +2780,7 @@ async def test_auto_create_codex_terminal_uses_worktree_workspace_not_bundle_dir
             spec_version=1,
             name="codex",
             executor=ExecutorSpec(
-                type="omnigent",
+                type="omnicraft",
                 config={"harness": "codex-native", "model": "gpt-5-default"},
             ),
             os_env=codex_os_env,
@@ -2847,15 +2847,15 @@ async def test_auto_create_codex_terminal_starts_relay_at_session_creation(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.codex_native_app_server as codex_app_mod
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.codex_native_app_server as codex_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_codex_relay_start"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
 
     class _SnapshotClient:
         """Fresh-session snapshot (no external thread → discovery path)."""
@@ -2948,7 +2948,7 @@ async def test_auto_create_codex_terminal_starts_relay_at_session_creation(
         spec_version=1,
         name="codex",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex-native", "model": "gpt-5-default"},
         ),
     )
@@ -3041,14 +3041,14 @@ async def test_claude_native_first_turn_not_blocked_by_cold_bridge_notify(
     # The runner imports post_tools_changed from this module at call time, so
     # patching the module attribute is picked up by _ensure_comment_relay_started.
     monkeypatch.setattr(
-        "omnigent.claude_native_bridge.post_tools_changed",
+        "omnicraft.claude_native_bridge.post_tools_changed",
         _blocking_post_tools_changed,
     )
 
     spec = AgentSpec(
         spec_version=1,
         name="claude",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -3153,7 +3153,7 @@ async def _run_antigravity_auto_create(
     :param tmp_path: Temporary directory for isolated bridge state.
     :param monkeypatch: Pytest monkeypatch fixture.
     :param session_id: Session/conversation id under test.
-    :param snapshot: The Omnigent session snapshot the helper should read.
+    :param snapshot: The OmniCraft session snapshot the helper should read.
     :param candidate_ports: Ports ``_candidate_agy_rpc_ports`` yields (``[]`` →
         the bootstrap never finds a candidate port).
     :param pane: ``(tmux_socket, tmux_target)`` ``_terminal_tmux_pane`` returns,
@@ -3166,18 +3166,18 @@ async def _run_antigravity_auto_create(
     :returns: ``(bridge_state_after, start_cascade_calls, reader_calls,
         external_session_id_patch_calls)``.
     """
-    import omnigent.antigravity_native_bridge as bridge_mod
-    import omnigent.antigravity_native_launch as launch_mod
-    import omnigent.antigravity_native_reader as reader_mod
-    import omnigent.antigravity_native_rpc as rpc_mod
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.antigravity_native_bridge as bridge_mod
+    import omnicraft.antigravity_native_launch as launch_mod
+    import omnicraft.antigravity_native_reader as reader_mod
+    import omnicraft.antigravity_native_rpc as rpc_mod
+    import omnicraft.runner.app as runner_app_mod
 
     monkeypatch.setattr(bridge_mod, "_BRIDGE_ROOT", tmp_path / "antigravity-native")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
 
     # No-op the launch builder + onboarding seed so nothing tries to find agy.
     monkeypatch.setattr(
@@ -3188,7 +3188,7 @@ async def _run_antigravity_auto_create(
     # ``supervise_reader`` at its definition module (the helper imports it lazily)
     # so the test does not start a real one. The reader is wrapped in
     # ``_run_antigravity_reader``, which still opens (and, on teardown, closes) a
-    # real Omnigent client around this stub — fine, since nothing posts here.
+    # real OmniCraft client around this stub — fine, since nothing posts here.
     reader_calls: list[dict[str, Any]] = []
 
     def _counting_reader(*args: Any, **kwargs: Any) -> Any:
@@ -3502,9 +3502,9 @@ async def test_cold_start_agy_conversation_returns_early_on_real_id_in_bridge_st
     early-return BEFORE probing for a port or calling ``StartCascade`` — so even a
     future caller that forgets the resume gate cannot cold-start over a real id.
     """
-    import omnigent.antigravity_native_bridge as bridge_mod
-    import omnigent.antigravity_native_rpc as rpc_mod
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.antigravity_native_bridge as bridge_mod
+    import omnicraft.antigravity_native_rpc as rpc_mod
+    import omnicraft.runner.app as runner_app_mod
 
     monkeypatch.setattr(bridge_mod, "_BRIDGE_ROOT", tmp_path / "antigravity-native")
     session_id = "conv_agy_guard"
@@ -3601,22 +3601,22 @@ async def test_auto_create_antigravity_wires_reader_task_and_interaction_bridge(
       with ``{elicitation_id, params}``, then — on the human verdict — delivers
       the answer to agy via ``handle_user_interaction`` (the bridge default).
     """
-    import omnigent.antigravity_native_bridge as bridge_mod
-    import omnigent.antigravity_native_interactions as interactions_mod
-    import omnigent.antigravity_native_launch as launch_mod
-    import omnigent.antigravity_native_reader as reader_mod
-    import omnigent.antigravity_native_rpc as rpc_mod
-    import omnigent.runner.app as runner_app_mod
-    from omnigent.antigravity_native_interactions import agy_elicitation_id
-    from omnigent.antigravity_native_steps import pending_interaction
+    import omnicraft.antigravity_native_bridge as bridge_mod
+    import omnicraft.antigravity_native_interactions as interactions_mod
+    import omnicraft.antigravity_native_launch as launch_mod
+    import omnicraft.antigravity_native_reader as reader_mod
+    import omnicraft.antigravity_native_rpc as rpc_mod
+    import omnicraft.runner.app as runner_app_mod
+    from omnicraft.antigravity_native_interactions import agy_elicitation_id
+    from omnicraft.antigravity_native_steps import pending_interaction
 
     session_id = "conv_agy_wiring"
     monkeypatch.setattr(bridge_mod, "_BRIDGE_ROOT", tmp_path / "antigravity-native")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
     monkeypatch.setattr(
         launch_mod, "build_agy_launch", lambda **_kwargs: (("agy",), {"AGY_ENV": "1"})
     )
@@ -3644,7 +3644,7 @@ async def test_auto_create_antigravity_wires_reader_task_and_interaction_bridge(
 
     monkeypatch.setattr(reader_mod, "supervise_reader", _capturing_reader)
 
-    # Control the reader's Omnigent client transport: record the elicitation hook
+    # Control the reader's OmniCraft client transport: record the elicitation hook
     # POST and return the human's ACCEPT verdict as an ElicitationResult body.
     hook_posts: list[tuple[str, dict[str, Any]]] = []
 
@@ -3767,11 +3767,11 @@ async def test_auto_create_antigravity_wires_reader_task_and_interaction_bridge(
 
 
 @pytest.mark.asyncio
-async def test_auto_create_antigravity_wires_omnigent_mcp_relay(
+async def test_auto_create_antigravity_wires_omnicraft_mcp_relay(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Auto-create wires the Omnigent MCP relay so agy gets the sys_* tools (#1194).
+    """Auto-create wires the OmniCraft MCP relay so agy gets the sys_* tools (#1194).
 
     Asserts the three wiring points end-to-end against fakes:
 
@@ -3785,19 +3785,19 @@ async def test_auto_create_antigravity_wires_omnigent_mcp_relay(
       env does not override ``HOME``, so agy keeps platform auth such as macOS
       Keychain but loads the bridge-scoped config.
     """
-    import omnigent.antigravity_native_bridge as bridge_mod
-    import omnigent.antigravity_native_launch as launch_mod
-    import omnigent.antigravity_native_reader as reader_mod
-    import omnigent.antigravity_native_rpc as rpc_mod
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.antigravity_native_bridge as bridge_mod
+    import omnicraft.antigravity_native_launch as launch_mod
+    import omnicraft.antigravity_native_reader as reader_mod
+    import omnicraft.antigravity_native_rpc as rpc_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_agy_mcp"
     monkeypatch.setattr(bridge_mod, "_BRIDGE_ROOT", tmp_path / "antigravity-native")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
     monkeypatch.setattr(bridge_mod, "ensure_agy_onboarding_complete", lambda: None)
     monkeypatch.setattr(runner_app_mod, "_terminal_tmux_pane", lambda *_a, **_k: (None, None))
     monkeypatch.setattr(rpc_mod, "_candidate_agy_rpc_ports", list)
@@ -3882,8 +3882,8 @@ async def test_auto_create_antigravity_wires_omnigent_mcp_relay(
     mcp_config = iso_home / ".gemini" / "config" / "mcp_config.json"
     assert mcp_config.is_file()
     payload = json.loads(mcp_config.read_text(encoding="utf-8"))
-    server = payload["mcpServers"]["omnigent"]
-    assert server["args"][:4] == ["-I", "-m", "omnigent.claude_native_bridge", "serve-mcp"]
+    server = payload["mcpServers"]["omnicraft"]
+    assert server["args"][:4] == ["-I", "-m", "omnicraft.claude_native_bridge", "serve-mcp"]
     assert str(bridge_dir) in server["args"]
     assert "sys_session_create" in server["enabledTools"]
     # The bridge token the shared relay needs was written into the bridge dir.
@@ -3922,19 +3922,19 @@ async def test_auto_create_antigravity_prepends_gemini_dir_to_generated_flags(
     argv is preserved verbatim. This guards that invariant against a future change
     to the argv-composition line in ``_auto_create_antigravity_terminal``.
     """
-    import omnigent.antigravity_native_bridge as bridge_mod
-    import omnigent.antigravity_native_launch as launch_mod
-    import omnigent.antigravity_native_reader as reader_mod
-    import omnigent.antigravity_native_rpc as rpc_mod
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.antigravity_native_bridge as bridge_mod
+    import omnicraft.antigravity_native_launch as launch_mod
+    import omnicraft.antigravity_native_reader as reader_mod
+    import omnicraft.antigravity_native_rpc as rpc_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_agy_argv"
     monkeypatch.setattr(bridge_mod, "_BRIDGE_ROOT", tmp_path / "antigravity-native")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     (tmp_path / "workspace").mkdir(parents=True, exist_ok=True)
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
     monkeypatch.setattr(bridge_mod, "ensure_agy_onboarding_complete", lambda: None)
     monkeypatch.setattr(runner_app_mod, "_terminal_tmux_pane", lambda *_a, **_k: (None, None))
     monkeypatch.setattr(rpc_mod, "_candidate_agy_rpc_ports", list)
@@ -4038,23 +4038,23 @@ async def test_codex_subagent_always_needs_runner_terminal(
 
     The ``parent_host_id=None`` case is the regression: gating the child
     on the parent's ``host_id`` made codex-native sub-agents under a CLI-driven
-    parent (e.g. nessie run via ``omnigent run --server``) silently never get
+    parent (e.g. nessie run via ``omnicraft run --server``) silently never get
     a terminal, so ``sys_session_send`` dispatch no-op'd. If that case returns
     ``False``, the regression has reappeared.
 
     :param parent_host_id: The parent session's ``host_id`` value to simulate;
         ``"host_parent"`` (web-UI parent) or ``None`` (CLI-driven parent).
     """
-    from omnigent.runner.app import _codex_session_needs_runner_terminal
+    from omnicraft.runner.app import _codex_session_needs_runner_terminal
 
     class _Client:
         async def get(self, url: str, *, timeout: float) -> httpx.Response:
             """
             Return child then parent session snapshots.
 
-            :param url: Omnigent session snapshot URL.
+            :param url: OmniCraft session snapshot URL.
             :param timeout: HTTP timeout in seconds.
-            :returns: Fake Omnigent session response.
+            :returns: Fake OmniCraft session response.
             """
             del timeout
             if url.endswith("/conv_child"):
@@ -4086,7 +4086,7 @@ async def test_codex_session_needs_runner_terminal_false_without_client() -> Non
     host-spawned or sub-agent session, so it returns ``False`` — skipping
     auto-create rather than risking a competing setup.
     """
-    from omnigent.runner.app import _codex_session_needs_runner_terminal
+    from omnicraft.runner.app import _codex_session_needs_runner_terminal
 
     assert await _codex_session_needs_runner_terminal(None, "conv_x") is False
 
@@ -4101,8 +4101,8 @@ async def test_codex_discover_thread_and_forward_cleans_up_on_discovery_failure(
     Otherwise each failed host-spawned codex session orphans an app-server
     subprocess (and a dangling listener) for the runner's lifetime.
     """
-    from omnigent import codex_native_forwarder
-    from omnigent.runner.app import (
+    from omnicraft import codex_native_forwarder
+    from omnicraft.runner.app import (
         _AUTO_CODEX_APP_SERVERS,
         _codex_discover_thread_and_forward,
     )
@@ -4166,9 +4166,9 @@ async def test_codex_discover_thread_and_forward_records_accurate_startup_error(
     reads as "startup timed out", while a RuntimeError (TUI exited / event
     stream ended) must NOT be mislabeled as a timeout.
     """
-    from omnigent import codex_native_forwarder
-    from omnigent.codex_native_bridge import read_bridge_startup_error
-    from omnigent.runner.app import (
+    from omnicraft import codex_native_forwarder
+    from omnicraft.codex_native_bridge import read_bridge_startup_error
+    from omnicraft.runner.app import (
         _AUTO_CODEX_APP_SERVERS,
         _codex_discover_thread_and_forward,
     )
@@ -4231,7 +4231,7 @@ async def test_create_session() -> None:
 async def test_create_session_preserves_existing_event_queue() -> None:
     """Session init must not orphan a stream subscriber's event queue.
 
-    The Omnigent relay's ``GET /stream`` lazily creates the per-session event
+    The OmniCraft relay's ``GET /stream`` lazily creates the per-session event
     queue when it connects before ``POST /v1/sessions`` runs (the relay
     can race ahead of init). Init used to *unconditionally replace* that
     queue, orphaning the relay on the now-dead object: ``_publish_event``
@@ -4242,7 +4242,7 @@ async def test_create_session_preserves_existing_event_queue() -> None:
     "working". Init must PRESERVE an existing queue — assert the
     pre-attached queue object survives init unchanged.
     """
-    from omnigent.runner.app import _session_event_queues_ref
+    from omnicraft.runner.app import _session_event_queues_ref
 
     app, _pm, _hc = _build_lifecycle_app()
     # Simulate the relay's GET /stream having already attached (lazily
@@ -4448,7 +4448,7 @@ async def test_session_stream_receives_events() -> None:
 @pytest.mark.asyncio
 async def test_session_stream_emits_heartbeat_on_idle() -> None:
     """The session stream emits an immediate and idle ``session.heartbeat``."""
-    import omnigent.runner.app as runner_app_module
+    import omnicraft.runner.app as runner_app_module
 
     original = runner_app_module._SESSION_STREAM_HEARTBEAT_S
     runner_app_module._SESSION_STREAM_HEARTBEAT_S = 0.05
@@ -4478,7 +4478,7 @@ async def test_session_stream_emits_heartbeat_on_idle() -> None:
         heartbeats = [e for e in collected if e.get("type") == "session.heartbeat"]
         assert len(heartbeats) >= 1, f"Expected at least 1 session.heartbeat, got {collected}"
         assert collected[0] == {"type": "session.heartbeat"}, (
-            "The first stream frame must be the ready heartbeat. Omnigent waits "
+            "The first stream frame must be the ready heartbeat. OmniCraft waits "
             "for this before forwarding fast no-replay user input."
         )
     finally:
@@ -5110,7 +5110,7 @@ def _build_native_app(
     spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
     harness_client = _NativeBlockingHarnessClient(gate)
     pm = _FakeProcessManager(harness_client)
@@ -5282,7 +5282,7 @@ async def test_messages_reach_harness_in_submission_order() -> None:
     """Two messages must reach the harness in the order they were sent.
 
     Repro for the web→TUI / claude-native out-of-order symptom. In
-    ``post_session_events`` (omnigent/runner/app.py) the turn-vs-buffer
+    ``post_session_events`` (omnicraft/runner/app.py) the turn-vs-buffer
     decision (the ``if conversation_id in _active_turns`` check at ~4237)
     runs *after* ``await _resolve_forwarded_message_content`` (~4230).
     A message with slow content resolution (e.g. a remote runner inlining
@@ -5607,7 +5607,7 @@ def _build_recovery_app(
     }
     if harness_name is not None:
         spec_kwargs["executor"] = ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": harness_name},
         )
     spec = AgentSpec(**spec_kwargs)
@@ -5721,9 +5721,9 @@ async def test_session_creation_does_not_replay_trailing_user_for_codex_native(
     Codex-native startup must not replay a trailing user item as recovery.
 
     Native transcripts are mirrored from Codex. If a Codex turn errors before
-    producing an assistant item, Omnigent history can end with the user prompt even
+    producing an assistant item, OmniCraft history can end with the user prompt even
     though Codex already consumed it. Generic crash recovery would treat that
-    as an unanswered Omnigent turn and resend the same prompt when ``omnigent
+    as an unanswered OmniCraft turn and resend the same prompt when ``omnicraft
     codex`` reattaches.
 
     :param monkeypatch: Pytest monkeypatch fixture used to bypass real
@@ -5731,7 +5731,7 @@ async def test_session_creation_does_not_replay_trailing_user_for_codex_native(
     """
     import asyncio as _aio
 
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_codex_failed_recover"
     runner_app_mod._session_histories_ref.pop(session_id, None)
@@ -5789,7 +5789,7 @@ async def test_catch_up_scan_skips_codex_native_history_entries(
     """
     import asyncio as _aio
 
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_codex_catchup_skip"
     saved_histories = dict(runner_app_mod._session_histories_ref)
@@ -5805,7 +5805,7 @@ async def test_catch_up_scan_skips_codex_native_history_entries(
         spec_version=1,
         name="catchup-codex-native",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex-native"},
         ),
     )
@@ -5860,7 +5860,7 @@ async def test_catch_up_scan_skips_codex_native_history_entries(
         runner_app_mod._session_histories_ref.update(saved_histories)
 
     assert server_client.get_calls == [], (
-        "Catch-up scan must skip Codex-native sessions before fetching Omnigent "
+        "Catch-up scan must skip Codex-native sessions before fetching OmniCraft "
         "items. A GET here means reconnect recovery can observe mirrored "
         "native transcript items and replay them."
     )
@@ -6641,7 +6641,7 @@ async def test_interrupt_forwards_to_harness_before_cancelling() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runner.app import _session_histories_ref
+    from omnicraft.runner.app import _session_histories_ref
 
     gate = _aio.Event()  # stream blocks forever
     fwd_gate = _aio.Event()  # interrupt forward blocks until released
@@ -6707,7 +6707,7 @@ async def test_interrupt_inserts_cancellation_items_in_history() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runner.app import _session_histories_ref
+    from omnicraft.runner.app import _session_histories_ref
 
     gate = _aio.Event()
     app, _pm, _hc = _build_interrupt_app(gate)
@@ -6825,7 +6825,7 @@ async def test_interrupt_cancel_floor_finalizes_stuck_turn() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runner.app import _session_histories_ref
+    from omnicraft.runner.app import _session_histories_ref
 
     gate = _aio.Event()  # never set — only the floor's task-cancel can end the turn
     app, _pm, _hc = _build_interrupt_app(gate)
@@ -6875,7 +6875,7 @@ async def test_stop_session_cancels_inprocess_turn() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runner.app import _session_histories_ref
+    from omnicraft.runner.app import _session_histories_ref
 
     gate = _aio.Event()  # never set
     app, _pm, _hc = _build_interrupt_app(gate)
@@ -6930,7 +6930,7 @@ async def test_interrupt_during_setup_phase_recovers_stuck_turn() -> None:
     """
     import asyncio as _aio
 
-    from omnigent.runner.app import _session_histories_ref
+    from omnicraft.runner.app import _session_histories_ref
 
     resolver_gate = _aio.Event()  # released only in teardown → spec resolution blocks
     resolver_entered = _aio.Event()
@@ -7023,7 +7023,7 @@ async def test_interrupt_marker_instructs_model_to_disregard_abandoned_request()
     """
     import asyncio as _aio
 
-    from omnigent.runner.app import _session_histories_ref
+    from omnicraft.runner.app import _session_histories_ref
 
     gate = _aio.Event()
     app, _pm, _hc = _build_interrupt_app(gate)
@@ -7089,13 +7089,13 @@ async def test_external_session_status_idle_delivers_forwarded_native_output_to_
     """
     Native idle status completes sub-agent work with AP-forwarded output.
 
-    Native harness transcript items are persisted by Omnigent server, so the
+    Native harness transcript items are persisted by OmniCraft server, so the
     runner's local history can be empty or stale. A forwarded
     ``data.output`` value must be used for the parent inbox instead of
     falling back to the runner-local history.
     """
-    from omnigent.runner import app as runner_app
-    from omnigent.runner.tool_dispatch import execute_tool
+    from omnicraft.runner import app as runner_app
+    from omnicraft.runner.tool_dispatch import execute_tool
 
     parent_id = "conv_parent_native_complete"
     child_id = "conv_child_native_complete"
@@ -7173,7 +7173,7 @@ async def test_external_session_status_running_fans_out_child_busy_to_parent() -
     a ``session.child_session.updated`` delta with ``busy=True``; otherwise
     Nessie's Agents rail has no durable "Working" signal for native children.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_native_status_fanout"
     child_id = "conv_child_native_status_fanout"
@@ -7249,7 +7249,7 @@ async def test_external_status_sequence_coalesces_duplicates_but_emits_task_stat
     ``idle`` → ``failed`` sequence must still update ``current_task_status``
     from ``"completed"`` to ``"failed"`` even though both edges are non-busy.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_native_status_sequence"
     child_id = "conv_child_native_status_sequence"
@@ -7348,7 +7348,7 @@ async def test_external_status_idle_fans_out_forwarded_output_preview_to_parent(
     value forwarded by AP; otherwise the Agents rail can replace the real
     native reply with stale runner-local text while clearing the spinner.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_native_preview_fanout"
     child_id = "conv_child_native_preview_fanout"
@@ -7416,13 +7416,13 @@ async def test_external_status_idle_without_output_omits_stale_history_preview()
     """
     Native child ``idle`` without forwarded output omits stale local text.
 
-    If Omnigent has no authoritative native transcript text to forward, the parent
+    If OmniCraft has no authoritative native transcript text to forward, the parent
     rail and parent inbox must not fall back to runner-local history: native
     runner history may be stale because the terminal forwarder owns
     persistence. The inbox receives an explicit empty result so the parent can
     still observe completion without fabricated output.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_native_no_preview"
     child_id = "conv_child_native_no_preview"
@@ -7547,7 +7547,7 @@ async def test_native_subagent_completion_wakes_idle_parent() -> None:
     the inbox still fills but no parent ``/events`` POST is made — exactly the
     "nessie doesn't know its sub-agent finished" bug this fixes.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_wake"
     child_id = "conv_child_wake"
@@ -7652,7 +7652,7 @@ async def test_tracked_subagent_status_without_parent_inbox_returns_503() -> Non
     204 would tell AP/the forwarder the completion was delivered even though
     the parent can never drain it.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_missing_inbox"
     child_id = "conv_child_missing_inbox"
@@ -7700,7 +7700,7 @@ def test_subagent_terminal_delivery_retry_uses_latest_undelivered_report() -> No
     parent should receive that latest report rather than stale cancellation
     text from the first failed delivery attempt.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_retry_missing_inbox"
     child_id = "conv_child_retry_missing_inbox"
@@ -7752,7 +7752,7 @@ def test_subagent_terminal_delivery_handles_missing_output() -> None:
     message. That must not become an unstructured ``RuntimeError`` after the
     parent inbox is available.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_missing_output"
     child_id = "conv_child_missing_output"
@@ -7834,7 +7834,7 @@ async def test_repeated_idle_status_wakes_parent_only_once() -> None:
     re-deliver or re-wake — this is what keeps a parallel fan-out (or a
     forwarder that re-sends idle) from triggering a wake storm.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_wake_once"
     child_id = "conv_child_wake_once"
@@ -7894,7 +7894,7 @@ async def test_delete_session_clears_pending_subagent_wake() -> None:
     away too; otherwise a later session reusing the same id can receive a child
     result in its inbox but never get the wake notice that tells it to drain.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_delete_clears_wake"
     first_child_id = "conv_child_before_delete"
@@ -7981,7 +7981,7 @@ async def test_subagent_completion_during_parent_wake_turn_posts_followup_wake()
     turn is still active should therefore enqueue a follow-up wake rather than
     leaving the result stranded until a human sends another message.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_wake_turn_race"
     first_child_id = "conv_child_initial_wake"
@@ -8092,7 +8092,7 @@ async def test_parent_idle_with_stuck_wake_flag_posts_recovery_wake() -> None:
     *coalesced* against the re-armed flag (inbox grows, no 4th wake). Child C is
     kept only to pin that coalesce contract — the signal is the step-3 wake.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_rewake_after_consume"
     child_a = "conv_child_round1_a"
@@ -8307,7 +8307,7 @@ async def test_parent_idle_with_stuck_wake_flag_and_drained_inbox_clears_flag() 
     fresh wake [3]. Under the bug, step 4 leaves the flag set, so step 5's C
     is debounced (count stays [2]) and C's result strands.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_rewake_drained_inbox"
     child_a = "conv_child_drained_a"
@@ -8515,8 +8515,8 @@ async def test_replayed_idle_status_after_inbox_drain_is_acknowledged() -> None:
     sees an already-delivered ack instead of a false ``missing_work_entry``
     503 for a still-known child session.
     """
-    from omnigent.runner import app as runner_app
-    from omnigent.runner.tool_dispatch import execute_tool
+    from omnicraft.runner import app as runner_app
+    from omnicraft.runner.tool_dispatch import execute_tool
 
     parent_id = "conv_parent_drain_replay"
     child_id = "conv_child_drain_replay"
@@ -8603,7 +8603,7 @@ async def test_concurrent_subagent_completions_coalesce_into_one_wake() -> None:
     and tripping the executor's per-turn tool-context guard ("no active turn
     context") — the regression this guards against.
     """
-    from omnigent.runner import app as runner_app
+    from omnicraft.runner import app as runner_app
 
     parent_id = "conv_parent_fanout"
     child_ids = ["conv_child_fan_a", "conv_child_fan_b", "conv_child_fan_c"]
@@ -8689,8 +8689,8 @@ async def test_events_interrupt_on_native_session_injects_escape_without_marker(
     user bubble is back; if a synthesized idle reappears in 3, the
     watcher desync bug is back.
     """
-    from omnigent.runner.app import _session_event_queues_ref, _session_histories_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref, _session_histories_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     captured_inject: list[Any] = []
 
@@ -8700,14 +8700,14 @@ async def test_events_interrupt_on_native_session_injects_escape_without_marker(
 
     monkeypatch.setattr(claude_native_bridge, "inject_interrupt", _fake_inject)
 
-    # Native spec: executor.type="omnigent" + config.harness="claude-native"
+    # Native spec: executor.type="omnicraft" + config.harness="claude-native"
     # is the canonical shape the runner reads at session start to
     # populate _session_spec_cache; _session_harness_name reads it
     # back at interrupt time to pick the right dispatch branch.
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -8824,7 +8824,7 @@ async def test_events_interrupt_on_native_session_injects_escape_without_marker(
         # own running/idle edges.
         ("claude-native", []),
         # codex-native may use the runner's running edge so the thread
-        # shows work as soon as Omnigent accepts the turn, but must not use the
+        # shows work as soon as OmniCraft accepts the turn, but must not use the
         # runner's idle edge because the injection task completes before
         # the user-visible Codex turn.
         ("codex-native", ["running"]),
@@ -8851,7 +8851,7 @@ async def test_message_turn_lifecycle_status_suppressed_for_terminal_backed_harn
     represent the user-visible model turn. For claude-native, the runner
     turn is only a pane-injection task, so its ``running`` and ``idle`` edges
     are both suppressed. For codex-native, the runner's ``running`` edge is a
-    useful immediate signal that Omnigent accepted the turn, but its ``idle`` edge
+    useful immediate signal that OmniCraft accepted the turn, but its ``idle`` edge
     is invalid because the injection task finishes before Codex is done.
 
     Drives the real ``POST /events`` message path and waits for the
@@ -8865,17 +8865,17 @@ async def test_message_turn_lifecycle_status_suppressed_for_terminal_backed_harn
         on the session stream, e.g. ``["running", "idle"]``.
     :returns: None.
     """
-    from omnigent.runner.app import _session_event_queues_ref
+    from omnicraft.runner.app import _session_event_queues_ref
 
     session_id = f"conv_ts_{harness.replace('-', '_')}"
     spec = AgentSpec(
         spec_version=1,
         name="t",
-        # executor.type="omnigent" + config.harness=<harness> is the
+        # executor.type="omnicraft" + config.harness=<harness> is the
         # canonical shape the runner reads at session start to populate
         # _session_spec_cache; _session_harness_name reads it back to
         # decide whether a PTY watcher owns this session's status.
-        executor=ExecutorSpec(type="omnigent", config={"harness": harness}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": harness}),
     )
     stream_finished = asyncio.Event()
     harness_client = _ScriptedHarnessClient([], stream_finished=stream_finished)
@@ -8971,8 +8971,8 @@ async def test_events_interrupt_on_native_session_503_skips_cleanup_when_inject_
     refactor the responsibility lives on the runner, so the
     invariant is pinned here.
     """
-    from omnigent.runner.app import _session_event_queues_ref, _session_histories_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref, _session_histories_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(bridge_dir: Any, *, timeout_s: float) -> None:
         """Simulate the bridge-not-ready path."""
@@ -8984,7 +8984,7 @@ async def test_events_interrupt_on_native_session_503_skips_cleanup_when_inject_
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -9070,7 +9070,7 @@ async def test_events_interrupt_on_native_session_503_skips_cleanup_when_inject_
 
 
 class _EventRecordingServerClient(NullServerClient):
-    """Records Omnigent ``external_*`` event POSTs for assertion.
+    """Records OmniCraft ``external_*`` event POSTs for assertion.
 
     Subclasses :class:`NullServerClient` so all other runner→AP calls still
     succeed silently; captures ``external_conversation_item`` bodies so a
@@ -9099,10 +9099,10 @@ class _RecordingCodexAppServerClient:
     Test double for Codex app-server JSON-RPC controls.
 
     :param transport: Transport passed to
-        :func:`omnigent.codex_native_app_server.client_for_transport`, e.g.
+        :func:`omnicraft.codex_native_app_server.client_for_transport`, e.g.
         ``"ws://127.0.0.1:1234"``.
     :param client_name: App-server client name, e.g.
-        ``"omnigent-codex-native-runner"``.
+        ``"omnicraft-codex-native-runner"``.
     """
 
     def __init__(self, transport: str, client_name: str) -> None:
@@ -9182,14 +9182,14 @@ async def test_events_codex_native_settings_change_uses_thread_settings_update(
     """
     Codex-native model / effort updates call ``thread/settings/update``.
 
-    The web UI persists model and effort through Omnigent's normal session
+    The web UI persists model and effort through OmniCraft's normal session
     PATCH path. The runner must translate the forwarded control event into
     Codex app-server's structured settings RPC, not type into the terminal or
     204 as a no-op. The update is a next-turn setting: it is valid even when
     no active turn id is recorded.
     """
-    from omnigent import codex_native_app_server
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft import codex_native_app_server
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = "conv_codex_native_settings"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
@@ -9207,13 +9207,13 @@ async def test_events_codex_native_settings_change_uses_thread_settings_update(
 
     fake_client = _RecordingCodexAppServerClient(
         transport="ws://127.0.0.1:43210",
-        client_name="omnigent-codex-native-runner",
+        client_name="omnicraft-codex-native-runner",
     )
 
     def _fake_client_for_transport(
         transport: str,
         *,
-        client_name: str = "omnigent",
+        client_name: str = "omnicraft",
     ) -> _RecordingCodexAppServerClient:
         """
         Return the fake Codex app-server client for the recorded bridge state.
@@ -9221,7 +9221,7 @@ async def test_events_codex_native_settings_change_uses_thread_settings_update(
         :param transport: App-server transport from bridge state, e.g.
             ``"ws://127.0.0.1:43210"``.
         :param client_name: Client name supplied by the runner, e.g.
-            ``"omnigent-codex-native-runner"``.
+            ``"omnicraft-codex-native-runner"``.
         :returns: Fake client that records JSON-RPC calls.
         """
         assert transport == fake_client.transport
@@ -9238,7 +9238,7 @@ async def test_events_codex_native_settings_change_uses_thread_settings_update(
         spec_version=1,
         name="t",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex-native", "model": "gpt-5.4"},
         ),
     )
@@ -9294,7 +9294,7 @@ async def test_codex_native_model_options_returns_503_until_bridge_state_exists(
     is still creating its app-server bridge; that would permanently hide the
     Web UI model picker for the session.
     """
-    from omnigent import codex_native_app_server
+    from omnicraft import codex_native_app_server
 
     conv_id = "conv_codex_native_model_options_not_ready"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
@@ -9302,7 +9302,7 @@ async def test_codex_native_model_options_returns_503_until_bridge_state_exists(
     def _client_for_transport(
         transport: str,
         *,
-        client_name: str = "omnigent",
+        client_name: str = "omnicraft",
     ) -> _RecordingCodexAppServerClient:
         """
         Fail the test if the endpoint reaches Codex without bridge state.
@@ -9310,7 +9310,7 @@ async def test_codex_native_model_options_returns_503_until_bridge_state_exists(
         :param transport: App-server transport from bridge state, e.g.
             ``"ws://127.0.0.1:43210"``.
         :param client_name: Client name supplied by the runner, e.g.
-            ``"omnigent-codex-native-runner"``.
+            ``"omnicraft-codex-native-runner"``.
         :returns: Never returns; raises if called.
         """
         raise AssertionError(
@@ -9327,7 +9327,7 @@ async def test_codex_native_model_options_returns_503_until_bridge_state_exists(
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -9372,8 +9372,8 @@ async def test_codex_native_model_options_query_model_list(
     this endpoint should ask Codex for models and return those model objects
     unchanged for the AP snapshot.
     """
-    from omnigent import codex_native_app_server
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft import codex_native_app_server
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = "conv_codex_native_model_options"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
@@ -9391,7 +9391,7 @@ async def test_codex_native_model_options_query_model_list(
 
     fake_client = _RecordingCodexAppServerClient(
         transport="ws://127.0.0.1:43210",
-        client_name="omnigent-codex-native-runner",
+        client_name="omnicraft-codex-native-runner",
     )
     fake_client.model_list_responses = [
         {
@@ -9434,7 +9434,7 @@ async def test_codex_native_model_options_query_model_list(
     def _fake_client_for_transport(
         transport: str,
         *,
-        client_name: str = "omnigent",
+        client_name: str = "omnicraft",
     ) -> _RecordingCodexAppServerClient:
         """
         Return the fake Codex app-server client for the recorded bridge state.
@@ -9442,7 +9442,7 @@ async def test_codex_native_model_options_query_model_list(
         :param transport: App-server transport from bridge state, e.g.
             ``"ws://127.0.0.1:43210"``.
         :param client_name: Client name supplied by the runner, e.g.
-            ``"omnigent-codex-native-runner"``.
+            ``"omnicraft-codex-native-runner"``.
         :returns: Fake client scripted with ``model/list`` pages.
         """
         assert transport == fake_client.transport
@@ -9458,7 +9458,7 @@ async def test_codex_native_model_options_query_model_list(
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -9535,7 +9535,7 @@ async def test_events_codex_native_plan_mode_requires_loaded_bridge(
         spec_version=1,
         name="t",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex-native", "model": "gpt-5.4"},
         ),
     )
@@ -9596,9 +9596,9 @@ async def test_events_interrupt_on_codex_native_uses_turn_interrupt_without_mark
     3. The session is NOT added to ``_interrupted_sessions``; no marker in
        ``_session_histories``.
     """
-    from omnigent import codex_native_app_server
-    from omnigent.runner.app import _session_histories_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft import codex_native_app_server
+    from omnicraft.runner.app import _session_histories_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = "conv_codex_native_int"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
@@ -9616,13 +9616,13 @@ async def test_events_interrupt_on_codex_native_uses_turn_interrupt_without_mark
 
     fake_client = _RecordingCodexAppServerClient(
         transport="ws://127.0.0.1:43210",
-        client_name="omnigent-codex-native-runner",
+        client_name="omnicraft-codex-native-runner",
     )
 
     def _fake_client_for_transport(
         transport: str,
         *,
-        client_name: str = "omnigent",
+        client_name: str = "omnicraft",
     ) -> _RecordingCodexAppServerClient:
         """
         Return the fake Codex app-server client for the recorded bridge state.
@@ -9630,7 +9630,7 @@ async def test_events_interrupt_on_codex_native_uses_turn_interrupt_without_mark
         :param transport: App-server transport from bridge state, e.g.
             ``"ws://127.0.0.1:43210"``.
         :param client_name: Client name supplied by the runner, e.g.
-            ``"omnigent-codex-native-runner"``.
+            ``"omnicraft-codex-native-runner"``.
         :returns: Fake client that records JSON-RPC calls.
         """
         assert transport == fake_client.transport
@@ -9646,7 +9646,7 @@ async def test_events_interrupt_on_codex_native_uses_turn_interrupt_without_mark
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -9744,9 +9744,9 @@ async def test_events_stop_session_on_codex_native_uses_turn_interrupt_without_m
     3. The session is NOT added to ``_interrupted_sessions``; no marker leaks
        into ``_session_histories``.
     """
-    from omnigent import codex_native_app_server
-    from omnigent.runner.app import _session_histories_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft import codex_native_app_server
+    from omnicraft.runner.app import _session_histories_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = "conv_codex_native_stop"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
@@ -9764,13 +9764,13 @@ async def test_events_stop_session_on_codex_native_uses_turn_interrupt_without_m
 
     fake_client = _RecordingCodexAppServerClient(
         transport="ws://127.0.0.1:43211",
-        client_name="omnigent-codex-native-runner",
+        client_name="omnicraft-codex-native-runner",
     )
 
     def _fake_client_for_transport(
         transport: str,
         *,
-        client_name: str = "omnigent",
+        client_name: str = "omnicraft",
     ) -> _RecordingCodexAppServerClient:
         """
         Return the fake Codex app-server client for the stop-session path.
@@ -9778,7 +9778,7 @@ async def test_events_stop_session_on_codex_native_uses_turn_interrupt_without_m
         :param transport: App-server transport from bridge state, e.g.
             ``"ws://127.0.0.1:43211"``.
         :param client_name: Client name supplied by the runner, e.g.
-            ``"omnigent-codex-native-runner"``.
+            ``"omnicraft-codex-native-runner"``.
         :returns: Fake client that records JSON-RPC calls.
         """
         assert transport == fake_client.transport
@@ -9794,7 +9794,7 @@ async def test_events_stop_session_on_codex_native_uses_turn_interrupt_without_m
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -9891,8 +9891,8 @@ async def test_events_stop_on_codex_native_cancels_mcp_startup_without_active_tu
     Codex TUI's startup interrupt — ``turn/interrupt`` with an empty turn
     id — instead of doing nothing.
     """
-    from omnigent import codex_native_app_server
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft import codex_native_app_server
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = f"conv_codex_native_mcp_{event_type}"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
@@ -9900,7 +9900,7 @@ async def test_events_stop_on_codex_native_cancels_mcp_startup_without_active_tu
     # ``clear_bridge_state`` — otherwise the seeded bridge state below is
     # wiped on hosts where the codex CLI/provider config exist (in CI the
     # auto-create aborts on its own before the clear).
-    import omnigent.runner.app as runner_app_module
+    import omnicraft.runner.app as runner_app_module
 
     async def _fail_launch_config(**kwargs: Any) -> None:
         """Abort codex auto-create before it clears bridge state."""
@@ -9923,13 +9923,13 @@ async def test_events_stop_on_codex_native_cancels_mcp_startup_without_active_tu
 
     fake_client = _RecordingCodexAppServerClient(
         transport="ws://127.0.0.1:43212",
-        client_name="omnigent-codex-native-runner",
+        client_name="omnicraft-codex-native-runner",
     )
 
     def _fake_client_for_transport(
         transport: str,
         *,
-        client_name: str = "omnigent",
+        client_name: str = "omnicraft",
     ) -> _RecordingCodexAppServerClient:
         """
         Return the fake Codex app-server client for the startup-cancel path.
@@ -9937,7 +9937,7 @@ async def test_events_stop_on_codex_native_cancels_mcp_startup_without_active_tu
         :param transport: App-server transport from bridge state, e.g.
             ``"ws://127.0.0.1:43212"``.
         :param client_name: Client name supplied by the runner, e.g.
-            ``"omnigent-codex-native-runner"``.
+            ``"omnicraft-codex-native-runner"``.
         :returns: Fake client that records JSON-RPC calls.
         """
         assert transport == fake_client.transport
@@ -9953,7 +9953,7 @@ async def test_events_stop_on_codex_native_cancels_mcp_startup_without_active_tu
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10027,14 +10027,14 @@ async def test_events_interrupt_on_codex_native_with_turn_and_mcp_stops_both(
     send the startup interrupt (empty turn id, best-effort, first) and
     flip the bridge's pending servers to ``cancelled``.
     """
-    from omnigent import codex_native_app_server
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft import codex_native_app_server
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = "conv_codex_native_dual_stop"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
     # Keep the seeded bridge state alive through session create (see the
     # sister startup-cancel test for why auto-create must abort early).
-    import omnigent.runner.app as runner_app_module
+    import omnicraft.runner.app as runner_app_module
 
     async def _fail_launch_config(**kwargs: Any) -> None:
         """Abort codex auto-create before it clears bridge state."""
@@ -10057,13 +10057,13 @@ async def test_events_interrupt_on_codex_native_with_turn_and_mcp_stops_both(
 
     fake_client = _RecordingCodexAppServerClient(
         transport="ws://127.0.0.1:43214",
-        client_name="omnigent-codex-native-runner",
+        client_name="omnicraft-codex-native-runner",
     )
 
     def _fake_client_for_transport(
         transport: str,
         *,
-        client_name: str = "omnigent",
+        client_name: str = "omnicraft",
     ) -> _RecordingCodexAppServerClient:
         """
         Return the fake Codex app-server client for the dual-stop path.
@@ -10071,7 +10071,7 @@ async def test_events_interrupt_on_codex_native_with_turn_and_mcp_stops_both(
         :param transport: App-server transport from bridge state, e.g.
             ``"ws://127.0.0.1:43214"``.
         :param client_name: Client name supplied by the runner, e.g.
-            ``"omnigent-codex-native-runner"``.
+            ``"omnicraft-codex-native-runner"``.
         :returns: Fake client that records JSON-RPC calls.
         """
         assert transport == fake_client.transport
@@ -10087,7 +10087,7 @@ async def test_events_interrupt_on_codex_native_with_turn_and_mcp_stops_both(
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10142,14 +10142,14 @@ async def test_events_interrupt_on_codex_native_without_turn_or_mcp_is_noop(
     An idle codex-native session must not send spurious ``turn/interrupt``
     requests to the app-server on every Stop press.
     """
-    from omnigent import codex_native_app_server
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft import codex_native_app_server
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = "conv_codex_native_idle_stop"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
     # Keep the seeded bridge state alive through session create (see the
     # sister startup-cancel test for why auto-create must abort early).
-    import omnigent.runner.app as runner_app_module
+    import omnicraft.runner.app as runner_app_module
 
     async def _fail_launch_config(**kwargs: Any) -> None:
         """Abort codex auto-create before it clears bridge state."""
@@ -10172,7 +10172,7 @@ async def test_events_interrupt_on_codex_native_without_turn_or_mcp_is_noop(
     def _fail_client_for_transport(
         transport: str,
         *,
-        client_name: str = "omnigent",
+        client_name: str = "omnicraft",
     ) -> _RecordingCodexAppServerClient:
         """Fail the test if the runner opens an app-server connection."""
         raise AssertionError(
@@ -10189,7 +10189,7 @@ async def test_events_interrupt_on_codex_native_without_turn_or_mcp_is_noop(
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10247,9 +10247,9 @@ async def test_events_interrupt_and_stop_on_pi_native_enqueue_bridge_interrupt(
     2. An ``interrupt_*`` payload is written to the session's bridge inbox.
     3. NO ``[System: interrupted]`` marker is persisted (the floor never ran).
     """
-    import omnigent.pi_native_bridge as pi_native_bridge
-    from omnigent.runner.app import _session_histories_ref
-    from omnigent.spec.types import ExecutorSpec
+    import omnicraft.pi_native_bridge as pi_native_bridge
+    from omnicraft.runner.app import _session_histories_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = f"conv_pi_native_{event_type}"
     monkeypatch.setattr(pi_native_bridge, "_BRIDGE_ROOT", tmp_path / "pi-bridge")
@@ -10257,7 +10257,7 @@ async def test_events_interrupt_and_stop_on_pi_native_enqueue_bridge_interrupt(
     pi_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "pi-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "pi-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10377,8 +10377,8 @@ async def test_events_stop_session_on_native_kills_tmux_and_publishes_idle(
        being torn down, not interrupted mid-turn. A stray marker would
        be the interrupt handler leaking into the stop path.
     """
-    from omnigent.runner.app import _session_event_queues_ref, _session_histories_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref, _session_histories_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     captured_kill: list[Any] = []
 
@@ -10391,7 +10391,7 @@ async def test_events_stop_session_on_native_kills_tmux_and_publishes_idle(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10492,8 +10492,8 @@ async def test_stop_session_on_native_subagent_reclaims_work_entry(
     Pre-fix the kill happened but the entry was never reclaimed (the parent could
     hang thinking the worker was still running).
     """
-    from omnigent.runner import app as runner_app
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner import app as runner_app
+    from omnicraft.spec.types import ExecutorSpec
 
     parent_id = "conv_parent_stop_reclaim"
     worker_id = "conv_worker_stop_reclaim"
@@ -10504,7 +10504,7 @@ async def test_stop_session_on_native_subagent_reclaims_work_entry(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10563,11 +10563,11 @@ async def test_stop_session_on_native_subagent_without_parent_inbox_returns_204(
 
     ``stop_session`` is user-initiated stop orchestration, not the native
     terminal-status ACK path. Once the pane is killed, the runner must return
-    204 so Omnigent can finish host-runner teardown and write the deliberate-stop
+    204 so OmniCraft can finish host-runner teardown and write the deliberate-stop
     label even if parent delivery cannot be confirmed.
     """
-    from omnigent.runner import app as runner_app
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner import app as runner_app
+    from omnicraft.spec.types import ExecutorSpec
 
     parent_id = "conv_parent_stop_missing_inbox"
     worker_id = "conv_worker_stop_missing_inbox"
@@ -10577,7 +10577,7 @@ async def test_stop_session_on_native_subagent_without_parent_inbox_returns_204(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10641,8 +10641,8 @@ async def test_events_stop_session_on_native_returns_503_when_kill_fails(
     surface a 503 rather than lie to the web UI with a 204 + idle
     that says "stopped" while the session may still be alive.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_kill(bridge_dir: Any, *, timeout_s: float) -> None:
         """Simulate the bridge-not-ready path."""
@@ -10654,7 +10654,7 @@ async def test_events_stop_session_on_native_returns_503_when_kill_fails(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10717,11 +10717,11 @@ async def test_events_stop_session_on_non_native_session_is_204_noop(
 
     In-process harnesses have no external tmux process for the runner to
     kill: stop cancels the in-flight turn via the cancel floor, or — with
-    no turn in flight, as here — is a clean 204 no-op. The Omnigent server is
+    no turn in flight, as here — is a clean 204 no-op. The OmniCraft server is
     harness-agnostic and forwards stop_session for any session, so the
     runner must accept it and 204 — never reach ``kill_session``.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_kill(bridge_dir: Any, *, timeout_s: float) -> None:
         """Fail the test if a non-native session reaches the killer."""
@@ -10737,7 +10737,7 @@ async def test_events_stop_session_on_non_native_session_is_204_noop(
     default_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={}),
+        executor=ExecutorSpec(type="omnicraft", config={}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10787,8 +10787,8 @@ async def test_events_stop_session_closes_terminal_and_publishes_deleted(
     stop handler must therefore close each of the session's terminals and
     publish ``session.resource.deleted`` so connected clients drop them.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
     from tests.runner.helpers import make_test_terminal_instance
 
     def _fake_kill(bridge_dir: Any, *, timeout_s: float) -> None:
@@ -10811,7 +10811,7 @@ async def test_events_stop_session_closes_terminal_and_publishes_deleted(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -10885,8 +10885,8 @@ async def test_required_terminal_exit_publishes_deleted_and_failed(tmp_path: Pat
 
     :param tmp_path: Temporary directory for fake terminal paths.
     """
-    from omnigent.runner import app as runner_app
-    from omnigent.runner.app import _session_event_queues_ref
+    from omnicraft.runner import app as runner_app
+    from omnicraft.runner.app import _session_event_queues_ref
     from tests.runner.helpers import make_test_terminal_instance
 
     parent_id = f"conv_parent_required_exit_{uuid.uuid4().hex[:12]}"
@@ -11028,8 +11028,8 @@ async def test_required_terminal_exit_while_idle_does_not_fail_session(tmp_path:
 
     :param tmp_path: Temporary directory for fake terminal paths.
     """
-    from omnigent.runner import app as runner_app
-    from omnigent.runner.app import _session_event_queues_ref
+    from omnicraft.runner import app as runner_app
+    from omnicraft.runner.app import _session_event_queues_ref
     from tests.runner.helpers import make_test_terminal_instance
 
     parent_id = f"conv_parent_idle_exit_{uuid.uuid4().hex[:12]}"
@@ -11155,9 +11155,9 @@ async def test_required_terminal_clean_quit_publishes_idle_not_failed(
 
     :param terminal_name: The native terminal that the user quit cleanly.
     """
-    from omnigent.runner import app as runner_app
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.runner.resource_registry import (
+    from omnicraft.runner import app as runner_app
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.runner.resource_registry import (
         TerminalExitEvent,
         TerminalLifecycle,
     )
@@ -11231,7 +11231,7 @@ async def test_external_idle_status_makes_required_terminal_exit_clean(tmp_path:
 
     :param tmp_path: Temporary directory for fake terminal paths.
     """
-    from omnigent.runner.app import _session_event_queues_ref
+    from omnicraft.runner.app import _session_event_queues_ref
     from tests.runner.helpers import make_test_terminal_instance
 
     conv_id = f"conv_kiro_external_idle_exit_{uuid.uuid4().hex[:12]}"
@@ -11316,7 +11316,7 @@ async def test_events_effort_change_on_native_session_types_slash_command(
     POST ``/events`` with ``{"type":"effort_change","effort":"high"}``
     on a claude-native session injects ``/effort high`` into tmux.
 
-    With the unified-effort refactor Omnigent server no longer POSTs to
+    With the unified-effort refactor OmniCraft server no longer POSTs to
     ``/claude-native-effort`` — every PATCH effort goes through the
     generic ``/events`` path. The runner's ``/events`` dispatch must
     recognize the native harness and route to
@@ -11327,8 +11327,8 @@ async def test_events_effort_change_on_native_session_types_slash_command(
     would fall through to the generic harness-forward and 404, leaving
     the dropdown click silently ineffective.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     captured: list[Any] = []
 
@@ -11347,7 +11347,7 @@ async def test_events_effort_change_on_native_session_types_slash_command(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -11411,10 +11411,10 @@ async def test_events_effort_change_on_native_session_types_slash_command(
     assert command == "/effort high", f"Expected '/effort high' literal, got {command!r}."
     # 1.0s short timeout: missing tmux.json means the pane isn't
     # attached; persisted effort still applies on next spawn. A 30s
-    # default would hang the Omnigent PATCH whenever the pane is detached.
+    # default would hang the OmniCraft PATCH whenever the pane is detached.
     assert timeout_s == 1.0
     # 3) effort_change is a control signal, not a state change.
-    # Any session.status enqueued here would mislead the Omnigent relay.
+    # Any session.status enqueued here would mislead the OmniCraft relay.
     assert queued_events == [], (
         f"effort_change must not publish session events; got "
         f"{queued_events!r}. If non-empty, the native handler is "
@@ -11440,16 +11440,16 @@ async def test_events_effort_change_on_native_session_skips_inject_for_unsupport
     """
     Unsupported / null effort values 204 without typing into tmux.
 
-    Omnigent server is harness-agnostic — it always forwards the new
+    OmniCraft server is harness-agnostic — it always forwards the new
     persisted effort to ``/events``. The runner's native handler
     owns the level-validation, skipping injection when the value
     isn't in Claude's accepted set. Persistence already happened on
-    the Omnigent side; the next spawn picks up the value via ``--effort``.
+    the OmniCraft side; the next spawn picks up the value via ``--effort``.
 
     Pins that the validation lives in the runner (where the
-    harness-specific knowledge belongs), not in the Omnigent server.
+    harness-specific knowledge belongs), not in the OmniCraft server.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(
         bridge_dir: Any,
@@ -11470,7 +11470,7 @@ async def test_events_effort_change_on_native_session_skips_inject_for_unsupport
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -11517,11 +11517,11 @@ async def test_events_effort_change_on_native_session_returns_503_when_bridge_no
     Sister to the happy-path test. Pins that the failure mode of the
     native effort dispatch (tmux pane gone / bridge dir not yet
     advertised) returns 503 with the same error code shape the
-    legacy route returns. Omnigent server's PATCH swallows this 503 and
+    legacy route returns. OmniCraft server's PATCH swallows this 503 and
     still returns 200 with the persisted value — the next spawn
     will apply the new effort via ``--effort``.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(
         bridge_dir: Any,
@@ -11539,7 +11539,7 @@ async def test_events_effort_change_on_native_session_returns_503_when_bridge_no
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -11588,12 +11588,12 @@ async def test_events_effort_change_on_non_native_session_is_204_noop(
     In-process harnesses (default / claude-sdk / openai-agents / codex)
     re-read the persisted ``reasoning_effort`` from store on each
     turn, so they need no runtime notification when it changes. The
-    Omnigent server still POSTs ``effort_change`` to ``/events`` for every
+    OmniCraft server still POSTs ``effort_change`` to ``/events`` for every
     PATCH (it's harness-agnostic), so the runner must accept the
     event and 204 — never reach the slash-command injector, never
     forward to the harness scaffold.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(
         bridge_dir: Any,
@@ -11615,7 +11615,7 @@ async def test_events_effort_change_on_non_native_session_is_204_noop(
     default_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={}),
+        executor=ExecutorSpec(type="omnicraft", config={}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -11661,19 +11661,19 @@ async def test_events_compact_on_native_session_types_slash_command(
 
     Explicit compaction on a claude-native session must run inside
     Claude Code (it owns its own context window in the terminal); the
-    Omnigent server's own compaction would only summarise the transcript
+    OmniCraft server's own compaction would only summarise the transcript
     mirror. The runner's ``/events`` dispatch recognises the native
     harness and routes to ``_handle_claude_native_compact``, which
     types the slash command into the pane.
 
-    The 200 (not 204) is load-bearing: the Omnigent server reads it to know
+    The 200 (not 204) is load-bearing: the OmniCraft server reads it to know
     the control was handled in the terminal and skips its own
     in-process compaction. A regression returning 204 here would make
-    the Omnigent server fall through to ``_run_compact_locked``, which 400s
+    the OmniCraft server fall through to ``_run_compact_locked``, which 400s
     on the LLM-less claude-native pseudo-agent — the original bug.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     captured: list[Any] = []
 
@@ -11692,7 +11692,7 @@ async def test_events_compact_on_native_session_types_slash_command(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -11735,7 +11735,7 @@ async def test_events_compact_on_native_session_types_slash_command(
 
     # 200 = native dispatch routed to the compact handler and it
     # injected successfully. 204 would mean the handler returned the
-    # in-process no-op (wrong harness branch) → Omnigent falls through to
+    # in-process no-op (wrong harness branch) → OmniCraft falls through to
     # _run_compact_locked and 400s. 404 = the dispatch fell through to
     # the generic harness-forward.
     assert resp.status_code == 200, (
@@ -11777,7 +11777,7 @@ async def test_events_compact_on_native_session_returns_503_when_bridge_not_read
     server treats a non-200/204 runner response as an error rather
     than silently running its own (wrong) compaction.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(
         bridge_dir: Any,
@@ -11795,7 +11795,7 @@ async def test_events_compact_on_native_session_returns_503_when_bridge_not_read
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -11844,10 +11844,10 @@ async def test_events_compact_on_codex_native_injects_slash_command(
     compaction must run inside Codex — the same rationale as the
     claude-native path.  The pane coordinates come from the resource
     registry (not a ``tmux.json`` sidecar).  The 200 return is
-    load-bearing: the Omnigent server reads it to skip its own
+    load-bearing: the OmniCraft server reads it to skip its own
     AP-side compaction.
     """
-    from omnigent.runner.app import _session_event_queues_ref
+    from omnicraft.runner.app import _session_event_queues_ref
     from tests.runner.helpers import make_test_terminal_instance
 
     captured: list[tuple[str, list[str]]] = []
@@ -11861,7 +11861,7 @@ async def test_events_compact_on_codex_native_injects_slash_command(
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -11938,13 +11938,13 @@ async def test_events_compact_on_codex_native_returns_204_when_no_terminal() -> 
     Codex-native compact returns 204 when no live terminal is registered.
 
     Without a running codex terminal the ``/compact`` slash command
-    has nowhere to go.  204 tells the Omnigent server to fall back to
+    has nowhere to go.  204 tells the OmniCraft server to fall back to
     its own AP-side compaction (or skip it).
     """
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -11990,7 +11990,7 @@ async def test_events_compact_on_codex_native_returns_503_on_tmux_failure(
     """
     Codex-native compact returns 503 when the tmux send-keys call fails.
 
-    The 503 tells the Omnigent server the control was NOT handled, so it
+    The 503 tells the OmniCraft server the control was NOT handled, so it
     can surface an error rather than silently running its own (wrong)
     compaction.
     """
@@ -12006,7 +12006,7 @@ async def test_events_compact_on_codex_native_returns_503_on_tmux_failure(
     codex_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "codex-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "codex-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -12062,7 +12062,7 @@ async def test_events_compact_on_cursor_native_pastes_summarize_and_raises_spinn
     cursor-agent manages its own context window in the TUI, so explicit
     compaction must run there (its built-in ``/summarize`` command) rather
     than as AP-side compaction — the same rationale as the claude-native
-    path.  The 200 (not 204) is load-bearing: the Omnigent server reads it to
+    path.  The 200 (not 204) is load-bearing: the OmniCraft server reads it to
     skip its own ``_run_compact_locked`` (which 400s on the LLM-less native
     pseudo-agent).
 
@@ -12083,8 +12083,8 @@ async def test_events_compact_on_cursor_native_pastes_summarize_and_raises_spinn
        the cursor forwarder when it observes the summary blob (covered by
        ``tests/test_cursor_native_forwarder.py``).
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     monkeypatch.setattr(cursor_native_bridge, "_BRIDGE_ROOT", tmp_path / "cursor-bridge")
 
@@ -12099,7 +12099,7 @@ async def test_events_compact_on_cursor_native_pastes_summarize_and_raises_spinn
     cursor_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "cursor-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "cursor-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -12134,7 +12134,7 @@ async def test_events_compact_on_cursor_native_pastes_summarize_and_raises_spinn
 
     # 200 = cursor-native dispatch routed to the compact handler and the paste
     # succeeded. 204 would mean the dispatch fell through to the in-process
-    # no-op branch (the original gap) → Omnigent runs its own compaction and 400s.
+    # no-op branch (the original gap) → OmniCraft runs its own compaction and 400s.
     assert resp.status_code == 200, (
         f"Cursor-native compact must return 200 from /events; got {resp.status_code}: {resp.text}"
     )
@@ -12203,8 +12203,8 @@ async def test_events_compact_on_cursor_native_503_dismisses_spinner_on_inject_f
     both the tmux ``RuntimeError`` and the tempfile ``OSError`` surfaces; the
     latter is unique to cursor's bracketed-paste path.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     monkeypatch.setattr(cursor_native_bridge, "_BRIDGE_ROOT", tmp_path / "cursor-bridge")
 
@@ -12218,7 +12218,7 @@ async def test_events_compact_on_cursor_native_503_dismisses_spinner_on_inject_f
     cursor_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "cursor-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "cursor-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -12281,7 +12281,7 @@ async def test_events_compact_on_pi_native_enqueues_compact_payload(
     queues a ``compact`` payload to the Pi extension inbox and returns 200.
 
     Pi owns its context window inside the resident Pi TUI process, so explicit
-    compaction must run there (the Omnigent server's AP-side compaction would
+    compaction must run there (the OmniCraft server's AP-side compaction would
     only summarise the transcript mirror and desync the two, and 400s on the
     LLM-less pi-native pseudo-agent). The runner's ``compact`` dispatch routes
     to ``_handle_pi_native_compact``, which drops a ``compact`` payload into the
@@ -12292,14 +12292,14 @@ async def test_events_compact_on_pi_native_enqueues_compact_payload(
     cursor-native, so pi-native fell through to the 204 no-op.
 
     Pins:
-    1. 200 returned (not 204) so the Omnigent server skips its own AP-side
+    1. 200 returned (not 204) so the OmniCraft server skips its own AP-side
        compaction.
     2. A ``compact_*`` payload is written to the session's bridge inbox.
     3. /compact is a control signal and publishes no ``session.status`` events.
     """
-    import omnigent.pi_native_bridge as pi_native_bridge
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    import omnicraft.pi_native_bridge as pi_native_bridge
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = "conv_pi_native_compact"
     monkeypatch.setattr(pi_native_bridge, "_BRIDGE_ROOT", tmp_path / "pi-bridge")
@@ -12307,7 +12307,7 @@ async def test_events_compact_on_pi_native_enqueues_compact_payload(
     pi_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "pi-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "pi-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -12382,10 +12382,10 @@ async def test_events_compact_on_pi_native_returns_503_when_inbox_unwritable(
     Sister to the happy-path test. If the inbox enqueue raises OSError (e.g. a
     filesystem fault), the handler surfaces 503 with the
     ``pi_native_compact_failed`` code rather than silently swallowing the
-    request; the Omnigent server then treats it as not-handled.
+    request; the OmniCraft server then treats it as not-handled.
     """
-    import omnigent.pi_native_bridge as pi_native_bridge
-    from omnigent.spec.types import ExecutorSpec
+    import omnicraft.pi_native_bridge as pi_native_bridge
+    from omnicraft.spec.types import ExecutorSpec
 
     conv_id = "conv_pi_native_compact_fail"
     monkeypatch.setattr(pi_native_bridge, "_BRIDGE_ROOT", tmp_path / "pi-bridge")
@@ -12399,7 +12399,7 @@ async def test_events_compact_on_pi_native_returns_503_when_inbox_unwritable(
     pi_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "pi-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "pi-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -12453,8 +12453,8 @@ async def test_events_compact_on_qwen_native_submits_compress_and_raises_spinner
     ``in_progress``; the ``completed`` edge is the compaction mirror's job once
     the ``chat_compression`` record lands (covered in test_qwen_native_forwarder).
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     captured: list[tuple[Any, str]] = []
 
@@ -12467,7 +12467,7 @@ async def test_events_compact_on_qwen_native_submits_compress_and_raises_spinner
     qwen_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "qwen-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "qwen-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -12526,8 +12526,8 @@ async def test_events_compact_on_qwen_native_503_dismisses_spinner_on_submit_fai
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A submit failure surfaces as 503 AND dismisses the spinner (in_progress->failed)."""
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_submit(bridge_dir: Any, *, content: str) -> None:
         del bridge_dir, content
@@ -12538,7 +12538,7 @@ async def test_events_compact_on_qwen_native_503_dismisses_spinner_on_submit_fai
     qwen_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "qwen-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "qwen-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -12587,7 +12587,7 @@ async def test_events_compact_on_qwen_native_503_dismisses_spinner_on_submit_fai
 class _FakeOpenCodeCompactClient:
     """OpenCode client stub recording ``summarize`` calls for compact tests.
 
-    Stands in for :class:`omnigent.opencode_native_client.OpenCodeClient` so
+    Stands in for :class:`omnicraft.opencode_native_client.OpenCodeClient` so
     the opencode-native compact handler's model-resolution + ``/summarize``
     call is observable without a live ``opencode serve``.
     """
@@ -12677,17 +12677,17 @@ async def _drive_opencode_native_compact(
     :param summarize_error: When set, ``summarize`` raises it (503 path).
     :returns: ``(response, fake_client)`` for the compact POST.
     """
-    from omnigent import opencode_native_bridge
-    from omnigent.opencode_native_bridge import OpenCodeNativeBridgeState
-    from omnigent.opencode_native_client import OpenCodeSession
-    from omnigent.runner.app import _AUTO_OPENCODE_SERVERS, _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft import opencode_native_bridge
+    from omnicraft.opencode_native_bridge import OpenCodeNativeBridgeState
+    from omnicraft.opencode_native_client import OpenCodeSession
+    from omnicraft.runner.app import _AUTO_OPENCODE_SERVERS, _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
     from tests.runner.helpers import make_test_terminal_instance
 
     opencode_native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "opencode-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "opencode-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -12753,8 +12753,8 @@ def test_resolve_opencode_compact_model_prefers_latest_assistant_message() -> No
     must iterate in reverse and ignore user-role messages, picking the live
     model even when a session ``model`` and a ``model_override`` also resolve.
     """
-    from omnigent.opencode_native_client import OpenCodeSession
-    from omnigent.runner.app import _resolve_opencode_compact_model
+    from omnicraft.opencode_native_client import OpenCodeSession
+    from omnicraft.runner.app import _resolve_opencode_compact_model
 
     session = OpenCodeSession.from_payload(
         {"id": "ses_x", "model": {"providerID": "stale", "id": "stale-model"}}
@@ -12788,8 +12788,8 @@ def test_resolve_opencode_compact_model_falls_back_to_session_model() -> None:
     ``modelID``). An assistant message missing ``modelID`` must be skipped so
     the session field is used.
     """
-    from omnigent.opencode_native_client import OpenCodeSession
-    from omnigent.runner.app import _resolve_opencode_compact_model
+    from omnicraft.opencode_native_client import OpenCodeSession
+    from omnicraft.runner.app import _resolve_opencode_compact_model
 
     session = OpenCodeSession.from_payload(
         {"id": "ses_x", "model": {"providerID": "anthropic", "id": "claude-opus-4"}}
@@ -12809,8 +12809,8 @@ def test_resolve_opencode_compact_model_falls_back_to_model_override() -> None:
     A model id may itself contain ``/`` (e.g. an OpenRouter slug), so only the
     FIRST separator delimits provider from model.
     """
-    from omnigent.opencode_native_client import OpenCodeSession
-    from omnigent.runner.app import _resolve_opencode_compact_model
+    from omnicraft.opencode_native_client import OpenCodeSession
+    from omnicraft.runner.app import _resolve_opencode_compact_model
 
     session = OpenCodeSession.from_payload({"id": "ses_x"})
 
@@ -12825,11 +12825,11 @@ def test_resolve_opencode_compact_model_returns_none_when_unresolvable() -> None
     """
     Nothing resolvable → ``(None, None)`` so the handler 204s to AP-side.
 
-    Covers the live Omnigent flow: the session is created without a model and
+    Covers the live OmniCraft flow: the session is created without a model and
     has no assistant turn yet, and no override is set.
     """
-    from omnigent.opencode_native_client import OpenCodeSession
-    from omnigent.runner.app import _resolve_opencode_compact_model
+    from omnicraft.opencode_native_client import OpenCodeSession
+    from omnicraft.runner.app import _resolve_opencode_compact_model
 
     session = OpenCodeSession.from_payload({"id": "ses_x"})
 
@@ -12847,8 +12847,8 @@ async def test_events_compact_on_opencode_native_summarizes_from_assistant_messa
     opencode-native compact resolves the live model and calls ``/summarize``.
 
     The model comes from the latest assistant message (``providerID`` +
-    ``modelID``) because Omnigent creates the session without a model. A 200
-    return is load-bearing: the Omnigent server reads it to skip its AP-side
+    ``modelID``) because OmniCraft creates the session without a model. A 200
+    return is load-bearing: the OmniCraft server reads it to skip its AP-side
     compaction (the native ``/summarize`` path was previously dead, always
     204ing because ``session.raw["model"]`` is empty).
     """
@@ -12943,7 +12943,7 @@ async def test_events_compact_on_opencode_native_204_when_model_unresolvable(
     """
     No resolvable model → 204 and ``/summarize`` is never called.
 
-    The 204 tells the Omnigent server to run its own AP-side compaction.
+    The 204 tells the OmniCraft server to run its own AP-side compaction.
     """
     resp, client = await _drive_opencode_native_compact(
         monkeypatch,
@@ -12971,10 +12971,10 @@ async def test_events_compact_on_opencode_native_503_when_summarize_raises(
     """
     A failing ``/summarize`` surfaces 503 with the opencode error code.
 
-    The Omnigent server must see the failure (rather than a silent fallback)
+    The OmniCraft server must see the failure (rather than a silent fallback)
     so it does not run a duplicate compaction.
     """
-    from omnigent.opencode_native_client import OpenCodeClientError
+    from omnicraft.opencode_native_client import OpenCodeClientError
 
     resp, client = await _drive_opencode_native_compact(
         monkeypatch,
@@ -13012,12 +13012,12 @@ async def test_events_compact_on_non_native_session_is_204_noop(
 
     For in-process harnesses, explicit compaction is an AP-side
     operation (``_run_compact_locked`` → ``compact_conversation_now``).
-    The Omnigent server forwards ``compact`` to ``/events`` for every harness
+    The OmniCraft server forwards ``compact`` to ``/events`` for every harness
     (it stays harness-agnostic), so the runner must accept the event
     and 204 — never reach the slash-command injector. The 204 tells the
-    Omnigent server to run its own compaction.
+    OmniCraft server to run its own compaction.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(
         bridge_dir: Any,
@@ -13039,7 +13039,7 @@ async def test_events_compact_on_non_native_session_is_204_noop(
     default_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={}),
+        executor=ExecutorSpec(type="omnicraft", config={}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13079,7 +13079,7 @@ async def test_events_compact_on_non_native_session_is_204_noop(
     "event_payload,inject_attr",
     # ``/fork`` creates a new conversation that reuses the
     # same Claude process (same bridge_dir), so the new session has
-    # bridge_id != conv_id, stored on the ``omnigent.claude_native
+    # bridge_id != conv_id, stored on the ``omnicraft.claude_native
     # .bridge_id`` label. The runner-side native dispatch MUST
     # resolve bridge_id via ``_claude_native_bridge_id_for_session``
     # so the slash command lands in the right pane. Using
@@ -13109,7 +13109,7 @@ async def test_events_native_dispatch_resolves_bridge_id_via_label_lookup(
     handlers used ``bridge_dir_for_conversation_id(conv_id)``
     directly, which is broken for ``/fork`` sessions (bridge_id !=
     conv_id, stored on label
-    ``omnigent.claude_native.bridge_id``).
+    ``omnicraft.claude_native.bridge_id``).
 
     Strategy: monkeypatch ``_claude_native_bridge_id_for_session``
     to return a sentinel bridge_id distinct from conv_id. Then
@@ -13119,9 +13119,9 @@ async def test_events_native_dispatch_resolves_bridge_id_via_label_lookup(
     directly. If the handler regresses to the conv_id-only path,
     the assertion fails.
     """
-    from omnigent.claude_native_bridge import bridge_dir_for_bridge_id
-    from omnigent.runner import app as runner_app_module
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.claude_native_bridge import bridge_dir_for_bridge_id
+    from omnicraft.runner import app as runner_app_module
+    from omnicraft.spec.types import ExecutorSpec
 
     captured_bridge_dir: list[Any] = []
 
@@ -13148,7 +13148,7 @@ async def test_events_native_dispatch_resolves_bridge_id_via_label_lookup(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13211,8 +13211,8 @@ async def test_events_model_change_on_native_session_types_slash_command(
     runner dispatch routes model_change to the native handler and
     assembles the right slash command.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     captured: list[Any] = []
 
@@ -13231,7 +13231,7 @@ async def test_events_model_change_on_native_session_types_slash_command(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13301,8 +13301,8 @@ async def test_events_model_change_on_kiro_session_types_slash_command(
     Pins that the runner dispatch routes model_change to the kiro handler.
     Mirrors ``test_events_model_change_on_native_session_types_slash_command``.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     captured: list[Any] = []
 
@@ -13315,7 +13315,7 @@ async def test_events_model_change_on_kiro_session_types_slash_command(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "kiro-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "kiro-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13372,9 +13372,9 @@ async def test_events_model_change_on_native_session_skips_inject_for_empty_or_n
     Null / empty / whitespace-only model values 204 without typing.
 
     Pins that the empty-value validation lives in the runner native
-    handler, not in the Omnigent server.
+    handler, not in the OmniCraft server.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(
         bridge_dir: Any,
@@ -13395,7 +13395,7 @@ async def test_events_model_change_on_native_session_skips_inject_for_empty_or_n
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13438,11 +13438,11 @@ async def test_events_model_change_on_native_session_returns_503_when_bridge_not
     Sister to the happy-path test. Pins that the failure mode of the
     native model dispatch (tmux pane gone / bridge dir not yet
     advertised) returns 503 with the same error code shape the
-    legacy ``/claude-native-model`` route used. Omnigent server's PATCH
+    legacy ``/claude-native-model`` route used. OmniCraft server's PATCH
     swallows this 503 and still returns 200 with the persisted
     value — the next spawn applies the new model via ``--model``.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(
         bridge_dir: Any,
@@ -13460,7 +13460,7 @@ async def test_events_model_change_on_native_session_returns_503_when_bridge_not
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13505,12 +13505,12 @@ async def test_events_model_change_on_non_native_session_is_204_noop(
     Non-native sessions accept model_change and 204 without side effects.
 
     In-process harnesses re-read the persisted ``model_override`` on
-    each turn (or via the per-event override). Omnigent server is harness-
+    each turn (or via the per-event override). OmniCraft server is harness-
     agnostic and POSTs model_change for every PATCH, so the runner
     must accept the event with a 204 — never reach the slash-command
     injector.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(
         bridge_dir: Any,
@@ -13532,7 +13532,7 @@ async def test_events_model_change_on_non_native_session_is_204_noop(
     default_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={}),
+        executor=ExecutorSpec(type="omnicraft", config={}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13577,7 +13577,7 @@ async def test_events_model_change_on_cursor_native_session_types_slash_command(
     (not the claude slash injector and not a 204 no-op) and pass the
     model id straight through.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     captured: list[tuple[Any, str, float]] = []
 
@@ -13590,7 +13590,7 @@ async def test_events_model_change_on_cursor_native_session_types_slash_command(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "cursor-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "cursor-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13640,7 +13640,7 @@ async def test_events_model_change_on_cursor_native_session_skips_inject_for_emp
     clear only takes effect on the next spawn — mirrors the claude-native
     skip test.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(bridge_dir: Any, *, model: str, timeout_s: float) -> None:
         """Fail the test if the runner reaches inject for an empty value."""
@@ -13652,7 +13652,7 @@ async def test_events_model_change_on_cursor_native_session_skips_inject_for_emp
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "cursor-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "cursor-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13694,9 +13694,9 @@ async def test_events_model_change_on_cursor_native_session_returns_503_when_not
 
     Cursor analog of the claude-native 503 test: a missing tmux target
     (pane not attached yet) returns 503 with the cursor-specific error
-    code; Omnigent server swallows it and the next spawn applies ``--model``.
+    code; OmniCraft server swallows it and the next spawn applies ``--model``.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(bridge_dir: Any, *, model: str, timeout_s: float) -> None:
         """Simulate the bridge-not-ready path."""
@@ -13708,7 +13708,7 @@ async def test_events_model_change_on_cursor_native_session_returns_503_when_not
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "cursor-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "cursor-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13757,12 +13757,12 @@ async def test_events_effort_change_on_cursor_native_session_is_disabled_noop(
     effort value (cursor-native is excluded from the effort_change gate, and the
     effort injector no longer exists).
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "cursor-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "cursor-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -13804,8 +13804,8 @@ async def test_auto_create_claude_terminal_registers_permission_hook(
 
     The runner's ``_auto_create_claude_terminal`` is the launch path
     used when a claude-native session is created with no CLI client
-    present (web-UI sessions, the ``omnigent host`` host API). It
-    must pass the Omnigent server URL into ``augment_claude_args`` so
+    present (web-UI sessions, the ``omnicraft host`` host API). It
+    must pass the OmniCraft server URL into ``augment_claude_args`` so
     ``build_hook_settings`` registers the ``PermissionRequest`` command
     hook and writes permission_hook.json. Without it, approval prompts
     silently never reach the web UI even though every other hook is
@@ -13827,7 +13827,7 @@ async def test_auto_create_claude_terminal_registers_permission_hook(
         forwarder_kwargs.update(kwargs)
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _no_op_forwarder,
     )
 
@@ -13883,7 +13883,7 @@ async def test_auto_create_claude_terminal_registers_permission_hook(
     assert "claude_native_hook permission-request" in permission_hook["command"]
 
     # The hook reads the server URL back out of this file at hook time,
-    # so it must be written with the runner's Omnigent server URL.
+    # so it must be written with the runner's OmniCraft server URL.
     config = read_permission_hook_config(bridge_dir_for_bridge_id("conv_abc"))
     assert config["ap_server_url"] == "http://127.0.0.1:8000"
 
@@ -13892,7 +13892,7 @@ async def test_auto_create_claude_terminal_registers_permission_hook(
     # session keeps forwarding after the ~1h OAuth token expires.
     # ``_auto_create_claude_terminal`` schedules the forwarder as a task;
     # yield once so the stub records its kwargs before asserting.
-    from omnigent.runner._entry import _RunnerDatabricksAuth
+    from omnicraft.runner._entry import _RunnerDatabricksAuth
 
     await asyncio.sleep(0)
     assert isinstance(forwarder_kwargs.get("auth"), _RunnerDatabricksAuth)
@@ -13918,9 +13918,9 @@ async def test_auto_create_pi_terminal_launches_required_terminal(
     :param tmp_path: Pytest-provided temporary directory.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    import omnigent.pi_native as pi_native
-    import omnigent.pi_native_bridge as pi_native_bridge
-    import omnigent.pi_native_credentials as pi_native_credentials
+    import omnicraft.pi_native as pi_native
+    import omnicraft.pi_native_bridge as pi_native_bridge
+    import omnicraft.pi_native_credentials as pi_native_credentials
 
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:8000")
     monkeypatch.setattr(pi_native_bridge, "_BRIDGE_ROOT", tmp_path / "pi-bridge")
@@ -13943,7 +13943,7 @@ async def test_auto_create_pi_terminal_launches_required_terminal(
             external_session_id=None,
         )
 
-    monkeypatch.setattr("omnigent.runner.app._pi_native_launch_config", _fake_launch_config)
+    monkeypatch.setattr("omnicraft.runner.app._pi_native_launch_config", _fake_launch_config)
 
     captured: dict[str, Any] = {}
 
@@ -13999,7 +13999,7 @@ async def test_auto_create_kiro_terminal_launches_required_terminal_with_isolate
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Kiro-native auto-create launches the TUI and session forwarder."""
-    import omnigent.kiro_native as kiro_native
+    import omnicraft.kiro_native as kiro_native
 
     monkeypatch.setenv("PATH", "/usr/bin")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -14026,11 +14026,11 @@ async def test_auto_create_kiro_terminal_launches_required_terminal_with_isolate
         relay_calls.append({"session_id": session_id, **kwargs})
 
     monkeypatch.setattr(
-        "omnigent.kiro_native_session_forwarder.supervise_kiro_session_forwarder",
+        "omnicraft.kiro_native_session_forwarder.supervise_kiro_session_forwarder",
         _fake_supervise_kiro_session_forwarder,
     )
     monkeypatch.setattr(
-        "omnigent.kiro_native_permissions.supervise_kiro_permission_mirror",
+        "omnicraft.kiro_native_permissions.supervise_kiro_permission_mirror",
         _fake_supervise_kiro_permission_mirror,
     )
 
@@ -14041,7 +14041,7 @@ async def test_auto_create_kiro_terminal_launches_required_terminal_with_isolate
             external_session_id="kiro-session-123",
         )
 
-    monkeypatch.setattr("omnigent.runner.app._kiro_native_launch_config", _fake_launch_config)
+    monkeypatch.setattr("omnicraft.runner.app._kiro_native_launch_config", _fake_launch_config)
 
     captured: dict[str, Any] = {}
 
@@ -14123,7 +14123,7 @@ async def test_auto_create_kiro_terminal_launches_required_terminal_with_isolate
     assert permission_mirror_calls
     assert permission_mirror_calls[0]["base_url"] == "http://127.0.0.1:6767"
     assert permission_mirror_calls[0]["session_id"] == "conv_kiro"
-    # The Omnigent MCP tool relay is seeded for this session's bridge dir.
+    # The OmniCraft MCP tool relay is seeded for this session's bridge dir.
     assert relay_calls == [
         {
             "session_id": "conv_kiro",
@@ -14131,11 +14131,11 @@ async def test_auto_create_kiro_terminal_launches_required_terminal_with_isolate
             "await_notify": False,
         }
     ]
-    # And the Omnigent MCP server is declared in the workspace-scoped kiro config.
+    # And the OmniCraft MCP server is declared in the workspace-scoped kiro config.
     workspace_mcp = tmp_path / ".kiro" / "settings" / "mcp.json"
     assert workspace_mcp.exists()
     mcp_servers = json.loads(workspace_mcp.read_text())["mcpServers"]
-    assert "serve-mcp" in mcp_servers["omnigent"]["args"]
+    assert "serve-mcp" in mcp_servers["omnicraft"]["args"]
 
 
 @pytest.mark.asyncio
@@ -14143,14 +14143,14 @@ async def test_auto_create_kiro_terminal_skips_mcp_wiring_without_relay(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Without a comment-relay callback, the Omnigent MCP is NOT wired.
+    """Without a comment-relay callback, the OmniCraft MCP is NOT wired.
 
     The workspace mcp.json write + relay seed are gated on ``server_client`` AND
     ``ensure_comment_relay`` together, so serve-mcp never launches with no relay
     to route calls back to. With ``ensure_comment_relay`` absent the gate must
     short-circuit: no workspace ``mcp.json`` is written.
     """
-    import omnigent.kiro_native as kiro_native
+    import omnicraft.kiro_native as kiro_native
 
     monkeypatch.setenv("PATH", "/usr/bin")
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
@@ -14166,11 +14166,11 @@ async def test_auto_create_kiro_terminal_skips_mcp_wiring_without_relay(
         return None
 
     monkeypatch.setattr(
-        "omnigent.kiro_native_session_forwarder.supervise_kiro_session_forwarder",
+        "omnicraft.kiro_native_session_forwarder.supervise_kiro_session_forwarder",
         _noop_supervise,
     )
     monkeypatch.setattr(
-        "omnigent.kiro_native_permissions.supervise_kiro_permission_mirror",
+        "omnicraft.kiro_native_permissions.supervise_kiro_permission_mirror",
         _noop_supervise,
     )
     mcp_writes: list[Any] = []
@@ -14187,7 +14187,7 @@ async def test_auto_create_kiro_terminal_skips_mcp_wiring_without_relay(
             external_session_id=None,
         )
 
-    monkeypatch.setattr("omnigent.runner.app._kiro_native_launch_config", _fake_launch_config)
+    monkeypatch.setattr("omnicraft.runner.app._kiro_native_launch_config", _fake_launch_config)
 
     class _FakeResourceRegistry:
         terminal_registry = None
@@ -14239,10 +14239,10 @@ async def test_auto_create_pi_terminal_inherits_agent_sandbox(
     :param tmp_path: Pytest-provided temporary directory.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    import omnigent.pi_native as pi_native
-    import omnigent.pi_native_bridge as pi_native_bridge
-    import omnigent.pi_native_credentials as pi_native_credentials
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    import omnicraft.pi_native as pi_native
+    import omnicraft.pi_native_bridge as pi_native_bridge
+    import omnicraft.pi_native_credentials as pi_native_credentials
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:8000")
     monkeypatch.setattr(pi_native_bridge, "_BRIDGE_ROOT", tmp_path / "pi-bridge")
@@ -14261,7 +14261,7 @@ async def test_auto_create_pi_terminal_inherits_agent_sandbox(
             external_session_id=None,
         )
 
-    monkeypatch.setattr("omnigent.runner.app._pi_native_launch_config", _fake_launch_config)
+    monkeypatch.setattr("omnicraft.runner.app._pi_native_launch_config", _fake_launch_config)
 
     captured: dict[str, Any] = {}
 
@@ -14303,7 +14303,7 @@ async def test_auto_create_pi_terminal_inherits_agent_sandbox(
         spec_version=1,
         name="pi_code",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "pi-native", "model": "pi-default"},
         ),
         os_env=agent_os_env,
@@ -14335,7 +14335,7 @@ async def test_auto_create_claude_terminal_passes_session_effort(
     """
     Host-spawned terminal launch reads session effort and passes ``--effort``.
 
-    When the Omnigent server returns a session with a persisted
+    When the OmniCraft server returns a session with a persisted
     ``reasoning_effort``, the auto-create path must include
     ``--effort <value>`` in the Claude CLI args so the terminal
     starts at the user's chosen effort level.
@@ -14351,7 +14351,7 @@ async def test_auto_create_claude_terminal_passes_session_effort(
         del kwargs
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _no_op_forwarder,
     )
 
@@ -14383,7 +14383,7 @@ async def test_auto_create_claude_terminal_passes_session_effort(
                 metadata={"terminal_name": "claude", "session_key": "main", "running": True},
             )
 
-    # Fake Omnigent server client that returns a session with reasoning_effort.
+    # Fake OmniCraft server client that returns a session with reasoning_effort.
     fake_client = httpx.AsyncClient(
         base_url="http://test-server",
         transport=httpx.MockTransport(
@@ -14419,13 +14419,13 @@ def test_agent_os_env_from_spec_unwraps_resolved_and_handles_none() -> None:
     return ``None`` when there is no spec — so the launch falls back to the
     platform default only when there is genuinely no agent policy to honour.
     """
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     os_env = OSEnvSpec(type="caller_process", cwd=".", sandbox=OSEnvSandboxSpec(type="none"))
     bare = AgentSpec(
         spec_version=1,
         name="agent",
-        executor=ExecutorSpec(type="omnigent", config={}),
+        executor=ExecutorSpec(type="omnicraft", config={}),
         os_env=os_env,
     )
 
@@ -14439,7 +14439,7 @@ def test_agent_os_env_from_spec_unwraps_resolved_and_handles_none() -> None:
     no_os_env = AgentSpec(
         spec_version=1,
         name="agent",
-        executor=ExecutorSpec(type="omnigent", config={}),
+        executor=ExecutorSpec(type="omnicraft", config={}),
     )
     assert _agent_os_env_from_spec(no_os_env) is None
 
@@ -14469,7 +14469,7 @@ async def test_auto_create_claude_terminal_inherits_agent_sandbox(
     :param tmp_path: Pytest-provided temporary directory.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     monkeypatch.setattr(claude_native_bridge, "_TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr(claude_native_bridge, "_BRIDGE_ROOT", tmp_path / "root")
@@ -14479,7 +14479,7 @@ async def test_auto_create_claude_terminal_inherits_agent_sandbox(
         del kwargs
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _no_op_forwarder,
     )
 
@@ -14530,7 +14530,7 @@ async def test_auto_create_claude_terminal_inherits_agent_sandbox(
         spec_version=1,
         name="claude_code",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "claude-native", "model": "claude-default"},
         ),
         os_env=agent_os_env,
@@ -14577,13 +14577,13 @@ async def test_auto_create_claude_terminal_injects_ucode_gateway_config(
     :param tmp_path: Pytest-provided temporary directory.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    from omnigent.claude_native import ClaudeNativeUcodeConfig
+    from omnicraft.claude_native import ClaudeNativeUcodeConfig
 
     monkeypatch.setattr(claude_native_bridge, "_TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr(claude_native_bridge, "_BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:8000")
     # The supported credential source for a host-spawned runner: the
-    # global config's ``auth:`` block (written by ``omnigent setup``),
+    # global config's ``auth:`` block (written by ``omnicraft setup``),
     # isolated to a temp config home so the developer's real config
     # can't leak in.
     config_home = tmp_path / "config-home"
@@ -14591,13 +14591,13 @@ async def test_auto_create_claude_terminal_injects_ucode_gateway_config(
     (config_home / "config.yaml").write_text(
         "auth:\n  type: databricks\n  profile: test-profile\n"
     )
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(config_home))
 
     async def _no_op_forwarder(**kwargs: Any) -> None:
         del kwargs
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _no_op_forwarder,
     )
 
@@ -14608,9 +14608,9 @@ async def test_auto_create_claude_terminal_injects_ucode_gateway_config(
         model="databricks-claude-opus-4-7",
     )
     # The runner imports ``_ucode_config_for_profile`` from
-    # ``omnigent.claude_native`` per call, so patch it at the source.
+    # ``omnicraft.claude_native`` per call, so patch it at the source.
     monkeypatch.setattr(
-        "omnigent.claude_native._ucode_config_for_profile",
+        "omnicraft.claude_native._ucode_config_for_profile",
         lambda profile: ucode,
     )
 
@@ -14692,19 +14692,19 @@ async def _run_auto_create_cursor_terminal(
     ``httpx.MockTransport``, and a fake registry records the ``spec`` passed to
     ``launch_required_terminal`` so the test can assert on ``spec.args``.
     """
-    from omnigent.runner import _entry as _runner_entry
+    from omnicraft.runner import _entry as _runner_entry
 
     workspace = tmp_path / "ws"
     workspace.mkdir()
     monkeypatch.setattr(cursor_native_bridge, "_BRIDGE_ROOT", tmp_path / "cursor-bridge")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:8000")
-    monkeypatch.setattr("omnigent.cursor_native.resolve_cursor_executable", lambda: "cursor-agent")
+    monkeypatch.setattr("omnicraft.cursor_native.resolve_cursor_executable", lambda: "cursor-agent")
 
     async def _no_op_forwarder(**kwargs: Any) -> None:
         del kwargs
 
     monkeypatch.setattr(
-        "omnigent.cursor_native_forwarder.supervise_cursor_forwarder",
+        "omnicraft.cursor_native_forwarder.supervise_cursor_forwarder",
         _no_op_forwarder,
     )
     # The forwarder is stubbed, so the auth it would carry is never used — keep
@@ -14860,7 +14860,7 @@ async def test_auto_create_claude_terminal_forwarder_skips_replayed_transcript_o
 
     On cold resume the runner synthesizes Claude's local transcript from
     AP's committed history and launches ``claude --resume``, so the
-    transcript file already holds every item Omnigent has at offset 0. The
+    transcript file already holds every item OmniCraft has at offset 0. The
     forwarder must therefore start at the transcript end
     (``start_at_end=True``); starting at offset 0 would re-post the whole
     history as new ``external_conversation_item`` records — which carry no
@@ -14882,7 +14882,7 @@ async def test_auto_create_claude_terminal_forwarder_skips_replayed_transcript_o
     monkeypatch.setattr(claude_native_bridge, "_TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr(claude_native_bridge, "_BRIDGE_ROOT", tmp_path / "root")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:8000")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     # Pin the launch config to Claude's native auth so the test does not
     # depend on the runner process's ambient Databricks profile.
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
@@ -14894,11 +14894,11 @@ async def test_auto_create_claude_terminal_forwarder_skips_replayed_transcript_o
         forwarder_kwargs.update(kwargs)
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _capture_forwarder,
     )
 
-    # Transcript synthesis from Omnigent history has its own coverage; stub it to
+    # Transcript synthesis from OmniCraft history has its own coverage; stub it to
     # return a path so the resume branch sets ``resume_external_session_id``
     # without a real item fetch. A non-None return mirrors the production
     # contract: it means ``--resume`` will be passed, which is precisely the
@@ -14918,7 +14918,7 @@ async def test_auto_create_claude_terminal_forwarder_skips_replayed_transcript_o
         return tmp_path / f"{external_session_id}.jsonl"
 
     monkeypatch.setattr(
-        "omnigent.claude_native._ensure_local_claude_resume_transcript",
+        "omnicraft.claude_native._ensure_local_claude_resume_transcript",
         _fake_synth,
     )
 
@@ -15076,7 +15076,7 @@ async def test_auto_create_claude_terminal_emits_resource_created_event(
         del kwargs
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _no_op_forwarder,
     )
 
@@ -15129,7 +15129,7 @@ async def test_auto_create_claude_terminal_emits_resource_created_event(
     assert len(created) == 1, (
         f"auto-create must publish exactly one session.resource.created; got {published}"
     )
-    # Routed under the session id so the Omnigent relay forwards it to that
+    # Routed under the session id so the OmniCraft relay forwards it to that
     # session's web stream.
     assert created[0].session_id == "conv_emit"
     resource = created[0].event["resource"]
@@ -15141,7 +15141,7 @@ async def test_auto_create_claude_terminal_emits_resource_created_event(
 
 def test_publish_terminal_pending_emits_pending_then_clear() -> None:
     """
-    ``_publish_terminal_pending`` emits the wire shape the Omnigent relay
+    ``_publish_terminal_pending`` emits the wire shape the OmniCraft relay
     consumes for the Terminal-pill spinner.
 
     The session-creation handler calls this with ``True`` before
@@ -15163,7 +15163,7 @@ def test_publish_terminal_pending_emits_pending_then_clear() -> None:
         {"type": "session.terminal_pending", "pending": True},
         {"type": "session.terminal_pending", "pending": False},
     ]
-    # Routed under the session id so the Omnigent relay forwards it to that
+    # Routed under the session id so the OmniCraft relay forwards it to that
     # session's web stream.
     assert all(p.session_id == "conv_pending" for p in published)
 
@@ -15177,7 +15177,7 @@ def test_publish_native_terminal_start_error_emits_failed_status_only(
     The runner must stay alive when terminal auto-create fails, but the
     affected session should only receive ``session.status: failed`` from
     this startup path. A bare ``response.error`` is turn-scoped; if the
-    runner publishes one here, Omnigent can persist an orphan transcript error
+    runner publishes one here, OmniCraft can persist an orphan transcript error
     and then publish/persist a second error when the user message
     fast-fails against the same terminal.
 
@@ -15250,7 +15250,7 @@ def test_terminal_lookup_miss_log_explains_stopped_registered_terminal(
 
     _terminal_lookup_miss_log_state.clear()
     try:
-        with caplog.at_level(logging.INFO, logger="omnigent.runner.app"):
+        with caplog.at_level(logging.INFO, logger="omnicraft.runner.app"):
             _log_terminal_lookup_miss(
                 resource_registry,
                 "conv_lookup",
@@ -15282,7 +15282,7 @@ async def test_auto_create_claude_terminal_resets_stale_bridge_id_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    Auto-create corrects a stale ``bridge_id`` label on the Omnigent session.
+    Auto-create corrects a stale ``bridge_id`` label on the OmniCraft session.
 
     If a prior rotation left ``BRIDGE_ID_LABEL_KEY`` set to an older
     bridge id (e.g. ``"m0-bridge_from_prior_rotation"``),
@@ -15301,7 +15301,7 @@ async def test_auto_create_claude_terminal_resets_stale_bridge_id_label(
         del kwargs
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _no_op_forwarder,
     )
 
@@ -15339,7 +15339,7 @@ async def test_auto_create_claude_terminal_resets_stale_bridge_id_label(
                 },
             )
 
-    # Capture all HTTP requests made to the fake Omnigent server.
+    # Capture all HTTP requests made to the fake OmniCraft server.
     recorded_requests: list[httpx.Request] = []
 
     def _handle(req: httpx.Request) -> httpx.Response:
@@ -15411,7 +15411,7 @@ async def test_auto_create_claude_terminal_honours_cleared_bridge_label(
         del kwargs
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _no_op_forwarder,
     )
 
@@ -15698,12 +15698,12 @@ async def test_create_session_auto_create_guard_skips_rotation_targets(
         del resource_registry, publish_event
         created.append(session_id)
 
-    monkeypatch.setattr("omnigent.runner.app._auto_create_claude_terminal", _recording_auto_create)
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_claude_terminal", _recording_auto_create)
 
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "claude-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -15882,7 +15882,7 @@ async def test_create_session_antigravity_auto_create_guard_skips_rotation_targe
     """
     The antigravity-native auto-create guard skips ``/clear`` rotation targets.
 
-    A ``/clear`` rotation binds the runner to a fresh Omnigent session, then
+    A ``/clear`` rotation binds the runner to a fresh OmniCraft session, then
     transfers the existing agy terminal onto it — agy is one long-lived process
     hosting many cascades, so the rotation re-homes the SAME process. The bind
     reaches the runner's ``POST /v1/sessions`` before the transfer runs, so the
@@ -15900,7 +15900,7 @@ async def test_create_session_antigravity_auto_create_guard_skips_rotation_targe
     ``clear_rotation_target_skips`` case red (auto-create fires for a rotation
     target again).
     """
-    import omnigent.antigravity_native_bridge as bridge_mod
+    import omnicraft.antigravity_native_bridge as bridge_mod
 
     monkeypatch.setattr(bridge_mod, "_BRIDGE_ROOT", tmp_path / "antigravity-native")
 
@@ -15953,13 +15953,13 @@ async def test_create_session_antigravity_auto_create_guard_skips_rotation_targe
         created.append(session_id)
 
     monkeypatch.setattr(
-        "omnigent.runner.app._auto_create_antigravity_terminal", _recording_auto_create
+        "omnicraft.runner.app._auto_create_antigravity_terminal", _recording_auto_create
     )
 
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "antigravity-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "antigravity-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -16133,7 +16133,7 @@ async def test_create_session_terminal_ensure_routes_claude_native(
             name="launched",
         )
 
-    monkeypatch.setattr("omnigent.runner.app._auto_create_claude_terminal", _stub_auto_create)
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_claude_terminal", _stub_auto_create)
     monkeypatch.setattr(SessionResourceRegistry, "get_terminal_resource", _stub_get_terminal)
     monkeypatch.setattr(
         SessionResourceRegistry,
@@ -16178,8 +16178,8 @@ async def test_create_session_terminal_ensure_failure_returns_json_without_live_
     """
     Native terminal ensure failures are reported to AP, not published live.
 
-    ``ensure_native_terminal`` is called by the Omnigent server while handling a
-    user message. Omnigent owns that failed transcript turn: it persists the
+    ``ensure_native_terminal`` is called by the OmniCraft server while handling a
+    user message. OmniCraft owns that failed transcript turn: it persists the
     consumed user message, appends the sibling ``error`` item, and
     publishes the live banner. If the runner endpoint also publishes
     ``response.error`` before returning its structured 500, the same
@@ -16205,9 +16205,9 @@ async def test_create_session_terminal_ensure_failure_returns_json_without_live_
         """Fail if the ensure endpoint tries to publish the live banner."""
         raise AssertionError("ensure endpoint must not publish response.error")
 
-    monkeypatch.setattr("omnigent.runner.app._auto_create_claude_terminal", _failing_auto_create)
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_claude_terminal", _failing_auto_create)
     monkeypatch.setattr(
-        "omnigent.runner.app._publish_native_terminal_start_error",
+        "omnicraft.runner.app._publish_native_terminal_start_error",
         _unexpected_live_publish,
     )
 
@@ -16462,7 +16462,7 @@ async def test_create_session_terminal_ensure_routes_codex_native(
             name="launched",
         )
 
-    monkeypatch.setattr("omnigent.runner.app._auto_create_codex_terminal", _stub_auto_create)
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_codex_terminal", _stub_auto_create)
     monkeypatch.setattr(SessionResourceRegistry, "get_terminal_resource", _stub_get_terminal)
     monkeypatch.setattr(
         SessionResourceRegistry,
@@ -16513,7 +16513,7 @@ async def test_late_status_for_deleted_sub_agent_child_is_not_a_spurious_503() -
     child is deleted there is nothing to preserve, so ``delete_session`` must
     drop the name. Without the pop, the lingering name makes the late status
     read ``is_runner_known_subagent=True`` with no work entry → a spurious
-    ``503 subagent_delivery_not_confirmed`` (which Omnigent then retries) plus an
+    ``503 subagent_delivery_not_confirmed`` (which OmniCraft then retries) plus an
     unbounded leak of the name map across deleted sessions.
     """
     child_id = "conv_child_late_status_after_delete"
@@ -16551,7 +16551,7 @@ async def test_late_status_for_deleted_sub_agent_child_is_not_a_spurious_503() -
     assert late_status.status_code == 204, late_status.text
 
 
-# ── Omnigent REPL terminal auto-create (SDK sessions) ────────────────
+# ── OmniCraft REPL terminal auto-create (SDK sessions) ────────────────
 
 
 @dataclass
@@ -16560,7 +16560,7 @@ class _RecordedPatch:
     A PATCH captured from the REPL terminal auto-create helper.
 
     :param url: Request path, e.g. ``"/v1/sessions/conv_repl"``.
-    :param json: JSON body, e.g. ``{"labels": {"omnigent.ui": "terminal"}}``.
+    :param json: JSON body, e.g. ``{"labels": {"omnicraft.ui": "terminal"}}``.
     """
 
     url: str
@@ -16573,13 +16573,13 @@ async def test_auto_create_repl_terminal_launches_attach_and_stamps_label(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    The REPL terminal hosts ``omnigent attach`` and stamps the UI label.
+    The REPL terminal hosts ``omnicraft attach`` and stamps the UI label.
 
     The web UI embeds the framework's own TUI for SDK sessions through
-    this terminal: the spec must run ``omnigent attach <session_id>
+    this terminal: the spec must run ``omnicraft attach <session_id>
     --server <runner's server URL>`` (a co-drive client of the live
     session), defer the process to first attach, pin the cwd to the
-    runner workspace, stamp the ``omnigent.ui: terminal`` label that
+    runner workspace, stamp the ``omnicraft.ui: terminal`` label that
     gates the web Chat/Terminal pill, and publish the resource on the
     live stream. Each wrong value maps to a distinct user-facing break:
     wrong command/args → dead pane or wrong session; missing label →
@@ -16589,11 +16589,11 @@ async def test_auto_create_repl_terminal_launches_attach_and_stamps_label(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    from omnigent._wrapper_labels import UI_MODE_LABEL_KEY, UI_MODE_TERMINAL_VALUE
+    from omnicraft._wrapper_labels import UI_MODE_LABEL_KEY, UI_MODE_TERMINAL_VALUE
 
     session_id = "conv_repl"
     workspace = tmp_path / "workspace"
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(workspace))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
 
     launched_specs: list[Any] = []
@@ -16629,7 +16629,7 @@ async def test_auto_create_repl_terminal_launches_attach_and_stamps_label(
             # 4404). It is distinct from CLAUDE_NATIVE_TERMINAL_ROLE,
             # so the pane's activity still does not drive the
             # session's working status.
-            assert resource_role == OMNIGENT_REPL_TERMINAL_ROLE
+            assert resource_role == OMNICRAFT_REPL_TERMINAL_ROLE
             launched_specs.append(spec)
             return SessionResourceView(
                 id="terminal_tui_main",
@@ -16676,7 +16676,7 @@ async def test_auto_create_repl_terminal_launches_attach_and_stamps_label(
     assert launched.command == sys.executable
     assert launched.args == [
         "-m",
-        "omnigent",
+        "omnicraft",
         "attach",
         session_id,
         "--server",
@@ -16732,11 +16732,11 @@ async def test_auto_create_repl_terminal_inherits_agent_sandbox(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     session_id = "conv_repl_sandbox_none"
     workspace = tmp_path / "workspace"
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(workspace))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
 
     captured: dict[str, Any] = {}
@@ -16784,7 +16784,7 @@ async def test_auto_create_repl_terminal_inherits_agent_sandbox(
         spec_version=1,
         name="sdk_worker",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "openai-agents", "model": "claude-default"},
         ),
         os_env=agent_os_env,
@@ -16848,7 +16848,7 @@ async def test_create_session_repl_terminal_dispatch(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     # Keep the codex-native branch's bridge writes inside tmp_path.
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
@@ -16856,7 +16856,7 @@ async def test_create_session_repl_terminal_dispatch(
     spec = AgentSpec(
         spec_version=1,
         name="dispatch-agent",
-        executor=ExecutorSpec(type="omnigent", config={"harness": harness}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": harness}),
     )
     pm = _FakeProcessManager(_ScriptedHarnessClient([]))
 
@@ -16935,7 +16935,7 @@ class _WakePost:
 
 class _QueuedResponseServerClient:
     """
-    Omnigent HTTP client stub that returns a fixed queue of real responses.
+    OmniCraft HTTP client stub that returns a fixed queue of real responses.
 
     A real stub (NOT ``MagicMock``) so that an unexpected attribute access or
     an extra POST beyond the queue fails the test loudly instead of silently
@@ -17015,7 +17015,7 @@ def _no_wake_backoff(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     async def _record(seconds: float) -> None:
         recorded.append(seconds)
 
-    monkeypatch.setattr("omnigent.runner.app._wake_retry_sleep", _record)
+    monkeypatch.setattr("omnicraft.runner.app._wake_retry_sleep", _record)
     return recorded
 
 
@@ -17025,7 +17025,7 @@ async def test_wake_post_retries_transient_503_then_succeeds(
     """
     A transient 503 wake response is retried and the next 200 succeeds.
 
-    Guards the core bug: Omnigent returns a genuine 503 ``RUNNER_UNAVAILABLE``
+    Guards the core bug: OmniCraft returns a genuine 503 ``RUNNER_UNAVAILABLE``
     *response* (not a transport exception) while the parent's runner tunnel
     reconnects. The wake POST must treat that as a failure and retry, not
     accept it as delivered.
@@ -17162,7 +17162,7 @@ def test_wake_post_transport_error_is_retryable() -> None:
     A transport-level error (no response) is always retryable.
 
     A ``ConnectError`` carries no HTTP response — the POST may never have
-    reached Omnigent — so the wake should be retried.
+    reached OmniCraft — so the wake should be retried.
     """
     request = httpx.Request("POST", "http://test/v1/sessions/p/events")
     exc = httpx.ConnectError("connection refused", request=request)
@@ -17216,7 +17216,7 @@ async def test_cancel_auto_forwarder_task_cancels_and_awaits_registered_task() -
     still post items (it runs right before the bridge's forward-cursor
     state is wiped).
     """
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_fwd_cancel_awaits"
     run = _ForwarderRun()
@@ -17273,7 +17273,7 @@ async def test_register_auto_forwarder_task_replaces_incumbent_and_survives_stal
        Without the identity check, B would lose its strong reference and
        the registry would report no forwarder for a session that has one.
     """
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_fwd_stale_evict"
     run_a = _ForwarderRun()
@@ -17328,7 +17328,7 @@ async def test_auto_forwarder_registry_isolates_sessions_and_evicts_completed() 
     finishes on its own removes its entry (the dict must not leak entries
     the way the old set relied on ``discard`` for).
     """
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     run_a = _ForwarderRun()
     run_b = _ForwarderRun()
@@ -17389,7 +17389,7 @@ async def test_auto_create_claude_terminal_recreate_cancels_prior_forwarder(
     :param tmp_path: Pytest-provided temporary directory.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     monkeypatch.setattr(claude_native_bridge, "_TRUSTED_PARENT", tmp_path)
     monkeypatch.setattr(claude_native_bridge, "_BRIDGE_ROOT", tmp_path / "root")
@@ -17410,7 +17410,7 @@ async def test_auto_create_claude_terminal_recreate_cancels_prior_forwarder(
             raise
 
     monkeypatch.setattr(
-        "omnigent.claude_native_forwarder.supervise_forwarder",
+        "omnicraft.claude_native_forwarder.supervise_forwarder",
         _parking_forwarder,
     )
 
@@ -17503,16 +17503,16 @@ async def test_auto_create_codex_terminal_recreate_cancels_prior_forwarder(
     :param tmp_path: Temporary directory for isolated bridge state.
     :param monkeypatch: Pytest monkeypatch fixture.
     """
-    import omnigent.codex_native_app_server as codex_app_mod
-    import omnigent.runner.app as runner_app_mod
+    import omnicraft.codex_native_app_server as codex_app_mod
+    import omnicraft.runner.app as runner_app_mod
 
     session_id = "conv_codex_fwd_recreate"
     thread_id = "019e96aa-0be2-7343-8d3b-6f914d60936b"
     monkeypatch.setattr(codex_native_bridge, "_BRIDGE_ROOT", tmp_path / "codex-bridge")
-    monkeypatch.setenv("OMNIGENT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(tmp_path / "workspace"))
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://ap.example")
     monkeypatch.delenv("DATABRICKS_CONFIG_PROFILE", raising=False)
-    monkeypatch.setattr("omnigent.runner._entry._make_auth_token_factory", lambda: None)
+    monkeypatch.setattr("omnicraft.runner._entry._make_auth_token_factory", lambda: None)
 
     class _SnapshotServerClient:
         """Server client returning a persisted resume thread + one item."""
@@ -17658,7 +17658,7 @@ async def test_auto_create_codex_terminal_recreate_cancels_prior_forwarder(
         spec_version=1,
         name="codex",
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex-native", "model": "gpt-5-default"},
         ),
     )
@@ -17719,7 +17719,7 @@ async def test_events_interrupt_on_kiro_native_routes_to_escape(
     did nothing. This pins that the dispatch routes kiro-native to
     ``kiro_native_bridge.inject_interrupt`` with the snappy 1.0s timeout.
     """
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.spec.types import ExecutorSpec
 
     captured: list[Any] = []
     monkeypatch.setattr(
@@ -17731,7 +17731,7 @@ async def test_events_interrupt_on_kiro_native_routes_to_escape(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "kiro-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "kiro-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -17777,8 +17777,8 @@ async def test_events_stop_session_on_kiro_native_kills_tmux_and_publishes_idle(
     ``kiro_native_bridge.kill_session`` and enqueue exactly one
     ``session.status: idle`` (kiro-cli has no Stop hook on a hard kill).
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     captured: list[Any] = []
     monkeypatch.setattr(
@@ -17790,7 +17790,7 @@ async def test_events_stop_session_on_kiro_native_kills_tmux_and_publishes_idle(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "kiro-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "kiro-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -17847,8 +17847,8 @@ async def test_events_interrupt_on_kiro_native_503_skips_idle_when_inject_fails(
     would clear the web-UI spinner while the kiro turn keeps generating. Guards
     against a reorder that moves the idle publish ahead of the ``try``.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_inject(bridge_dir: Any, *, timeout_s: float) -> None:
         """Simulate the bridge-not-ready path."""
@@ -17860,7 +17860,7 @@ async def test_events_interrupt_on_kiro_native_503_skips_idle_when_inject_fails(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "kiro-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "kiro-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
@@ -17917,8 +17917,8 @@ async def test_events_stop_session_on_kiro_native_503_when_kill_fails(
     a failed kill must surface 503 rather than lie to the web UI with 204 + idle
     while the ``kiro-cli`` process may still be alive.
     """
-    from omnigent.runner.app import _session_event_queues_ref
-    from omnigent.spec.types import ExecutorSpec
+    from omnicraft.runner.app import _session_event_queues_ref
+    from omnicraft.spec.types import ExecutorSpec
 
     def _fake_kill(bridge_dir: Any, *, timeout_s: float) -> None:
         """Simulate the bridge-not-ready path."""
@@ -17930,7 +17930,7 @@ async def test_events_stop_session_on_kiro_native_503_when_kill_fails(
     native_spec = AgentSpec(
         spec_version=1,
         name="t",
-        executor=ExecutorSpec(type="omnigent", config={"harness": "kiro-native"}),
+        executor=ExecutorSpec(type="omnicraft", config={"harness": "kiro-native"}),
     )
 
     async def _resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:

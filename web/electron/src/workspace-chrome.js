@@ -1,5 +1,5 @@
 // Hiding the Databricks workspace navigation chrome around a workspace-hosted
-// Omnigent SPA. Kept in its own Electron-free module so the injection logic is
+// OmniCraft SPA. Kept in its own Electron-free module so the injection logic is
 // unit-testable (test/workspace-chrome.test.js calls applyWorkspaceChromeHideCss
 // with a fake webContents) without requiring main.js, which boots the app.
 
@@ -8,17 +8,17 @@
  *
  * On a workspace the SPA is mounted as a workspace *page*, so Databricks wraps
  * it in its top-nav shell (the dark bar with the workspace switcher). In a
- * dedicated desktop window that chrome is just noise. We promote Omnigent's
- * own root — ``.omnigent-app``, the wrapper web's embed entry sets
+ * dedicated desktop window that chrome is just noise. We promote OmniCraft's
+ * own root — ``.omnicraft-app``, the wrapper web's embed entry sets
  * (``web/src/embed.tsx``) — to a full-viewport overlay so it paints over
- * the workspace bar. Keying on Omnigent's wrapper (defined in THIS repo)
+ * the workspace bar. Keying on OmniCraft's wrapper (defined in THIS repo)
  * rather than the monolith-owned, unstable workspace nav markup keeps this
  * from silently breaking when Databricks reshuffles its chrome; on a
- * standalone (non-embed) build there is no ``.omnigent-app``, so the rule is
+ * standalone (non-embed) build there is no ``.omnicraft-app``, so the rule is
  * a harmless no-op.
  */
 const WORKSPACE_CHROME_HIDE_CSS = `
-  .omnigent-app {
+  .omnicraft-app {
     position: fixed !important;
     inset: 0 !important;
     z-index: 2147483647 !important;
@@ -32,7 +32,7 @@ const WORKSPACE_CHROME_HIDE_CSS = `
  * ``pathname.startsWith(WORKSPACE_UI_PATH)``, which silently skipped injection
  * whenever the loaded URL didn't match the mount path (auth redirects, path
  * variants) and left the workspace switcher visible. Because the CSS only
- * targets ``.omnigent-app`` — which exists solely in the workspace-embedded
+ * targets ``.omnicraft-app`` — which exists solely in the workspace-embedded
  * build — injecting on every load is a harmless no-op on standalone servers.
  * Do not reintroduce a URL/path guard here.
  *

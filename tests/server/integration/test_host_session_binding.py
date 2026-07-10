@@ -13,29 +13,29 @@ from asgiref.testing import ApplicationCommunicator
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
-from omnigent.entities import Conversation
-from omnigent.host.frames import (
+from omnicraft.entities import Conversation
+from omnicraft.host.frames import (
     HostHelloFrame,
     HostLaunchRunnerFrame,
     HostLaunchRunnerResultFrame,
     decode_host_frame,
     encode_host_frame,
 )
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.server.auth import RESERVED_USER_LOCAL
-from omnigent.server.host_registry import HostRegistry
-from omnigent.server.managed_hosts import parse_sandbox_config
-from omnigent.server.routes.host_tunnel import create_host_tunnel_router
-from omnigent.server.routes.hosts import create_hosts_router
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.runtime.agent_cache import AgentCache
+from omnicraft.server.app import create_app
+from omnicraft.server.auth import RESERVED_USER_LOCAL
+from omnicraft.server.host_registry import HostRegistry
+from omnicraft.server.managed_hosts import parse_sandbox_config
+from omnicraft.server.routes.host_tunnel import create_host_tunnel_router
+from omnicraft.server.routes.hosts import create_hosts_router
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.artifact_store.local import LocalArtifactStore
+from omnicraft.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.host_store import HostStore
+from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from omnicraft.stores.host_store import HostStore
 from tests.server.helpers import (
     FakeSandboxLauncher,
     HostStartInvocation,
@@ -269,7 +269,7 @@ async def managed_session_env(
             {
                 "provider": "modal",
                 "server_url": "https://managed-test.example.com",
-                "modal": {"image": "docker.io/test/omnigent-host:latest"},
+                "modal": {"image": "docker.io/test/omnicraft-host:latest"},
             }
         ),
     )
@@ -310,7 +310,7 @@ async def _fake_sandbox_host(
     Connects to the app's real host tunnel authenticating ONLY with
     the launch token (exactly what a sandbox has), sends hello with
     the server-injected host name (the real host reads it from
-    ``OMNIGENT_HOST_NAME``; the name must match the pre-registered
+    ``OMNICRAFT_HOST_NAME``; the name must match the pre-registered
     row's ``(owner, name)`` key), then answers the launch frame with a
     launched result — the full protocol a real managed host performs.
 
@@ -323,10 +323,10 @@ async def _fake_sandbox_host(
         dropping it garbage-collects the ASGI task, which tears the
         tunnel down and flips the host offline.
     """
-    from omnigent.runner.identity import token_bound_runner_id
+    from omnicraft.runner.identity import token_bound_runner_id
 
     scope = _websocket_scope(f"/v1/hosts/{host_id}/tunnel")
-    scope["headers"] = [(b"x-omnigent-host-token", token.encode("ascii"))]
+    scope["headers"] = [(b"x-omnicraft-host-token", token.encode("ascii"))]
     comm = ApplicationCommunicator(app, scope)
     await comm.send_input({"type": "websocket.connect"})
     accepted = await comm.receive_output(timeout=5.0)
@@ -408,12 +408,12 @@ async def test_managed_session_create_end_to_end(
     # A healthy fake host registers in well under a second; shrink the
     # online-poll budget so a registration regression fails the test in
     # seconds instead of hanging into the pytest timeout.
-    monkeypatch.setattr("omnigent.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
+    monkeypatch.setattr("omnicraft.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
     # No real runner ever connects in this harness; shrink the
     # background task's runner-tunnel wait so it settles (and the
     # task finishes) within the test instead of lingering 30s.
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
+        "omnicraft.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
     )
     loop = asyncio.get_running_loop()
     host_futures: list[asyncio.Future[ApplicationCommunicator]] = []
@@ -499,10 +499,10 @@ async def test_managed_session_create_with_repo_workspace_binds_cloned_dir(
     env = managed_session_env
     # Same shrunken online-poll budget as the e2e golden path: a
     # registration regression should fail in seconds.
-    monkeypatch.setattr("omnigent.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
+    monkeypatch.setattr("omnicraft.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
     # No real runner connects; settle the background task quickly.
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
+        "omnicraft.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
     )
     loop = asyncio.get_running_loop()
     host_futures: list[asyncio.Future[ApplicationCommunicator]] = []
@@ -734,13 +734,13 @@ async def test_managed_launch_progress_surfaces_on_snapshot_and_stream(
     """
     import threading
 
-    from omnigent.runtime import session_stream
+    from omnicraft.runtime import session_stream
 
     env = managed_session_env
-    monkeypatch.setattr("omnigent.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
+    monkeypatch.setattr("omnicraft.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
     # No real runner connects; settle the background task quickly.
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
+        "omnicraft.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
     )
     loop = asyncio.get_running_loop()
     gate = threading.Event()
@@ -846,9 +846,9 @@ async def test_subagent_session_reuses_managed_sandbox_runner(
     the sub-agent runs nowhere.
     """
     env = managed_session_env
-    monkeypatch.setattr("omnigent.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
+    monkeypatch.setattr("omnicraft.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
+        "omnicraft.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
     )
     loop = asyncio.get_running_loop()
     host_futures: list[asyncio.Future[ApplicationCommunicator]] = []
@@ -919,13 +919,13 @@ async def test_message_relaunches_dead_managed_sandbox(
     503s and none of the generation-2 effects below happen.
     """
     env = managed_session_env
-    monkeypatch.setattr("omnigent.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
+    monkeypatch.setattr("omnicraft.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
     # No real runner connects in this harness; shrink both runner
     # waits so the message POST and the background task settle fast.
     monkeypatch.setattr(
-        "omnigent.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
+        "omnicraft.server.routes.sessions._HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.2
     )
-    monkeypatch.setattr("omnigent.server.routes.sessions._HOST_BOUND_RUNNER_CONNECT_GRACE_S", 0.1)
+    monkeypatch.setattr("omnicraft.server.routes.sessions._HOST_BOUND_RUNNER_CONNECT_GRACE_S", 0.1)
     loop = asyncio.get_running_loop()
     host_futures: list[asyncio.Future[ApplicationCommunicator]] = []
 
@@ -1045,7 +1045,7 @@ async def test_cancel_managed_launch_tasks_returns_while_provision_parked(
     """
     import threading
 
-    from omnigent.server.routes.sessions import cancel_managed_launch_tasks
+    from omnicraft.server.routes.sessions import cancel_managed_launch_tasks
 
     env = managed_session_env
     gate = threading.Event()
@@ -1084,7 +1084,7 @@ async def test_managed_session_deleted_during_provision_terminates_sandbox(
     import threading
 
     env = managed_session_env
-    monkeypatch.setattr("omnigent.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
+    monkeypatch.setattr("omnicraft.server.managed_hosts.MANAGED_HOST_ONLINE_TIMEOUT_S", 10)
     loop = asyncio.get_running_loop()
     gate = threading.Event()
     host_futures: list[asyncio.Future[ApplicationCommunicator]] = []

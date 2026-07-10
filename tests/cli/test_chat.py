@@ -1,4 +1,4 @@
-"""Tests for omnigent.chat — omnigent chat CLI logic."""
+"""Tests for omnicraft.chat — omnicraft chat CLI logic."""
 
 from __future__ import annotations
 
@@ -10,11 +10,11 @@ from types import SimpleNamespace
 import click
 import httpx
 import pytest
-from omnigent_client import OmnigentError as ClientOmnigentError
-from omnigent_client import QueryResult
+from omnicraft_client import OmniCraftError as ClientOmniCraftError
+from omnicraft_client import QueryResult
 
-import omnigent.chat as chat_module
-from omnigent.chat import (
+import omnicraft.chat as chat_module
+from omnicraft.chat import (
     _DEFAULT_AD_HOC_MODEL,
     _SERVER_READY_BACKOFF_POLL_SECONDS,
     _SERVER_READY_FAST_POLL_WINDOW_SECONDS,
@@ -40,10 +40,10 @@ from omnigent.chat import (
     _wait_for_server,
     run_chat,
 )
-from omnigent.cli import _build_resume_parts
-from omnigent.inner.databricks_executor import DatabricksCredentials
-from omnigent.spec import load as load_spec
-from omnigent.spec import validate as validate_spec
+from omnicraft.cli import _build_resume_parts
+from omnicraft.inner.databricks_executor import DatabricksCredentials
+from omnicraft.spec import load as load_spec
+from omnicraft.spec import validate as validate_spec
 
 # ── _is_url ──────────────────────────────────────────
 
@@ -85,7 +85,7 @@ def test_redirect_native_resume_routes_kiro_wrapper(monkeypatch: pytest.MonkeyPa
     def _capture(**kwargs: object) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.kiro_native.run_kiro_native", _capture)
+    monkeypatch.setattr("omnicraft.kiro_native.run_kiro_native", _capture)
 
     redirected = chat_module._redirect_native_resume_if_needed(
         base_url="https://example.com",
@@ -178,7 +178,7 @@ def test_validate_agent_spec_unresolved_env_var(
         _validate_agent_spec(agent_dir)
 
     # Asserting on the variable name (not just "ClickException raised")
-    # proves the underlying OmnigentError message reached the user
+    # proves the underlying OmniCraftError message reached the user
     # — that's the entire point of the pre-validation step.
     assert "AP_TEST_MISSING_KEY" in excinfo.value.message
 
@@ -195,7 +195,7 @@ def test_validate_agent_spec_missing_config(tmp_path: Path) -> None:
         _validate_agent_spec(agent_dir)
 
     # Confirms the FileNotFoundError branch of the except clause fired
-    # (not the OmnigentError branch) — both must convert.
+    # (not the OmniCraftError branch) — both must convert.
     assert "config.yaml" in excinfo.value.message
 
 
@@ -260,9 +260,9 @@ def test_wait_for_server_uses_fast_poll_before_backoff(
             raise __import__("httpx").ConnectError("not ready")
         return _Resp(200)
 
-    monkeypatch.setattr("omnigent.chat.time.monotonic", _fake_monotonic)
-    monkeypatch.setattr("omnigent.chat.time.sleep", _fake_sleep)
-    monkeypatch.setattr("omnigent.chat.httpx.get", _fake_get)
+    monkeypatch.setattr("omnicraft.chat.time.monotonic", _fake_monotonic)
+    monkeypatch.setattr("omnicraft.chat.time.sleep", _fake_sleep)
+    monkeypatch.setattr("omnicraft.chat.httpx.get", _fake_get)
 
     _wait_for_server(8123, server, timeout=5.0)
 
@@ -288,19 +288,19 @@ def test_raise_server_failed_truncates_log_to_tail(tmp_path: Path) -> None:
     truncation path is exercised: the head must be dropped, the tail
     must be preserved.
     """
-    from omnigent.chat import _SERVER_LOG_TAIL_LINES
+    from omnicraft.chat import _SERVER_LOG_TAIL_LINES
 
     log = tmp_path / "server.log"
     head_lines = [f"banner-line-{i}" for i in range(_SERVER_LOG_TAIL_LINES + 30)]
     tail_lines = [
         "ERROR: spec parse failed at line 3",
         "Traceback (most recent call last):",
-        "  File omnigent/server/app.py, line 42, in create_app",
+        "  File omnicraft/server/app.py, line 42, in create_app",
         "RuntimeError: missing required field 'agent'",
     ]
     log.write_text("\n".join(head_lines + tail_lines) + "\n")
     server = SimpleNamespace(
-        proc=SimpleNamespace(args=["python", "-m", "omnigent", "server"]),
+        proc=SimpleNamespace(args=["python", "-m", "omnicraft", "server"]),
         log_path=log,
     )
 
@@ -318,7 +318,7 @@ def test_raise_server_failed_truncates_log_to_tail(tmp_path: Path) -> None:
         f"truncation didn't drop the head; banner-line-0 leaked into message:\n{msg}"
     )
     # The cmd display and log path are still in the message.
-    assert "python -m omnigent server" in msg
+    assert "python -m omnicraft server" in msg
     assert str(log) in msg
 
 
@@ -329,7 +329,7 @@ def test_raise_server_failed_handles_unreadable_log(tmp_path: Path) -> None:
     """
     missing = tmp_path / "does-not-exist.log"
     server = SimpleNamespace(
-        proc=SimpleNamespace(args=["python", "-m", "omnigent", "server"]),
+        proc=SimpleNamespace(args=["python", "-m", "omnicraft", "server"]),
         log_path=missing,
     )
 
@@ -340,7 +340,7 @@ def test_raise_server_failed_handles_unreadable_log(tmp_path: Path) -> None:
     assert "could not read log file" in msg
     # Path and cmd display still surface so the user can investigate.
     assert str(missing) in msg
-    assert "python -m omnigent server" in msg
+    assert "python -m omnicraft server" in msg
 
 
 def test_wait_for_server_waits_for_runner_tunnel_status(
@@ -395,9 +395,9 @@ def test_wait_for_server_waits_for_runner_tunnel_status(
             return _Resp(200, next(status_bodies))
         raise AssertionError(f"unexpected URL: {url}")
 
-    monkeypatch.setattr("omnigent.chat.time.monotonic", _fake_monotonic)
-    monkeypatch.setattr("omnigent.chat.time.sleep", _fake_sleep)
-    monkeypatch.setattr("omnigent.chat.httpx.get", _fake_get)
+    monkeypatch.setattr("omnicraft.chat.time.monotonic", _fake_monotonic)
+    monkeypatch.setattr("omnicraft.chat.time.sleep", _fake_sleep)
+    monkeypatch.setattr("omnicraft.chat.httpx.get", _fake_get)
 
     _wait_for_server(8123, server, timeout=5.0)
 
@@ -420,10 +420,10 @@ def test_start_local_server_spawns_runner_as_sibling(
     What this proves: ``_start_local_server`` spawns both the server
     (via ``subprocess.Popen``) and the runner (via
     ``_start_cli_runner_process``). The server receives a tunnel token
-    via ``OMNIGENT_RUNNER_TUNNEL_TOKEN`` so it accepts exactly the
+    via ``OMNICRAFT_RUNNER_TUNNEL_TOKEN`` so it accepts exactly the
     sibling runner's tunnel. The runner is NOT a child of the server.
     """
-    from omnigent.cli import _CliRunnerProcess
+    from omnicraft.cli import _CliRunnerProcess
 
     class _Proc:
         """Minimal subprocess handle returned by the patched Popen."""
@@ -474,16 +474,16 @@ def test_start_local_server_spawns_runner_as_sibling(
     # Import before patching ``subprocess.Popen``. The runner package imports
     # MCP modules with ``subprocess.Popen[...]`` annotations, and patching the
     # process-global module first makes those imports fail in isolated runs.
-    import omnigent.runner.identity  # noqa: F401
+    import omnicraft.runner.identity  # noqa: F401
 
-    monkeypatch.setattr("omnigent.chat.subprocess.Popen", _fake_popen)
-    monkeypatch.setattr("omnigent.chat._omnigent_log_dir", lambda: tmp_path / "logs")
+    monkeypatch.setattr("omnicraft.chat.subprocess.Popen", _fake_popen)
+    monkeypatch.setattr("omnicraft.chat._omnicraft_log_dir", lambda: tmp_path / "logs")
     monkeypatch.setattr(
-        "omnigent.chat.load_spec",
+        "omnicraft.chat.load_spec",
         lambda _path: SimpleNamespace(executor=SimpleNamespace(profile=None)),
     )
     monkeypatch.setattr(
-        "omnigent.cli._start_cli_runner_process",
+        "omnicraft.cli._start_cli_runner_process",
         _fake_start_runner,
     )
     server = _start_local_server(tmp_path, 8765, ephemeral=True)
@@ -491,21 +491,21 @@ def test_start_local_server_spawns_runner_as_sibling(
     # Server subprocess was spawned.
     assert len(server_popen_calls) == 1
     assert server_popen_calls[0].args[2:6] == [
-        "omnigent.cli",
+        "omnicraft.cli",
         "server",
         "--host",
         "127.0.0.1",
     ]
     assert server_popen_calls[0].args[-2:] == ["--agent", str(tmp_path)]
     # Server receives the tunnel token, not RUNNER_ID_ENV_VAR.
-    assert "OMNIGENT_RUNNER_TUNNEL_TOKEN" in server_popen_calls[0].env
+    assert "OMNICRAFT_RUNNER_TUNNEL_TOKEN" in server_popen_calls[0].env
 
     # Runner was spawned as a sibling via _start_cli_runner_process.
     assert len(runner_calls) == 1
     assert runner_calls[0]["server_url"] == "http://127.0.0.1:8765"
     assert (
         runner_calls[0]["tunnel_token"]
-        == server_popen_calls[0].env["OMNIGENT_RUNNER_TUNNEL_TOKEN"]
+        == server_popen_calls[0].env["OMNICRAFT_RUNNER_TUNNEL_TOKEN"]
     )
     assert runner_calls[0]["isolate_session"] is True
 
@@ -554,9 +554,9 @@ def test_wait_for_remote_runner_uses_status_endpoint_and_auth(
         requested.append((url, headers))
         return _Resp(next(status_bodies))
 
-    monkeypatch.setattr("omnigent.chat.time.monotonic", _fake_monotonic)
-    monkeypatch.setattr("omnigent.chat.time.sleep", _fake_sleep)
-    monkeypatch.setattr("omnigent.chat.httpx.get", _fake_get)
+    monkeypatch.setattr("omnicraft.chat.time.monotonic", _fake_monotonic)
+    monkeypatch.setattr("omnicraft.chat.time.sleep", _fake_sleep)
+    monkeypatch.setattr("omnicraft.chat.httpx.get", _fake_get)
 
     _wait_for_remote_runner(
         "https://example.databricksapps.com",
@@ -613,7 +613,7 @@ def test_wait_for_remote_runner_fails_loud_on_auth_rejection(
         del url, headers, timeout
         return _Resp()
 
-    monkeypatch.setattr("omnigent.chat.httpx.get", _fake_get)
+    monkeypatch.setattr("omnicraft.chat.httpx.get", _fake_get)
 
     with pytest.raises(click.ClickException, match="status check was rejected \\(401\\)"):
         _wait_for_remote_runner(
@@ -675,10 +675,10 @@ def test_wait_for_remote_runner_timeout_surfaces_log_path(
         """
         return next(monotonic_values)
 
-    monkeypatch.setattr("omnigent.chat.time.monotonic", _fake_monotonic)
-    monkeypatch.setattr("omnigent.chat.time.sleep", lambda _s: None)
+    monkeypatch.setattr("omnicraft.chat.time.monotonic", _fake_monotonic)
+    monkeypatch.setattr("omnicraft.chat.time.sleep", lambda _s: None)
     monkeypatch.setattr(
-        "omnigent.chat.httpx.get",
+        "omnicraft.chat.httpx.get",
         lambda *_a, **_k: _Resp(),
     )
 
@@ -727,8 +727,8 @@ def test_wait_for_remote_runner_early_exit_surfaces_log_path(
     )
 
     proc = SimpleNamespace(poll=lambda: 1, returncode=1)
-    monkeypatch.setattr("omnigent.chat.time.monotonic", lambda: 0.0)
-    monkeypatch.setattr("omnigent.chat.time.sleep", lambda _s: None)
+    monkeypatch.setattr("omnicraft.chat.time.monotonic", lambda: 0.0)
+    monkeypatch.setattr("omnicraft.chat.time.sleep", lambda _s: None)
 
     def _fake_get(*_a, **_k):
         """Status probe never invoked because the runner is dead.
@@ -737,7 +737,7 @@ def test_wait_for_remote_runner_early_exit_surfaces_log_path(
         """
         raise AssertionError("should not reach httpx when runner already exited")
 
-    monkeypatch.setattr("omnigent.chat.httpx.get", _fake_get)
+    monkeypatch.setattr("omnicraft.chat.httpx.get", _fake_get)
 
     with pytest.raises(click.ClickException) as exc_info:
         _wait_for_remote_runner(
@@ -897,7 +897,7 @@ def test_run_chat_with_server_url_routes_through_daemon(
     ) -> None:
         calls["via_daemon"] = {"agent_path": agent_path, "base_url": base_url, **kwargs}
 
-    monkeypatch.setattr("omnigent.cli._ensure_backend", _fake_ensure_backend)
+    monkeypatch.setattr("omnicraft.cli._ensure_backend", _fake_ensure_backend)
     monkeypatch.setattr(chat_module, "_chat_via_daemon", _fake_via_daemon)
 
     run_chat(
@@ -936,7 +936,7 @@ def test_chat_via_daemon_uses_directory_bundle_for_root_config_yaml(
         "name: orchestrator\n"
         "prompt: orchestrate\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: claude-sdk\n"
     )
@@ -945,7 +945,7 @@ def test_chat_via_daemon_uses_directory_bundle_for_root_config_yaml(
         "name: worker\n"
         "prompt: work\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: codex-native\n"
     )
@@ -970,7 +970,7 @@ def test_chat_via_daemon_uses_directory_bundle_for_root_config_yaml(
 
     monkeypatch.setattr(chat_module, "_bundle_agent", _fake_bundle)
     monkeypatch.setattr(
-        "omnigent.host.identity.load_or_create_host_identity",
+        "omnicraft.host.identity.load_or_create_host_identity",
         lambda: SimpleNamespace(host_id="host_x", name="x"),
     )
     monkeypatch.setattr(chat_module, "_resolve_resume_target", lambda **_k: None)
@@ -1000,7 +1000,7 @@ def test_run_local_headless_prompt_uses_directory_bundle_for_root_config_yaml(
 ) -> None:
     """One-shot local prompt mode also preserves directory-agent siblings.
 
-    This covers ``omnigent run bundle/config.yaml -p ...``. Without the
+    This covers ``omnicraft run bundle/config.yaml -p ...``. Without the
     canonicalization in the headless helper, interactive runs would upload the
     full bundle while one-shot runs would silently upload only ``config.yaml``.
     """
@@ -1012,7 +1012,7 @@ def test_run_local_headless_prompt_uses_directory_bundle_for_root_config_yaml(
         "name: orchestrator\n"
         "prompt: orchestrate\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: claude-sdk\n"
     )
@@ -1098,7 +1098,7 @@ def test_chat_local_uses_directory_bundle_for_root_config_yaml(
         "name: orchestrator\n"
         "prompt: orchestrate\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: claude-sdk\n"
     )
@@ -1211,7 +1211,7 @@ def test_chat_via_daemon_hands_daemon_runner_to_chat_with_server(
 
     monkeypatch.setattr(chat_module, "_bundle_agent", lambda _p: b"bundle-bytes")
     monkeypatch.setattr(
-        "omnigent.host.identity.load_or_create_host_identity",
+        "omnicraft.host.identity.load_or_create_host_identity",
         lambda: SimpleNamespace(host_id="host_x", name="x"),
     )
     monkeypatch.setattr(chat_module, "_resolve_resume_target", lambda **_k: None)
@@ -1264,7 +1264,7 @@ class _FakeSessionsApi:
 
 
 class _FakeSdkClient:
-    """Async-context-manager stand-in for ``OmnigentClient`` in prep tests.
+    """Async-context-manager stand-in for ``OmniCraftClient`` in prep tests.
 
     :param captured: Dict forwarded to the fake sessions API.
     """
@@ -1286,7 +1286,7 @@ def _patch_daemon_launch(monkeypatch: pytest.MonkeyPatch, captured: dict[str, ob
     :param captured: Dict the stubs record their inputs into.
     """
     monkeypatch.setattr(
-        "omnigent_client.OmnigentClient",
+        "omnicraft_client.OmniCraftClient",
         lambda **_kw: _FakeSdkClient(captured),
     )
 
@@ -1305,10 +1305,10 @@ def _patch_daemon_launch(monkeypatch: pytest.MonkeyPatch, captured: dict[str, ob
     async def _fake_bind(client: object, session_id: str, runner_id: str) -> None:
         captured["bind"] = {"session_id": session_id, "runner_id": runner_id}
 
-    monkeypatch.setattr("omnigent.host.daemon_launch.wait_for_host_online", _no_host_wait)
-    monkeypatch.setattr("omnigent.host.daemon_launch.launch_or_reuse_daemon_runner", _fake_launch)
-    monkeypatch.setattr("omnigent.host.daemon_launch.wait_for_runner_online", _no_runner_wait)
-    monkeypatch.setattr("omnigent.native_terminal.bind_session_runner", _fake_bind)
+    monkeypatch.setattr("omnicraft.host.daemon_launch.wait_for_host_online", _no_host_wait)
+    monkeypatch.setattr("omnicraft.host.daemon_launch.launch_or_reuse_daemon_runner", _fake_launch)
+    monkeypatch.setattr("omnicraft.host.daemon_launch.wait_for_runner_online", _no_runner_wait)
+    monkeypatch.setattr("omnicraft.native_terminal.bind_session_runner", _fake_bind)
 
 
 def test_prepare_chat_session_via_daemon_creates_fresh_and_launches(
@@ -1377,7 +1377,7 @@ def test_prepare_chat_session_via_daemon_binds_runner_to_clear_stopped_marker(
     """Resume re-binds the runner via ``bind_session_runner`` (the PATCH chokepoint).
 
     ``launch_or_reuse_daemon_runner`` binds via the host-launch / online-reuse
-    paths, neither of which clears the server-side ``omnigent.stopped`` marker
+    paths, neither of which clears the server-side ``omnicraft.stopped`` marker
     — only the ``replace_runner_id`` PATCH (which ``bind_session_runner`` issues)
     does. So resuming a stopped session must call ``bind_session_runner`` with
     the launched runner id; otherwise the first turn is rejected until the
@@ -1403,8 +1403,8 @@ def test_prepare_chat_session_via_daemon_binds_runner_to_clear_stopped_marker(
     )
 
     # The launched runner is re-bound to the resumed session through the
-    # PATCH chokepoint that clears omnigent.stopped — same pattern as
-    # ``omnigent claude`` (claude_native.py's bind_session_runner call).
+    # PATCH chokepoint that clears omnicraft.stopped — same pattern as
+    # ``omnicraft claude`` (claude_native.py's bind_session_runner call).
     assert captured["bind"] == {"session_id": "conv_resume", "runner_id": "runner_daemon"}
 
 
@@ -1442,47 +1442,47 @@ def test_prepare_chat_session_via_daemon_fork_wins_over_resume(
     assert launch["session_id"] == "conv_forked"
 
 
-# ── OMNIGENT_MODEL env-var fallback ───────────────────
+# ── OMNICRAFT_MODEL env-var fallback ───────────────────
 #
 # These tests pin the env-var contract on the
-# ``omnigent/cli.py`` → ``run_chat`` direct path. Without
-# them, ``OMNIGENT_MODEL=foo`` was silently dropped on the
-# ``omnigent`` console-script default Omnigent path because
+# ``omnicraft/cli.py`` → ``run_chat`` direct path. Without
+# them, ``OMNICRAFT_MODEL=foo`` was silently dropped on the
+# ``omnicraft`` console-script default OmniCraft path because
 # ``_apply_overrides_to_raw`` used the hardcoded
 # ``_DEFAULT_AD_HOC_MODEL`` instead of the env-var-aware
-# helper. See ``designs/RUN_OMNIGENT_REPL_PARITY.md``.
+# helper. See ``designs/RUN_OMNICRAFT_REPL_PARITY.md``.
 
 
 def test_default_cli_model_returns_hardcoded_default_when_env_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    With ``OMNIGENT_MODEL`` unset, the helper returns the
+    With ``OMNICRAFT_MODEL`` unset, the helper returns the
     hardcoded ``_DEFAULT_AD_HOC_MODEL``.
 
     What this proves: the existing default behavior (the model
     that ships in the README example) is preserved when no env
     var is set. If this fails, users running
-    ``omnigent run hello.yaml`` without setting the env var
+    ``omnicraft run hello.yaml`` without setting the env var
     would suddenly land on a different model than they did
     before — silently breaking their workflows.
     """
-    monkeypatch.delenv("OMNIGENT_MODEL", raising=False)
+    monkeypatch.delenv("OMNICRAFT_MODEL", raising=False)
     assert _default_cli_model() == _DEFAULT_AD_HOC_MODEL
 
 
-def test_default_cli_model_honors_omnigent_model_env_var(
+def test_default_cli_model_honors_omnicraft_model_env_var(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    With ``OMNIGENT_MODEL=foo`` set, the helper returns
+    With ``OMNICRAFT_MODEL=foo`` set, the helper returns
     ``"foo"``.
 
     What this proves: the env-var override fires. If the helper
     returns ``_DEFAULT_AD_HOC_MODEL`` here, the env var was
     silently dropped — exactly the regression this gap closed.
     """
-    monkeypatch.setenv("OMNIGENT_MODEL", "databricks-claude-sonnet-4-6")
+    monkeypatch.setenv("OMNICRAFT_MODEL", "databricks-claude-sonnet-4-6")
     assert _default_cli_model() == "databricks-claude-sonnet-4-6"
 
 
@@ -1492,17 +1492,17 @@ def test_apply_overrides_uses_env_var_when_yaml_has_no_model_or_harness(
     """
     A YAML that declares neither ``executor.model`` nor
     ``executor.harness``, processed with empty overrides and
-    ``OMNIGENT_MODEL=foo`` set, lands with ``executor.model =
+    ``OMNICRAFT_MODEL=foo`` set, lands with ``executor.model =
     "foo"``.
 
     What this proves: the env var traverses
     ``_apply_overrides_to_raw`` to the executor block. If this
     fails with the assertion showing ``databricks-gpt-5-4``
     (the hardcoded default), the helper isn't being called —
-    line 756 of ``omnigent/chat.py`` reverted to the literal
+    line 756 of ``omnicraft/chat.py`` reverted to the literal
     ``_DEFAULT_AD_HOC_MODEL`` and the env var is dropped again.
     """
-    monkeypatch.setenv("OMNIGENT_MODEL", "databricks-claude-sonnet-4-6")
+    monkeypatch.setenv("OMNICRAFT_MODEL", "databricks-claude-sonnet-4-6")
     raw: dict[str, object] = {"name": "ad_hoc", "prompt": "hi"}
 
     _apply_overrides_to_raw(raw, ChatOverrides())
@@ -1517,9 +1517,9 @@ def test_apply_overrides_uses_env_var_when_yaml_has_no_model_or_harness(
         f"Expected env-var override 'databricks-claude-sonnet-4-6' to "
         f"land in executor.model; got {executor.get('model')!r}. If "
         f"this is 'databricks-gpt-5-4' (the hardcoded default), line "
-        f"756 of omnigent/chat.py is back to the literal "
-        f"_DEFAULT_AD_HOC_MODEL and OMNIGENT_MODEL is silently dropped "
-        f"on the omnigent/cli.py → run_chat path."
+        f"756 of omnicraft/chat.py is back to the literal "
+        f"_DEFAULT_AD_HOC_MODEL and OMNICRAFT_MODEL is silently dropped "
+        f"on the omnicraft/cli.py → run_chat path."
     )
 
 
@@ -1528,14 +1528,14 @@ def test_apply_overrides_explicit_model_wins_over_env_var(
 ) -> None:
     """
     A ``--model`` override takes precedence over
-    ``OMNIGENT_MODEL``.
+    ``OMNICRAFT_MODEL``.
 
     What this proves: the precedence chain is
-    ``--model`` > ``executor.model`` in YAML > ``OMNIGENT_MODEL``
+    ``--model`` > ``executor.model`` in YAML > ``OMNICRAFT_MODEL``
     > ``_DEFAULT_AD_HOC_MODEL``. If this fails, the env var is
     overriding an explicit CLI flag — surprising and broken.
     """
-    monkeypatch.setenv("OMNIGENT_MODEL", "from-env")
+    monkeypatch.setenv("OMNICRAFT_MODEL", "from-env")
     raw: dict[str, object] = {"name": "ad_hoc", "prompt": "hi"}
 
     _apply_overrides_to_raw(raw, ChatOverrides(model="from-flag"))
@@ -1543,7 +1543,7 @@ def test_apply_overrides_explicit_model_wins_over_env_var(
     executor = raw["executor"]
     assert isinstance(executor, dict)
     assert executor.get("model") == "from-flag", (
-        f"--model override must win over OMNIGENT_MODEL. Got "
+        f"--model override must win over OMNICRAFT_MODEL. Got "
         f"{executor.get('model')!r}; if this is 'from-env' the "
         f"precedence chain inverted and explicit CLI args lost to "
         f"environment values — a surprising regression."
@@ -1568,7 +1568,7 @@ def test_apply_overrides_writes_nested_config_harness_for_spec_version_bundle() 
     ``executor.config.harness`` — the ONLY harness location that
     format's parser reads.
 
-    Regression guard for the polly no-op: ``omnigent run
+    Regression guard for the polly no-op: ``omnicraft run
     examples/polly --harness pi`` used to write the flat
     ``executor.harness`` key, which ``_parse_executor`` ignores for
     spec_version specs — the brain silently stayed on claude-sdk.
@@ -1578,7 +1578,7 @@ def test_apply_overrides_writes_nested_config_harness_for_spec_version_bundle() 
         "name": "polly",
         "prompt": "orchestrate",
         "executor": {
-            "type": "omnigent",
+            "type": "omnicraft",
             "context_window": 1000000,
             "config": {"harness": "claude-sdk", "profile": "my-profile"},
         },
@@ -1610,7 +1610,7 @@ def test_apply_overrides_writes_nested_config_harness_for_spec_version_bundle() 
 
 def test_apply_overrides_flat_harness_creates_no_config_for_single_file_yaml() -> None:
     """
-    Single-file omnigent YAMLs (no ``spec_version``) keep the flat
+    Single-file omnicraft YAMLs (no ``spec_version``) keep the flat
     ``executor.harness`` write and gain no ``config`` block.
 
     If a ``config`` key appears here, the spec-format detection in
@@ -1657,7 +1657,7 @@ def test_apply_overrides_canonicalizes_alias_into_spec_version_config(
         "spec_version": 1,
         "name": "bundle",
         "prompt": "hi",
-        "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+        "executor": {"type": "omnicraft", "config": {"harness": "claude-sdk"}},
     }
 
     _apply_overrides_to_raw(raw, ChatOverrides(harness=alias))
@@ -1667,7 +1667,7 @@ def test_apply_overrides_canonicalizes_alias_into_spec_version_config(
     assert executor["config"]["harness"] == canonical, (
         f"--harness {alias!r} must canonicalize to {canonical!r} in the "
         f"materialized bundle; got {executor['config'].get('harness')!r}. "
-        f"A raw alias here would fail OMNIGENT_HARNESSES validation or "
+        f"A raw alias here would fail OMNICRAFT_HARNESSES validation or "
         f"miss the runtime dispatch registry."
     )
 
@@ -1678,14 +1678,14 @@ def test_apply_overrides_harness_and_model_together_for_spec_version_bundle() ->
     parser-read locations: nested ``config.harness`` and flat
     ``executor.model``.
 
-    This is the polly-on-GPT invocation shape: ``omnigent run
+    This is the polly-on-GPT invocation shape: ``omnicraft run
     examples/polly --harness openai-agents --model <gpt>``.
     """
     raw: dict[str, object] = {
         "spec_version": 1,
         "name": "polly",
         "prompt": "orchestrate",
-        "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+        "executor": {"type": "omnicraft", "config": {"harness": "claude-sdk"}},
     }
 
     _apply_overrides_to_raw(raw, ChatOverrides(harness="pi", model="databricks-claude-sonnet-4-6"))
@@ -1697,9 +1697,9 @@ def test_apply_overrides_harness_and_model_together_for_spec_version_bundle() ->
     assert executor["model"] == "databricks-claude-sonnet-4-6"
 
 
-def test_apply_overrides_rejects_harness_for_non_omnigent_executor_type() -> None:
+def test_apply_overrides_rejects_harness_for_non_omnicraft_executor_type() -> None:
     """
-    A spec_version bundle with a non-omnigent ``executor.type`` fails
+    A spec_version bundle with a non-omnicraft ``executor.type`` fails
     loud on ``--harness`` instead of silently no-opping.
 
     Those executor types have no ``config.harness``; writing one
@@ -1733,7 +1733,7 @@ def test_apply_overrides_skips_default_when_yaml_declares_harness(
     harness expects to choose its own. The guard exists for
     exactly this case.
     """
-    monkeypatch.setenv("OMNIGENT_MODEL", "from-env")
+    monkeypatch.setenv("OMNICRAFT_MODEL", "from-env")
     raw: dict[str, object] = {
         "name": "claude_agent",
         "prompt": "hi",
@@ -1759,21 +1759,21 @@ def test_materialize_override_bundle_bakes_env_var_into_yaml(
 ) -> None:
     """
     End-to-end through ``_materialize_override_bundle``: write a
-    real YAML file, set ``OMNIGENT_MODEL=foo``, materialize a
+    real YAML file, set ``OMNICRAFT_MODEL=foo``, materialize a
     rewritten bundle, read the result — ``executor.model``
     must be ``"foo"``.
 
     What this proves: the env var survives the
     ``mkdtemp`` → ``yaml.safe_load`` → ``_apply_overrides_to_raw``
     → ``yaml.safe_dump`` round-trip and lands as a real,
-    on-disk override the omnigent server reads. If the
+    on-disk override the omnicraft server reads. If the
     written YAML has ``model: databricks-gpt-5-4``, the env-var
     fallback regressed somewhere in the materialization
     pipeline.
     """
     import yaml as _yaml
 
-    monkeypatch.setenv("OMNIGENT_MODEL", "databricks-claude-sonnet-4-6")
+    monkeypatch.setenv("OMNICRAFT_MODEL", "databricks-claude-sonnet-4-6")
 
     src = tmp_path / "ad_hoc.yaml"
     src.write_text("name: ad_hoc\nprompt: hi\n")
@@ -1823,13 +1823,13 @@ def test_nested_config_harness_skips_ad_hoc_model_fallback(
     overrides / ambient OpenAI creds, so the only path that could fire is the
     ad-hoc fallback.
     """
-    monkeypatch.delenv("OMNIGENT_MODEL", raising=False)
+    monkeypatch.delenv("OMNICRAFT_MODEL", raising=False)
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     src = tmp_path / "config.yaml"
     src.write_text(
         "spec_version: 1\nname: nested-harness\nprompt: hi\n"
-        "executor:\n  type: omnigent\n  config:\n    harness: claude-sdk\n"
+        "executor:\n  type: omnicraft\n  config:\n    harness: claude-sdk\n"
     )
 
     materialized = _materialize_override_bundle(src, ChatOverrides())
@@ -1870,12 +1870,12 @@ def test_apply_overrides_skips_default_for_nested_harness(
     """
     # Even with the env-var default in play, the nested harness must
     # suppress the fallback entirely.
-    monkeypatch.setenv("OMNIGENT_MODEL", "databricks-gpt-5-4")
+    monkeypatch.setenv("OMNICRAFT_MODEL", "databricks-gpt-5-4")
     raw: dict[str, object] = {
         "spec_version": 1,
         "name": "debby",
         "prompt": "hi",
-        "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+        "executor": {"type": "omnicraft", "config": {"harness": "claude-sdk"}},
     }
 
     _apply_overrides_to_raw(raw, ChatOverrides())
@@ -1916,12 +1916,12 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
     """
     import yaml as _yaml
 
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     # The env-var default would be the injected value if the fallback
     # wrongly fired — set it to the exact bad model to make a regression
     # unmistakable.
-    monkeypatch.setenv("OMNIGENT_MODEL", "databricks-gpt-5-4")
+    monkeypatch.setenv("OMNICRAFT_MODEL", "databricks-gpt-5-4")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
     agent_dir = tmp_path / "debby"
@@ -1931,7 +1931,7 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
         "name: debby\n"
         "prompt: hi\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: claude-sdk\n"
     )
@@ -1991,36 +1991,36 @@ def test_materialize_bundle_overrides_brain_harness(
     harness and whose sub-agents keep their own declared harnesses.
 
     End-to-end through the production pipeline: ``copytree`` →
-    ``_apply_overrides_to_raw`` → ``yaml.safe_dump`` → ``omnigent.spec.load``
-    → ``validate``. This is the exact path ``omnigent run examples/polly
+    ``_apply_overrides_to_raw`` → ``yaml.safe_dump`` → ``omnicraft.spec.load``
+    → ``validate``. This is the exact path ``omnicraft run examples/polly
     --harness pi`` (or ``examples/debby``) takes before the bundle reaches
     a server.
 
     What this proves: (1) the override reaches ``executor.config.harness``
     where the bundle parser reads it — before the fix it landed on a flat
     key and the brain silently stayed claude-sdk; (2) the rewritten spec
-    still validates (the harness is in OMNIGENT_HARNESSES); (3) the
+    still validates (the harness is in OMNICRAFT_HARNESSES); (3) the
     override never leaks into the sub-agents, which would break
     cross-vendor orchestration (polly's workers) and debby's claude-vs-gpt
     debate pairing.
 
     :param bundle_name: Packaged example bundle under
-        ``omnigent.resources.examples``, e.g. ``"polly"``.
+        ``omnicraft.resources.examples``, e.g. ``"polly"``.
     :param expected_workers: Sub-agent name → declared harness mapping the
         override must leave untouched.
     :param brain_harness: The ``--harness`` value under test, e.g. ``"pi"``.
     """
     import importlib.resources
 
-    # Isolate from the developer's omnigent config and ambient creds so
+    # Isolate from the developer's omnicraft config and ambient creds so
     # env-auth baking / model fallback can't make the result machine-dependent.
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
-    monkeypatch.delenv("OMNIGENT_MODEL", raising=False)
+    monkeypatch.delenv("OMNICRAFT_MODEL", raising=False)
 
     bundle_dir = Path(
-        str(importlib.resources.files("omnigent.resources.examples").joinpath(bundle_name))
+        str(importlib.resources.files("omnicraft.resources.examples").joinpath(bundle_name))
     )
 
     materialized = _materialize_override_bundle(bundle_dir, ChatOverrides(harness=brain_harness))
@@ -2074,8 +2074,8 @@ def test_materialize_override_bundle_bakes_openai_env_auth_for_daemon_runner(
     """
     import yaml as _yaml
 
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-test")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://gateway.example.com/openai/v1")
 
@@ -2117,8 +2117,8 @@ def test_materialize_override_bundle_adds_openai_env_auth_for_directory_without_
     """
     import yaml as _yaml
 
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-dir-env-test")
     monkeypatch.setenv("OPENAI_BASE_URL", "https://gateway.example.com/openai/v1")
 
@@ -2158,8 +2158,8 @@ def test_cleanup_materialized_override_bundle_removes_temp_credentials(
     :param tmp_path: Temporary source-spec directory.
     :returns: None.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-cleanup-test")
     src = tmp_path / "hello.yaml"
     src.write_text("name: hello\nprompt: hi\n")
@@ -2198,10 +2198,10 @@ def test_materialize_override_bundle_cleans_tempdir_when_directory_invalid(
         Return a deterministic tempdir path for cleanup assertions.
 
         :param prefix: Requested tempdir prefix, e.g.
-            ``"omnigent-override-"``.
+            ``"omnicraft-override-"``.
         :returns: Filesystem path to the deterministic tempdir.
         """
-        assert prefix == "omnigent-override-"
+        assert prefix == "omnicraft-override-"
         tempdir.mkdir()
         return str(tempdir)
 
@@ -2227,8 +2227,8 @@ def test_apply_overrides_keeps_explicit_openai_auth(
     If this test fails, a caller's shell env can silently reroute a spec
     that intentionally picked a different key or base URL.
     """
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(tmp_path / "config"))
-    monkeypatch.setenv("OMNIGENT_DISABLE_KEYRING", "1")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path / "config"))
+    monkeypatch.setenv("OMNICRAFT_DISABLE_KEYRING", "1")
     monkeypatch.setenv("OPENAI_API_KEY", "sk-env-should-not-win")
     raw: dict[str, object] = {
         "name": "x",
@@ -2259,7 +2259,7 @@ def test_apply_overrides_keeps_explicit_openai_auth(
 
 def test_remote_headers_prefers_explicit_remote_token_env(monkeypatch: pytest.MonkeyPatch) -> None:
     """Explicit remote bearer env var wins over ambient Databricks credentials."""
-    monkeypatch.setenv("OMNIGENT_REMOTE_AUTH_TOKEN", "env-token")
+    monkeypatch.setenv("OMNICRAFT_REMOTE_AUTH_TOKEN", "env-token")
     monkeypatch.setattr(
         chat_module,
         "_read_databrickscfg",
@@ -2276,14 +2276,14 @@ def test_remote_headers_falls_back_to_ambient_databricks_creds(
 ) -> None:
     """No env token + no stored login record → ambient Databricks credentials.
 
-    Bottom of the resolution chain: with ``OMNIGENT_REMOTE_AUTH_TOKEN``
+    Bottom of the resolution chain: with ``OMNICRAFT_REMOTE_AUTH_TOKEN``
     unset, no stored OIDC token, and no stored Databricks Apps pointer
     record for the server, ``_remote_headers`` must fall back to
     ``_read_databrickscfg(None)`` (the SDK's ambient resolution — no
     profile is threaded anymore) and put its token in the bearer header.
     """
-    monkeypatch.delenv("OMNIGENT_REMOTE_AUTH_TOKEN", raising=False)
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: None)
+    monkeypatch.delenv("OMNICRAFT_REMOTE_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", lambda _url: None)
     monkeypatch.setattr(chat_module, "_stored_databricks_record_token", lambda _url: None)
     read_calls: list[object] = []
 
@@ -2311,14 +2311,14 @@ def test_remote_headers_adds_org_id_header(monkeypatch: pytest.MonkeyPatch) -> N
     added here or the request routes to the account. It accompanies
     whichever bearer the resolution chain produced.
     """
-    monkeypatch.delenv("OMNIGENT_REMOTE_AUTH_TOKEN", raising=False)
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: None)
+    monkeypatch.delenv("OMNICRAFT_REMOTE_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", lambda _url: None)
     monkeypatch.setattr(chat_module, "_stored_databricks_record_token", lambda _url: "rec-tok")
     monkeypatch.setattr(
-        "omnigent.cli_auth.load_databricks_org_id", lambda _url: "2850744067564480"
+        "omnicraft.cli_auth.load_databricks_org_id", lambda _url: "2850744067564480"
     )
 
-    headers = _remote_headers(server_url="https://acme.databricks.com/api/2.0/omnigent")
+    headers = _remote_headers(server_url="https://acme.databricks.com/api/2.0/omnicraft")
 
     assert headers == {
         "Authorization": "Bearer rec-tok",
@@ -2334,12 +2334,12 @@ def test_remote_headers_omits_org_when_no_record(monkeypatch: pytest.MonkeyPatch
     bearer, so the runtime replay never appends a routing header where none
     was recorded.
     """
-    monkeypatch.delenv("OMNIGENT_REMOTE_AUTH_TOKEN", raising=False)
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: None)
+    monkeypatch.delenv("OMNICRAFT_REMOTE_AUTH_TOKEN", raising=False)
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", lambda _url: None)
     monkeypatch.setattr(chat_module, "_stored_databricks_record_token", lambda _url: "rec-tok")
-    monkeypatch.setattr("omnigent.cli_auth.load_databricks_org_id", lambda _url: None)
+    monkeypatch.setattr("omnicraft.cli_auth.load_databricks_org_id", lambda _url: None)
 
-    headers = _remote_headers(server_url="https://single.databricks.com/api/2.0/omnigent")
+    headers = _remote_headers(server_url="https://single.databricks.com/api/2.0/omnicraft")
 
     assert headers == {"Authorization": "Bearer rec-tok"}
     assert "X-Databricks-Org-Id" not in headers
@@ -2405,7 +2405,7 @@ def test_run_repl_auto_opens_conversation_when_session_starts(
     opened: list[tuple[str, str, bool]] = []
 
     class _Client:
-        """Async context manager stub for :class:`OmnigentClient`."""
+        """Async context manager stub for :class:`OmniCraftClient`."""
 
         def __init__(self, *args: object, **kwargs: object) -> None:
             """
@@ -2458,7 +2458,7 @@ def test_run_repl_auto_opens_conversation_when_session_starts(
         """
         Capture the browser-open request.
 
-        :param base_url: Omnigent server base URL.
+        :param base_url: OmniCraft server base URL.
         :param conversation_id: Conversation id passed to the opener.
         :param enabled: Whether auto-open was enabled.
         :param warn: Warning sink passed by production code.
@@ -2467,10 +2467,10 @@ def test_run_repl_auto_opens_conversation_when_session_starts(
         del warn
         opened.append((base_url, conversation_id, enabled))
 
-    monkeypatch.setattr(chat_module, "OmnigentClient", _Client)
-    monkeypatch.setattr("omnigent.repl.run_repl", _fake_run_repl)
+    monkeypatch.setattr(chat_module, "OmniCraftClient", _Client)
+    monkeypatch.setattr("omnicraft.repl.run_repl", _fake_run_repl)
     monkeypatch.setattr(chat_module, "open_conversation_link_if_enabled", _fake_open)
-    monkeypatch.setattr("omnigent.repl._tmux_pane.register_pane", lambda **kwargs: None)
+    monkeypatch.setattr("omnicraft.repl._tmux_pane.register_pane", lambda **kwargs: None)
 
     chat_module._run_repl(
         "http://127.0.0.1:8181",
@@ -2512,13 +2512,13 @@ def _make_run_context(**params: object) -> click.Context:
     :returns: A Click context whose ``.params`` dict reflects the
         given overrides applied on top of the command's defaults.
     """
-    from omnigent.cli import cli
+    from omnicraft.cli import cli
 
     run_cmd = cli.commands["run"]  # type: ignore[attr-defined]
     # Start with the declared defaults, then overlay the caller's overrides.
     merged = {p.name: p.default for p in run_cmd.params}
     merged.update(params)
-    ctx = click.Context(run_cmd, info_name="run", parent=click.Context(cli, info_name="omnigent"))
+    ctx = click.Context(run_cmd, info_name="run", parent=click.Context(cli, info_name="omnicraft"))
     ctx.params = merged
     return ctx
 
@@ -2538,7 +2538,7 @@ def test_build_resume_parts_preserves_flags() -> None:
     # A missing pair means _build_resume_parts dropped a live override;
     # an extra entry means a default leaked into the resume command.
     assert parts == [
-        "omnigent",
+        "omnicraft",
         "run",
         "agent.yaml",
         "--harness",
@@ -2603,7 +2603,7 @@ def test_build_resume_parts_omits_defaults() -> None:
     with ctx:
         parts = _build_resume_parts()
     # Only the command path + the target.
-    assert parts == ["omnigent", "run", "agent.yaml"]
+    assert parts == ["omnicraft", "run", "agent.yaml"]
 
 
 # ---------------------------------------------------------------------------
@@ -2619,7 +2619,7 @@ def _stub_run_repl_deps(
 ) -> None:
     """Stub the heavy dependencies of ``_run_repl`` so it can run in tests.
 
-    Replaces ``run_repl`` (the async REPL), ``OmnigentClient``
+    Replaces ``run_repl`` (the async REPL), ``OmniCraftClient``
     (the HTTP client), and ``register_pane`` (tmux integration)
     with lightweight fakes.
 
@@ -2636,18 +2636,18 @@ def _stub_run_repl_deps(
         return conversation_id
 
     # run_repl is lazily imported inside _run_repl as
-    # ``from omnigent.repl import run_repl``, which reads the
+    # ``from omnicraft.repl import run_repl``, which reads the
     # package attribute. Patch both the package and the source
     # module so the lazy import picks up our fake regardless of
     # which reference Python resolves.
-    import omnigent.repl as _repl_pkg
+    import omnicraft.repl as _repl_pkg
 
     monkeypatch.setattr(_repl_pkg, "run_repl", _fake_run_repl)
-    monkeypatch.setattr("omnigent.repl._repl.run_repl", _fake_run_repl)
-    monkeypatch.setattr("omnigent.chat.OmnigentClient", _FakeClientCtx)
-    monkeypatch.setattr("omnigent.chat._server_auth", lambda server_url=None: None)
+    monkeypatch.setattr("omnicraft.repl._repl.run_repl", _fake_run_repl)
+    monkeypatch.setattr("omnicraft.chat.OmniCraftClient", _FakeClientCtx)
+    monkeypatch.setattr("omnicraft.chat._server_auth", lambda server_url=None: None)
     monkeypatch.setattr(
-        "omnigent.repl._tmux_pane.register_pane",
+        "omnicraft.repl._tmux_pane.register_pane",
         lambda **_kw: None,
     )
 
@@ -2658,7 +2658,7 @@ def test_run_repl_passes_resume_parts_to_run_repl(
     """_run_repl threads resume_parts to run_repl."""
     captured: dict[str, object] = {}
     _stub_run_repl_deps(monkeypatch, conversation_id="conv_1", captured_kwargs=captured)
-    parts = ["omnigent", "run", "agent.yaml", "--server", "https://example.com"]
+    parts = ["omnicraft", "run", "agent.yaml", "--server", "https://example.com"]
 
     chat_module._run_repl(
         "http://127.0.0.1:9999",
@@ -2716,7 +2716,7 @@ class _FakeSessionsForResume:
 
 
 class _FakeResumeClient:
-    """Minimal OmnigentClient-like object exposing sessions."""
+    """Minimal OmniCraftClient-like object exposing sessions."""
 
     def __init__(self, rows: list[object]) -> None:
         self.sessions = _FakeSessionsForResume(rows)
@@ -2767,7 +2767,7 @@ async def test_resolve_latest_conversation_id_async_returns_none_for_unknown_nam
 
 
 class _FakeClientCtx:
-    """Minimal OmnigentClient stand-in that works as an async context manager.
+    """Minimal OmniCraftClient stand-in that works as an async context manager.
 
     Yields itself from ``async with`` — no real connection is opened.
     """
@@ -2813,7 +2813,7 @@ def test_databricks_token_auth_resolves_sdk_once(
     :param monkeypatch: Pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.inner.databricks_executor as dbx
+    import omnicraft.inner.databricks_executor as dbx
 
     class _CountingConfig:
         """Config double whose authenticate() counts calls."""
@@ -2841,10 +2841,10 @@ def test_databricks_token_auth_resolves_sdk_once(
 
     monkeypatch.setattr(dbx, "_resolve_databricks_auth", _fake_resolve)
     monkeypatch.delenv(chat_module._REMOTE_AUTH_TOKEN_ENV, raising=False)  # skip static path
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: None)  # skip OIDC path
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", lambda _url: None)  # skip OIDC path
     # No Databricks Apps pointer record stored for this server → the auth
     # falls through to ambient SDK resolution rather than host-keyed lookup.
-    monkeypatch.setattr("omnigent.cli_auth.load_databricks_workspace_host", lambda _url: None)
+    monkeypatch.setattr("omnicraft.cli_auth.load_databricks_workspace_host", lambda _url: None)
 
     auth = chat_module._DatabricksTokenAuth(server_url="https://ex.databricks.com")
 
@@ -2875,9 +2875,9 @@ def test_databricks_token_auth_sets_org_header(monkeypatch: pytest.MonkeyPatch) 
     :returns: None.
     """
     monkeypatch.delenv(chat_module._REMOTE_AUTH_TOKEN_ENV, raising=False)
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: None)
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", lambda _url: None)
     monkeypatch.setattr(
-        "omnigent.cli_auth.databricks_request_headers",
+        "omnicraft.cli_auth.databricks_request_headers",
         lambda _url: {"X-Databricks-Org-Id": "2850744067564480"},
     )
     # Isolate from real Databricks SDK resolution: the bearer is irrelevant
@@ -2885,10 +2885,10 @@ def test_databricks_token_auth_sets_org_header(monkeypatch: pytest.MonkeyPatch) 
     monkeypatch.setattr(chat_module._DatabricksTokenAuth, "_sdk_token", lambda self: None)
 
     auth = chat_module._DatabricksTokenAuth(
-        server_url="https://acme.databricks.com/api/2.0/omnigent"
+        server_url="https://acme.databricks.com/api/2.0/omnicraft"
     )
     flow = auth.auth_flow(
-        httpx.Request("GET", "https://acme.databricks.com/api/2.0/omnigent/v1/sessions")
+        httpx.Request("GET", "https://acme.databricks.com/api/2.0/omnicraft/v1/sessions")
     )
     request = next(flow)
     flow.close()
@@ -2916,7 +2916,7 @@ def test_spec_used_families_multi_vendor_directory_agent(tmp_path) -> None:
         "name: orchestrator\n"
         "prompt: orchestrate\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: claude-sdk\n"
         "tools:\n"
@@ -2928,14 +2928,14 @@ def test_spec_used_families_multi_vendor_directory_agent(tmp_path) -> None:
         "name: worker\n"
         "prompt: work\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: codex-native\n"
     )
 
     # Both the orchestrator (anthropic) and its sub-agent (openai) count,
     # whether the caller passes the config.yaml or the directory itself
-    # (the latter is what `omnigent run <dir>` threads through).
+    # (the latter is what `omnicraft run <dir>` threads through).
     assert _spec_used_families(root / "config.yaml") == ["anthropic", "openai"]
     assert _spec_used_families(root) == ["anthropic", "openai"]
 
@@ -2969,12 +2969,12 @@ def test_await_accounts_setup_noop_when_token_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A CLI that already holds a token for the server does not probe/wait."""
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: "existing-token")
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", lambda _url: "existing-token")
 
     def _must_not_probe(*_a: object, **_k: object) -> object:
         raise AssertionError("must not call /v1/info when a token already exists")
 
-    monkeypatch.setattr("omnigent.chat.httpx.get", _must_not_probe)
+    monkeypatch.setattr("omnicraft.chat.httpx.get", _must_not_probe)
 
     chat_module._await_accounts_first_run_setup("http://127.0.0.1:8000")
 
@@ -2983,9 +2983,9 @@ def test_await_accounts_setup_noop_for_header_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """When the server is not in accounts mode there is no admin to wait for."""
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: None)
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", lambda _url: None)
     monkeypatch.setattr(
-        "omnigent.chat.httpx.get",
+        "omnicraft.chat.httpx.get",
         lambda _url, timeout=5.0: _info_response(
             {"accounts_enabled": False, "needs_setup": False}
         ),
@@ -2994,7 +2994,7 @@ def test_await_accounts_setup_noop_for_header_mode(
     def _must_not_sleep(_s: float) -> None:
         raise AssertionError("must not poll in header mode")
 
-    monkeypatch.setattr("omnigent.chat.time.sleep", _must_not_sleep)
+    monkeypatch.setattr("omnicraft.chat.time.sleep", _must_not_sleep)
 
     chat_module._await_accounts_first_run_setup("http://127.0.0.1:8000")
 
@@ -3016,12 +3016,12 @@ def test_await_accounts_setup_waits_then_continues(
         # None on the pre-check and the first poll; token on the second poll.
         return None if calls["n"] <= 2 else "minted-token"
 
-    monkeypatch.setattr("omnigent.cli_auth.load_token", _load)
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", _load)
     monkeypatch.setattr(
-        "omnigent.chat.httpx.get",
+        "omnicraft.chat.httpx.get",
         lambda _url, timeout=5.0: _info_response({"accounts_enabled": True, "needs_setup": True}),
     )
-    monkeypatch.setattr("omnigent.chat.time.sleep", lambda _s: None)
+    monkeypatch.setattr("omnicraft.chat.time.sleep", lambda _s: None)
 
     chat_module._await_accounts_first_run_setup("http://127.0.0.1:8000")
 
@@ -3032,12 +3032,12 @@ def test_await_accounts_setup_times_out(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """If the admin is never created, the wait fails loud (no hang/traceback)."""
-    monkeypatch.setattr("omnigent.cli_auth.load_token", lambda _url: None)
+    monkeypatch.setattr("omnicraft.cli_auth.load_token", lambda _url: None)
     monkeypatch.setattr(
-        "omnigent.chat.httpx.get",
+        "omnicraft.chat.httpx.get",
         lambda _url, timeout=5.0: _info_response({"accounts_enabled": True, "needs_setup": True}),
     )
-    monkeypatch.setattr("omnigent.chat.time.sleep", lambda _s: None)
+    monkeypatch.setattr("omnicraft.chat.time.sleep", lambda _s: None)
 
     with pytest.raises(click.ClickException, match="Timed out"):
         chat_module._await_accounts_first_run_setup("http://127.0.0.1:8000", timeout_s=0.0)
@@ -3141,7 +3141,7 @@ def test_run_attach_uses_session_snapshot_runner_online(
             )
         raise AssertionError(f"unexpected GET {url}")
 
-    monkeypatch.setattr("omnigent.chat.httpx.get", _fake_get)
+    monkeypatch.setattr("omnicraft.chat.httpx.get", _fake_get)
     connected = False
 
     def _must_not_connect(*_args: object, **_kwargs: object) -> None:
@@ -3192,7 +3192,7 @@ def test_run_attach_does_not_probe_owner_scoped_runner_status(
             )
         raise AssertionError(f"owner-scoped runner status probe leaked through: {url}")
 
-    monkeypatch.setattr("omnigent.chat.httpx.get", _fake_get)
+    monkeypatch.setattr("omnicraft.chat.httpx.get", _fake_get)
     captured: dict[str, object] = {}
 
     def _capture(base_url: str, _tool_handler: object, **kwargs: object) -> None:
@@ -3379,7 +3379,7 @@ def _fake_sessions_chat_cls(
 
     :param query_impl: Async callable taking the prompt and returning a
         :class:`QueryResult` or raising, e.g. one that raises
-        ``OmnigentError("turn failed")``.
+        ``OmniCraftError("turn failed")``.
     :param extra_turns: Optional list of text strings to return from
         successive ``await_turn()`` calls, simulating async orchestrator
         auto-wakes. When exhausted ``await_turn`` returns empty text and
@@ -3416,12 +3416,12 @@ def _fake_sessions_chat_cls(
 
 async def _raise_turn_failed(_prompt: str) -> QueryResult:
     """Simulate the spurious transport ``failed`` raise."""
-    raise ClientOmnigentError("turn failed")
+    raise ClientOmniCraftError("turn failed")
 
 
 async def _raise_genuine_failure(_prompt: str) -> QueryResult:
     """Simulate a real setup/auth failure that persists no output."""
-    raise ClientOmnigentError("auth misconfigured")
+    raise ClientOmniCraftError("auth misconfigured")
 
 
 async def _return_empty(_prompt: str) -> QueryResult:
@@ -3442,15 +3442,15 @@ async def _run_one_shot(
     """
     Drive ``_query_sessions_once`` with a faked ``SessionsChat.query``.
 
-    :param client: The fake Omnigent client supplying the transcript.
+    :param client: The fake OmniCraft client supplying the transcript.
     :param query_impl: The async ``query`` behavior to install.
     :param monkeypatch: pytest monkeypatch fixture.
     :returns: Whatever ``_query_sessions_once`` returns.
     """
-    # chat.py does ``from omnigent_client import SessionsChat`` inside
+    # chat.py does ``from omnicraft_client import SessionsChat`` inside
     # the function, so patch the attribute on the package (resolved at
     # call time), not a chat-module-local alias.
-    monkeypatch.setattr("omnigent_client.SessionsChat", _fake_sessions_chat_cls(query_impl))
+    monkeypatch.setattr("omnicraft_client.SessionsChat", _fake_sessions_chat_cls(query_impl))
     return await _query_sessions_once(
         client=client,
         agent_name="hello_world",
@@ -3467,7 +3467,7 @@ async def test_query_sessions_once_reconciles_persisted_text_on_failed_status(
 ) -> None:
     """A spurious ``failed`` after a completed turn returns the persisted text.
 
-    This is the exact reported bug: ``omnigent run -p`` printed
+    This is the exact reported bug: ``omnicraft run -p`` printed
     "Error: turn failed" while the remote session held the response. If
     this fails, the ``-p`` path is again raising on a transport-induced
     ``session.status: failed`` instead of recovering the saved answer.
@@ -3503,7 +3503,7 @@ async def test_query_sessions_once_reraises_when_no_persisted_text(
     swallowed as empty output instead of raising.
     """
     client = _FakeAPClient([_item_user("say hi")])
-    with pytest.raises(ClientOmnigentError, match="auth misconfigured"):
+    with pytest.raises(ClientOmniCraftError, match="auth misconfigured"):
         await _run_one_shot(client, _raise_genuine_failure, monkeypatch)
 
 
@@ -3521,7 +3521,7 @@ async def test_query_sessions_once_surfaces_persisted_error_when_no_text(
             _item_error("inner executor error: Failed to start cursor-sdk agent: bad model"),
         ]
     )
-    with pytest.raises(ClientOmnigentError, match="Failed to start cursor-sdk agent"):
+    with pytest.raises(ClientOmniCraftError, match="Failed to start cursor-sdk agent"):
         await _run_one_shot(client, _return_empty, monkeypatch)
 
 
@@ -3565,7 +3565,7 @@ async def test_query_sessions_once_multi_turn_async_orchestrator(
     partial output (only turn 1's narration, never the final synthesis).
     """
     monkeypatch.setattr(
-        "omnigent_client.SessionsChat",
+        "omnicraft_client.SessionsChat",
         _fake_sessions_chat_cls(
             _return_text,
             extra_turns=["<!-- POLLY_REVIEW_START -->\n## Summary\nLooks good."],
@@ -3655,7 +3655,7 @@ async def test_query_sessions_once_reraises_on_failed_with_only_partial_item(
     client = _FakeAPClient(
         [_item_user("say hi"), _item_assistant("half a reply", status="incomplete")]
     )
-    with pytest.raises(ClientOmnigentError, match="turn failed"):
+    with pytest.raises(ClientOmniCraftError, match="turn failed"):
         await _run_one_shot(client, _raise_turn_failed, monkeypatch)
 
 
@@ -3676,7 +3676,7 @@ def test_spec_used_families_pi_brain_agent_contributes_pi_surface(tmp_path) -> N
         "name: polly-like\n"
         "prompt: orchestrate\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: pi\n"
         "tools:\n"
@@ -3688,7 +3688,7 @@ def test_spec_used_families_pi_brain_agent_contributes_pi_surface(tmp_path) -> N
         "name: worker\n"
         "prompt: work\n"
         "executor:\n"
-        "  type: omnigent\n"
+        "  type: omnicraft\n"
         "  config:\n"
         "    harness: codex-native\n"
     )
@@ -3703,27 +3703,27 @@ def test_env_auth_injection_skipped_when_global_auth_configured(
 ) -> None:
     """An ambient OPENAI_API_KEY must not be baked over configured auth.
 
-    With a global ``auth:`` block (written by ``omnigent setup``), the
+    With a global ``auth:`` block (written by ``omnicraft setup``), the
     user's configured Databricks routing is the explicit choice; baking
     the shell's env key into the materialized spec as ``executor.auth``
     would silently hijack it — the exact failure mode that produced
     empty openai-agents replies in the e2e REPL suite.
     """
-    from omnigent.chat import _inject_openai_env_auth_if_needed
+    from omnicraft.chat import _inject_openai_env_auth_if_needed
 
     config_home = tmp_path / "config"
     config_home.mkdir()
     (config_home / "config.yaml").write_text(
         "auth:\n  type: databricks\n  profile: my-ws\n", encoding="utf-8"
     )
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(config_home))
     monkeypatch.setenv("OPENAI_API_KEY", "sk-ambient-shell-key")
 
     raw: dict[str, object] = {"executor": {"harness": "openai-agents"}}
     _inject_openai_env_auth_if_needed(raw)
 
     # No auth baked: the global block remains the routing source and the
-    # runner resolves it via OMNIGENT_CONFIG_HOME. A baked api_key here
+    # runner resolves it via OMNICRAFT_CONFIG_HOME. A baked api_key here
     # means ambient env regained priority over configured credentials.
     assert "auth" not in raw["executor"]
 
@@ -3737,11 +3737,11 @@ def test_env_auth_injection_applies_when_nothing_configured(
     whose only credential is the shell's OPENAI_API_KEY the bake is what
     keeps ``run --harness openai-agents`` working at all.
     """
-    from omnigent.chat import _inject_openai_env_auth_if_needed
+    from omnicraft.chat import _inject_openai_env_auth_if_needed
 
     config_home = tmp_path / "config-empty"
     config_home.mkdir()
-    monkeypatch.setenv("OMNIGENT_CONFIG_HOME", str(config_home))
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(config_home))
     monkeypatch.setenv("OPENAI_API_KEY", "sk-ambient-shell-key")
     monkeypatch.delenv("OPENAI_BASE_URL", raising=False)
 
@@ -3756,15 +3756,15 @@ def test_env_auth_injection_applies_when_nothing_configured(
 
 
 def test_redirect_native_resume_handles_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
-    """A cursor-native resume hands off to ``omnigent cursor`` (direct attach).
+    """A cursor-native resume hands off to ``omnicraft cursor`` (direct attach).
 
     Regression: without a cursor branch in ``_redirect_native_resume_if_needed``
-    the resume fell through to the Omnigent REPL, which drove an Omnigent turn
+    the resume fell through to the OmniCraft REPL, which drove an OmniCraft turn
     per message (persisting its own user item) *while* the cursor forwarder
     mirrored the same message from the cursor store — recording each user
     message twice. The redirect keeps the TUI the single source of turns.
     """
-    from omnigent._wrapper_labels import CURSOR_NATIVE_WRAPPER_VALUE
+    from omnicraft._wrapper_labels import CURSOR_NATIVE_WRAPPER_VALUE
 
     monkeypatch.setattr(
         chat_module,
@@ -3776,7 +3776,7 @@ def test_redirect_native_resume_handles_cursor(monkeypatch: pytest.MonkeyPatch) 
     def _fake_run_cursor_native(**kwargs: object) -> None:
         captured.update(kwargs)
 
-    monkeypatch.setattr("omnigent.cursor_native.run_cursor_native", _fake_run_cursor_native)
+    monkeypatch.setattr("omnicraft.cursor_native.run_cursor_native", _fake_run_cursor_native)
 
     handled = chat_module._redirect_native_resume_if_needed(
         base_url="https://example.com",
@@ -3793,20 +3793,20 @@ def test_redirect_native_resume_handles_cursor(monkeypatch: pytest.MonkeyPatch) 
     }
 
 
-def test_cursor_native_resume_never_drives_an_omnigent_turn(
+def test_cursor_native_resume_never_drives_an_omnicraft_turn(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Resuming a cursor-native conversation must not enter the turn-driving REPL.
 
     This is the behavior that makes the user's message appear exactly once. The
-    duplicate had two sources: (1) the Omnigent turn the REPL drives, which
+    duplicate had two sources: (1) the OmniCraft turn the REPL drives, which
     persists its own user item, and (2) the cursor forwarder mirroring the same
     message back from the cursor store. ``_chat_with_server`` must short-circuit
     on the wrapper redirect *before* either ``_run_repl`` or ``_run_one_shot``
     is reached, so source (1) never happens and only the forwarder records the
     turn.
     """
-    from omnigent._wrapper_labels import CURSOR_NATIVE_WRAPPER_VALUE
+    from omnicraft._wrapper_labels import CURSOR_NATIVE_WRAPPER_VALUE
 
     monkeypatch.setattr(
         chat_module,
@@ -3815,15 +3815,15 @@ def test_cursor_native_resume_never_drives_an_omnigent_turn(
     )
     redirected: dict[str, object] = {}
     monkeypatch.setattr(
-        "omnigent.cursor_native.run_cursor_native",
+        "omnicraft.cursor_native.run_cursor_native",
         lambda **kwargs: redirected.update(kwargs),
     )
 
     def _fail_repl(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("_run_repl drove an Omnigent turn for a cursor-native resume")
+        raise AssertionError("_run_repl drove an OmniCraft turn for a cursor-native resume")
 
     def _fail_one_shot(*_args: object, **_kwargs: object) -> None:
-        raise AssertionError("_run_one_shot drove an Omnigent turn for a cursor-native resume")
+        raise AssertionError("_run_one_shot drove an OmniCraft turn for a cursor-native resume")
 
     monkeypatch.setattr(chat_module, "_run_repl", _fail_repl)
     monkeypatch.setattr(chat_module, "_run_one_shot", _fail_one_shot)

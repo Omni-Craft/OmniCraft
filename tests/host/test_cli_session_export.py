@@ -1,4 +1,4 @@
-"""Unit tests for ``omnigent session export``."""
+"""Unit tests for ``omnicraft session export``."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import httpx
 import respx
 from click.testing import CliRunner
 
-from omnigent.cli import cli
+from omnicraft.cli import cli
 
 _BASE = "http://localhost:6767"
 
@@ -54,7 +54,7 @@ _ITEMS_PAGE = {
 
 def _patch_server(base_url: str = _BASE) -> Any:
     """Patch the CLI so it uses *base_url* without spawning a real server."""
-    return patch("omnigent.cli._resolve_attach_server", return_value=base_url)
+    return patch("omnicraft.cli._resolve_attach_server", return_value=base_url)
 
 
 @respx.mock

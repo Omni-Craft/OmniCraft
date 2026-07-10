@@ -1,4 +1,4 @@
-"""Tests for ``_codex_native_launch_config`` in ``omnigent/runner/app.py``.
+"""Tests for ``_codex_native_launch_config`` in ``omnicraft/runner/app.py``.
 
 The runner fetches a session snapshot over HTTP and validates it before
 launching a runner-owned Codex terminal. Each malformed field is meant to
@@ -14,7 +14,7 @@ from typing import Any
 import httpx
 import pytest
 
-from omnigent.runner.app import _codex_native_launch_config
+from omnicraft.runner.app import _codex_native_launch_config
 
 
 class _Resp:
@@ -117,10 +117,10 @@ async def test_happy_path_parses_full_config(monkeypatch: pytest.MonkeyPatch) ->
         "model_override": "gpt-5.4-mini",
         "external_session_id": "thread_abc",
         "labels": {
-            "omnigent.fork.source_id": "conv_source",
-            "omnigent.fork.source_external_session_id": "thread_src",
-            "omnigent.fork.carry_history": "1",
-            "omnigent.codex_native.bypass_sandbox": "1",
+            "omnicraft.fork.source_id": "conv_source",
+            "omnicraft.fork.source_external_session_id": "thread_src",
+            "omnicraft.fork.carry_history": "1",
+            "omnicraft.codex_native.bypass_sandbox": "1",
         },
     }
     cfg = await _run(_Client(_Resp(200, snapshot)))
@@ -143,9 +143,9 @@ async def test_happy_path_parses_full_config(monkeypatch: pytest.MonkeyPatch) ->
     [
         None,  # no labels at all
         {},  # labels present but no bypass key
-        {"omnigent.codex_native.bypass_sandbox": "0"},  # explicit off
-        {"omnigent.codex_native.bypass_sandbox": "true"},  # only "1" arms it
-        {"omnigent.codex_native.bypass_sandbox": ""},  # empty string
+        {"omnicraft.codex_native.bypass_sandbox": "0"},  # explicit off
+        {"omnicraft.codex_native.bypass_sandbox": "true"},  # only "1" arms it
+        {"omnicraft.codex_native.bypass_sandbox": ""},  # empty string
     ],
 )
 async def test_bypass_sandbox_defaults_off_unless_label_is_one(

@@ -1,13 +1,13 @@
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: omnigent-to-openshell-gateway
+  name: omnicraft-to-openshell-gateway
   labels:
-    app: omnigent
+    app: omnicraft
 spec:
   podSelector:
     matchLabels:
-      app: omnigent
+      app: omnicraft
   policyTypes:
     - Egress
   egress:

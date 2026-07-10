@@ -1,4 +1,4 @@
-"""Tests for the shared server-config loader (:mod:`omnigent.server.server_config`).
+"""Tests for the shared server-config loader (:mod:`omnicraft.server.server_config`).
 
 Covers path resolution (env override → ``<data_dir>/config.yaml`` →
 None), loading + fail-open behavior (missing / malformed / non-mapping
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.server.server_config import (
+from omnicraft.server.server_config import (
     config_str_list,
     load_server_config,
     resolve_config_path,
@@ -21,18 +21,18 @@ from omnigent.server.server_config import (
 
 def _pin_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     """Point <data_dir> at tmp_path and clear the explicit-path override."""
-    monkeypatch.delenv("OMNIGENT_CONFIG", raising=False)
-    monkeypatch.setenv("OMNIGENT_ADMIN_CREDENTIALS_PATH", str(tmp_path / "admin-credentials"))
+    monkeypatch.delenv("OMNICRAFT_CONFIG", raising=False)
+    monkeypatch.setenv("OMNICRAFT_ADMIN_CREDENTIALS_PATH", str(tmp_path / "admin-credentials"))
 
 
 # ── path resolution ───────────────────────────────────────────────
 
 
 def test_resolve_config_path_env_override(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    """``OMNIGENT_CONFIG`` wins over the data-dir default."""
+    """``OMNICRAFT_CONFIG`` wins over the data-dir default."""
     p = tmp_path / "custom.yaml"
     p.write_text("{}")
-    monkeypatch.setenv("OMNIGENT_CONFIG", str(p))
+    monkeypatch.setenv("OMNICRAFT_CONFIG", str(p))
     assert resolve_config_path() == p
 
 

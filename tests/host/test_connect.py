@@ -14,14 +14,14 @@ from websockets.datastructures import Headers
 from websockets.exceptions import ConnectionClosedError, InvalidStatus, InvalidURI
 from websockets.http11 import Response
 
-from omnigent.host.connect import (
+from omnicraft.host.connect import (
     HostConnectError,
     HostProcess,
     _build_runner_env,
     _RunnerHandle,
     run_host_process,
 )
-from omnigent.host.frames import (
+from omnicraft.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
     HostCreateDirFrame,
     HostCreateDirResultFrame,
@@ -37,8 +37,8 @@ from omnigent.host.frames import (
     HostStopRunnerResultFrame,
     decode_host_frame,
 )
-from omnigent.host.identity import HostIdentity
-from omnigent.runner.identity import (
+from omnicraft.host.identity import HostIdentity
+from omnicraft.runner.identity import (
     RUNNER_ID_ENV_VAR,
     RUNNER_PARENT_PID_ENV_VAR,
     RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR,
@@ -121,7 +121,7 @@ async def test_handle_launch_spawns_subprocess(
             stderr=subprocess.DEVNULL,
         )
 
-    with patch("omnigent.host.connect.subprocess.Popen", side_effect=_fake_popen):
+    with patch("omnicraft.host.connect.subprocess.Popen", side_effect=_fake_popen):
         result = await host._handle_launch(frame)
 
     assert isinstance(result, HostLaunchRunnerResultFrame)
@@ -138,8 +138,8 @@ async def test_handle_launch_spawns_subprocess(
 
     # Verify env vars passed to the subprocess.
     assert spawned_env.get("RUNNER_SERVER_URL") == "http://localhost:8000"
-    assert spawned_env.get("OMNIGENT_RUNNER_TUNNEL_BINDING_TOKEN") == "test_token_abc"
-    assert spawned_env.get("OMNIGENT_RUNNER_WORKSPACE") == str(workspace)
+    assert spawned_env.get("OMNICRAFT_RUNNER_TUNNEL_BINDING_TOKEN") == "test_token_abc"
+    assert spawned_env.get("OMNICRAFT_RUNNER_WORKSPACE") == str(workspace)
 
     # Runners must get a clean /dev/null stdin, not the daemon's inherited fd:
     # a long-lived (e.g. nohup'd) daemon can end up with a closed/recycled
@@ -186,7 +186,7 @@ async def test_handle_launch_refuses_unconfigured_harness(
     """
     Verify _handle_launch refuses to spawn when the frame's harness is
     not configured, with the structured error_code and a message that
-    names the harness, the host, and the `omnigent setup` fix.
+    names the harness, the host, and the `omnicraft setup` fix.
 
     If this regresses, an unconfigured launch spawns a runner whose
     first turn dies inside the executor — the exact dead-session UX
@@ -199,7 +199,7 @@ async def test_handle_launch_refuses_unconfigured_harness(
     # Patch the symbol connect.py imported, with the real function's
     # signature; the workspace exists so ONLY the harness check can fail.
     monkeypatch.setattr(
-        "omnigent.host.connect.harness_is_configured",
+        "omnicraft.host.connect.harness_is_configured",
         lambda harness: False,
     )
 
@@ -219,7 +219,7 @@ async def test_handle_launch_refuses_unconfigured_harness(
     # harness, the host, and the remediation command.
     assert "'codex'" in (result.error or "")
     assert "test-laptop" in (result.error or "")
-    assert "omnigent setup" in (result.error or "")
+    assert "omnicraft setup" in (result.error or "")
     assert result.runner_id is None
     # No runner subprocess may exist after a refusal.
     assert host._runners == {}
@@ -231,7 +231,7 @@ async def test_handle_launch_native_cursor_message_points_at_cursor_installer(
 ) -> None:
     """
     A native-Cursor refusal must name the ``cursor-agent`` installer and
-    login, not ``omnigent setup`` — which only configures the SDK ``cursor``
+    login, not ``omnicraft setup`` — which only configures the SDK ``cursor``
     harness and never installs the ``cursor-agent`` CLI ``omni cursor`` boots.
 
     Here ``harness_setup_hint`` is the real function (only the readiness check
@@ -241,7 +241,7 @@ async def test_handle_launch_native_cursor_message_points_at_cursor_installer(
     workspace = tmp_path / "project"
     workspace.mkdir()
     monkeypatch.setattr(
-        "omnigent.host.connect.harness_is_configured",
+        "omnicraft.host.connect.harness_is_configured",
         lambda harness: False,
     )
 
@@ -260,7 +260,7 @@ async def test_handle_launch_native_cursor_message_points_at_cursor_installer(
     assert "test-laptop" in message
     assert "cursor.com/install" in message
     assert "cursor-agent login" in message
-    assert "omnigent setup" not in message
+    assert "omnicraft setup" not in message
     assert host._runners == {}
 
 
@@ -280,7 +280,7 @@ async def test_handle_launch_configured_harness_proceeds_to_spawn(
     workspace = tmp_path / "project"
     workspace.mkdir()
     monkeypatch.setattr(
-        "omnigent.host.connect.harness_is_configured",
+        "omnicraft.host.connect.harness_is_configured",
         lambda harness: True,
     )
 
@@ -305,7 +305,7 @@ async def test_handle_launch_configured_harness_proceeds_to_spawn(
         workspace=str(workspace),
         harness="claude-sdk",
     )
-    with patch("omnigent.host.connect.subprocess.Popen", side_effect=_fake_popen):
+    with patch("omnicraft.host.connect.subprocess.Popen", side_effect=_fake_popen):
         result = await host._handle_launch(frame)
 
     assert result.status == "launched", (
@@ -342,7 +342,7 @@ async def test_handle_launch_without_harness_skips_check(
         raise AssertionError("harness_is_configured must not be called when frame.harness is None")
 
     monkeypatch.setattr(
-        "omnigent.host.connect.harness_is_configured",
+        "omnicraft.host.connect.harness_is_configured",
         _must_not_be_called,
     )
 
@@ -366,7 +366,7 @@ async def test_handle_launch_without_harness_skips_check(
         binding_token="token_ghi",
         workspace=str(workspace),
     )
-    with patch("omnigent.host.connect.subprocess.Popen", side_effect=_fake_popen):
+    with patch("omnicraft.host.connect.subprocess.Popen", side_effect=_fake_popen):
         result = await host._handle_launch(frame)
 
     assert result.status == "launched"
@@ -386,7 +386,7 @@ async def test_handle_launch_prints_exact_runner_log_path(
     real output — the agent turn, tracebacks — lands only in the per-runner
     log file. The user needs that precise path to tail it, so the launch
     print must include it. We repoint ``Path.home`` so the log lands under
-    tmp (no write to the developer's real ``~/.omnigent``).
+    tmp (no write to the developer's real ``~/.omnicraft``).
     """
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
     host = _make_host_process()
@@ -415,18 +415,18 @@ async def test_handle_launch_prints_exact_runner_log_path(
             stderr=subprocess.DEVNULL,
         )
 
-    with patch("omnigent.host.connect.subprocess.Popen", side_effect=_fake_popen):
+    with patch("omnicraft.host.connect.subprocess.Popen", side_effect=_fake_popen):
         result = await host._handle_launch(frame)
 
     assert result.status == "launched", result.error
     # Exactly one runner-*.log was created under the host-runner dir.
-    runner_log_dir = tmp_path / ".omnigent" / "logs" / "host-runner"
+    runner_log_dir = tmp_path / ".omnicraft" / "logs" / "host-runner"
     log_files = list(runner_log_dir.glob("runner-*.log"))
     assert len(log_files) == 1
     out = capsys.readouterr().out
     assert "↑ Runner started:" in out
     # The exact file path is printed, home-collapsed to ``~`` for readability.
-    assert f"log: ~/.omnigent/logs/host-runner/{log_files[0].name}" in out
+    assert f"log: ~/.omnicraft/logs/host-runner/{log_files[0].name}" in out
     assert "session: conv_log" in out
 
     _cleanup_host(host)
@@ -507,7 +507,7 @@ async def test_handle_launch_immediate_exit_reports_exit_code_and_log_tail(
         binding_token="tok_dead",
         workspace=str(workspace),
     )
-    with patch("omnigent.host.connect.subprocess.Popen", side_effect=_fake_popen):
+    with patch("omnicraft.host.connect.subprocess.Popen", side_effect=_fake_popen):
         result = await host._handle_launch(frame)
 
     assert result.status == "failed"
@@ -515,7 +515,7 @@ async def test_handle_launch_immediate_exit_reports_exit_code_and_log_tail(
     # The exit code identifies the failure class without log-reading.
     assert "code 7" in error
     # The log path lets the user fetch the full log on the host.
-    assert "~/.omnigent/logs/host-runner/runner-" in error
+    assert "~/.omnicraft/logs/host-runner/runner-" in error
     # The tail carries the actual cause — the whole point of the report.
     assert "RuntimeError: boom-traceback" in error
 
@@ -533,7 +533,7 @@ async def test_watch_runner_reports_unexpected_exit(
     directory on the host.
     """
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
-    monkeypatch.setattr("omnigent.host.connect._RUNNER_WATCH_INTERVAL_S", 0.01)
+    monkeypatch.setattr("omnicraft.host.connect._RUNNER_WATCH_INTERVAL_S", 0.01)
     host = _make_host_process()
     tunnel = _FakeTunnel()
     host._ws = tunnel  # type: ignore[assignment] — duck-typed send
@@ -566,7 +566,7 @@ async def test_watch_runner_reports_unexpected_exit(
         binding_token="tok_watch",
         workspace=str(workspace),
     )
-    with patch("omnigent.host.connect.subprocess.Popen", side_effect=_fake_popen):
+    with patch("omnicraft.host.connect.subprocess.Popen", side_effect=_fake_popen):
         result = await host._handle_launch(frame)
     assert result.status == "launched", result.error
 
@@ -596,7 +596,7 @@ async def test_watch_runner_silent_on_intentional_stop(
     cleanly stopped session.
     """
     monkeypatch.setattr(Path, "home", classmethod(lambda _cls: tmp_path))
-    monkeypatch.setattr("omnigent.host.connect._RUNNER_WATCH_INTERVAL_S", 0.01)
+    monkeypatch.setattr("omnicraft.host.connect._RUNNER_WATCH_INTERVAL_S", 0.01)
     host = _make_host_process()
     tunnel = _FakeTunnel()
     host._ws = tunnel  # type: ignore[assignment] — duck-typed send
@@ -624,7 +624,7 @@ async def test_watch_runner_silent_on_intentional_stop(
         binding_token="tok_stop",
         workspace=str(workspace),
     )
-    with patch("omnigent.host.connect.subprocess.Popen", side_effect=_fake_popen):
+    with patch("omnicraft.host.connect.subprocess.Popen", side_effect=_fake_popen):
         result = await host._handle_launch(launch)
     assert result.status == "launched", result.error
 
@@ -675,13 +675,13 @@ async def test_unreported_exit_flushes_after_reconnect(
 
 
 async def test_hello_advertises_installed_version() -> None:
-    """The ``host.hello`` frame reports the omnigent version, not a placeholder.
+    """The ``host.hello`` frame reports the omnicraft version, not a placeholder.
 
     A hard-coded placeholder would make every host look like the same
     stale build in the server's version popover. The hello must carry the
     shared resolved version this host is actually running.
     """
-    from omnigent.version import VERSION
+    from omnicraft.version import VERSION
 
     host = _make_host_process()
     tunnel = _FakeTunnel()
@@ -889,7 +889,7 @@ def test_reaper_does_not_steal_host_owned_subprocess_exit_code(tmp_path: Path) -
 
     Regression for the Polly-flagged race: the host also spawns *direct*
     children that are not tracked runners — the ``git`` commands in
-    :mod:`omnigent.host.git_worktree`, run via ``subprocess.run`` under
+    :mod:`omnicraft.host.git_worktree`, run via ``subprocess.run`` under
     ``asyncio.to_thread`` from the worktree handlers. If the 2s reaper sweep
     fires after such a git child has exited but before ``subprocess``'s own
     ``wait()`` collects it, a blind reaper would ``waitpid`` it — and CPython
@@ -955,7 +955,7 @@ def test_install_child_subreaper_is_safe_to_call() -> None:
     """
     import sys
 
-    from omnigent.host.connect import _install_child_subreaper
+    from omnicraft.host.connect import _install_child_subreaper
 
     result = _install_child_subreaper()
     assert isinstance(result, bool)
@@ -968,7 +968,7 @@ def test_host_spawned_runner_has_parent_pid_env(
 ) -> None:
     """
     Verify that runners spawned by the host have
-    OMNIGENT_RUNNER_PARENT_PID set to the host's PID.
+    OMNICRAFT_RUNNER_PARENT_PID set to the host's PID.
 
     The runner's parent-PID watchdog uses this to auto-exit when
     the host dies. If the env var is missing or wrong, runners
@@ -1004,14 +1004,14 @@ def test_host_spawned_runner_has_parent_pid_env(
             stderr=subprocess.DEVNULL,
         )
 
-    with patch("omnigent.host.connect.subprocess.Popen", side_effect=_capture_env):
+    with patch("omnicraft.host.connect.subprocess.Popen", side_effect=_capture_env):
         import asyncio
 
         result = asyncio.run(host._handle_launch(frame))
 
     assert result.status == "launched"
     # RUNNER_PARENT_PID should be the host's own PID.
-    parent_pid = spawned_env.get("OMNIGENT_RUNNER_PARENT_PID")
+    parent_pid = spawned_env.get("OMNICRAFT_RUNNER_PARENT_PID")
     assert parent_pid == str(os.getpid()), (
         f"Expected RUNNER_PARENT_PID={os.getpid()}, got {parent_pid}. "
         "Without this, the runner watchdog can't detect host death."
@@ -1232,10 +1232,10 @@ def test_build_runner_env_allowlists_host_env_and_strips_secrets() -> None:
         "DATABRICKS_TOKEN": "dapi-secret",
         "AWS_SECRET_ACCESS_KEY": "aws-secret",
         "SOME_RANDOM_VAR": "x",
-        "OMNIGENT_CLAUDE_SDK_NO_SANDBOX": "1",
+        "OMNICRAFT_CLAUDE_SDK_NO_SANDBOX": "1",
         "KUBECONFIG": "/home/alice/.kube/config",
         "CLAUDE_CODE_SKIP_BEDROCK_AUTH": "1",
-        "OMNIGENT_DATABRICKS_EXTRA_HEADERS": '{"x-databricks-route-hint": "instance-abc"}',
+        "OMNICRAFT_DATABRICKS_EXTRA_HEADERS": '{"x-databricks-route-hint": "instance-abc"}',
     }
 
     env = _build_runner_env(
@@ -1269,10 +1269,10 @@ def test_build_runner_env_allowlists_host_env_and_strips_secrets() -> None:
     # sandbox containers. Only the baked host image ever sets it.
     assert env["IS_SANDBOX"] == "1"
     # The claude-sdk sandbox bypass flag forwards — it is read inside the
-    # harness, so a bare ``OMNIGENT_CLAUDE_SDK_NO_SANDBOX=1 omnigent run …``
+    # harness, so a bare ``OMNICRAFT_CLAUDE_SDK_NO_SANDBOX=1 omnicraft run …``
     # must reach the runner without also forcing
-    # ``OMNIGENT_RUNNER_ENV_PASSTHROUGH=OMNIGENT_CLAUDE_SDK_NO_SANDBOX``.
-    assert env["OMNIGENT_CLAUDE_SDK_NO_SANDBOX"] == "1"
+    # ``OMNICRAFT_RUNNER_ENV_PASSTHROUGH=OMNICRAFT_CLAUDE_SDK_NO_SANDBOX``.
+    assert env["OMNICRAFT_CLAUDE_SDK_NO_SANDBOX"] == "1"
     # KUBECONFIG is a filesystem path (not a secret) — kubectl, helm, k9s
     # need it to resolve the user's cluster contexts and namespaces.
     assert env["KUBECONFIG"] == "/home/alice/.kube/config"
@@ -1281,9 +1281,9 @@ def test_build_runner_env_allowlists_host_env_and_strips_secrets() -> None:
     assert env["CLAUDE_CODE_SKIP_BEDROCK_AUTH"] == "1"
     # Opaque request-routing headers forward host→runner so the runner's tunnel
     # and server callbacks reach the same server instance the host registered on
-    # (without the operator also listing it in OMNIGENT_RUNNER_ENV_PASSTHROUGH).
+    # (without the operator also listing it in OMNICRAFT_RUNNER_ENV_PASSTHROUGH).
     assert (
-        env["OMNIGENT_DATABRICKS_EXTRA_HEADERS"] == '{"x-databricks-route-hint": "instance-abc"}'
+        env["OMNICRAFT_DATABRICKS_EXTRA_HEADERS"] == '{"x-databricks-route-hint": "instance-abc"}'
     )
     # Non-harness secrets are stripped — the point of the allowlist.
     assert "DATABRICKS_TOKEN" not in env
@@ -1305,7 +1305,7 @@ def test_build_runner_env_forwards_harness_credentials_and_endpoints() -> None:
     or gateway setups break in confusing ways). Absent vars are simply
     not set rather than defaulted.
     """
-    from omnigent.host.connect import HARNESS_CREDENTIAL_ENV_VARS
+    from omnicraft.host.connect import HARNESS_CREDENTIAL_ENV_VARS
 
     base = {
         "PATH": "/usr/bin",
@@ -1351,14 +1351,14 @@ def test_build_runner_env_forwards_harness_credentials_and_endpoints() -> None:
     assert "ANTHROPIC_AUTH_TOKEN" not in env
 
 
-def test_build_runner_env_forwards_omnigent_prefixed_harness_credentials() -> None:
+def test_build_runner_env_forwards_omnicraft_prefixed_harness_credentials() -> None:
     """Prefixed harness credential aliases forward without creating raw names."""
-    from omnigent.host.connect import HARNESS_CREDENTIAL_ENV_VARS
+    from omnicraft.host.connect import HARNESS_CREDENTIAL_ENV_VARS
 
     base = {
         "PATH": "/usr/bin",
         "HOME": "/root",
-        "OMNIGENT_ANTHROPIC_API_KEY": "sk-prefixed",
+        "OMNICRAFT_ANTHROPIC_API_KEY": "sk-prefixed",
     }
 
     env = _build_runner_env(
@@ -1370,21 +1370,21 @@ def test_build_runner_env_forwards_omnigent_prefixed_harness_credentials() -> No
         parent_pid=42,
     )
 
-    assert "OMNIGENT_ANTHROPIC_API_KEY" in HARNESS_CREDENTIAL_ENV_VARS
-    assert env["OMNIGENT_ANTHROPIC_API_KEY"] == "sk-prefixed"
+    assert "OMNICRAFT_ANTHROPIC_API_KEY" in HARNESS_CREDENTIAL_ENV_VARS
+    assert env["OMNICRAFT_ANTHROPIC_API_KEY"] == "sk-prefixed"
     assert "ANTHROPIC_API_KEY" not in env
 
 
 def test_build_runner_env_passthrough_extends_forwarded_set() -> None:
     """
-    OMNIGENT_RUNNER_ENV_PASSTHROUGH names EXTRA vars to forward (for
+    OMNICRAFT_RUNNER_ENV_PASSTHROUGH names EXTRA vars to forward (for
     `providers:`-config `env:` refs and custom gateway wiring) without
     opening the allowlist to anything unnamed.
     """
     base = {
         "PATH": "/usr/bin",
         "HOME": "/root",
-        "OMNIGENT_RUNNER_ENV_PASSTHROUGH": "MY_GATEWAY_TOKEN, MY_GATEWAY_URL",
+        "OMNICRAFT_RUNNER_ENV_PASSTHROUGH": "MY_GATEWAY_TOKEN, MY_GATEWAY_URL",
         "MY_GATEWAY_TOKEN": "tok-123",
         "MY_GATEWAY_URL": "https://llm.internal.example.com",
         "UNLISTED_SECRET": "nope",
@@ -1438,19 +1438,19 @@ def test_build_runner_env_propagates_data_dir_paths_not_db_uri() -> None:
     local chain agrees on where config + data live, but the DB URI (which may
     embed a password) does not.
 
-    Regression guard: ``OMNIGENT_CONFIG_HOME`` was absent from the
-    allowlist, so the daemon/runner used ``~/.omnigent`` while a CLI run
+    Regression guard: ``OMNICRAFT_CONFIG_HOME`` was absent from the
+    allowlist, so the daemon/runner used ``~/.omnicraft`` while a CLI run
     under an isolated config home read the local-server pidfile elsewhere —
-    discovery then timed out (the e2e ``OMNIGENT_CONFIG_HOME`` isolation
+    discovery then timed out (the e2e ``OMNICRAFT_CONFIG_HOME`` isolation
     case). A failure of the first two asserts means that regression is back;
     a failure of the third means a DB secret can now leak into a (possibly
     hosted) runner.
     """
     base = {
         "PATH": "/usr/bin:/bin",
-        "OMNIGENT_CONFIG_HOME": "/tmp/iso-home",
-        "OMNIGENT_DATA_DIR": "/tmp/iso-data",
-        "OMNIGENT_DATABASE_URI": "postgresql://user:pw@host/db",
+        "OMNICRAFT_CONFIG_HOME": "/tmp/iso-home",
+        "OMNICRAFT_DATA_DIR": "/tmp/iso-data",
+        "OMNICRAFT_DATABASE_URI": "postgresql://user:pw@host/db",
     }
 
     env = _build_runner_env(
@@ -1464,15 +1464,15 @@ def test_build_runner_env_propagates_data_dir_paths_not_db_uri() -> None:
 
     # Path vars propagate — they're how the runner finds the same config/data
     # dir the CLI + daemon + local server use.
-    assert env["OMNIGENT_CONFIG_HOME"] == "/tmp/iso-home"
-    assert env["OMNIGENT_DATA_DIR"] == "/tmp/iso-data"
+    assert env["OMNICRAFT_CONFIG_HOME"] == "/tmp/iso-home"
+    assert env["OMNICRAFT_DATA_DIR"] == "/tmp/iso-data"
     # The DB URI is NOT propagated — it may carry credentials and a runner
     # (hosted or local) has no business holding the server's DB connection.
-    assert "OMNIGENT_DATABASE_URI" not in env
+    assert "OMNICRAFT_DATABASE_URI" not in env
 
 
 def test_build_runner_env_propagates_disable_keyring() -> None:
-    """``OMNIGENT_DISABLE_KEYRING`` propagates so the runner resolves
+    """``OMNICRAFT_DISABLE_KEYRING`` propagates so the runner resolves
     ``keychain:`` secret refs against the SAME backend the CLI configured.
 
     Regression guard: with the flag set, ``configure harnesses`` stores pasted
@@ -1482,7 +1482,7 @@ def test_build_runner_env_propagates_disable_keyring() -> None:
     the CLI just saved — the headless / file-backend deploy case (and the exact
     failure hit while dogfooding the first-run flow).
     """
-    base = {"PATH": "/usr/bin:/bin", "OMNIGENT_DISABLE_KEYRING": "1"}
+    base = {"PATH": "/usr/bin:/bin", "OMNICRAFT_DISABLE_KEYRING": "1"}
     env = _build_runner_env(
         base,
         server_url="http://server",
@@ -1491,7 +1491,7 @@ def test_build_runner_env_propagates_disable_keyring() -> None:
         workspace="/ws",
         parent_pid=42,
     )
-    assert env["OMNIGENT_DISABLE_KEYRING"] == "1"
+    assert env["OMNICRAFT_DISABLE_KEYRING"] == "1"
 
 
 # ── host.list_dir handler ───────────────────────────────
@@ -2009,7 +2009,7 @@ def _patch_connect(monkeypatch: pytest.MonkeyPatch, spy: _ConnectSpy) -> None:
     """
     import websockets.asyncio.client as ws_client
 
-    import omnigent.runner._entry as entry_mod
+    import omnicraft.runner._entry as entry_mod
 
     monkeypatch.setattr(entry_mod, "_make_auth_token_factory", lambda *, server_url=None: None)
     monkeypatch.setattr(ws_client, "connect", spy)
@@ -2038,17 +2038,17 @@ def test_build_connect_headers_adds_org_header(monkeypatch: pytest.MonkeyPatch) 
     :param monkeypatch: The pytest monkeypatch fixture.
     :returns: None.
     """
-    import omnigent.runner._entry as entry_mod
+    import omnicraft.runner._entry as entry_mod
 
     # No managed token + no real Databricks creds: isolate the bearer
     # branch so only the routing header is under test.
-    monkeypatch.delenv("OMNIGENT_HOST_TOKEN", raising=False)
+    monkeypatch.delenv("OMNICRAFT_HOST_TOKEN", raising=False)
     monkeypatch.setattr(entry_mod, "_make_auth_token_factory", lambda *, server_url=None: None)
     monkeypatch.setattr(
-        "omnigent.cli_auth.load_databricks_org_id", lambda _url: "2850744067564480"
+        "omnicraft.cli_auth.load_databricks_org_id", lambda _url: "2850744067564480"
     )
 
-    headers = _host("https://acme.databricks.com/api/2.0/omnigent")._build_connect_headers()
+    headers = _host("https://acme.databricks.com/api/2.0/omnicraft")._build_connect_headers()
 
     assert headers["X-Databricks-Org-Id"] == "2850744067564480"
 
@@ -2064,10 +2064,10 @@ async def test_run_retries_on_login_redirect(
     ``InvalidURI`` because the redirect scheme isn't ws/wss. This can
     happen transiently during server restarts, so the host must retry
     with backoff rather than dying. The warning still surfaces the single
-    ``omnigent login`` remediation so the operator can act if the cause
+    ``omnicraft login`` remediation so the operator can act if the cause
     is persistent.
     """
-    monkeypatch.setattr("omnigent.host.connect._RECONNECT_BASE_S", 0.0)
+    monkeypatch.setattr("omnicraft.host.connect._RECONNECT_BASE_S", 0.0)
     spy = _ConnectSpy(
         [
             InvalidURI("https://w/oidc/authorize", "scheme isn't ws or wss"),
@@ -2077,16 +2077,16 @@ async def test_run_retries_on_login_redirect(
     _patch_connect(monkeypatch, spy)
     host = _host()
 
-    with caplog.at_level(logging.WARNING, logger="omnigent.host.connect"):
+    with caplog.at_level(logging.WARNING, logger="omnicraft.host.connect"):
         await host.run()
 
     # 2 = redirect attempt + cancel attempt → it genuinely reconnected.
     assert spy.call_count == 2
     # The warning surfaces the login-page cause and the credentials hint —
-    # the single remediation message recommending `omnigent login <url>`.
+    # the single remediation message recommending `omnicraft login <url>`.
     assert any("login page" in r.message for r in caplog.records)
     assert any(
-        "omnigent login https://app.example.databricks.com" in r.message for r in caplog.records
+        "omnicraft login https://app.example.databricks.com" in r.message for r in caplog.records
     )
 
 
@@ -2097,12 +2097,12 @@ async def test_login_redirect_prints_warning_to_terminal(
     """The first login redirect of a streak warns on stderr, not just the log.
 
     ``_logger.warning`` goes to the CLI log file, so before this fix a
-    not-logged-in ``omnigent host`` sat completely silent on the terminal
+    not-logged-in ``omnicraft host`` sat completely silent on the terminal
     while retrying (the user's only signal was Ctrl-C and reading the log).
     The terminal warning must name the cause and the copy-pasteable
-    ``omnigent login <url>`` remedy.
+    ``omnicraft login <url>`` remedy.
     """
-    monkeypatch.setattr("omnigent.host.connect._RECONNECT_BASE_S", 0.0)
+    monkeypatch.setattr("omnicraft.host.connect._RECONNECT_BASE_S", 0.0)
     spy = _ConnectSpy(
         [
             InvalidURI("https://w/oidc/authorize", "scheme isn't ws or wss"),
@@ -2119,7 +2119,7 @@ async def test_login_redirect_prints_warning_to_terminal(
     # regression is back (warning only in the log file).
     assert "login page" in err
     # The exact remedy command, URL included, so the user can copy-paste.
-    assert "omnigent login https://app.example.databricks.com" in err
+    assert "omnicraft login https://app.example.databricks.com" in err
 
 
 async def test_fresh_host_fails_loud_after_persistent_login_redirects(
@@ -2133,7 +2133,7 @@ async def test_fresh_host_fails_loud_after_persistent_login_redirects(
     of retrying forever with the terminal silent (the silent-hang regression
     could resurface once the redirect was made retryable).
     """
-    monkeypatch.setattr("omnigent.host.connect._RECONNECT_BASE_S", 0.0)
+    monkeypatch.setattr("omnicraft.host.connect._RECONNECT_BASE_S", 0.0)
     # A single queued redirect repeats forever — the streak only ends
     # because the host gives up.
     spy = _ConnectSpy([InvalidURI("https://w/oidc/authorize", "scheme isn't ws or wss")])
@@ -2146,7 +2146,7 @@ async def test_fresh_host_fails_loud_after_persistent_login_redirects(
     message = str(excinfo.value)
     # The fatal message identifies the auth cause and the exact remedy.
     assert "login page" in message
-    assert "omnigent login https://app.example.databricks.com" in message
+    assert "omnicraft login https://app.example.databricks.com" in message
     # 3 = _LOGIN_REDIRECT_FATAL_ATTEMPTS: enough retries to absorb a
     # one-off proxy blip, then fail. 1 would mean the blip
     # tolerance regressed; more (or no raise at all) would mean the
@@ -2164,7 +2164,7 @@ async def test_login_redirect_streak_resets_on_other_transient_errors(
     otherwise a fresh host riding out a restart would die from redirects
     accumulated across unrelated errors instead of three in a row.
     """
-    monkeypatch.setattr("omnigent.host.connect._RECONNECT_BASE_S", 0.0)
+    monkeypatch.setattr("omnicraft.host.connect._RECONNECT_BASE_S", 0.0)
     redirect = InvalidURI("https://w/oidc/authorize", "scheme isn't ws or wss")
     # Two redirects, then a 503 (must reset the streak), then redirects
     # repeating forever until the host gives up.
@@ -2192,7 +2192,7 @@ async def test_connected_host_retries_login_redirects_indefinitely(
     killing it would drop its live runners. It must keep retrying past
     the fresh-host fatal threshold.
     """
-    monkeypatch.setattr("omnigent.host.connect._RECONNECT_BASE_S", 0.0)
+    monkeypatch.setattr("omnicraft.host.connect._RECONNECT_BASE_S", 0.0)
     redirect = InvalidURI("https://w/oidc/authorize", "scheme isn't ws or wss")
     # Accepted upgrade first (None), then MORE redirects than the
     # fresh-host fatal threshold of 3, then a cancel to end the test.
@@ -2242,10 +2242,10 @@ async def test_run_fails_loud_on_permanent_4xx(
 
 
 @pytest.mark.parametrize("status", [401, 403])
-async def test_auth_rejection_suggests_omnigent_login(
+async def test_auth_rejection_suggests_omnicraft_login(
     monkeypatch: pytest.MonkeyPatch, status: int
 ) -> None:
-    """401/403 rejections point the user at ``omnigent login``.
+    """401/403 rejections point the user at ``omnicraft login``.
 
     Both statuses are auth failures the user can resolve by logging in to
     an accounts/OIDC-mode server (a Databricks profile token may
@@ -2263,13 +2263,13 @@ async def test_auth_rejection_suggests_omnigent_login(
 
     # The exact, copy-pasteable command — URL included — must be present,
     # not just the bare word "login".
-    assert f"omnigent login {server_url}" in str(excinfo.value)
+    assert f"omnicraft login {server_url}" in str(excinfo.value)
 
 
 async def test_non_auth_permanent_4xx_omits_login_hint(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A non-auth permanent 4xx (404) does NOT suggest ``omnigent login``.
+    """A non-auth permanent 4xx (404) does NOT suggest ``omnicraft login``.
 
     The login remedy is specific to credential/authorization failures;
     surfacing it on a 404 ("wrong URL / route missing") would misdirect
@@ -2286,7 +2286,7 @@ async def test_non_auth_permanent_4xx_omits_login_hint(
     # Confirm we got the actual 404 fatal message (not some unrelated
     # error that happens to lack "login") before asserting the absence.
     assert "HTTP 404" in message
-    assert "omnigent login" not in message
+    assert "omnicraft login" not in message
 
 
 @pytest.mark.parametrize("status", [408, 429, 500, 503])
@@ -2300,7 +2300,7 @@ async def test_run_reconnects_on_transient_upgrade_failure(
     ``CancelledError`` on the second attempt ends the loop so the test
     terminates; with backoff zeroed the retry is immediate.
     """
-    monkeypatch.setattr("omnigent.host.connect._RECONNECT_BASE_S", 0.0)
+    monkeypatch.setattr("omnicraft.host.connect._RECONNECT_BASE_S", 0.0)
     spy = _ConnectSpy([_invalid_status(status), asyncio.CancelledError()])
     _patch_connect(monkeypatch, spy)
     host = _host()
@@ -2343,9 +2343,9 @@ def test_run_host_process_exits_nonzero_on_fatal(
 def test_run_host_process_announces_session_log_dir_on_start(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    """``omnigent host`` names the session-log dir on start (was silent).
+    """``omnicraft host`` names the session-log dir on start (was silent).
 
-    The reported regression: ``omnigent host`` ran completely silently, so a
+    The reported regression: ``omnicraft host`` ran completely silently, so a
     quiet/stuck host gave no hint where to look. The startup banner now points
     at the per-session runner log dir up front; the exact ``runner-*.log`` is
     printed later when each runner launches. We stub the tunnel to a clean
@@ -2363,4 +2363,4 @@ def test_run_host_process_announces_session_log_dir_on_start(
     )
 
     out = capsys.readouterr().out
-    assert "Session logs: ~/.omnigent/logs/host-runner/" in out
+    assert "Session logs: ~/.omnicraft/logs/host-runner/" in out

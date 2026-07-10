@@ -14,8 +14,8 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse
 
-from omnigent.runner import create_runner_app
-from omnigent.runner.transports.ws_tunnel.frames import (
+from omnicraft.runner import create_runner_app
+from omnicraft.runner.transports.ws_tunnel.frames import (
     HelloFrame,
     RequestFrame,
     ResponseBodyFrame,
@@ -23,12 +23,12 @@ from omnigent.runner.transports.ws_tunnel.frames import (
     ResponseHeadFrame,
     decode_frame,
 )
-from omnigent.runner.transports.ws_tunnel.registry import (
+from omnicraft.runner.transports.ws_tunnel.registry import (
     RunnerSession,
     TunnelRegistry,
 )
-from omnigent.runner.transports.ws_tunnel.serve import dispatch_via_asgi
-from omnigent.runner.transports.ws_tunnel.transport import WSTunnelTransport
+from omnicraft.runner.transports.ws_tunnel.serve import dispatch_via_asgi
+from omnicraft.runner.transports.ws_tunnel.transport import WSTunnelTransport
 from tests.runner.helpers import NullServerClient
 
 # ── Fake WebSocket pair ──────────────────────────────────

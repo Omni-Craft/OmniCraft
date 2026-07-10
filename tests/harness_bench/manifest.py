@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from omnigent.harness_aliases import is_native_harness
-from omnigent.harness_capabilities import AuthModel, HarnessCapabilities, IntegrationMode
-from omnigent.harness_plugins import (
+from omnicraft.harness_aliases import is_native_harness
+from omnicraft.harness_capabilities import AuthModel, HarnessCapabilities, IntegrationMode
+from omnicraft.harness_plugins import (
     harness_aliases,
     harness_capabilities,
     harness_install_keys,
@@ -25,7 +25,7 @@ _INTEGRATION_MODE_PROSE: dict[IntegrationMode, str] = {
 }
 
 _AUTH_PROSE: dict[AuthModel, str] = {
-    AuthModel.OMNIGENT_CREDENTIAL: "Omnigent credential (gateway / provider config)",
+    AuthModel.OMNICRAFT_CREDENTIAL: "OmniCraft credential (gateway / provider config)",
     AuthModel.OWN_AUTH: "Own auth (vendor login / API key)",
     AuthModel.SESSION_SCOPED_CONFIG: "Session-scoped vendor config",
 }

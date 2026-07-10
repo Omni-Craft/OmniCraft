@@ -1,6 +1,6 @@
-# Omnigent Android
+# OmniCraft Android
 
-Thin Kotlin/`WebView` shell for Omnigent. Like the Electron app and the iOS
+Thin Kotlin/`WebView` shell for OmniCraft. Like the Electron app and the iOS
 shell (`web/ios`), this target loads the server-served web UI instead of
 shipping a duplicate copy of the SPA. It is a native _shell_, not a rewrite.
 
@@ -19,12 +19,12 @@ keep the platform default (HTTPS only), mirroring the iOS
 
 The same `web/` bundle runs in a browser tab, the Electron shell, the iOS
 WKWebView shell, and this Android WebView. Detection is feature-based at
-runtime via `window.omnigentNative` — see `web/src/lib/nativeBridge.ts`. This
+runtime via `window.omnicraftNative` — see `web/src/lib/nativeBridge.ts`. This
 shell injects that object with `kind: "android"`; the web layer needs no
 per-feature branching beyond the `kind` discriminator (`isAndroidShell()`).
 
 The web→native transport is a `WebViewCompat.addWebMessageListener` channel
-(`OmnigentBridgeListener`) **origin-allowlisted to the pinned server** and
+(`OmniCraftBridgeListener`) **origin-allowlisted to the pinned server** and
 gated on `isMainFrame`, rather than `addJavascriptInterface`. This is the
 structural equivalent of the iOS bridge's frame-origin + `isMainFrame` check:
 the transport object is never delivered to a sandboxed / cross-origin
@@ -35,10 +35,10 @@ agent-HTML iframe, so an injected artifact can't reach the native surface.
 Provides native setup chrome (server entry + recent servers via
 `ConnectActivity`), `WebView` loading, foreground local notifications with tap
 routing back into the SPA, a best-effort app badge, edge-to-edge inset plumbing
-(measured insets injected as `--omnigent-android-safe-area-*`, consumed by the
+(measured insets injected as `--omnicraft-android-safe-area-*`, consumed by the
 web inset system), correct system-back / predictive-back handling, file
 downloads — including `blob:` / `data:` exports via a fetch→base64→MediaStore
-bridge, which closes omnigent-ai/omnigent#969 (the iOS shell drops these) —
+bridge, which closes omnicraft-ai/omnicraft#969 (the iOS shell drops these) —
 file **uploads** (`<input type=file>` via `WebChromeClient.onShowFileChooser`),
 and **microphone** capture for voice input (`onPermissionRequest`, granted to
 the pinned origin only, with a runtime `RECORD_AUDIO` request).
@@ -72,5 +72,5 @@ Play case but review is unpredictable for this category.
 
 > Status: builds clean — `gradlew :app:assembleDebug :app:lintDebug` produces a
 > debug APK with 0 lint errors (JDK 17, Gradle 8.9 wrapper, `compileSdk 35`).
-> Implementation for omnigent-ai/omnigent#1604; not yet exercised on a device
+> Implementation for omnicraft-ai/omnicraft#1604; not yet exercised on a device
 > (no runtime/instrumented testing here), so treat device behavior as unverified.

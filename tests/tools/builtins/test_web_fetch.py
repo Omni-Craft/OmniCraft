@@ -7,14 +7,14 @@ import sys
 
 import pytest
 
-from omnigent.errors import OmnigentError
-from omnigent.spec.types import (
+from omnicraft.errors import OmniCraftError
+from omnicraft.spec.types import (
     AgentSpec,
     ExecutorSpec,
     LLMConfig,
     ProviderAuth,
 )
-from omnigent.tools.builtins.web_fetch import (
+from omnicraft.tools.builtins.web_fetch import (
     RESEARCHER_NAME,
     WebFetchTool,
     build_researcher_spec,
@@ -32,12 +32,12 @@ def _make_parent_spec(
 
     :param model: The LLM model string.
     :param executor_type: Executor type override, or ``None``
-        for default (omnigent executor on the claude-sdk harness).
+        for default (omnicraft executor on the claude-sdk harness).
     :returns: An AgentSpec suitable for constructing WebFetchTool.
     """
-    # A real bootable ``type="omnigent"`` agent always carries a harness in
+    # A real bootable ``type="omnicraft"`` agent always carries a harness in
     # ``executor.config`` — without one ``harness_kind`` is the unspawnable
-    # literal "omnigent". Default the helper to a real harness so fixtures build
+    # literal "omnicraft". Default the helper to a real harness so fixtures build
     # bootable parents (and ``build_researcher_spec`` does not fail loud).
     executor = ExecutorSpec(config={"harness": "claude-sdk"})
     if executor_type is not None:
@@ -144,7 +144,7 @@ def test_researcher_inherits_parent_sandbox_egress() -> None:
     a sandbox-less child silently bypassed an egress-restricted parent's
     allowlist (e.g. reaching localhost / IMDS the parent blocked).
     """
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     sandbox = OSEnvSandboxSpec(
         egress_rules=["GET api.example.com/**"],
@@ -199,7 +199,7 @@ def test_no_os_env_parent_fails_at_build_when_bwrap_missing(
     monkeypatch.setattr(shutil, "which", lambda cmd: None)
     parent = _make_parent_spec()
     assert parent.os_env is None
-    with pytest.raises(OmnigentError, match="bubblewrap") as excinfo:
+    with pytest.raises(OmniCraftError, match="bubblewrap") as excinfo:
         build_researcher_spec(parent)
     assert "sandbox.type" not in str(excinfo.value)
 
@@ -222,7 +222,7 @@ def test_parent_with_os_env_skips_bwrap_probe(
     verbatim path: its sandbox posture is its own to configure, so the
     probe must not second-guess it.
     """
-    from omnigent.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
 
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(shutil, "which", lambda cmd: None)
@@ -245,7 +245,7 @@ def test_no_os_env_parent_fails_at_build_when_sandbox_exec_missing(
     """The same seed-time probe covers the macOS default sandbox."""
     monkeypatch.setattr(sys, "platform", "darwin")
     monkeypatch.setattr(shutil, "which", lambda cmd: None)
-    with pytest.raises(OmnigentError, match="sandbox-exec") as excinfo:
+    with pytest.raises(OmniCraftError, match="sandbox-exec") as excinfo:
         build_researcher_spec(_make_parent_spec())
     assert "sandbox.type" not in str(excinfo.value)
 
@@ -339,13 +339,13 @@ def test_web_fetch_is_runner_dispatched() -> None:
     The Tool itself owns only the schema and the researcher
     sub-agent spec; the actual spawn runs through
     ``_execute_subagent_tool`` from
-    ``omnigent/runner/tool_dispatch.py``. If a future change
+    ``omnicraft/runner/tool_dispatch.py``. If a future change
     drops web_fetch from ``_ALL_LOCAL_TOOLS`` the LLM would call
     ``Tool.invoke`` which now raises ``NotImplementedError`` — a
     silent regression. Pinning the membership here keeps the two
     sides honest.
     """
-    from omnigent.runner.tool_dispatch import should_dispatch_locally
+    from omnicraft.runner.tool_dispatch import should_dispatch_locally
 
     assert should_dispatch_locally("web_fetch") is True
 
@@ -363,7 +363,7 @@ def test_runner_handler_validates_query_required() -> None:
     """
     import asyncio
 
-    from omnigent.runner.tool_dispatch import _execute_web_fetch_tool
+    from omnicraft.runner.tool_dispatch import _execute_web_fetch_tool
 
     result = asyncio.run(
         _execute_web_fetch_tool(
@@ -403,41 +403,41 @@ def testbuild_researcher_spec_copies_llm() -> None:
 
 
 def testbuild_researcher_spec_default_executor() -> None:
-    """Researcher inherits the parent's omnigent executor type AND harness."""
+    """Researcher inherits the parent's omnicraft executor type AND harness."""
     parent = _make_parent_spec()
     researcher = build_researcher_spec(parent)
-    assert researcher.executor.type == "omnigent"
+    assert researcher.executor.type == "omnicraft"
     # The harness carries from the parent so the child is bootable (not the
-    # unspawnable literal "omnigent").
+    # unspawnable literal "omnicraft").
     assert researcher.executor.harness_kind == "claude-sdk"
 
 
 def test_researcher_build_fails_loud_when_parent_has_no_harness() -> None:
     """
-    A parent with ``ExecutorSpec(type="omnigent", config={})`` (no harness)
+    A parent with ``ExecutorSpec(type="omnicraft", config={})`` (no harness)
     must NOT silently produce an unbootable child whose
-    ``harness_kind == "omnigent"`` — it must fail loud at build time.
+    ``harness_kind == "omnicraft"`` — it must fail loud at build time.
 
     The child ``__web_researcher`` session is created without a per-session
     ``harness_override``, so the runner resolves its harness solely from this
-    spec. A child carrying the literal ``"omnigent"`` would crash the runner
-    with ``unknown harness 'omnigent'`` (the original Layer-1 failure). The
+    spec. A child carrying the literal ``"omnicraft"`` would crash the runner
+    with ``unknown harness 'omnicraft'`` (the original Layer-1 failure). The
     resolved harness (e.g. an API ``harness_override`` on a spec with no
     ``executor.config["harness"]``) is not visible at this call site, so
     ``build_researcher_spec`` raises a clear, parent-naming error instead.
     """
     import pytest
 
-    from omnigent.errors import ErrorCode, OmnigentError
+    from omnicraft.errors import ErrorCode, OmniCraftError
 
     parent = AgentSpec(
         spec_version=1,
         name="no-harness-leg",
         llm=LLMConfig(model="openai/gpt-5.4"),
-        executor=ExecutorSpec(type="omnigent", config={}),
+        executor=ExecutorSpec(type="omnicraft", config={}),
     )
 
-    with pytest.raises(OmnigentError) as exc_info:
+    with pytest.raises(OmniCraftError) as exc_info:
         build_researcher_spec(parent)
 
     # Actionable: names the offending parent leg and the missing harness.
@@ -453,11 +453,11 @@ def test_researcher_inherits_parent_harness_auth_and_model() -> None:
 
     ``build_researcher_spec`` previously copied only ``llm`` and built a
     bare ``ExecutorSpec(max_iterations=5)``. That bare spec defaults
-    ``type`` to ``"omnigent"`` with an empty ``config``, so:
+    ``type`` to ``"omnicraft"`` with an empty ``config``, so:
 
     - Layer 1 (active): ``executor.harness_kind`` resolves to the literal
-      ``"omnigent"`` (no ``config["harness"]``), and the runner aborts the
-      researcher spawn with ``RuntimeError: unknown harness 'omnigent'``
+      ``"omnicraft"`` (no ``config["harness"]``), and the runner aborts the
+      researcher spawn with ``RuntimeError: unknown harness 'omnicraft'``
       before any model routing — every ``web_fetch`` fails on all legs.
     - Layer 2 (latent): dropping the parent's ``auth`` and model strips the
       researcher off the parent's provider, so a gateway model such as
@@ -475,7 +475,7 @@ def test_researcher_inherits_parent_harness_auth_and_model() -> None:
         name="pi-parent",
         llm=LLMConfig(model="z-ai/glm-5.2"),
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "pi"},
             model="z-ai/glm-5.2",
             connection={"base_url": "https://openrouter.ai/api/v1"},
@@ -485,7 +485,7 @@ def test_researcher_inherits_parent_harness_auth_and_model() -> None:
 
     researcher = build_researcher_spec(parent)
 
-    # Layer 1: the child must NOT be the bare "unknown harness 'omnigent'"
+    # Layer 1: the child must NOT be the bare "unknown harness 'omnicraft'"
     # spec — it carries the parent's harness selector.
     assert researcher.executor.config.get("harness") == "pi", (
         "Researcher dropped the parent's harness — the runner would abort "
@@ -495,7 +495,7 @@ def test_researcher_inherits_parent_harness_auth_and_model() -> None:
         "harness_kind must resolve to the parent's harness, not the literal "
         f"executor type; got {researcher.executor.harness_kind!r}."
     )
-    assert researcher.executor.harness_kind != "omnigent"
+    assert researcher.executor.harness_kind != "omnicraft"
 
     # Layer 2: credentials + model must carry so the parent's provider routes
     # the parent's model.
@@ -522,7 +522,7 @@ def test_researcher_drops_inline_os_env_from_executor_config() -> None:
         name="codex-parent",
         llm=LLMConfig(model="openai/gpt-5.4"),
         executor=ExecutorSpec(
-            type="omnigent",
+            type="omnicraft",
             config={"harness": "codex", "os_env": {"type": "caller_process"}},
             model="openai/gpt-5.4",
         ),

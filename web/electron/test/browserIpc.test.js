@@ -144,20 +144,20 @@ describe("browserIpc — trust gate", () => {
     const { ipcMain } = setup();
     const channels = ipcMain.channels();
     for (const ch of [
-      "omnigent:browser-open-or-navigate",
-      "omnigent:browser-set-active",
-      "omnigent:browser-resize",
-      "omnigent:browser-screenshot",
-      "omnigent:browser-execute",
-      "omnigent:browser-has-view",
-      "omnigent:browser-close",
-      "omnigent:browser-go-back",
-      "omnigent:browser-go-forward",
-      "omnigent:browser-reload",
-      "omnigent:open-browser-devtools",
-      "omnigent:browser-enable-design-mode",
-      "omnigent:browser-disable-design-mode",
-      "omnigent:browser-signal-design-result",
+      "omnicraft:browser-open-or-navigate",
+      "omnicraft:browser-set-active",
+      "omnicraft:browser-resize",
+      "omnicraft:browser-screenshot",
+      "omnicraft:browser-execute",
+      "omnicraft:browser-has-view",
+      "omnicraft:browser-close",
+      "omnicraft:browser-go-back",
+      "omnicraft:browser-go-forward",
+      "omnicraft:browser-reload",
+      "omnicraft:open-browser-devtools",
+      "omnicraft:browser-enable-design-mode",
+      "omnicraft:browser-disable-design-mode",
+      "omnicraft:browser-signal-design-result",
     ]) {
       assert.ok(channels.includes(ch), `missing handler: ${ch}`);
     }
@@ -166,10 +166,10 @@ describe("browserIpc — trust gate", () => {
   it("rejects an unpinned sender on the new toolbar handlers", async () => {
     const { ipcMain, event } = setup({ pinned: false });
     const channels = [
-      "omnigent:browser-go-back",
-      "omnigent:browser-go-forward",
-      "omnigent:browser-reload",
-      "omnigent:open-browser-devtools",
+      "omnicraft:browser-go-back",
+      "omnicraft:browser-go-forward",
+      "omnicraft:browser-reload",
+      "omnicraft:open-browser-devtools",
     ];
     const results = await Promise.all(
       channels.map((ch) => ipcMain.invoke(ch, event, { conversationId: "conv_1" })),
@@ -185,7 +185,7 @@ describe("browserIpc — history navigation", () => {
   it("go-back issues goBack only when canGoBack is true", async () => {
     const wc = makeWebContents({ canBack: true });
     const { ipcMain, event } = setup({ webContents: wc });
-    const r = await ipcMain.invoke("omnigent:browser-go-back", event, { conversationId: "conv_1" });
+    const r = await ipcMain.invoke("omnicraft:browser-go-back", event, { conversationId: "conv_1" });
     assert.equal(r.ok, true);
     assert.ok(wc.calls.includes("goBack"));
   });
@@ -193,7 +193,7 @@ describe("browserIpc — history navigation", () => {
   it("go-back is a no-op when canGoBack is false", async () => {
     const wc = makeWebContents({ canBack: false });
     const { ipcMain, event } = setup({ webContents: wc });
-    const r = await ipcMain.invoke("omnigent:browser-go-back", event, { conversationId: "conv_1" });
+    const r = await ipcMain.invoke("omnicraft:browser-go-back", event, { conversationId: "conv_1" });
     assert.equal(r.ok, true);
     assert.ok(!wc.calls.includes("goBack"));
   });
@@ -201,20 +201,20 @@ describe("browserIpc — history navigation", () => {
   it("go-forward issues goForward when canGoForward is true", async () => {
     const wc = makeWebContents({ canForward: true });
     const { ipcMain, event } = setup({ webContents: wc });
-    await ipcMain.invoke("omnigent:browser-go-forward", event, { conversationId: "conv_1" });
+    await ipcMain.invoke("omnicraft:browser-go-forward", event, { conversationId: "conv_1" });
     assert.ok(wc.calls.includes("goForward"));
   });
 
   it("reload calls webContents.reload", async () => {
     const wc = makeWebContents();
     const { ipcMain, event } = setup({ webContents: wc });
-    await ipcMain.invoke("omnigent:browser-reload", event, { conversationId: "conv_1" });
+    await ipcMain.invoke("omnicraft:browser-reload", event, { conversationId: "conv_1" });
     assert.ok(wc.calls.includes("reload"));
   });
 
   it("returns {ok:false} for a missing view", async () => {
     const { ipcMain, event } = setup({ conversationId: null });
-    const r = await ipcMain.invoke("omnigent:browser-go-back", event, { conversationId: "nope" });
+    const r = await ipcMain.invoke("omnicraft:browser-go-back", event, { conversationId: "nope" });
     assert.equal(r.ok, false);
     assert.equal(r.error, "No browser view");
   });
@@ -224,9 +224,9 @@ describe("browserIpc — devtools toggle", () => {
   it("opens devtools docked bottom when closed, closes when open", async () => {
     const wc = makeWebContents();
     const { ipcMain, event } = setup({ webContents: wc });
-    await ipcMain.invoke("omnigent:open-browser-devtools", event, { conversationId: "conv_1" });
+    await ipcMain.invoke("omnicraft:open-browser-devtools", event, { conversationId: "conv_1" });
     assert.ok(wc.calls.includes("openDevTools:bottom"));
-    await ipcMain.invoke("omnigent:open-browser-devtools", event, { conversationId: "conv_1" });
+    await ipcMain.invoke("omnicraft:open-browser-devtools", event, { conversationId: "conv_1" });
     assert.ok(wc.calls.includes("closeDevTools"));
   });
 });
@@ -234,7 +234,7 @@ describe("browserIpc — devtools toggle", () => {
 describe("browserIpc — url live-tracking", () => {
   it("open-or-navigate wires did-navigate listeners that emit url + nav-state", async () => {
     const { ipcMain, registry, sent, event } = setup({ conversationId: null });
-    await ipcMain.invoke("omnigent:browser-open-or-navigate", event, {
+    await ipcMain.invoke("omnicraft:browser-open-or-navigate", event, {
       conversationId: "conv_1",
       url: "https://example.com",
     });
@@ -254,7 +254,7 @@ describe("browserIpc — url live-tracking", () => {
 
   it("did-navigate-in-page only emits for the main frame", async () => {
     const { ipcMain, registry, sent, event } = setup({ conversationId: null });
-    await ipcMain.invoke("omnigent:browser-open-or-navigate", event, {
+    await ipcMain.invoke("omnicraft:browser-open-or-navigate", event, {
       conversationId: "conv_1",
       url: "https://example.com",
     });
@@ -270,9 +270,9 @@ describe("browserIpc — design mode", () => {
   it("rejects an unpinned sender on all three design-mode channels", async () => {
     const { ipcMain, event } = setup({ pinned: false });
     const channels = [
-      "omnigent:browser-enable-design-mode",
-      "omnigent:browser-disable-design-mode",
-      "omnigent:browser-signal-design-result",
+      "omnicraft:browser-enable-design-mode",
+      "omnicraft:browser-disable-design-mode",
+      "omnicraft:browser-signal-design-result",
     ];
     const results = await Promise.all(
       channels.map((ch) => ipcMain.invoke(ch, event, { conversationId: "conv_1" })),
@@ -286,7 +286,7 @@ describe("browserIpc — design mode", () => {
   it("enable injects the picker script and attaches a console-message listener", async () => {
     const wc = makeWebContents();
     const { ipcMain, event } = setup({ webContents: wc });
-    const r = await ipcMain.invoke("omnigent:browser-enable-design-mode", event, {
+    const r = await ipcMain.invoke("omnicraft:browser-enable-design-mode", event, {
       conversationId: "conv_1",
     });
     assert.equal(r.ok, true);
@@ -297,7 +297,7 @@ describe("browserIpc — design mode", () => {
   it("a valid nonced submit marker following a native gesture is forwarded", async () => {
     const wc = makeWebContents();
     const { ipcMain, sent, event } = setup({ webContents: wc });
-    await ipcMain.invoke("omnigent:browser-enable-design-mode", event, {
+    await ipcMain.invoke("omnicraft:browser-enable-design-mode", event, {
       conversationId: "conv_1",
     });
     const nonce = nonceFromScripts(wc.scripts);
@@ -321,7 +321,7 @@ describe("browserIpc — design mode", () => {
   it("a submit marker WITHOUT the valid nonce is ignored (no send fired)", async () => {
     const wc = makeWebContents();
     const { ipcMain, sent, event } = setup({ webContents: wc });
-    await ipcMain.invoke("omnigent:browser-enable-design-mode", event, {
+    await ipcMain.invoke("omnicraft:browser-enable-design-mode", event, {
       conversationId: "conv_1",
     });
     // Even with a real native gesture, a marker forged WITHOUT the nonce (the
@@ -340,10 +340,10 @@ describe("browserIpc — design mode", () => {
   it("enable is idempotent — toggling on twice leaves a single listener", async () => {
     const wc = makeWebContents();
     const { ipcMain, event } = setup({ webContents: wc });
-    await ipcMain.invoke("omnigent:browser-enable-design-mode", event, {
+    await ipcMain.invoke("omnicraft:browser-enable-design-mode", event, {
       conversationId: "conv_1",
     });
-    await ipcMain.invoke("omnigent:browser-enable-design-mode", event, {
+    await ipcMain.invoke("omnicraft:browser-enable-design-mode", event, {
       conversationId: "conv_1",
     });
     assert.equal(wc.listenerCount("console-message"), 1);
@@ -352,11 +352,11 @@ describe("browserIpc — design mode", () => {
   it("disable detaches the console-message listener", async () => {
     const wc = makeWebContents();
     const { ipcMain, event } = setup({ webContents: wc });
-    await ipcMain.invoke("omnigent:browser-enable-design-mode", event, {
+    await ipcMain.invoke("omnicraft:browser-enable-design-mode", event, {
       conversationId: "conv_1",
     });
     assert.equal(wc.listenerCount("console-message"), 1);
-    const r = await ipcMain.invoke("omnigent:browser-disable-design-mode", event, {
+    const r = await ipcMain.invoke("omnicraft:browser-disable-design-mode", event, {
       conversationId: "conv_1",
     });
     assert.equal(r.ok, true);
@@ -366,7 +366,7 @@ describe("browserIpc — design mode", () => {
   it("signal-design-result forwards the coerced envelope into the page", async () => {
     const wc = makeWebContents();
     const { ipcMain, event } = setup({ webContents: wc });
-    const r = await ipcMain.invoke("omnigent:browser-signal-design-result", event, {
+    const r = await ipcMain.invoke("omnicraft:browser-signal-design-result", event, {
       conversationId: "conv_1",
       id: 7,
       ok: true,

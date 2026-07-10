@@ -19,11 +19,11 @@ from typing import Any
 
 import pytest
 
-from omnigent.entities import ConversationItem, PagedList
-from omnigent.policies.base import Policy
-from omnigent.policies.types import EvaluationContext, PolicyResult
-from omnigent.runtime.policies.engine import PolicyEngine
-from omnigent.spec.types import (
+from omnicraft.entities import ConversationItem, PagedList
+from omnicraft.policies.base import Policy
+from omnicraft.policies.types import EvaluationContext, PolicyResult
+from omnicraft.runtime.policies.engine import PolicyEngine
+from omnicraft.spec.types import (
     FunctionPolicySpec,
     Phase,
     PolicyAction,

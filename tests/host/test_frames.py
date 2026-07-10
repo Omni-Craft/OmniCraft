@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from omnigent.host.frames import (
+from omnicraft.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
     HostCreateDirFrame,
     HostCreateDirResultFrame,
@@ -286,7 +286,7 @@ def test_launch_runner_result_frame_error_code_round_trip() -> None:
     The server keys its 412 mapping on this exact string — if it's
     dropped, an unconfigured-harness refusal degrades to the generic
     warn-and-return-200 path and the user never sees the
-    `omnigent setup` recommendation.
+    `omnicraft setup` recommendation.
     """
     original = HostLaunchRunnerResultFrame(
         request_id="req_001",

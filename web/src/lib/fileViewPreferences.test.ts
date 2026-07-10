@@ -5,7 +5,7 @@ import {
   writeFileViewPreferences,
 } from "./fileViewPreferences";
 
-const STORAGE_KEY = "omnigent:file-view-preferences";
+const STORAGE_KEY = "omnicraft:file-view-preferences";
 
 afterEach(() => {
   localStorage.clear();

@@ -5,7 +5,7 @@ The code-font controls live on the Settings page (``pages/SettingsPage.tsx``,
 "Code font size" and "Code font family": a segmented pill (``−`` / value /
 ``+``) under a ``role="group"`` labelled "Code font size", plus a free-text
 family input. Stepping the size writes the px choice to
-``localStorage["omnigent:code-font-size"]``.
+``localStorage["omnicraft:code-font-size"]``.
 
 Unlike the chrome font (which rides the ``--ui-font-scale`` CSS variable), the
 code editor (Monaco) and terminal (xterm) are fixed-pixel widgets: they read a
@@ -30,7 +30,7 @@ import httpx
 import pytest
 from playwright.sync_api import Locator, Page, expect
 
-STORAGE_KEY = "omnigent:code-font-size"
+STORAGE_KEY = "omnicraft:code-font-size"
 
 # The seeded file lands in ``<cwd>/<session_id>/`` (the agent spec uses
 # ``os_env.cwd: .``); mirror test_file_autosave.py's per-session cleanup.

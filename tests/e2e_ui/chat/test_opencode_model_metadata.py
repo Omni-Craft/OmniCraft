@@ -47,7 +47,7 @@ def _patch_session_as_opencode_native(page: Page, session_id: str) -> None:
         payload = response.json()
         payload["labels"] = {
             **payload.get("labels", {}),
-            "omnigent.wrapper": "opencode-native-ui",
+            "omnicraft.wrapper": "opencode-native-ui",
         }
         payload["harness"] = "opencode"
         payload["llm_model"] = LAUNCH_MODEL

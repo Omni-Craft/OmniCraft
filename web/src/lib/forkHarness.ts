@@ -1,13 +1,13 @@
 // Pure helpers for the "fork / switch agent" flows: decide which target
 // harnesses preserve the source's conversation history (and so should appear
 // in each picker). Three carry mechanisms, all keyed off the TARGET harness —
-// a frontend mirror of the server (omnigent/server/routes/sessions.py):
+// a frontend mirror of the server (omnicraft/server/routes/sessions.py):
 //
-//   - SDK (non-native) harnesses replay the Omnigent transcript as LLM
+//   - SDK (non-native) harnesses replay the OmniCraft transcript as LLM
 //     context — carry on BOTH fork and switch, regardless of source/family.
 //   - Native-REBUILD harnesses (Claude Code, Codex, Pi, Hermes, Qwen Code)
 //     record a resumable on-disk session file the runner rebuilds from the
-//     copied Omnigent items (a same-family native source clones the source
+//     copied OmniCraft items (a same-family native source clones the source
 //     file instead; cross-family rebuilds, format-agnostic) — carry on BOTH
 //     fork and switch. Mirrors `_FORK_HISTORY_NATIVE_HARNESSES`.
 //   - PREAMBLE harnesses (Cursor, OpenCode) have no rebuildable local store,
@@ -55,14 +55,14 @@ export function harnessFamily(
  * Whether a harness is a native CLI harness that carries fork/switch history
  * (Claude Code / Codex / Cursor / Pi / Antigravity / Qwen Code). These are the
  * native harnesses whose history the runner rebuilds or replays on a fork — the
- * subset of Python `NATIVE_HARNESSES` (`omnigent/harness_aliases.py`) that the
+ * subset of Python `NATIVE_HARNESSES` (`omnicraft/harness_aliases.py`) that the
  * server gates in `_FORK_HISTORY_NATIVE_HARNESSES` /
  * `_CURSOR_FORK_HISTORY_HARNESSES` (`server/routes/sessions.py`). A native
  * harness that always starts fresh (e.g. goose-native) is intentionally absent
  * so the picker doesn't promise history it would drop. Both native-antigravity
  * spellings are included (the in-process `antigravity` SDK harness is NOT
  * native); qwen-native rebuilds qwen's on-disk chat recording from the copied
- * Omnigent items (see `write_qwen_session_recording`).
+ * OmniCraft items (see `write_qwen_session_recording`).
  */
 export function isNativeHarness(harness: string | null | undefined): boolean {
   return (
@@ -83,9 +83,9 @@ export function isNativeHarness(harness: string | null | undefined): boolean {
 
 /**
  * Native harnesses whose runner REBUILDS a resumable on-disk transcript from
- * the copied Omnigent items, so they carry history on BOTH fork and switch.
+ * the copied OmniCraft items, so they carry history on BOTH fork and switch.
  * Mirrors Python `_FORK_HISTORY_NATIVE_HARNESSES`
- * (`omnigent/server/routes/sessions.py`); both canonical and reversed
+ * (`omnicraft/server/routes/sessions.py`); both canonical and reversed
  * spellings are listed so a catalog `harness` in either form matches.
  */
 const NATIVE_REBUILD_HARNESSES: ReadonlySet<string> = new Set([

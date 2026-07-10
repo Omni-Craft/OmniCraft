@@ -514,7 +514,7 @@ function truncateTitle(raw: string, max = 60): string {
 // loadingConversation is true, which unmounts the entire chat surface).
 // Text drafts are also persisted to sessionStorage so they survive page
 // refreshes; File objects can't be serialized, so only text round-trips.
-const SESSION_DRAFTS_KEY = "omnigent.sessionDrafts";
+const SESSION_DRAFTS_KEY = "omnicraft.sessionDrafts";
 
 function loadDraftsFromStorage(): Map<string, { text: string; files: File[] }> {
   try {
@@ -688,7 +688,7 @@ export function ChatPage() {
   const conversationLoadError = useChatStore((s) => s.conversationLoadError);
   const boundAgentId = useChatStore((s) => s.boundAgentId);
   const boundAgentName = useChatStore((s) => s.boundAgentName);
-  // Fallback for session-scoped agents (created by `omnigent run --server`):
+  // Fallback for session-scoped agents (created by `omnicraft run --server`):
   // the sessions-derived list only carries id+name, so fetch the full
   // agent object for the active session. Drives the picker's
   // name/description; the same react-query cache also feeds the header
@@ -739,7 +739,7 @@ export function ChatPage() {
   // picker alone in those cases.
   //
   // If the bound agent isn't in the cached list (e.g. a new agent was
-  // registered by a fresh `omnigent run` after the page loaded),
+  // registered by a fresh `omnicraft run` after the page loaded),
   // refetch so the list stays current. staleTime: Infinity means the
   // query won't self-update, so we do it manually on demand.
   useEffect(() => {
@@ -884,8 +884,8 @@ export function ChatPage() {
   // NOT sufficient to decide whether to OPEN the picker. Prefer the
   // snapshot's labels, falling back to the sidebar row.
   const forkSourceId =
-    activeSession?.labels?.["omnigent.fork.source_id"] ??
-    activeConv?.labels?.["omnigent.fork.source_id"] ??
+    activeSession?.labels?.["omnicraft.fork.source_id"] ??
+    activeConv?.labels?.["omnicraft.fork.source_id"] ??
     null;
   // Only an *unbound* fork (no workspace yet) routes the offline guard to
   // the directory picker — which binds + launches. A bound fork that is
@@ -940,7 +940,7 @@ export function ChatPage() {
   // background tabs signal parent activity without duplicating child-session
   // badges from the sidebar/Agents rail. An open-but-untitled session
   // (no synthesized title yet) reads as "New session" to match its
-  // sidebar row; the landing page (no active session) stays "Omnigent".
+  // sidebar row; the landing page (no active session) stays "OmniCraft".
   // Sub-agent (child) sessions are absent from the sidebar list, so
   // ``activeConv`` is null and the title would otherwise read "New session";
   // name the tab after the sub-agent instead, mirroring the header.
@@ -1143,7 +1143,7 @@ export function ChatPage() {
         onOpenChange={setReconnectDialogOpen}
         conversationId={urlConvId}
         serverUrl={getCliServerUrl()}
-        wrapper={activeConv?.labels?.["omnigent.wrapper"]}
+        wrapper={activeConv?.labels?.["omnicraft.wrapper"]}
         state={reconnectState}
         isOwner={reconnectIsOwner}
         // Source prefill for the Clone tab's fork form. Mirrors AppShell's
@@ -1161,7 +1161,7 @@ export function ChatPage() {
           sessionId={urlConvId}
           sourceSessionId={forkSourceId}
           serverUrl={getCliServerUrl()}
-          wrapper={activeConv?.labels?.["omnigent.wrapper"]}
+          wrapper={activeConv?.labels?.["omnicraft.wrapper"]}
         />
       )}
     </SessionSharedContext.Provider>
@@ -1585,7 +1585,7 @@ function MainAgentSurface({
   // (the server has no slash_command path for native sessions). Undefined
   // → the composer falls through to the plaintext send for these. Keyed
   // on the wrapper label, NOT `isTerminalFirst` — a terminal-first SDK
-  // session (embedded Omnigent REPL terminal) runs an in-process harness
+  // session (embedded OmniCraft REPL terminal) runs an in-process harness
   // with the full server-side slash_command path.
   const isTerminalFirst = terminalFirst?.isTerminalFirst === true;
   const isNativeWrapper = terminalFirst?.isNativeWrapper === true;
@@ -2288,9 +2288,9 @@ export function JumpToTopButton({
       // top 50px centers the pill on the chat-scroll-fade border (the mask ramps
       // 48px→80px), just below the h-14 ChatHeader. z-40 > header z-30. On the
       // iOS shell the header and fade border shift down by the safe-area inset
-      // (see .chat-scroll-fade in index.css), so add --omnigent-inset-top here
+      // (see .chat-scroll-fade in index.css), so add --omnicraft-inset-top here
       // too to keep the pill centered on the border. The var is 0px off-shell.
-      style={{ top: "calc(50px + var(--omnigent-inset-top))" }}
+      style={{ top: "calc(50px + var(--omnicraft-inset-top))" }}
       className={cn(
         "pointer-events-none absolute inset-x-0 z-40 flex justify-center transition-opacity duration-150",
         visible ? "opacity-100" : "opacity-0",
@@ -2546,8 +2546,8 @@ export function ConnectionIndicator({
         <div
           aria-hidden
           className={cn(
-            "omnigent-native-bottom-spacer",
-            terminalFirst.view === "chat" && "omnigent-native-bottom-spacer--chat",
+            "omnicraft-native-bottom-spacer",
+            terminalFirst.view === "chat" && "omnicraft-native-bottom-spacer--chat",
           )}
         />
       ) : null;
@@ -3290,7 +3290,7 @@ interface ComposerProps {
   /**
    * Native-CLI wrapper session (claude-native / codex-native). Drops the
    * `/model` slash command unless the session also has a model picker
-   * (`showModels`); terminal-first SDK sessions (embedded Omnigent REPL
+   * (`showModels`); terminal-first SDK sessions (embedded OmniCraft REPL
    * terminal) keep it.
    */
   isNativeWrapper?: boolean;
@@ -5078,7 +5078,7 @@ export function dispatchInitialPrompt(
  * Whether a session is an *unbound* coding fork — one that still needs the
  * directory picker to bind a host + workspace before it can run.
  *
- * The ``omnigent.fork.source_id`` label is *provenance*: it stays on the
+ * The ``omnicraft.fork.source_id`` label is *provenance*: it stays on the
  * clone forever, including after it is bound. So the label alone can't gate
  * the picker — a bound fork whose runner is merely offline would wrongly
  * open the picker, and the bind endpoint would 400 with "session already
@@ -5088,7 +5088,7 @@ export function dispatchInitialPrompt(
  * returns false, routing an offline bound fork to the CLI reconnect dialog
  * like any other session.
  *
- * @param forkSourceId - The `omnigent.fork.source_id` label value, or null.
+ * @param forkSourceId - The `omnicraft.fork.source_id` label value, or null.
  * @param workspace - The session's bound workspace, or null/undefined when
  *   never bound.
  */
@@ -5114,7 +5114,7 @@ type LabelSource = { labels?: Record<string, string | null> | null } | null | un
  * The live session snapshot is checked first because child sessions do
  * not appear in the sidebar list and because labels can change after
  * initial navigation (for example ``sys_session_close`` marks a child
- * ``omnigent.closed=true``). The sidebar row is only a fallback.
+ * ``omnicraft.closed=true``). The sidebar row is only a fallback.
  *
  * @param activeSession - Live session snapshot, if loaded.
  * @param activeConv - Sidebar/session-list row fallback.
@@ -5126,10 +5126,10 @@ export function readOnlyReasonForSessionLabels(
   activeConv: LabelSource,
 ): string | null {
   const closed =
-    activeSession?.labels?.["omnigent.closed"] ?? activeConv?.labels?.["omnigent.closed"];
+    activeSession?.labels?.["omnicraft.closed"] ?? activeConv?.labels?.["omnicraft.closed"];
   if (closed === "true") return "Esta sessão de sub-agente está fechada";
   const wrapper =
-    activeSession?.labels?.["omnigent.wrapper"] ?? activeConv?.labels?.["omnigent.wrapper"];
+    activeSession?.labels?.["omnicraft.wrapper"] ?? activeConv?.labels?.["omnicraft.wrapper"];
   if (wrapper === "claude-code-native-ui-subagent") {
     return "Sub-agentes do Claude Code são somente leitura";
   }
@@ -5141,7 +5141,7 @@ export function effortLevelsForConv(
   codexModelOptions: readonly CodexModelOption[] = [],
   currentModel: string | null = null,
 ): readonly string[] {
-  switch (conv?.labels?.["omnigent.wrapper"]) {
+  switch (conv?.labels?.["omnicraft.wrapper"]) {
     case "claude-code-native-ui":
       return CLAUDE_NATIVE_EFFORT_LEVELS;
     case "codex-native-ui":
@@ -5154,14 +5154,14 @@ export function effortLevelsForConv(
 /**
  * Which native model picker should be visible for *conv*?
  *
- * Gated on the wrapper label, not `omnigent.ui === "terminal"`:
+ * Gated on the wrapper label, not `omnicraft.ui === "terminal"`:
  * other terminal-first wrappers may not be Claude/Codex-native (see
  * `TerminalFirstContext.tsx`).
  */
 export function modelPickerKindForConv(
   conv: { labels?: Record<string, string | null> | null } | null | undefined,
 ): NativeModelPickerKind | null {
-  switch (conv?.labels?.["omnigent.wrapper"]) {
+  switch (conv?.labels?.["omnicraft.wrapper"]) {
     case "claude-code-native-ui":
       return "claude";
     case "codex-native-ui":
@@ -5333,7 +5333,7 @@ function AgentPicker({
   // forwarder's terminal→web mirror and by web-side picks. Surface *that* as
   // the live model — never the cross-session sticky `selectedModel` (a pick
   // carried over from some other session) nor the meaningless `llmModel`
-  // default. The other vendor-owns wrappers have no Omnigent-visible model and
+  // default. The other vendor-owns wrappers have no OmniCraft-visible model and
   // stay null.
   // kiro persists the pick as ``model_override`` (applied via ``--model`` at
   // launch) and, mid-session, the runner types ``/model <id>`` into the live TUI.
@@ -5358,7 +5358,7 @@ function AgentPicker({
     ? modelPickerKind === "cursor" || modelPickerKind === "kiro"
       ? // cursor mirrors its live TUI model into ``model_override``; kiro sets it
         // on a web pick (which also drives a live ``/model`` switch). Either way
-        // the Omnigent-visible model is ``model_override``.
+        // the OmniCraft-visible model is ``model_override``.
         sessionModelOverride
       : modelPickerKind === "opencode"
         ? // opencode mirrors its live TUI model into ``model_override`` (set at

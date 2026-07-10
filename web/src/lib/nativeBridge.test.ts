@@ -12,13 +12,13 @@ import {
   setNativeServerSwitcherHidden,
 } from "./nativeBridge";
 
-// The Electron preload bridge mock, installed on window.omnigentDesktop.
+// The Electron preload bridge mock, installed on window.omnicraftDesktop.
 const electronSetBadge = vi.fn();
 const electronNotify = vi.fn().mockResolvedValue(true);
 const electronUnsubscribe = vi.fn();
 const electronOnNotificationActivated = vi.fn().mockReturnValue(electronUnsubscribe);
 
-// The iOS WKWebView bridge mock, installed on window.omnigentNative.
+// The iOS WKWebView bridge mock, installed on window.omnicraftNative.
 const iosSetBadge = vi.fn();
 const iosNotify = vi.fn().mockResolvedValue(true);
 const iosUnsubscribe = vi.fn();
@@ -28,7 +28,7 @@ const iosOnSidebarDrag = vi.fn().mockReturnValue(iosOnSidebarDragUnsubscribe);
 const iosSetServerSwitcherHidden = vi.fn();
 const iosSetSidebarOpen = vi.fn();
 
-// The Android WebView bridge mock, installed on window.omnigentNative. The MVP
+// The Android WebView bridge mock, installed on window.omnicraftNative. The MVP
 // Android shell exposes the shell-agnostic subset (notifications + badge); the
 // optional iOS-only chrome (sidebar drag, server switcher, view mode) is absent.
 const androidSetBadge = vi.fn();
@@ -43,7 +43,7 @@ const androidOnNotificationActivated = vi.fn().mockReturnValue(androidUnsubscrib
  */
 function setElectron(on: boolean, withClickRouting = true): void {
   if (on) {
-    (window as unknown as Record<string, unknown>).omnigentDesktop = {
+    (window as unknown as Record<string, unknown>).omnicraftDesktop = {
       kind: "electron",
       setBadgeCount: (...args: unknown[]) => electronSetBadge(...args),
       notify: (...args: unknown[]) => electronNotify(...args),
@@ -55,14 +55,14 @@ function setElectron(on: boolean, withClickRouting = true): void {
         : {}),
     };
   } else {
-    delete (window as unknown as Record<string, unknown>).omnigentDesktop;
+    delete (window as unknown as Record<string, unknown>).omnicraftDesktop;
   }
 }
 
 /** Simulate running inside / outside the iOS shell via the WKWebView bridge. */
 function setIOS(on: boolean, withClickRouting = true): void {
   if (on) {
-    (window as unknown as Record<string, unknown>).omnigentNative = {
+    (window as unknown as Record<string, unknown>).omnicraftNative = {
       kind: "ios",
       setBadgeCount: (...args: unknown[]) => iosSetBadge(...args),
       notify: (...args: unknown[]) => iosNotify(...args),
@@ -76,14 +76,14 @@ function setIOS(on: boolean, withClickRouting = true): void {
         : {}),
     };
   } else {
-    delete (window as unknown as Record<string, unknown>).omnigentNative;
+    delete (window as unknown as Record<string, unknown>).omnicraftNative;
   }
 }
 
 /** Simulate running inside / outside the Android shell via the WebView bridge. */
 function setAndroid(on: boolean, withClickRouting = true): void {
   if (on) {
-    (window as unknown as Record<string, unknown>).omnigentNative = {
+    (window as unknown as Record<string, unknown>).omnicraftNative = {
       kind: "android",
       setBadgeCount: (...args: unknown[]) => androidSetBadge(...args),
       notify: (...args: unknown[]) => androidNotify(...args),
@@ -95,7 +95,7 @@ function setAndroid(on: boolean, withClickRouting = true): void {
         : {}),
     };
   } else {
-    delete (window as unknown as Record<string, unknown>).omnigentNative;
+    delete (window as unknown as Record<string, unknown>).omnicraftNative;
   }
 }
 
@@ -156,14 +156,14 @@ describe("isNativeShell / isElectronShell", () => {
   });
 
   it("ignore a bridge with the wrong discriminator", () => {
-    (window as unknown as Record<string, unknown>).omnigentDesktop = { kind: "nope" };
-    (window as unknown as Record<string, unknown>).omnigentNative = { kind: "nope" };
+    (window as unknown as Record<string, unknown>).omnicraftDesktop = { kind: "nope" };
+    (window as unknown as Record<string, unknown>).omnicraftNative = { kind: "nope" };
     expect(isElectronShell()).toBe(false);
     expect(isIOSShell()).toBe(false);
     expect(isAndroidShell()).toBe(false);
     expect(isNativeShell()).toBe(false);
-    delete (window as unknown as Record<string, unknown>).omnigentDesktop;
-    delete (window as unknown as Record<string, unknown>).omnigentNative;
+    delete (window as unknown as Record<string, unknown>).omnicraftDesktop;
+    delete (window as unknown as Record<string, unknown>).omnicraftNative;
   });
 });
 
@@ -290,7 +290,7 @@ describe("onNativeSidebarDrag", () => {
 
   it("returns a no-op unsubscribe under a shell lacking the gesture hook", () => {
     setIOS(true);
-    delete (window as unknown as { omnigentNative: Record<string, unknown> }).omnigentNative
+    delete (window as unknown as { omnicraftNative: Record<string, unknown> }).omnicraftNative
       .onSidebarDrag;
     const unsubscribe = onNativeSidebarDrag(vi.fn());
     expect(iosOnSidebarDrag).not.toHaveBeenCalled();
@@ -366,7 +366,7 @@ describe("setNativeServerSwitcherHidden", () => {
 
   it("falls back to the legacy sidebar bridge name", () => {
     setIOS(true);
-    delete (window as unknown as { omnigentNative: Record<string, unknown> }).omnigentNative
+    delete (window as unknown as { omnicraftNative: Record<string, unknown> }).omnicraftNative
       .setServerSwitcherHidden;
     setNativeServerSwitcherHidden(true);
     expect(iosSetSidebarOpen).toHaveBeenCalledWith(true);

@@ -5,7 +5,7 @@ from typing import Any
 
 import pytest
 
-from omnigent.inner.executor import (
+from omnicraft.inner.executor import (
     ExecutorConfig,
     ExecutorError,
     TextChunk,

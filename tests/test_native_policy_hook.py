@@ -5,8 +5,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from omnigent import native_policy_hook
-from omnigent.native_policy_hook import (
+from omnicraft import native_policy_hook
+from omnicraft.native_policy_hook import (
     _is_login_redirect_or_unauthorized,
     evaluation_response_to_hook_output,
     fail_closed_hook_output,
@@ -65,18 +65,18 @@ def test_post_tool_use_maps_to_phase_tool_result() -> None:
 
 
 @pytest.mark.parametrize("hook_event", ["PreToolUse", "PostToolUse"])
-def test_omnigent_mcp_tools_are_skipped(hook_event: str) -> None:
+def test_omnicraft_mcp_tools_are_skipped(hook_event: str) -> None:
     """
-    Omnigent MCP tools return None and are never sent to /policies/evaluate.
+    OmniCraft MCP tools return None and are never sent to /policies/evaluate.
 
-    Omnigent MCP tool calls are already policy-checked by the relay path
-    (ProxyMcpManager → Omnigent /mcp endpoint → _evaluate_tool_call_policy).
+    OmniCraft MCP tool calls are already policy-checked by the relay path
+    (ProxyMcpManager → OmniCraft /mcp endpoint → _evaluate_tool_call_policy).
     If this guard regressed, every MCP tool call would be evaluated
     twice — once via the relay, once via this hook.
     """
     result = hook_payload_to_evaluation_request(
         hook_event,
-        {"tool_name": "mcp__omnigent__list_comments", "tool_input": {}, "tool_output": "x"},
+        {"tool_name": "mcp__omnicraft__list_comments", "tool_input": {}, "tool_output": "x"},
     )
     # None signals the caller to skip the POST entirely.
     assert result is None
@@ -91,7 +91,7 @@ def test_connector_native_mcp_tools_are_evaluated(hook_event: str, expected_type
     Connector-native MCP tools must not be skipped by the native pre-call hook.
 
     Tools such as ``mcp__github__*`` are injected by the connector layer and
-    do not round-trip through Omnigent's MCP proxy, so this hook is their
+    do not round-trip through OmniCraft's MCP proxy, so this hook is their
     TOOL_CALL/TOOL_RESULT policy enforcement site.
     """
     result = hook_payload_to_evaluation_request(
@@ -387,7 +387,7 @@ def _resp(status: int, location: str | None = None) -> httpx.Response:
         # Databricks Apps returns 403 "Invalid Token" for an expired bearer.
         (_resp(403), True),
         (_resp(302, "https://w.example.com/oidc/oauth2/v2.0/authorize"), True),
-        (_resp(302, "https://omnigents.example.databricksapps.com/.auth/callback"), True),
+        (_resp(302, "https://omnicrafts.example.databricksapps.com/.auth/callback"), True),
         # Unrelated redirect / success must NOT trigger a wasted token round-trip.
         (_resp(302, "https://w.example.com/some/other/page"), False),
         (_resp(302, None), False),
@@ -607,11 +607,11 @@ def test_policy_hook_request_headers_merges_baked_auth(
     """The reader merges the executor-baked auth + routing headers.
 
     The import-free hook subprocess can't resolve credentials in-process, so
-    the executor bakes them into ``_OMNIGENT_AUTH_HEADERS``; the reader must
+    the executor bakes them into ``_OMNICRAFT_AUTH_HEADERS``; the reader must
     fold them onto ``Content-Type`` for the policy POST.
     """
     monkeypatch.setenv(
-        "_OMNIGENT_AUTH_HEADERS",
+        "_OMNICRAFT_AUTH_HEADERS",
         '{"Authorization": "Bearer tok", "X-Databricks-Org-Id": "org123"}',
     )
     assert native_policy_hook.policy_hook_request_headers() == {
@@ -632,9 +632,9 @@ def test_policy_hook_request_headers_tolerates_missing_or_bad_env(
     none).
     """
     if raw:
-        monkeypatch.setenv("_OMNIGENT_AUTH_HEADERS", raw)
+        monkeypatch.setenv("_OMNICRAFT_AUTH_HEADERS", raw)
     else:
-        monkeypatch.delenv("_OMNIGENT_AUTH_HEADERS", raising=False)
+        monkeypatch.delenv("_OMNICRAFT_AUTH_HEADERS", raising=False)
     assert native_policy_hook.policy_hook_request_headers() == {"Content-Type": "application/json"}
 
 
@@ -647,8 +647,8 @@ def test_policy_hook_wrapper_script_bakes_auth_and_routing(
     workspace routing for free — the gap that left the cursor/hermes hooks
     posting unauthenticated and unrouted.
     """
-    import omnigent.cli_auth as cli_auth
-    import omnigent.runner._entry as entry
+    import omnicraft.cli_auth as cli_auth
+    import omnicraft.runner._entry as entry
 
     monkeypatch.setattr(
         entry, "_make_auth_token_factory", lambda *, server_url=None: lambda: "tok"
@@ -656,15 +656,15 @@ def test_policy_hook_wrapper_script_bakes_auth_and_routing(
     monkeypatch.setattr(cli_auth, "load_databricks_org_id", lambda _url: "org123")
 
     script = native_policy_hook.policy_hook_wrapper_script(
-        "https://acme.databricks.com/api/2.0/omnigent", "conv_x", "/path/hook.py"
+        "https://acme.databricks.com/api/2.0/omnicraft", "conv_x", "/path/hook.py"
     )
 
     assert script.startswith("#!/bin/sh\n")
-    assert "_OMNIGENT_SERVER_URL=https://acme.databricks.com/api/2.0/omnigent" in script
-    assert "_OMNIGENT_SESSION_ID=conv_x" in script
+    assert "_OMNICRAFT_SERVER_URL=https://acme.databricks.com/api/2.0/omnicraft" in script
+    assert "_OMNICRAFT_SESSION_ID=conv_x" in script
     # The baked headers carry BOTH the bearer and the routing header.
     line = next(
-        ln for ln in script.splitlines() if ln.startswith("export _OMNIGENT_AUTH_HEADERS=")
+        ln for ln in script.splitlines() if ln.startswith("export _OMNICRAFT_AUTH_HEADERS=")
     )
     assert "Bearer tok" in line
     assert "X-Databricks-Org-Id" in line and "org123" in line
@@ -678,8 +678,8 @@ def test_policy_hook_wrapper_script_omits_auth_when_unauthenticated(
     The wrapper still exports the (empty) header dict, so the reader yields
     just ``Content-Type`` — non-workspace callers are unaffected.
     """
-    import omnigent.cli_auth as cli_auth
-    import omnigent.runner._entry as entry
+    import omnicraft.cli_auth as cli_auth
+    import omnicraft.runner._entry as entry
 
     monkeypatch.setattr(entry, "_make_auth_token_factory", lambda *, server_url=None: None)
     monkeypatch.setattr(cli_auth, "load_databricks_org_id", lambda _url: None)
@@ -688,7 +688,7 @@ def test_policy_hook_wrapper_script_omits_auth_when_unauthenticated(
         "http://127.0.0.1:6767", "conv_local", "/path/hook.py"
     )
     line = next(
-        ln for ln in script.splitlines() if ln.startswith("export _OMNIGENT_AUTH_HEADERS=")
+        ln for ln in script.splitlines() if ln.startswith("export _OMNICRAFT_AUTH_HEADERS=")
     )
     assert "Bearer" not in line
     assert "X-Databricks-Org-Id" not in line
@@ -705,11 +705,11 @@ def test_policy_hook_reauth_remints_and_preserves_routing_header(
     workspace-routing header that travels alongside it.
     """
     monkeypatch.setattr(
-        "omnigent.runner._entry._make_auth_token_factory",
+        "omnicraft.runner._entry._make_auth_token_factory",
         lambda _server_url: lambda: "fresh-token",
     )
     reauth = native_policy_hook.policy_hook_reauth(
-        "https://acme.databricks.com/api/2.0/omnigent",
+        "https://acme.databricks.com/api/2.0/omnicraft",
         {"Authorization": "Bearer stale", "X-Databricks-Org-Id": "o9"},
     )
     assert reauth() == {"Authorization": "Bearer fresh-token", "X-Databricks-Org-Id": "o9"}
@@ -720,7 +720,7 @@ def test_policy_hook_reauth_returns_none_without_factory(
 ) -> None:
     """No refresh mechanism (local/unauth) → ``None`` so the caller fails closed."""
     monkeypatch.setattr(
-        "omnigent.runner._entry._make_auth_token_factory",
+        "omnicraft.runner._entry._make_auth_token_factory",
         lambda _server_url: None,
     )
     reauth = native_policy_hook.policy_hook_reauth(

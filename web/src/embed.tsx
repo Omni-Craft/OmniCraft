@@ -1,6 +1,6 @@
 // Embed entry point.
 //
-// Exposes `OmnigentApp` — a plain React component (app-specific providers +
+// Exposes `OmniCraftApp` — a plain React component (app-specific providers +
 // routes, NO React root, NO router) — for a host (e.g. the Databricks monolith)
 // to render the full web experience directly inside its own React tree and
 // its own router. web's `<Routes>` match the absolute host pathname (route
@@ -9,7 +9,7 @@
 //
 // The embed:
 //   - injects the host transport config (API fetcher + WebSocket URL),
-//   - tags a root element with `.omnigent-app` so the scoped stylesheet
+//   - tags a root element with `.omnicraft-app` so the scoped stylesheet
 //     applies and Radix overlays portal back into this subtree,
 //   - applies the host-provided color scheme (`isDarkMode`): the embed is not
 //     user-toggleable (the theme switcher is hidden via `useIsEmbedded`); the
@@ -33,7 +33,7 @@ import { RunnerHealthProvider } from "./hooks/RunnerHealthProvider";
 import { CapabilitiesContext } from "./lib/CapabilitiesContext";
 import { resolveServerInfo, type ServerInfo } from "./lib/capabilities";
 import { EmbeddedProvider } from "./lib/embedded";
-import { type OmnigentHostConfig, setEmbedRoot, setOmnigentHostConfig } from "./lib/host";
+import { type OmniCraftHostConfig, setEmbedRoot, setOmniCraftHostConfig } from "./lib/host";
 import { resolveIdentity } from "./lib/identity";
 import {
   type RoutingApi,
@@ -46,13 +46,13 @@ import "./index.css";
 import { QueueFlushProvider } from "./hooks/QueueFlushProvider";
 import { SessionUpdatesProvider } from "./hooks/SessionUpdatesProvider";
 
-export type { OmnigentHostConfig } from "./lib/host";
+export type { OmniCraftHostConfig } from "./lib/host";
 export type { RoutingApi } from "./lib/routing";
 
 // Re-export the host-config setter so the host can install transport config
 // EAGERLY (before first render), independent of React render/prop timing. The
 // config is a module-level singleton in `host.ts`, shared across all chunks.
-export { setOmnigentHostConfig } from "./lib/host";
+export { setOmniCraftHostConfig } from "./lib/host";
 
 // The embed owns its QueryClient (react-query is bundled, not shared with the
 // host). One client at module scope, shared across the whole embed — mirrors
@@ -64,9 +64,9 @@ const queryClient = new QueryClient({
   },
 });
 
-export interface OmnigentAppProps extends OmnigentHostConfig {
+export interface OmniCraftAppProps extends OmniCraftHostConfig {
   /**
-   * Router basename, e.g. `/ml/omnigent-embed`. web's routes + navigation
+   * Router basename, e.g. `/ml/omnicraft-embed`. web's routes + navigation
    * use absolute paths (`/`, `/c/:conversationId`), so the app must be nested
    * under the host mount path.
    *
@@ -94,7 +94,7 @@ export interface OmnigentAppProps extends OmnigentHostConfig {
  * already be present — the host (universe) supplies it; the embed renders in
  * the host's same React tree (shared react-router). The embed brings its OWN
  * `<QueryClientProvider>` (react-query is bundled, not shared). Self-contained
- * for styling: renders its own `.omnigent-app` scope wrapper and registers it
+ * for styling: renders its own `.omnicraft-app` scope wrapper and registers it
  * as the Radix portal root, so the host only renders this — no class/portal
  * wiring needed.
  */
@@ -121,7 +121,7 @@ const SERVER_INFO_OFFLINE_FALLBACK: ServerInfo = {
  *
  * WITHOUT this provider, `useServerInfo()` returns the context default
  * (`"loading"`) forever, so `App` hits its `if (info === "loading") return
- * null` guard and the embed renders a permanently blank `.omnigent-app` div.
+ * null` guard and the embed renders a permanently blank `.omnicraft-app` div.
  */
 function EmbedCapabilitiesProvider({ children }: { children: ReactNode }) {
   const [info, setInfo] = useState<ServerInfo | "loading">("loading");
@@ -144,7 +144,7 @@ function EmbedCapabilitiesProvider({ children }: { children: ReactNode }) {
   return <CapabilitiesContext.Provider value={info}>{children}</CapabilitiesContext.Provider>;
 }
 
-function OmnigentProviders({
+function OmniCraftProviders({
   routing,
   basename,
   isDarkMode,
@@ -166,7 +166,7 @@ function OmnigentProviders({
 
   // Register the theme wrapper as the Radix portal container so overlays land
   // inside the themed subtree (and clear it on unmount). It's the inner div —
-  // not the `.omnigent-app` scope root — so portaled overlays inherit the
+  // not the `.omnicraft-app` scope root — so portaled overlays inherit the
   // `.dark` token overrides too.
   const scopeRef = useCallback((el: HTMLDivElement | null) => {
     setEmbedRoot(el);
@@ -174,15 +174,15 @@ function OmnigentProviders({
 
   return (
     // Two nested wrappers on purpose:
-    //   - `.omnigent-app` (outer) is the scope anchor. The scoped stylesheet
-    //     rewrites `:root` → `.omnigent-app` (light tokens) and `.dark` →
-    //     `.omnigent-app .dark`, so the dark class must be a DESCENDANT of the
+    //   - `.omnicraft-app` (outer) is the scope anchor. The scoped stylesheet
+    //     rewrites `:root` → `.omnicraft-app` (light tokens) and `.dark` →
+    //     `.omnicraft-app .dark`, so the dark class must be a DESCENDANT of the
     //     scope root, not the root itself.
     //   - the inner div carries the host-driven `dark` class (when dark) and is
     //     the Radix portal root, so both the app and its overlays read the dark
     //     token overrides. Light mode = no class → inherits the scope root's
     //     light tokens.
-    <div className="omnigent-app" style={{ height: "100%", width: "100%" }}>
+    <div className="omnicraft-app" style={{ height: "100%", width: "100%" }}>
       <div
         ref={scopeRef}
         className={isDarkMode ? "dark" : undefined}
@@ -195,7 +195,7 @@ function OmnigentProviders({
               `enableColorScheme={false}` keep it from mutating the host's
               `<html>` class or `color-scheme`. */}
           <NextThemesProvider
-            attribute="data-omnigent-theme"
+            attribute="data-omnicraft-theme"
             forcedTheme={isDarkMode ? "dark" : "light"}
             enableColorScheme={false}
             disableTransitionOnChange
@@ -223,7 +223,7 @@ function OmnigentProviders({
 }
 
 /**
- * The Omnigent app for the SAME-ROOT path: a plain component the host renders
+ * The OmniCraft app for the SAME-ROOT path: a plain component the host renders
  * directly inside its OWN React tree + router. Renders NO `<Router>` (that
  * would throw "Router inside a Router").
  *
@@ -234,19 +234,19 @@ function OmnigentProviders({
  *   - NAVIGATION/links: `navigate()`/`<Link to>` absolute targets are rebased
  *     under `basename` via `basenamedRouting` (the routing IoC).
  */
-export function OmnigentApp({
+export function OmniCraftApp({
   basename,
   routing,
   isDarkMode,
   ...hostConfig
-}: OmnigentAppProps = {}) {
+}: OmniCraftAppProps = {}) {
   // Install transport config ONCE per mount (not on every render). Setting it in
   // the render body re-ran on every (re)render, and concurrent/Suspense renders
   // could re-invoke with empty props — clobbering the good config with `{}`.
-  // The host also sets this eagerly at load (see `loadOmnigentApp`); this is a
+  // The host also sets this eagerly at load (see `loadOmniCraftApp`); this is a
   // belt-and-suspenders that captures the first non-empty props.
   useState(() => {
-    setOmnigentHostConfig(hostConfig);
+    setOmniCraftHostConfig(hostConfig);
     return null;
   });
 
@@ -262,11 +262,11 @@ export function OmnigentApp({
     return basename ? basenamedRouting(basename, merged) : merged;
   }, [basename, routing]);
 
-  // The embed owns its QueryClient (bundled react-query); `OmnigentProviders`
+  // The embed owns its QueryClient (bundled react-query); `OmniCraftProviders`
   // reads it back via `useQueryClient()` under this provider.
   return (
     <QueryClientProvider client={queryClient}>
-      <OmnigentProviders routing={routingApi} basename={basename} isDarkMode={isDarkMode} />
+      <OmniCraftProviders routing={routingApi} basename={basename} isDarkMode={isDarkMode} />
     </QueryClientProvider>
   );
 }

@@ -197,7 +197,7 @@ describe("Sidebar shift-click selection", () => {
     mockConversations(sessions);
 
     // Expand the Alpha project so its sessions are visible
-    localStorage.setItem("omnigent:expanded-project-sections", JSON.stringify(["Alpha"]));
+    localStorage.setItem("omnicraft:expanded-project-sections", JSON.stringify(["Alpha"]));
 
     renderSidebar();
 
@@ -260,7 +260,7 @@ describe("Sidebar shift-click selection", () => {
       conv("p2", { labels: { omni_project: "Alpha" } }),
       conv("p3", { labels: { omni_project: "Alpha" } }),
     ];
-    localStorage.setItem("omnigent:expanded-project-sections", JSON.stringify(["Alpha"]));
+    localStorage.setItem("omnicraft:expanded-project-sections", JSON.stringify(["Alpha"]));
 
     renderSidebar();
 

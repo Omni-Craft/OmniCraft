@@ -2,10 +2,10 @@
 Server-side wake delivery for the sub-agent block notifier.
 
 These tests exercise the *server* half of the feature —
-:func:`omnigent.server.routes.sessions.configure_subagent_block_notifier`
+:func:`omnicraft.server.routes.sessions.configure_subagent_block_notifier`
 plus the ``_wake_parent_for_blocked_child`` delivery it wires — driven
 through the real
-:func:`omnigent.runtime.pending_elicitations.record_publish` chokepoint
+:func:`omnicraft.runtime.pending_elicitations.record_publish` chokepoint
 (the single point every elicitation publish funnels through). Only the
 two boundaries the wake *reuses* are stubbed: ``_get_runner_client``
 (runner resolution) and ``_dispatch_session_event_to_runner`` (the
@@ -29,11 +29,11 @@ from typing import Any
 import pytest
 import pytest_asyncio
 
-from omnigent.entities.conversation import Conversation
-from omnigent.runtime import pending_elicitations, subagent_block_notifier
-from omnigent.server.routes import sessions as sessions_module
-from omnigent.server.schemas import SessionEventInput
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.entities.conversation import Conversation
+from omnicraft.runtime import pending_elicitations, subagent_block_notifier
+from omnicraft.server.routes import sessions as sessions_module
+from omnicraft.server.schemas import SessionEventInput
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
 
@@ -42,7 +42,7 @@ async def _instant_sleep(_seconds: float) -> None:
     """
     No-op stand-in for the notifier's ``_sleep`` retry backoff.
 
-    Patched over :func:`omnigent.runtime.subagent_block_notifier._sleep`
+    Patched over :func:`omnicraft.runtime.subagent_block_notifier._sleep`
     (the module's own helper, not the global ``asyncio.sleep``) so the
     bounded wake retry adds no real wall-clock wait in these tests.
 

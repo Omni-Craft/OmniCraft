@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy Omnigent to a Databricks App via Databricks Asset Bundles.
+"""Deploy OmniCraft to a Databricks App via Databricks Asset Bundles.
 
 End-to-end orchestrator that wraps `databricks bundle deploy` +
 `databricks bundle run`. The build pieces (version stamp, wheel
@@ -12,11 +12,11 @@ every step is idempotent.
 
 Usage example:
     python deploy/databricks/deploy.py \\
-        --app-name omnigent --profile <your-profile> \\
-        --lakebase-branch projects/omnigent/branches/production \\
+        --app-name omnicraft --profile <your-profile> \\
+        --lakebase-branch projects/omnicraft/branches/production \\
         --lakebase-database \\
-            projects/omnigent/branches/production/databases/databricks-postgres \\
-        --volume-name main.omnigent.artifacts
+            projects/omnicraft/branches/production/databases/databricks-postgres \\
+        --volume-name main.omnicraft.artifacts
 
 See ``README.md`` in the same directory for the full guide,
 including first-time infrastructure setup.
@@ -57,9 +57,9 @@ _ENV_VARS_TO_CLEAR = (
 )
 
 # Must match the `resources.apps.<key>` and `bundle.name` in databricks.yml.
-_BUNDLE_RESOURCE_KEY = "omnigent"
+_BUNDLE_RESOURCE_KEY = "omnicraft"
 
-_WHEEL_PREFIXES = ("omnigent-", "omnigent_client-", "omnigent_ui_sdk-")
+_WHEEL_PREFIXES = ("omnicraft-", "omnicraft_client-", "omnicraft_ui_sdk-")
 
 
 def _log(msg: str) -> None:
@@ -117,8 +117,8 @@ def _compute_deploy_version(base: str, explicit: str | None) -> str:
     base = re.sub(r"(\.post\d+|\.dev\d+)+$", "", base)
     # Post-release, not dev: pip treats `.dev` as a pre-release and
     # ignores it when resolving `>=` constraints, so a deploy that
-    # bumps via `.dev` clashes with `omnigent-ui-sdk` declaring
-    # `omnigent-client>=0.1.0`. `.post` is a final release and
+    # bumps via `.dev` clashes with `omnicraft-ui-sdk` declaring
+    # `omnicraft-client>=0.1.0`. `.post` is a final release and
     # sorts strictly above the base.
     return f"{base}.post{int(time.time())}"
 
@@ -127,7 +127,7 @@ def set_version_in_pyproject(path: Path, new_version: str) -> str:
     """Rewrite the version line and lockstep sibling pins in a pyproject.
 
     The release process pins the sibling SDK packages in lockstep
-    (e.g. ``"omnigent-client==0.1.0rc2"``). Stamping only the
+    (e.g. ``"omnicraft-client==0.1.0rc2"``). Stamping only the
     ``version = "..."`` line would leave those exact pins pointing at
     the unstamped base version, which no built wheel carries — so the
     app-level ``uv lock`` becomes unsatisfiable. Rewrite both.
@@ -146,11 +146,11 @@ def set_version_in_pyproject(path: Path, new_version: str) -> str:
     )
     if count != 1:
         raise RuntimeError(f"could not rewrite version in {path}")
-    # The lockstep graph is circular: omnigent pins both SDKs, the
-    # client pins omnigent back, and the ui-sdk pins the client. All
+    # The lockstep graph is circular: omnicraft pins both SDKs, the
+    # client pins omnicraft back, and the ui-sdk pins the client. All
     # three names must be stamped or the resolver still dead-ends.
     updated = re.sub(
-        r'"(omnigent(?:-client|-ui-sdk)?)==[^"]+"',
+        r'"(omnicraft(?:-client|-ui-sdk)?)==[^"]+"',
         rf'"\1=={new_version}"',
         updated,
     )
@@ -174,17 +174,17 @@ def _restore_versions(backups: dict[Path, str]) -> None:
 def _clean_build_artifacts() -> None:
     """Remove stale build outputs.
 
-    Old Vite bundles in ``omnigent/server/static/web-ui/``
+    Old Vite bundles in ``omnicraft/server/static/web-ui/``
     accumulate uniquely-hashed JS chunk filenames between builds.
     Without this sweep, orphan files get bundled into the main wheel
     and push it over the 10 MB Workspace upload limit.
     """
     root = _repo_root()
     targets = [
-        root / "omnigent" / "server" / "static" / "web-ui",
+        root / "omnicraft" / "server" / "static" / "web-ui",
         root / "dist",
         root / "build",
-        root / "omnigent.egg-info",
+        root / "omnicraft.egg-info",
     ]
     for target in targets:
         if target.exists():
@@ -211,7 +211,7 @@ def _build_wheels(skip_web_ui: bool) -> list[Path]:
 class _ClassifiedWheels:
     """Result of sorting built wheels by size for upload routing.
 
-    :param main: The top-level ``omnigent`` wheel — always uploaded
+    :param main: The top-level ``omnicraft`` wheel — always uploaded
         with the ``[databricks]`` extra.
     :param small: Wheels ≤ 10 MB. Uploaded into the bundle's
         ``source_code_path`` and referenced by relative path.
@@ -226,7 +226,7 @@ class _ClassifiedWheels:
 
 
 def _classify_wheels(wheels: Iterable[Path]) -> _ClassifiedWheels:
-    main_wheel = next(w for w in wheels if w.name.startswith("omnigent-"))
+    main_wheel = next(w for w in wheels if w.name.startswith("omnicraft-"))
     small: list[Path] = []
     oversize: list[Path] = []
     for wheel in wheels:
@@ -238,11 +238,11 @@ def _classify_wheels(wheels: Iterable[Path]) -> _ClassifiedWheels:
 
 
 def _wheel_version(wheel: Path, prefix: str) -> str:
-    """Extract a deploy version from an Omnigent wheel filename.
+    """Extract a deploy version from an OmniCraft wheel filename.
 
     :param wheel: Built wheel path, e.g.
-        ``dist/omnigent-0.1.0.post123-py3-none-any.whl``.
-    :param prefix: Expected wheel filename prefix, e.g. ``"omnigent-"``.
+        ``dist/omnicraft-0.1.0.post123-py3-none-any.whl``.
+    :param prefix: Expected wheel filename prefix, e.g. ``"omnicraft-"``.
     :returns: Version embedded in the wheel filename, e.g.
         ``"0.1.0.post123"``.
     :raises RuntimeError: If the wheel filename does not match the
@@ -263,7 +263,7 @@ def _derive_deploy_version_from_wheels(wheels: list[Path]) -> str:
     :raises RuntimeError: If any required wheel is missing or the
         wheel versions do not match.
     """
-    expected_prefixes = ("omnigent-", "omnigent_client-", "omnigent_ui_sdk-")
+    expected_prefixes = ("omnicraft-", "omnicraft_client-", "omnicraft_ui_sdk-")
     versions = []
     for prefix in expected_prefixes:
         matching = [wheel for wheel in wheels if wheel.name.startswith(prefix)]
@@ -276,7 +276,7 @@ def _derive_deploy_version_from_wheels(wheels: list[Path]) -> str:
 
 
 def _sweep_local_src_wheels(keep: set[str]) -> None:
-    """Delete Omnigent wheels from src/ whose filename is not in `keep`.
+    """Delete OmniCraft wheels from src/ whose filename is not in `keep`.
 
     Old deploys accumulate wheels here. Databricks Apps installs the
     source directory as a project, so stale wheels can keep local path
@@ -301,7 +301,7 @@ def _toml_string(value: str) -> str:
     """Return ``value`` encoded as a TOML basic string.
 
     :param value: String to encode for generated TOML, e.g.
-        ``"./omnigent-0.1.0-py3-none-any.whl"``.
+        ``"./omnicraft-0.1.0-py3-none-any.whl"``.
     :returns: TOML string literal with quotes and backslashes escaped.
     """
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
@@ -311,7 +311,7 @@ def _wheel_source_path(wheel: Path) -> str:
     """Return the path Databricks Apps should use for a wheel source.
 
     :param wheel: Built wheel path, e.g.
-        ``dist/omnigent-0.1.0-py3-none-any.whl``.
+        ``dist/omnicraft-0.1.0-py3-none-any.whl``.
     :returns: Relative source path for bundled wheels.
     :raises SystemExit: If ``wheel`` is oversize.
     """
@@ -330,8 +330,8 @@ def _uv_source_lines(
 ) -> list[str]:
     """Build ``[tool.uv.sources]`` lines for the three deploy wheels.
 
-    :param main_wheel: Top-level ``omnigent`` wheel path, e.g.
-        ``dist/omnigent-0.1.0-py3-none-any.whl``.
+    :param main_wheel: Top-level ``omnicraft`` wheel path, e.g.
+        ``dist/omnicraft-0.1.0-py3-none-any.whl``.
     :param small_wheels: Wheels copied into the app source directory.
     :param oversize_wheels: Wheels too large for the app source directory.
     :returns: TOML lines mapping package names to wheel paths.
@@ -341,9 +341,9 @@ def _uv_source_lines(
         raise RuntimeError(f"main wheel {main_wheel.name} was not classified for deployment")
     source_lines = []
     for package_name, wheel_prefix in (
-        ("omnigent", "omnigent-"),
-        ("omnigent-client", "omnigent_client-"),
-        ("omnigent-ui-sdk", "omnigent_ui_sdk-"),
+        ("omnicraft", "omnicraft-"),
+        ("omnicraft-client", "omnicraft_client-"),
+        ("omnicraft-ui-sdk", "omnicraft_ui_sdk-"),
     ):
         wheel = next(wheel for name, wheel in wheels.items() if name.startswith(wheel_prefix))
         source = _wheel_source_path(wheel)
@@ -359,8 +359,8 @@ def build_uv_pyproject(
 ) -> str:
     """Compose the app-level ``pyproject.toml`` for Databricks Apps.
 
-    :param main_wheel: Top-level ``omnigent`` wheel path, e.g.
-        ``dist/omnigent-0.1.0-py3-none-any.whl``.
+    :param main_wheel: Top-level ``omnicraft`` wheel path, e.g.
+        ``dist/omnicraft-0.1.0-py3-none-any.whl``.
     :param small_wheels: Wheels copied into the app source directory.
     :param oversize_wheels: Wheels too large for the app source directory.
     :param deploy_version: Version stamped into the wheels, e.g.
@@ -369,13 +369,13 @@ def build_uv_pyproject(
     """
     source_lines = _uv_source_lines(main_wheel, small_wheels, oversize_wheels)
     dependencies = [
-        f'"omnigent[databricks]=={deploy_version}"',
-        f'"omnigent-client=={deploy_version}"',
-        f'"omnigent-ui-sdk=={deploy_version}"',
+        f'"omnicraft[databricks]=={deploy_version}"',
+        f'"omnicraft-client=={deploy_version}"',
+        f'"omnicraft-ui-sdk=={deploy_version}"',
     ]
     return (
         "[project]\n"
-        'name = "omnigent-databricks-app"\n'
+        'name = "omnicraft-databricks-app"\n'
         'version = "0.0.0"\n'
         f"requires-python = {_toml_string(_APP_REQUIRES_PYTHON)}\n"
         "dependencies = [\n"
@@ -418,8 +418,8 @@ def write_uv_dependency_files(
     """Write the uv dependency files Databricks Apps should install.
 
     :param src: App source directory, e.g. ``deploy/databricks/src``.
-    :param main_wheel: Top-level ``omnigent`` wheel path, e.g.
-        ``dist/omnigent-0.1.0-py3-none-any.whl``.
+    :param main_wheel: Top-level ``omnicraft`` wheel path, e.g.
+        ``dist/omnicraft-0.1.0-py3-none-any.whl``.
     :param small_wheels: Wheels copied into ``src``.
     :param oversize_wheels: Wheels too large for ``src``.
     :param deploy_version: Version stamped into the wheels, e.g.
@@ -529,19 +529,19 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--app-name",
         required=True,
-        help="Databricks App name, e.g. 'omnigent'.",
+        help="Databricks App name, e.g. 'omnicraft'.",
     )
     parser.add_argument(
         "--lakebase-branch",
         required=True,
-        help=("Full Lakebase branch resource path, e.g. 'projects/omnigent/branches/production'."),
+        help=("Full Lakebase branch resource path, e.g. 'projects/omnicraft/branches/production'."),
     )
     parser.add_argument(
         "--lakebase-database",
         required=True,
         help=(
             "Full Lakebase database resource path, e.g. "
-            "'projects/omnigent/branches/production/databases/databricks-postgres'."
+            "'projects/omnicraft/branches/production/databases/databricks-postgres'."
         ),
     )
     parser.add_argument(
@@ -549,7 +549,7 @@ def _parse_args() -> argparse.Namespace:
         required=True,
         help=(
             "UC Volume full name (catalog.schema.volume) for artifact storage, "
-            "e.g. 'main.omnigent.artifacts'."
+            "e.g. 'main.omnicraft.artifacts'."
         ),
     )
     parser.add_argument(
@@ -560,7 +560,7 @@ def _parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--otel-table-schema",
-        default="main.omnigent_logs",
+        default="main.omnicraft_logs",
         help=(
             "UC schema (catalog.schema) holding the OTel destination tables. "
             "The Databricks Apps platform writes logs/metrics/spans to "
@@ -837,7 +837,7 @@ def main() -> int:
         _log(f"  {wheel.name}  {size_mb:.2f} MB")
     if classified.oversize:
         raise SystemExit(
-            "uv-based Databricks Apps deploys require all Omnigent wheels "
+            "uv-based Databricks Apps deploys require all OmniCraft wheels "
             "to fit in the app source snapshot. Rebuild with --skip-web-ui "
             "or reduce wheel size; UC Volume wheel paths are not used "
             "because uv lock validates path sources locally."

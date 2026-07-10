@@ -1,7 +1,7 @@
 """Cost-tracking probe — does a completed turn report usage / cost?
 
 Cost tracking is the keystone for cost *policies*: a ``cost_budget`` guardrail
-(``omnigent/policies/builtins/cost.py``) is a no-op without usage to measure, so
+(``omnicraft/policies/builtins/cost.py``) is a no-op without usage to measure, so
 this probe answers "can the operator see what a turn spent?".
 
 It reads the cumulative usage the server records on the session: ``total_cost_usd``
@@ -15,7 +15,7 @@ Verdicts:
 - **SUPPORTED** — a USD cost was reported (full cost tracking).
 - **PARTIAL** — tokens reported but no priced cost (an unpriced model: usage is
   visible, so a token/budget policy works, but a USD-cost policy cannot price
-  it). This matches omnigent's own behavior — an unpriced model makes the cost
+  it). This matches omnicraft's own behavior — an unpriced model makes the cost
   policy fail to ASK/DENY rather than silently allow.
 - **SKIPPED** — the transport surfaced no usage at all (e.g. the wrap path when
   the harness forwards none), with the reason; never a false UNSUPPORTED.

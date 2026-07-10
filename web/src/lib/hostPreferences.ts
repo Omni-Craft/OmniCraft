@@ -9,7 +9,7 @@
 // The consumer still validates a stored host id against the live host list and
 // falls back to the default when that host is gone or offline.
 
-const STORAGE_KEY = "omnigent:last-host-choice";
+const STORAGE_KEY = "omnicraft:last-host-choice";
 
 // Stored in place of a host id when the user picked the managed-sandbox option,
 // which has no host id of its own (the server provisions the host at create

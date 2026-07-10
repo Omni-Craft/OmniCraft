@@ -57,7 +57,7 @@ export interface ServerInfo {
    */
   sandbox_provider: string | null;
   /**
-   * Installed omnigent server version (same value as ``/api/version``),
+   * Installed omnicraft server version (same value as ``/api/version``),
    * e.g. ``"0.3.0.dev0"``. Shown in the session info popover's version
    * footer. ``null`` only when the probe failed (the OFF sentinel) — a
    * live server always reports it.
@@ -65,7 +65,7 @@ export interface ServerInfo {
   server_version: string | null;
   /**
    * True when the server has a routing client configured
-   * (``OMNIGENT_SMART_ROUTING=1`` + ``llm:`` config). Hidden by default.
+   * (``OMNICRAFT_SMART_ROUTING=1`` + ``llm:`` config). Hidden by default.
    */
   smart_routing_enabled: boolean;
 }
@@ -99,7 +99,7 @@ export async function resolveServerInfo(): Promise<ServerInfo> {
   _pending = (async () => {
     try {
       // Route through the host transport (`hostFetch`) so the embed hits the
-      // proxied omnigent API; standalone `hostFetch` falls back to plain
+      // proxied omnicraft API; standalone `hostFetch` falls back to plain
       // `fetch("/v1/info")`, preserving the original behavior.
       const res = await hostFetch("/v1/info");
       if (res.ok) {

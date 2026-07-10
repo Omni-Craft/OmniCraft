@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 # Build the wheels and optional web UI assets needed for a Databricks Apps
-# deployment of Omnigent.
+# deployment of OmniCraft.
 #
 # Inputs:
 #   SKIP_WEB_UI=1   Skip the web SPA build for API-only deployments.
 #
 # Outputs:
-#   dist/omnigent-<version>-py3-none-any.whl
-#   dist/omnigent_client-<version>-py3-none-any.whl
-#   dist/omnigent_ui_sdk-<version>-py3-none-any.whl
+#   dist/omnicraft-<version>-py3-none-any.whl
+#   dist/omnicraft_client-<version>-py3-none-any.whl
+#   dist/omnicraft_ui_sdk-<version>-py3-none-any.whl
 
 set -euo pipefail
 
@@ -24,10 +24,10 @@ cd "${REPO_ROOT}"
 # dir, end up in the main wheel, and push it over the 10 MB Workspace
 # upload cap. Always start from a clean slate.
 echo "==> Cleaning stale static assets and build outputs"
-rm -rf omnigent/server/static/web-ui dist build omnigent.egg-info
+rm -rf omnicraft/server/static/web-ui dist build omnicraft.egg-info
 
 if [[ "${SKIP_WEB_UI:-}" != "1" ]]; then
-    echo "==> Building web SPA into omnigent/server/static/web-ui/"
+    echo "==> Building web SPA into omnicraft/server/static/web-ui/"
     cd web
     npm install
     npm run build
@@ -36,13 +36,13 @@ else
     echo "==> SKIP_WEB_UI=1: skipping web build"
 fi
 
-echo "==> Building omnigent-client wheel"
+echo "==> Building omnicraft-client wheel"
 uv build --wheel --out-dir dist/ sdks/python-client/
 
-echo "==> Building omnigent-ui-sdk wheel"
+echo "==> Building omnicraft-ui-sdk wheel"
 uv build --wheel --out-dir dist/ sdks/ui/
 
-echo "==> Building omnigent wheel"
+echo "==> Building omnicraft wheel"
 uv build --wheel --out-dir dist/ .
 
 echo ""

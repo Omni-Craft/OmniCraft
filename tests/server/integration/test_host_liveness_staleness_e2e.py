@@ -40,19 +40,19 @@ import pytest_asyncio
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from omnigent.db.db_models import SqlHost
-from omnigent.db.utils import get_or_create_engine, now_epoch
-from omnigent.runtime.agent_cache import AgentCache
-from omnigent.server.app import create_app
-from omnigent.server.auth import RESERVED_USER_LOCAL
-from omnigent.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
-from omnigent.stores.artifact_store.local import LocalArtifactStore
-from omnigent.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
-from omnigent.stores.conversation_store.sqlalchemy_store import (
+from omnicraft.db.db_models import SqlHost
+from omnicraft.db.utils import get_or_create_engine, now_epoch
+from omnicraft.runtime.agent_cache import AgentCache
+from omnicraft.server.app import create_app
+from omnicraft.server.auth import RESERVED_USER_LOCAL
+from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
+from omnicraft.stores.artifact_store.local import LocalArtifactStore
+from omnicraft.stores.comment_store.sqlalchemy_store import SqlAlchemyCommentStore
+from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
 )
-from omnigent.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
-from omnigent.stores.host_store import HOST_LIVENESS_TTL_S, HostStore
+from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
+from omnicraft.stores.host_store import HOST_LIVENESS_TTL_S, HostStore
 from tests.server.helpers import create_test_agent
 
 pytestmark = pytest.mark.asyncio

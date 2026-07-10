@@ -1,4 +1,4 @@
-"""Tests for omnigent.tools.builtins.read_skill_file."""
+"""Tests for omnicraft.tools.builtins.read_skill_file."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from omnigent.spec.types import SkillSpec
-from omnigent.tools.base import ToolContext
-from omnigent.tools.builtins import ReadSkillFileTool
+from omnicraft.spec.types import SkillSpec
+from omnicraft.tools.base import ToolContext
+from omnicraft.tools.builtins import ReadSkillFileTool
 
 
 @pytest.fixture()

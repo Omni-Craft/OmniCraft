@@ -21,15 +21,15 @@ the child boots as the intended ``max_iterations=5`` curl helper instead.
 
 from __future__ import annotations
 
-from omnigent.runtime.workflow import _find_spec_by_name
-from omnigent.spec.types import (
+from omnicraft.runtime.workflow import _find_spec_by_name
+from omnicraft.spec.types import (
     AgentSpec,
     BuiltinToolConfig,
     ExecutorSpec,
     LLMConfig,
     ToolsConfig,
 )
-from omnigent.tools.builtins.web_fetch import RESEARCHER_NAME, build_researcher_spec
+from omnicraft.tools.builtins.web_fetch import RESEARCHER_NAME, build_researcher_spec
 
 
 def _coordinator_parent(*, web_fetch: bool = True) -> AgentSpec:
@@ -53,7 +53,7 @@ def _coordinator_parent(*, web_fetch: bool = True) -> AgentSpec:
         spec_version=1,
         name="concordia",
         llm=LLMConfig(model="openai/gpt-5.4"),
-        # A real bootable omnigent-executor coordinator carries a harness; the
+        # A real bootable omnicraft-executor coordinator carries a harness; the
         # researcher inherits it so the reconstructed child is spawnable.
         executor=ExecutorSpec(max_iterations=40, config={"harness": "claude-sdk"}),
         tools=ToolsConfig(builtins=builtins),

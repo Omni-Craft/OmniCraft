@@ -61,6 +61,7 @@ from omnicraft.server.routes.builtin_agents import create_builtin_agents_router
 from omnicraft.server.routes.comments import create_comments_router
 from omnicraft.server.routes.default_policies import create_default_policies_router
 from omnicraft.server.routes.harnesses import create_harnesses_router
+from omnicraft.server.routes.integrations import create_integrations_router
 from omnicraft.server.routes.policy_registry import create_policy_registry_router
 from omnicraft.server.routes.runner_tunnel import create_runner_tunnel_router
 from omnicraft.server.routes.session_mcp_servers import create_session_mcp_servers_router
@@ -1937,6 +1938,11 @@ def create_app(
         create_harnesses_router(auth_provider=auth_provider),
         prefix="/v1",
         tags=["harnesses"],
+    )
+    app.include_router(
+        create_integrations_router(auth_provider=auth_provider),
+        prefix="/v1",
+        tags=["integrations"],
     )
     app.include_router(
         create_terminal_attach_router(

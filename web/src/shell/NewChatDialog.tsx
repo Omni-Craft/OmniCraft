@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { takeComposeSeed } from "@/lib/composeSeed";
 import { useNavigate, useSearchParams } from "@/lib/routing";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -1771,7 +1772,11 @@ export function NewChatLandingScreen() {
   const [landingSurface, setLandingSurface] = useState<HTMLElement | null>(null);
   useNativeServerSwitcherForMainSurface(landingSurface, true);
 
-  const [message, setMessage] = useState<string>(() => landingDraft?.message ?? "");
+  // A pending seed (e.g. "start a session from this GitHub issue") wins over a
+  // stale draft; consumed once so it doesn't reappear on later visits.
+  const [message, setMessage] = useState<string>(
+    () => takeComposeSeed() ?? landingDraft?.message ?? "",
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isComposingRef = useRef(false);
   // maxRows 9 = 180px of 20px lines, matching the composer's 200px

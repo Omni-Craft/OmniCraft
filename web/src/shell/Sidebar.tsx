@@ -24,6 +24,7 @@ import {
   FolderMinusIcon,
   FolderOpenIcon,
   GitBranchIcon,
+  GitPullRequestIcon,
   InboxIcon,
   ListChecksIcon,
   Loader2Icon,
@@ -520,6 +521,24 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Arena de agentes</TooltipContent>
+              </Tooltip>
+              {/* GitHub: browse issues/PRs and start a session from one. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Integração GitHub"
+                    className="rounded-full"
+                    data-testid="github-button"
+                  >
+                    <Link to="/github" onClick={onNavClick}>
+                      <GitPullRequestIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Integração GitHub</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>

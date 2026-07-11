@@ -1,466 +1,453 @@
 <div align="center">
 
-# <img src="https://raw.githubusercontent.com/omnicraft-ai/omnicraft/main/docs/images/omnicraft-logo.svg" alt="" height="38" valign="middle" /> OmniCraft
+# <img src="docs/images/omnicraft-logo.svg" alt="" height="38" valign="middle" /> OmniCraft
 
-### The open-source meta-harness for all your AI agents.
+### O meta-harness open-source para todos os seus agentes de IA.
 
-OmniCraft is an open-source **meta-harness** that gives you a common orchestration layer over Claude Code, Codex, Cursor, OpenCode, Hermes, Pi, and the agents you write yourself: swap or combine harnesses without rewriting, enforce policies and sandboxing, and collaborate in real time from any device — terminal, browser, phone, or the native desktop app.
+O **OmniCraft** é uma camada comum de orquestração sobre Claude Code, Codex,
+Cursor, OpenCode, Hermes, Pi e os agentes que você mesmo escreve. Troque ou
+combine harnesses sem reescrever nada, aplique políticas e sandboxing, e
+colabore em tempo real de qualquer dispositivo — terminal, navegador, celular
+ou o app desktop nativo.
 
-[![PyPI version](https://img.shields.io/pypi/v/omnicraft.svg)](https://pypi.org/project/omnicraft/)
-[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://github.com/omnicraft-ai/omnicraft/blob/main/LICENSE)
-[![Discord](https://img.shields.io/badge/Discord-join-5865F2?logo=discord&logoColor=white)](https://discord.gg/omnicraft)
+[![Licença: Apache 2.0](https://img.shields.io/badge/Licen%C3%A7a-Apache_2.0-0fb5bd.svg)](LICENSE)
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
-
-[omnicraft.ai](https://omnicraft.ai) · **[⬇️ Download the macOS desktop app](https://omnicraft.ai/download/mac)**
+![Idioma: pt--BR](https://img.shields.io/badge/idioma-pt--BR-0fb5bd.svg)
 
 </div>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/omnicraft-ai/omnicraft/main/docs/images/omnicraft-desktop.png" alt="The OmniCraft desktop app: starting a new session, with pinned and project-grouped sessions in the sidebar" width="720" />
+  <img src="docs/images/omnicraft-desktop.png" alt="O app desktop do OmniCraft: iniciando uma nova sessão, com sessões fixadas e agrupadas por projeto na barra lateral" width="720" />
 </p>
 
+> **Sobre este fork.** Este é um fork em **português do Brasil** com identidade
+> visual própria (marca **OmniCraft** e tema **turquesa**). O projeto original
+> chamava-se *Omnigent*; aqui a interface, o CLI e a documentação foram
+> traduzidos e re-tematizados. Veja [o que muda neste fork](#-o-que-muda-neste-fork).
+
 ---
 
-## Why OmniCraft?
+## Índice
 
-OmniCraft lets you:
+- [Por que OmniCraft?](#por-que-omnicraft)
+- [Início rápido](#início-rápido)
+  - [1. Instalar](#1-instalar)
+  - [2. Iniciar seu primeiro agente](#2-iniciar-seu-primeiro-agente)
+  - [3. Escolher e trocar modelos](#3-escolher-e-trocar-modelos)
+  - [4. Implantar um servidor (e usar do celular 📱)](#4-implantar-um-servidor-e-usar-do-celular-)
+  - [5. Colaborar com seu time](#5-colaborar-com-seu-time)
+  - [6. Governar seus agentes com políticas](#6-governar-seus-agentes-com-políticas)
+- [Escreva seu próprio agente](#escreva-seu-próprio-agente)
+- [O que muda neste fork](#-o-que-muda-neste-fork)
+- [Contribuindo](#contribuindo)
+- [Licença](#licença)
 
-- **📱 Work with agents from any device, including your phone.** Sessions
-  follow you: start in your terminal, continue in the browser, pick it up on
-  your phone. Messages, sub-agents, terminals, and files stay in sync.
+---
 
-- **🤖 Supervise multiple agents.** Mix Claude Code, Codex, Cursor, OpenCode,
-  Hermes, Pi, and custom agents (defined in YAML) together in the same
-  session. Ask one agent to review another's work, or split a task across
-  agents that are each good at different things.
+## Por que OmniCraft?
 
-- **🔌 Use any model.** A first-party API key, a Claude/ChatGPT subscription,
-  or any compatible gateway. All first-class.
+O OmniCraft permite que você:
 
-- **🤝 Collaborate.** Share a session so teammates can chat with your agent
-  and watch it work live, co-drive it on your machine, or fork the
-  conversation to continue on their own.
+- **📱 Trabalhe com agentes de qualquer dispositivo, inclusive o celular.**
+  As sessões acompanham você: comece no terminal, continue no navegador,
+  retome no celular. Mensagens, sub-agentes, terminais e arquivos ficam
+  sincronizados.
 
-- **☁️ Run agents in cloud sandboxes.** No laptop required: run sessions in
-  disposable [Modal](https://modal.com), [Daytona](https://www.daytona.io),
-  [Islo](https://islo.dev), [E2B](https://e2b.dev),
+- **🤖 Supervisione vários agentes ao mesmo tempo.** Misture Claude Code,
+  Codex, Cursor, OpenCode, Hermes, Pi e agentes customizados (definidos em
+  YAML) na mesma sessão. Peça a um agente para revisar o trabalho de outro, ou
+  divida uma tarefa entre agentes bons em coisas diferentes.
+
+- **🔌 Use qualquer modelo.** Uma chave de API própria, uma assinatura
+  Claude/ChatGPT, ou qualquer gateway compatível. Todos de primeira classe.
+
+- **🤝 Colabore.** Compartilhe uma sessão para que colegas conversem com seu
+  agente e o vejam trabalhando ao vivo, co-dirijam na sua máquina, ou
+  bifurquem (fork) a conversa para continuar por conta própria.
+
+- **☁️ Rode agentes em sandboxes na nuvem.** Sem depender do notebook: execute
+  sessões em sandboxes descartáveis de [Modal](https://modal.com),
+  [Daytona](https://www.daytona.io), [Islo](https://islo.dev),
+  [E2B](https://e2b.dev),
   [CoreWeave](https://docs.coreweave.com/products/sandboxes),
-  [Kubernetes](https://kubernetes.io), [OpenShell](https://github.com/NVIDIA/OpenShell),
-  [Boxlite](https://github.com/boxlite-ai/boxlite), or
-  [Databricks](https://www.databricks.com) sandboxes, launched from the
-  CLI or provisioned by the server per session (*managed hosts*).
+  [Kubernetes](https://kubernetes.io),
+  [OpenShell](https://github.com/NVIDIA/OpenShell),
+  [Boxlite](https://github.com/boxlite-ai/boxlite) ou
+  [Databricks](https://www.databricks.com), lançados pelo CLI ou provisionados
+  pelo servidor a cada sessão (*hosts gerenciados*).
 
-- **🛡️ Govern your agents.** Create
-  [policies](#6-govern-your-agents-with-policies) to pause for your approval
-  before risky actions, cap spend, or limit which tools an agent reaches.
-  They apply to the whole server, one agent, or a single chat.
+- **🛡️ Governe seus agentes.** Crie
+  [políticas](#6-governar-seus-agentes-com-políticas) para pausar e pedir sua
+  aprovação antes de ações arriscadas, limitar gastos, ou restringir quais
+  ferramentas um agente alcança. Elas se aplicam ao servidor inteiro, a um
+  agente, ou a um único chat.
 
 ---
 
-## Quick start
+## Início rápido
 
-### 1. Install
+### 1. Instalar
 
-One command installs OmniCraft and everything it needs:
+O OmniCraft precisa de **Python 3.12+**, **`uv`** e **`git`**. Como este é um
+fork, instale direto do repositório:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/omnicraft-ai/omnicraft/main/scripts/install_oss.sh | sh
+# Instala o CLI (comandos `omnicraft` e o atalho `omni`) a partir do fork
+uv tool install --python 3.12 git+https://github.com/editzffaleta/OmniCraft.git
 ```
 
 <details>
-<summary>Prefer to install manually?</summary>
-
-OmniCraft needs **Python 3.12+**. Install the `omnicraft` package:
+<summary>Prefere clonar e instalar em modo editável (para desenvolver)?</summary>
 
 ```bash
-uv tool install omnicraft        # or: pip install "omnicraft"
+git clone https://github.com/editzffaleta/OmniCraft.git
+cd OmniCraft
+uv tool install --force --editable .
 ```
 
-Or with [Homebrew](https://github.com/omnicraft-ai/homebrew-tap):
-
-```bash
-brew install omnicraft-ai/tap/omnicraft
-```
-
-Or install straight from the repo:
-
-```bash
-uv tool install -q --python 3.12 git+https://github.com/omnicraft-ai/omnicraft.git
-```
+Em modo editável, mudanças no código do repositório passam a valer sem
+reinstalar. Veja o [CONTRIBUTING.md](CONTRIBUTING.md) para o fluxo completo.
 
 </details>
 
 <details>
-<summary>Toolchain and prerequisites (if the installer reports a missing tool)</summary>
+<summary>Ferramentas e pré-requisitos</summary>
 
-- **`uv`** (required). https://docs.astral.sh/uv/getting-started/installation/
-  The installer offers to set this up for you.
-- **`git`** (required).
-- **Node.js 22 LTS or newer** with **`npm`**, for the npm-installed coding
-  harnesses (Claude, Codex, OpenCode, Pi). `omnicraft run` installs the
-  harness CLI you pick.
-  https://docs.npmjs.com/downloading-and-installing-node-js-and-npm
-- **Kiro CLI** (optional), for `omnicraft kiro`: install with
-  `curl -fsSL https://cli.kiro.dev/install | bash`, then sign in with Kiro.
-  Kiro tool approvals stay answerable in the embedded Terminal; supported
-  one-time approvals also appear as Chat cards. See
-  `docs/kiro-native-elicitation.md`.
-- **`tmux`**, required by the native `omnicraft <harness>` terminal wrappers
+- **`uv`** (obrigatório). https://docs.astral.sh/uv/getting-started/installation/
+- **`git`** (obrigatório).
+- **Node.js 22 LTS ou mais novo** com **`npm`**, para os harnesses de código
+  instalados via npm (Claude, Codex, OpenCode, Pi). O `omnicraft run` instala
+  o CLI do harness que você escolher.
+- **`tmux`**, exigido pelos wrappers nativos de terminal `omnicraft <harness>`
   (`claude`, `codex`, `cursor`, `hermes`, `kiro`, `pi`)
-  (`brew install tmux` / `apt install tmux`; the installer offers
-  to install it for you).
-- **`bubblewrap`** (`bwrap`), **Linux only**. The native `omnicraft <harness>`
-  terminal wrappers and the `pi` harness wrap each agent
-  terminal in a `bwrap` OS-sandbox; on Linux that isolation is mandatory, so a
-  missing `bwrap` binary makes those terminals fail to start
-  (`apt install bubblewrap`; the installer offers to install it for you). macOS
-  uses the built-in `seatbelt` sandbox and needs nothing extra.
-- **Databricks** (optional). To use a Databricks workspace as your model
-  provider, install OmniCraft with the `databricks` extra:
-  `uv tool install "omnicraft[databricks]"` — or pass it to the bootstrap
-  installer with `... | sh -s -- --extra databricks`. Signing in to the
-  workspace also uses the [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install).
+  (`brew install tmux` / `apt install tmux`).
+- **`bubblewrap`** (`bwrap`), **somente Linux**. Os wrappers nativos e o
+  harness `pi` isolam cada terminal num sandbox `bwrap`; no Linux essa
+  isolação é obrigatória (`apt install bubblewrap`). O macOS usa o sandbox
+  `seatbelt` embutido e não precisa de nada extra.
+- **Databricks** (opcional). Para usar um workspace Databricks como provedor
+  de modelo, instale com o extra `databricks`:
+  `uv tool install "git+https://github.com/editzffaleta/OmniCraft.git#egg=omnicraft[databricks]"`.
 
 </details>
 
 <details>
-<summary>Windows (native)</summary>
+<summary>Atualizando o fork</summary>
 
-OmniCraft runs natively on Windows in a degraded mode. The `install_oss.sh`
-bootstrap is POSIX-only, so install with `uv` directly:
-
-```powershell
-uv tool install --python 3.12 omnicraft
-# or from the repo:
-uv tool install --python 3.12 git+https://github.com/omnicraft-ai/omnicraft.git
-```
-
-What works on Windows: `omnicraft server`, the web UI, and the SDK-based
-harnesses (`omnicraft run <agent.yaml>` with the claude-sdk / cursor / codex
-harnesses). Agents run under a Windows **Job Object** for process-tree
-containment.
-
-What is **not** available on Windows (use Linux/macOS, or WSL, for these):
-
-- the native `omnicraft claude` / `omnicraft codex` / `omnicraft cursor`
-  tmux/PTY terminal wrappers (run an SDK harness or the web UI instead);
-- `bwrap`/`seatbelt` filesystem & network sandboxing and the L7 egress proxy
-  — the Job Object backend contains the process tree and enforces resource
-  limits but does **not** isolate the filesystem or network.
-
-</details>
-
-<details>
-<summary>Updating to a new release</summary>
-
-When a newer release is on PyPI, OmniCraft shows a one-line notice (once per
-release) pointing here. To update:
+Este fork **não é publicado em nenhum índice público** (PyPI etc.) — por
+segurança, o auto-update não resolve pacotes de índices públicos. Para
+atualizar, puxe do git e reinstale:
 
 ```bash
-omni upgrade            # detects how you installed, drains & stops the local
-                        # server, then runs the matching upgrade command
-omni upgrade --check    # just report whether a newer release is available
+# instalação editável (clone):
+git pull
+
+# instalação via git URL:
+uv tool install --reinstall git+https://github.com/editzffaleta/OmniCraft.git
 ```
-
-`omni upgrade` waits for in-flight agent sessions to finish before stopping the
-local server (pass `--force` to stop them immediately); the next `omni` command
-brings the server back up on the new version. Source checkouts update with
-`git pull` instead. Silence the notice with `OMNICRAFT_NO_UPDATE_CHECK=1`.
-
-The check queries your configured package index — honoring `UV_INDEX_URL` /
-`PIP_INDEX_URL` and your `uv.toml` / `pip.conf` (default PyPI), so private
-mirrors work out of the box; override with `OMNICRAFT_INDEX_URL` if needed.
 
 </details>
 
-### 2. Start your first agent
+### 2. Iniciar seu primeiro agente
 
-`omnicraft` picks a model with you and starts a session in your terminal. It
-also launches a local web UI at `http://localhost:6767` that shows the same
-session in the browser, or on a phone on your network (step 4). The
-[desktop app](https://omnicraft.ai/docs/interact/desktop) wraps that same UI
-in a native window and adds OS notifications (with a configurable sound) and a dock badge —
-[download it for macOS](https://omnicraft.ai/download/mac).
+`omnicraft` escolhe um modelo com você e inicia uma sessão no seu terminal.
+Ele também sobe uma web UI local em `http://localhost:6767` que mostra a mesma
+sessão no navegador, ou num celular na sua rede (passo 4). O app desktop
+envolve essa mesma UI numa janela nativa e adiciona notificações do sistema
+(com som configurável) e um badge no dock.
 
 > [!NOTE]
-> The install puts two names for the same CLI on your PATH: `omnicraft` and
-> the shorter `omni`. They're interchangeable.
+> A instalação coloca dois nomes para o mesmo CLI no seu PATH: `omnicraft` e o
+> mais curto `omni`. São intercambiáveis.
 
 > [!TIP]
-> On first run, OmniCraft picks up model credentials already in your
-> environment (an `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, or a `claude` /
-> `codex` CLI you're logged into) and offers one as the default.
+> Na primeira execução, o OmniCraft aproveita credenciais de modelo já
+> presentes no seu ambiente (uma `ANTHROPIC_API_KEY` / `OPENAI_API_KEY`, ou um
+> CLI `claude` / `codex` já logado) e oferece uma como padrão.
 
 ```bash
 omnicraft
 ```
 
-Or launch a specific agent runtime:
+Ou lance um runtime de agente específico:
 
 ```bash
-omnicraft claude                      # Claude Code, in a session your team can join
-omnicraft codex                       # Codex
-omnicraft cursor                      # Cursor
-omnicraft opencode                    # OpenCode
-omnicraft hermes                      # Hermes Agent (Nous Research)
-omnicraft pi                          # Pi
+omnicraft claude      # Claude Code, numa sessão que seu time pode entrar
+omnicraft codex       # Codex
+omnicraft cursor      # Cursor
+omnicraft opencode    # OpenCode
+omnicraft hermes      # Hermes Agent (Nous Research)
+omnicraft pi          # Pi
 ```
 
-#### 🐙 Polly and 🟠🔵 Debby
+#### 🐙 Polly e 🟠🔵 Debby
 
-Two example agents ship with the repo, and they make good first sessions:
+Dois agentes de exemplo acompanham o repositório e são ótimas primeiras
+sessões:
 
 ```bash
 omnicraft run examples/polly/
 omnicraft run examples/debby/
-
-# ...or on a different harness (sub-agents keep their own):
-omnicraft run examples/polly/ --harness <harness>
-omnicraft run examples/debby/ --harness <harness>
 ```
 
-**🐙 Polly** is a multi-agent coding orchestrator who writes no code herself.
-She's the tech lead: she plans, delegates the work to coding sub-agents
-(Claude Code, Codex, or Pi) in parallel git worktrees, then routes each diff
-to a reviewer from a different vendor than the one that wrote it. You merge.
+**🐙 Polly** é uma orquestradora multi-agente de código que não escreve código
+sozinha. Ela é a tech lead: planeja, delega o trabalho a sub-agentes de código
+(Claude Code, Codex ou Pi) em worktrees git paralelos, e depois roteia cada
+diff para um revisor de um fornecedor diferente daquele que escreveu. Você faz
+o merge.
 
-**🟠🔵 Debby** is a brainstorming partner with two heads, one Claude and one GPT.
-Every question you ask goes to both heads, and she lays the two answers out
-side by side. Type `/debate` and the heads critique each other for a few
-rounds before converging. (She needs both a Claude and an OpenAI credential;
-see step 3.)
+**🟠🔵 Debby** é uma parceira de brainstorming com duas cabeças, uma Claude e
+uma GPT. Toda pergunta vai para ambas, e ela dispõe as duas respostas lado a
+lado. Digite `/debate` e as cabeças criticam uma à outra por algumas rodadas
+antes de convergir. (Precisa de uma credencial Claude e uma OpenAI; veja o
+passo 3.)
 
-**Prefer the browser?** Start a server and register your machine as a host:
+**Prefere o navegador?** Suba um servidor e registre sua máquina como host:
 
 ```bash
-omnicraft server start   # start the local server and web UI in the background
-omnicraft host           # (separate terminal) register this machine as a host
+omnicraft server start   # sobe o servidor local e a web UI em background
+omnicraft host           # (outro terminal) registra esta máquina como host
 ```
 
-In the web UI, hit **New Chat**, pick your machine, and go. Check status with
-`omnicraft server status`; stop everything with `omnicraft stop`.
+Na web UI, clique em **Nova sessão**, escolha sua máquina, e vá. Confira o
+status com `omnicraft server status`; pare tudo com `omnicraft stop`.
 
-### 3. Choose & switch models
+### 3. Escolher e trocar modelos
 
 ```bash
 omnicraft setup
 ```
 
-Add a credential, set a default, or remove one, grouped by agent. OmniCraft
-works with four kinds of credentials:
+Adicione uma credencial, defina um padrão, ou remova uma — agrupadas por
+agente. O OmniCraft trabalha com quatro tipos de credenciais:
 
-| | Kind | What it is |
+| | Tipo | O que é |
 |---|---|---|
-| 🔑 | **API key** | A first-party vendor key for Anthropic, OpenAI, and similar providers |
-| 🎟️ | **Subscription** | A Claude Pro/Max or ChatGPT plan, via the official `claude` / `codex` CLIs |
-| 🌐 | **Gateway** | Any OpenAI- or Anthropic-compatible `base_url` and key (OpenRouter, LiteLLM, Ollama, vLLM, Azure) |
-| 🧱 | **Databricks** | A Databricks workspace profile (requires the `databricks` extra) |
+| 🔑 | **Chave de API** | Uma chave própria de fornecedor: Anthropic, OpenAI e similares |
+| 🎟️ | **Assinatura** | Um plano Claude Pro/Max ou ChatGPT, via os CLIs oficiais `claude` / `codex` |
+| 🌐 | **Gateway** | Qualquer `base_url` + chave compatível com OpenAI ou Anthropic (OpenRouter, LiteLLM, Ollama, vLLM, Azure) |
+| 🧱 | **Databricks** | Um perfil de workspace Databricks (requer o extra `databricks`) |
 
-Defaults are per agent, so a Claude default and a Codex default coexist. You
-can also switch models in the middle of a session with the `/model` command.
+Os padrões são por agente, então um padrão Claude e um padrão Codex coexistem.
+Você também pode trocar de modelo no meio de uma sessão com o comando `/model`.
 
 <details>
-<summary>Gateway base URLs (OpenRouter, Ollama)</summary>
+<summary>Base URLs de gateway (OpenRouter, Ollama)</summary>
 
-When you add a **Gateway** credential, `omnicraft setup` asks for a base URL
-and a key. The base URL depends on which agent you point it at:
+Ao adicionar uma credencial **Gateway**, o `omnicraft setup` pede uma base URL
+e uma chave. A base URL depende de qual agente você aponta:
 
-| Provider | For | Base URL | Key |
+| Provedor | Para | Base URL | Chave |
 |---|---|---|---|
-| **OpenRouter** | Claude Code | `https://openrouter.ai/api` | your OpenRouter key (`sk-or-…`) |
-| **OpenRouter** | Codex / OpenAI agents | `https://openrouter.ai/api/v1` | your OpenRouter key (`sk-or-…`) |
-| **Ollama** (local) | Codex / OpenAI agents | `http://localhost:11434/v1` | any value (Ollama ignores it) |
+| **OpenRouter** | Claude Code | `https://openrouter.ai/api` | sua chave OpenRouter (`sk-or-…`) |
+| **OpenRouter** | Codex / agentes OpenAI | `https://openrouter.ai/api/v1` | sua chave OpenRouter (`sk-or-…`) |
+| **Ollama** (local) | Codex / agentes OpenAI | `http://localhost:11434/v1` | qualquer valor (o Ollama ignora) |
 
-For Claude Code, point at OpenRouter's Anthropic-compatible endpoint
-(`…/api`, **not** `…/api/v1`). For Codex and the OpenAI-agents harness, use
-the OpenAI-compatible `…/api/v1`.
+Para o Claude Code, aponte para o endpoint compatível-com-Anthropic do
+OpenRouter (`…/api`, **não** `…/api/v1`). Para o Codex e o harness de agentes
+OpenAI, use o `…/api/v1` compatível-com-OpenAI.
 
 </details>
 
-### 4. Deploy a server (and use it from your phone📱)
+### 4. Implantar um servidor (e usar do celular 📱)
 
-Run OmniCraft on a server with a stable URL
-([`deploy/README.md`](https://github.com/omnicraft-ai/omnicraft/blob/main/deploy/README.md) is the full guide) and your sessions
-become reachable from anywhere, including your phone. The web UI is built for
-mobile, so you get the same chat, sub-agents, terminals, and files, in sync
-with your laptop.
+Rode o OmniCraft num servidor com URL estável
+([`deploy/README.md`](deploy/README.md) é o guia completo) e suas sessões
+ficam acessíveis de qualquer lugar, inclusive do celular. A web UI é feita
+para mobile, então você tem o mesmo chat, sub-agentes, terminais e arquivos,
+em sincronia com o notebook.
 
-One `docker compose up` runs the server on any host you have (a VPS, a home
-server); **Render** and **Railway** deploy with one click; **Fly.io**, **Hugging
-Face Spaces**, **Modal**, **Cloudflare** (serverless, scale-to-zero), and
-**Databricks Apps** (backed by Lakebase Postgres and Unity Catalog Volumes) are
-covered too — and a **Cloudflare quick tunnel** (public) or **Tailscale**
-(private) reaches a server running on your own laptop without a deploy. The
-server can also provision a cloud sandbox per session (*managed hosts*), so no
-laptop has to stay online. The full menu of targets, the database options, and
-the sandbox setup live in
-[`deploy/README.md`](https://github.com/omnicraft-ai/omnicraft/blob/main/deploy/README.md).
+Um `docker compose up` roda o servidor em qualquer host que você tenha (um
+VPS, um servidor caseiro); **Render** e **Railway** implantam com um clique;
+**Fly.io**, **Hugging Face Spaces**, **Modal**, **Cloudflare** (serverless,
+escala-a-zero) e **Databricks Apps** também são cobertos — e um **quick tunnel
+do Cloudflare** (público) ou **Tailscale** (privado) alcança um servidor
+rodando no seu próprio notebook sem deploy. O cardápio completo de destinos,
+as opções de banco de dados e a configuração de sandbox estão em
+[`deploy/README.md`](deploy/README.md).
 
-Once the server is up, sign in and register your laptop as a host:
+Com o servidor no ar, faça login e registre seu notebook como host:
 
 ```bash
-omnicraft login https://your-host    # sign in once; run / attach / host reuse the token
-omnicraft host  https://your-host    # new sessions can now run on this machine
+omnicraft login https://seu-host    # login uma vez; run / attach / host reusam o token
+omnicraft host  https://seu-host    # novas sessões agora podem rodar nesta máquina
 ```
 
 > [!TIP]
-> On your own network you don't need a deploy. Open your machine's LAN
-> address on your phone (e.g. `http://192.168.x.x:6767`).
+> Na sua própria rede você não precisa de deploy. Abra o endereço LAN da sua
+> máquina no celular (ex.: `http://192.168.x.x:6767`).
 
-### 5. Collaborate with your team
+### 5. Colaborar com seu time
 
-OmniCraft supports **multi-user accounts**, controlled by one environment
-variable:
+O OmniCraft suporta **contas multiusuário**, controladas por uma variável de
+ambiente:
 
 ```bash
 OMNICRAFT_AUTH_ENABLED=1 omnicraft server start
 ```
 
-The **Docker deploy in [step 4](#4-deploy-a-server-and-use-it-from-your-phone)
-turns it on for you** (`OMNICRAFT_AUTH_ENABLED` defaults to `1` there).
+O **deploy Docker no [passo 4](#4-implantar-um-servidor-e-usar-do-celular-)
+já liga isso para você** (`OMNICRAFT_AUTH_ENABLED` tem padrão `1` lá).
 
-#### Invite your teammates
+#### Convide seus colegas
 
-Open the web UI (`http://localhost:6767` locally, or your host's URL) and
-sign in as `admin`; first run prints the password and saves it locally. Then
-open **Admin → Members → Invite** to create a single-use invite link, no
-email server needed. Send it over; your teammate opens it, sets a password,
-and they're in. Signup is invite-only.
+Abra a web UI (`http://localhost:6767` localmente, ou a URL do seu host) e
+entre como `admin`; a primeira execução imprime a senha e a salva localmente.
+Depois abra **Admin → Membros → Convidar** para criar um link de convite de
+uso único, sem servidor de e-mail. Envie; seu colega abre, define uma senha, e
+está dentro. O cadastro é somente por convite.
 
-<!-- TODO: screenshot of Admin → Members → Invite. -->
+#### Programem juntos
 
-> [!NOTE]
-> Teammates need to be able to reach the server. A local server is only
-> reachable on your network; for anyone off it, deploy an always-on host
-> (see [step 4](#4-deploy-a-server-and-use-it-from-your-phone)).
-
-#### Code together
-
-- **Share a live session.** Hit **Share** in the web UI and send the link;
-  teammates watch your agent work and chat with it in real time.
-- **Co-drive.** A teammate co-attaches to your running session; their
-  messages execute on **your** machine. Great for pairing or handing the
-  keyboard to a domain expert mid-investigation.
+- **Compartilhe uma sessão ao vivo.** Clique em **Compartilhar** na web UI e
+  envie o link; colegas veem seu agente trabalhando e conversam com ele em
+  tempo real.
+- **Co-dirija.** Um colega se co-anexa à sua sessão em execução; as mensagens
+  dele executam na **sua** máquina. Ótimo para pareamento ou passar o teclado
+  a um especialista no meio de uma investigação.
 
   ```bash
   omnicraft attach <session_id>
   ```
 
-- **Fork.** Clone a conversation onto your own machine and continue
-  independently from the fork point.
+- **Bifurque (fork).** Clone uma conversa para a sua máquina e continue de
+  forma independente a partir do ponto do fork.
 
   ```bash
   omnicraft run --fork <session_id>
   ```
 
 > [!TIP]
-> Want your team to sign in with the logins they already have (**Google,
-> GitHub, Okta, Microsoft**)? Set `OMNICRAFT_OIDC_ISSUER` plus a client ID
-> and secret on your deployed server and restart. The full walkthrough,
-> domain allowlists, and the proxy-only `header` auth mode are covered in
-> [`deploy/README.md#auth`](https://github.com/omnicraft-ai/omnicraft/blob/main/deploy/README.md#auth).
+> Quer que seu time entre com os logins que já têm (**Google, GitHub, Okta,
+> Microsoft**)? Configure `OMNICRAFT_OIDC_ISSUER` mais um client ID e secret no
+> servidor implantado e reinicie. O passo a passo completo está em
+> [`deploy/README.md`](deploy/README.md).
 
-### 6. Govern your agents with policies
+### 6. Governar seus agentes com políticas
 
-**Policies** decide what an agent may do: run shell commands, edit files,
-spend tokens. They check every action and either allow it, block it, or pause
-to ask you first.
+**Políticas** decidem o que um agente pode fazer: rodar comandos de shell,
+editar arquivos, gastar tokens. Elas verificam cada ação e ou permitem,
+bloqueiam, ou pausam para perguntar a você primeiro.
 
-- **In the web UI**: open a session's info panel to browse the available
-  policies and toggle them on or off.
-- **In chat**: ask. *"Add a policy that asks me before running shell
-  commands."* The agent sets it up for you.
+- **Na web UI**: abra o painel de informações de uma sessão para navegar pelas
+  políticas disponíveis e ligá-las/desligá-las.
+- **No chat**: peça. *"Adicione uma política que me pergunte antes de rodar
+  comandos de shell."* O agente configura para você.
 
-Want defaults that apply to everyone, or to a specific agent? Define them in
-your server config or an agent's YAML:
+Quer padrões que se apliquem a todos, ou a um agente específico? Defina-os na
+config do servidor ou no YAML de um agente:
 
 ```yaml
 policies:
   approve_shell:
     type: function
-    handler: omnicraft.policies.builtins.safety.ask_on_os_tools   # ask before shell / file writes
+    handler: omnicraft.policies.builtins.safety.ask_on_os_tools   # perguntar antes de shell / escrita de arquivo
   cap_calls:
     type: function
     handler: omnicraft.policies.builtins.safety.max_tool_calls_per_session
     factory_params:
-      limit: 50                    # cap how many tools one session can call
+      limit: 50                    # limita quantas ferramentas uma sessão pode chamar
   budget:
     type: function
     handler: omnicraft.policies.builtins.cost.cost_budget
     factory_params:
-      max_cost_usd: 5.00           # hard spend cap...
-      ask_thresholds_usd: [3.00]   # ...with a soft warning on the way
+      max_cost_usd: 5.00           # teto rígido de gasto...
+      ask_thresholds_usd: [3.00]   # ...com um aviso leve no caminho
 ```
 
-Policies stack across three levels, **server-wide** (admin), **per-agent**
-(developer), and **per-session** (you), with the stricter session rules
-checked first. Spend caps and access limits ship as builtins.
+As políticas se empilham em três níveis, **servidor inteiro** (admin),
+**por agente** (dev) e **por sessão** (você), com as regras mais estritas da
+sessão verificadas primeiro. Tetos de gasto e limites de acesso vêm como
+builtins.
 
-See the [policy guide](https://github.com/omnicraft-ai/omnicraft/blob/main/docs/POLICIES.md) for the full catalog and trust model.
+Veja o [guia de políticas](docs/POLICIES.md) para o catálogo completo e o
+modelo de confiança.
 
 ---
 
-## Write your own agent
+## Escreva seu próprio agente
 
-An agent is a short YAML file: your prompt, your tools — local Python
-functions, MCP servers, and sub-agents a supervisor can delegate to. You don't
-have to write it by hand: agents can build agents, so describe the agent you
-want in any OmniCraft chat and it authors the file for you.
+Um agente é um arquivo YAML curto: seu prompt, suas ferramentas — funções
+Python locais, servidores MCP, e sub-agentes a quem um supervisor pode
+delegar. Você não precisa escrever à mão: agentes podem construir agentes,
+então descreva o agente que você quer em qualquer chat do OmniCraft e ele
+escreve o arquivo para você.
 
 ```yaml
-name: my_agent
-prompt: You are a helpful data analyst.
+name: meu_agente
+prompt: Você é um analista de dados prestativo.
 
 executor:
-  harness: claude-sdk          # or: claude-native, codex, codex-native, cursor,
+  harness: claude-sdk          # ou: claude-native, codex, codex-native, cursor,
                                # cursor-native, hermes, hermes-native, opencode,
                                # pi, pi-native, openai-agents
 
 tools:
-  # A local Python function (schema auto-generated from the signature)
+  # Uma função Python local (schema gerado automaticamente pela assinatura)
   word_count:
     type: function
     callable: mypackage.mymodule.word_count
 
-  # Tools from an MCP server (a local command, or a remote URL)
+  # Ferramentas de um servidor MCP (um comando local, ou uma URL remota)
   docs:
     type: mcp
     url: https://example.com/mcp
 
-  # A sub-agent the supervisor can delegate to
+  # Um sub-agente a quem o supervisor pode delegar
   researcher:
     type: agent
-    prompt: Search for relevant information and summarize it.
+    prompt: Pesquise informações relevantes e resuma.
     tools:
       word_count: inherit
 ```
 
-Run it with:
+Rode com:
 
 ```bash
-omnicraft run path/to/my_agent.yaml
+omnicraft run caminho/para/meu_agente.yaml
 ```
 
-The same file can declare sub-agents and reviewers. For a fuller example, see
-Polly at [`examples/polly/`](https://github.com/omnicraft-ai/omnicraft/tree/main/examples/polly/), and the
-[Agent YAML spec](https://github.com/omnicraft-ai/omnicraft/blob/main/docs/AGENT_YAML_SPEC.md) for the full schema.
+O mesmo arquivo pode declarar sub-agentes e revisores. Para um exemplo mais
+completo, veja a Polly em [`examples/polly/`](examples/polly/), e a
+[especificação de Agent YAML](docs/AGENT_YAML_SPEC.md) para o schema completo.
 
 ---
 
-## Contributing
+## 🎨 O que muda neste fork
 
-Contributions are welcome. See [CONTRIBUTING.md](https://github.com/omnicraft-ai/omnicraft/blob/main/CONTRIBUTING.md) for how to set up your environment, run the checks, and open a pull request.
+Este fork foi totalmente re-tematizado e traduzido a partir do projeto
+original (*Omnigent*):
 
-Adding or changing support for a harness (Claude, Codex, Cursor, OpenCode,
-Hermes, Pi, ...)? Run the [harness test bench](https://github.com/omnicraft-ai/omnicraft/tree/main/tests/harness_bench)
-to check its capability matrix against observed behavior.
+- **Marca OmniCraft** — nome, banner ASCII do CLI, título das janelas,
+  ícone do app macOS e mascote (a estrela-do-mar Otto) atualizados.
+- **Tema turquesa** — a cor de marca rosa (`#df3c85`) deu lugar ao
+  turquesa (`#0fb5bd`) em toda a interface (web e CLI), incluindo o fundo
+  escuro com brilho teal.
+- **Interface 100% em português do Brasil** — web UI, telas de setup, REPL e
+  mensagens do CLI.
+- **Comando `omnicraft`** (mais o atalho `omni`) no lugar do binário antigo.
+- **Segurança**: o auto-update foi desacoplado de índices públicos para evitar
+  *dependency confusion* — atualizações vêm apenas deste repositório git.
 
+---
 
-### Contributors
+## Contribuindo
 
-Thanks to all of our amazing contributors!
+Contribuições são bem-vindas. Veja o [CONTRIBUTING.md](CONTRIBUTING.md) para
+configurar seu ambiente, rodar os checks e abrir um pull request.
 
-<a href="https://github.com/omnicraft-ai/omnicraft/graphs/contributors">
-  <img src="https://contrib.rocks/image?repo=omnicraft-ai/omnicraft" />
-</a>
+Vai adicionar ou mudar o suporte a um harness (Claude, Codex, Cursor,
+OpenCode, Hermes, Pi, ...)? Rode o
+[banco de testes de harness](tests/harness_bench) para checar a matriz de
+capacidades dele contra o comportamento observado.
 
+A política de segurança e como reportar vulnerabilidades estão em
+[SECURITY.md](SECURITY.md).
+
+---
+
+## Licença
+
+Distribuído sob a **Licença Apache 2.0** — veja [LICENSE](LICENSE) (texto
+oficial, em inglês) e [LICENSE.pt-BR.md](LICENSE.pt-BR.md) (tradução de
+referência, não-oficial).

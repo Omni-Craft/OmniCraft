@@ -442,7 +442,9 @@
       if (loadError) {
         // textContent, never innerHTML: both values come from the query
         // string and must be rendered as inert text.
-        err.textContent = failedUrl ? `Não foi possível carregar ${failedUrl}: ${loadError}` : loadError;
+        err.textContent = failedUrl
+          ? `Não foi possível carregar ${failedUrl}: ${loadError}`
+          : loadError;
       }
       if (isEphemeral) {
         document.querySelector("p.sub").textContent =
@@ -662,7 +664,8 @@
               await setup.setServerUrl(result.url);
               return;
             }
-            err.textContent = (result && result.error) || "Não foi possível iniciar o servidor local.";
+            err.textContent =
+              (result && result.error) || "Não foi possível iniciar o servidor local.";
           } catch (e) {
             err.textContent = String(e && e.message ? e.message : e);
           }

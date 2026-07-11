@@ -1,71 +1,77 @@
-# Security Policy
+# Política de Segurança
 
-To report a security vulnerability, use
-[GitHub private security advisories](https://github.com/omnicraft-ai/omnicraft/security/advisories/new).
+Para relatar uma vulnerabilidade de segurança, use os
+[GitHub private security advisories](https://github.com/editzffaleta/OmniCraft/security/advisories/new).
 
-Please do not open a public issue for security problems, and do not include live
-credentials, tokens, or customer data in any report.
+Por favor, não abra uma issue pública para problemas de segurança, e não inclua
+credenciais ativas, tokens ou dados de clientes em nenhum relato.
 
-## Contributor PR security gate
+## Gate de segurança para PRs de contribuidores
 
-CI for untrusted PRs is held behind a deterministic security scan so that
-untrusted code is not checked out, built, or run on our runners — and the
-Actions cache is not touched — until the diff has been vetted. It is split into
-two pieces so the scan work happens only **once per PR**:
+O CI para PRs não confiáveis fica retido atrás de um scan de segurança
+determinístico, de modo que código não confiável não é feito checkout, buildado
+ou executado em nossos runners — e o cache das Actions não é tocado — até que o
+diff tenha sido verificado. Isso é dividido em duas partes para que o trabalho
+de scan aconteça apenas **uma vez por PR**:
 
-- **`.github/workflows/security-scan.yml`** — runs the deterministic scan once
-  on `pull_request` and produces the `Security Scan` check.
-- **`.github/workflows/security-gate.yml`** — a reusable poller run as the first
-  job (`gate`) of every CI workflow (`ci`, `lint`, `e2e`, `e2e-ui`, web
-  tests); the real jobs declare `needs: gate`. It does not re-scan — for an
-  untrusted PR it waits for the `Security Scan` check and mirrors its result
-  (failure → the dependent CI jobs are skipped); trusted authors and non-PR
-  events proceed immediately.
+- **`.github/workflows/security-scan.yml`** — executa o scan determinístico uma
+  vez em `pull_request` e produz o check `Security Scan`.
+- **`.github/workflows/security-gate.yml`** — um poller reutilizável executado
+  como o primeiro job (`gate`) de todo workflow de CI (`ci`, `lint`, `e2e`,
+  `e2e-ui`, testes web); os jobs reais declaram `needs: gate`. Ele não refaz o
+  scan — para um PR não confiável, ele aguarda o check `Security Scan` e espelha
+  seu resultado (falha → os jobs de CI dependentes são pulados); autores
+  confiáveis e eventos que não são PR prosseguem imediatamente.
 
-By trust tier (GitHub `author_association`):
+Por nível de confiança (`author_association` do GitHub):
 
-- **Trusted** (`OWNER` / `MEMBER` / `COLLABORATOR`) and all non-PR events
-  (push, schedule, dispatch): the gate passes through instantly, no scan.
-- **Returning contributor** (`CONTRIBUTOR`): the gate runs the scan; a clean
-  result lets CI proceed automatically, a finding blocks all CI.
-- **First-time contributor**: GitHub's native *“require approval to run fork
-  pull request workflows”* repo setting already holds every workflow until a
-  maintainer clicks **Approve and run**; after approval the gate's scan still
-  applies.
+- **Confiável** (`OWNER` / `MEMBER` / `COLLABORATOR`) e todos os eventos que não
+  são PR (push, schedule, dispatch): o gate passa instantaneamente, sem scan.
+- **Contribuidor recorrente** (`CONTRIBUTOR`): o gate executa o scan; um
+  resultado limpo permite que o CI prossiga automaticamente, um achado bloqueia
+  todo o CI.
+- **Contribuidor de primeira vez**: a configuração nativa do GitHub *"require
+  approval to run fork pull request workflows"* já retém todo workflow até que
+  um mantenedor clique em **Approve and run**; após a aprovação, o scan do gate
+  ainda se aplica.
 
-The scan inspects the PR diff for committed secrets, secret-exfiltration shapes
-(a secret-named credential source plus a network sink in one file, an
-`os.environ` dump, a decode-then-exec, or a reverse shell), changes to
-privileged repo config (CI workflows, `.github/MAINTAINER`, `CODEOWNERS`,
-`.github/scripts`), CI-workflow misuse (`pull_request_target` + PR-head
-checkout, unpinned actions), and known code-execution / obfuscation patterns
-(semgrep, local ruleset). It only *statically* analyses the diff and runs with
-**no secrets** on fork PRs,
-and the scanner itself always runs from `main`, so a PR cannot weaken its own
-scan.
+O scan inspeciona o diff do PR em busca de segredos commitados, padrões de
+exfiltração de segredos (uma fonte de credencial com nome de segredo mais um
+sink de rede no mesmo arquivo, um dump de `os.environ`, um decode-then-exec, ou
+uma reverse shell), alterações em configuração privilegiada do repositório
+(workflows de CI, `.github/MAINTAINER`, `CODEOWNERS`, `.github/scripts`), uso
+indevido de workflow de CI (`pull_request_target` combinado com checkout do
+head do PR, actions não fixadas/unpinned) e padrões conhecidos de execução de
+código / ofuscação (semgrep, ruleset local). Ele apenas analisa o diff
+*estaticamente* e roda **sem segredos** em PRs de fork, e o próprio scanner
+sempre roda a partir de `main`, de modo que um PR não pode enfraquecer seu
+próprio scan.
 
-This is **not** a merge-required check: it gates CI, not the merge button
-directly. When enforcing, merge stays blocked transitively (the skipped
-pytest/e2e checks are required) and `Maintainer Approval` remains the ultimate
-gate.
+Este **não** é um check obrigatório para merge: ele controla o CI, não o botão
+de merge diretamente. Quando em vigor, o merge permanece bloqueado
+transitivamente (os checks de pytest/e2e pulados são obrigatórios) e o
+`Maintainer Approval` permanece o gate definitivo.
 
-It is **blocking**: a finding fails the `Security Scan` check, the pollers mirror
-that failure, and the dependent CI jobs are skipped. Detectors run fail-fast, so
-a clean PR must pass every one.
+Ele é **bloqueante**: um achado reprova o check `Security Scan`, os pollers
+espelham essa falha, e os jobs de CI dependentes são pulados. Os detectores
+rodam em modo fail-fast, então um PR limpo precisa passar em todos eles.
 
-### Maintainer override
+### Substituição pelo mantenedor
 
-A maintainer can waive the scan on a specific PR with the **`skip-security-scan`**
-label (same convention as `skip-e2e-ui-test`). The waiver is only honored when it
-is *maintainer-effective*: the label is present **and** the PR author is a
-maintainer, or a maintainer's latest decisive review is `APPROVED`. The label
-alone does nothing — applying labels needs triage access, and the extra
-maintainer check is defence in depth — so a fork contributor cannot self-waive.
-The label and review state are read from the API, and the decision runs from
-`should-scan.sh` on `main`, so a PR cannot edit the waiver logic.
+Um mantenedor pode dispensar o scan em um PR específico com a label
+**`skip-security-scan`** (mesma convenção de `skip-e2e-ui-test`). A dispensa só
+é aceita quando é *efetiva por um mantenedor*: a label está presente **e** o
+autor do PR é um mantenedor, ou a revisão decisiva mais recente de um
+mantenedor é `APPROVED`. A label sozinha não faz nada — aplicar labels exige
+acesso de triagem, e a checagem adicional do mantenedor é uma defesa em
+profundidade — então um contribuidor de fork não pode dispensar o scan por
+conta própria. A label e o estado da revisão são lidos da API, e a decisão roda
+a partir de `should-scan.sh` em `main`, de modo que um PR não pode editar a
+lógica de dispensa.
 
-To use it: a maintainer reviews/approves the PR and applies `skip-security-scan`;
-the `Security Scan` check re-runs and passes, then the blocked CI workflows are
-re-run (or the contributor pushes) so their gate jobs see the now-green scan.
-The waiver stays effective across pushes while the maintainer approval stands —
-remove the label (or dismiss the approval) to re-enable scanning.
+Para usar: um mantenedor revisa/aprova o PR e aplica `skip-security-scan`; o
+check `Security Scan` roda novamente e passa, então os workflows de CI
+bloqueados são reexecutados (ou o contribuidor faz push) para que seus jobs de
+gate vejam o scan agora verde. A dispensa permanece efetiva através de pushes
+subsequentes enquanto a aprovação do mantenedor se mantiver — remova a label
+(ou descarte a aprovação) para reabilitar o scan.

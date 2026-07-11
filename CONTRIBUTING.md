@@ -1,143 +1,155 @@
-# Contributing to OmniCraft
+# Contribuindo com o OmniCraft
 
-Thanks for your interest in improving OmniCraft. Issues and pull requests are
-welcome. For larger changes, open an issue first so we can discuss the approach.
+Obrigado pelo interesse em melhorar o OmniCraft. Issues e pull requests são
+bem-vindos. Para mudanças maiores, abra uma issue primeiro para discutirmos a
+abordagem.
 
-Please don't include secrets, internal URLs, customer data, or private
-configuration in issues, tests, examples, or logs.
+Por favor, não inclua segredos, URLs internas, dados de clientes ou
+configurações privadas em issues, testes, exemplos ou logs.
 
-## Development setup
+## Configuração do ambiente de desenvolvimento
 
-This is a Python package with an optional frontend under `web/`. Use
-[`uv`](https://docs.astral.sh/uv/) for local development:
+Este é um pacote Python com um frontend opcional em `web/`. Use o
+[`uv`](https://docs.astral.sh/uv/) para o desenvolvimento local:
 
-**Supported dev OS: macOS or Linux.** Native Windows is not supported for
-development — some test dependencies are POSIX-only (`pexpect`/`pyte` are
-excluded on Windows), a few modules import POSIX stdlib or call `os.getuid()`
-at import time, and the `pre-commit` hooks assume the Unix `.venv/bin/` layout,
-so `pytest` and `pre-commit` cannot pass natively. On Windows, use
-**WSL2 (Ubuntu)** and clone into the **Linux** filesystem (`~/…`, not `/mnt/c`);
-this matches CI. Git Bash is not sufficient — it runs native-Windows Python.
+**SO de desenvolvimento suportado: macOS ou Linux.** Windows nativo não é
+suportado para desenvolvimento — algumas dependências de teste são
+POSIX-only (`pexpect`/`pyte` são excluídas no Windows), alguns módulos
+importam bibliotecas padrão POSIX ou chamam `os.getuid()` durante o import, e
+os hooks do `pre-commit` assumem o layout Unix de `.venv/bin/`, então
+`pytest` e `pre-commit` não conseguem rodar nativamente. No Windows, use
+**WSL2 (Ubuntu)** e clone no sistema de arquivos **Linux** (`~/…`, não
+`/mnt/c`); isso corresponde ao CI. O Git Bash não é suficiente — ele executa
+o Python nativo do Windows.
 
-Install local prerequisites first:
+Instale primeiro os pré-requisitos locais:
 
-- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) for Python
-  environments and dependency management.
-- `tmux`, required for native Claude/Codex terminals launched by the local host
-  (`brew install tmux` on macOS, or `apt install tmux` on Debian/Ubuntu).
-- `bubblewrap` (`bwrap`), **Linux only**, used to OS-sandbox those native
-  Claude/Codex/Pi terminals (`apt install bubblewrap` on Debian/Ubuntu). macOS
-  uses the built-in `seatbelt` sandbox and needs nothing extra.
-- Node.js 22 LTS or newer with `npm` when working on `web/`.
+- [`uv`](https://docs.astral.sh/uv/getting-started/installation/) para
+  ambientes Python e gerenciamento de dependências.
+- `tmux`, necessário para os terminais nativos de Claude/Codex lançados pelo
+  host local (`brew install tmux` no macOS, ou `apt install tmux` no
+  Debian/Ubuntu).
+- `bubblewrap` (`bwrap`), **somente Linux**, usado para isolar (sandbox) no
+  nível do SO esses terminais nativos de Claude/Codex/Pi (`apt install
+  bubblewrap` no Debian/Ubuntu). O macOS usa o sandbox `seatbelt` embutido e
+  não precisa de nada extra.
+- Node.js 22 LTS ou mais recente, com `npm`, ao trabalhar em `web/`.
 
 ```bash
-git clone https://github.com/omnicraft-ai/omnicraft.git
-cd omnicraft
+git clone https://github.com/editzffaleta/OmniCraft.git
+cd OmniCraft
 
 uv python install
 uv venv --python "$(cat .python-version)"
 uv sync --extra all --extra dev
-source .venv/bin/activate    # or prefix commands with `uv run`
+source .venv/bin/activate    # ou prefixe os comandos com `uv run`
 ```
 
-Common checks:
+Verificações comuns:
 
 ```bash
-uv run pytest                      # Python tests (e2e/live skipped by default)
+uv run pytest                      # testes Python (e2e/live são pulados por padrão)
 uv run ruff check . && uv run ruff format --check .
 uv run pre-commit run --all-files
 ```
 
-When touching `web/`:
+Ao mexer em `web/`:
 
 ```bash
 cd web && npm install && npm run lint && npm run build
 ```
 
-## Running locally
+## Executando localmente
 
-To try your changes, start a local server, register your machine as a host,
-and run the frontend dev server. Use three separate terminals:
+Para experimentar suas mudanças, inicie um servidor local, registre sua
+máquina como host e rode o servidor de desenvolvimento do frontend. Use três
+terminais separados:
 
 ```bash
-# Terminal 1: local server on :6767
+# Terminal 1: servidor local na porta :6767
 omnicraft server
 
-# Terminal 2: register your machine as a host
+# Terminal 2: registre sua máquina como host
 omnicraft host --server http://localhost:6767
 
-# Terminal 3: frontend dev server
+# Terminal 3: servidor de desenvolvimento do frontend
 cd web
 npm run dev
 ```
 
-Open the Vite URL from the frontend dev server, usually
-`http://localhost:5173/`. The host registration is what lets the web UI browse
-your filesystem and start new sessions on your machine — without it, the web UI
-is read/continue-only.
+Abra a URL do Vite exibida pelo servidor de desenvolvimento do frontend,
+geralmente `http://localhost:5173/`. É o registro do host que permite à
+interface web navegar pelo seu sistema de arquivos e iniciar novas sessões na
+sua máquina — sem ele, a interface web fica somente em modo leitura/continuação.
 
-`omni` is an alias for `omnicraft`, so `omni host --server ...` works too.
-The host URL can also be passed positionally (`omnicraft host
-http://localhost:6767`). See the [README](README.md) for more on hosts,
-harnesses, and credentials.
+`omni` é um alias para `omnicraft`, então `omni host --server ...` também
+funciona. A URL do host também pode ser passada posicionalmente (`omnicraft
+host http://localhost:6767`). Veja o [README](README.md) para mais detalhes
+sobre hosts, harnesses e credenciais.
 
-### Backend-only local development validation
+### Validação local de desenvolvimento apenas do backend
 
-Use this when you want to validate the Python backend and local API server from
-a source checkout without building the web UI, configuring provider
-credentials, creating sessions, or running agents -- a quick server/API smoke
-check on your working copy or current `main`.
+Use isso quando quiser validar o backend Python e o servidor de API local a
+partir de um checkout do código-fonte, sem construir a interface web,
+configurar credenciais de provedor, criar sessões ou executar agentes —
+uma verificação rápida de sanidade do servidor/API na sua cópia de trabalho
+ou na `main` atual.
 
-[`scripts/backend-smoke.sh`](scripts/backend-smoke.sh) automates it:
+O script [`scripts/backend-smoke.sh`](scripts/backend-smoke.sh) automatiza
+isso:
 
 ```bash
-scripts/backend-smoke.sh              # boots on port 18080
-PORT=18090 scripts/backend-smoke.sh   # override the port if 18080 is busy
+scripts/backend-smoke.sh              # sobe na porta 18080
+PORT=18090 scripts/backend-smoke.sh   # sobrescreve a porta se a 18080 estiver ocupada
 ```
 
-It installs `uv` into a throwaway toolchain venv, runs `uv sync --frozen`,
-starts the server in API-only mode (`OMNICRAFT_SKIP_WEB_UI=true`), waits for
-`/health`, and smoke-tests `/`, `/health`, `/docs`, `/v1/agents`, and
-`/v1/sessions` -- expecting HTTP `200` from all five. It exits non-zero if any
-check fails.
+Ele instala o `uv` em um toolchain venv descartável, roda `uv sync
+--frozen`, inicia o servidor em modo somente-API (`OMNICRAFT_SKIP_WEB_UI=true`),
+aguarda o `/health`, e testa `/`, `/health`, `/docs`, `/v1/agents` e
+`/v1/sessions` -- esperando HTTP `200` de todos os cinco. Ele encerra com
+código de saída diferente de zero se alguma verificação falhar.
 
-Notes:
+Observações:
 
-- **Requires `bash` or `zsh`** (the script's `#!/usr/bin/env bash` shebang
-  guarantees this); it is not POSIX-`sh` portable. **Also needs** Python 3.12+
-  as `python3`, `git`, `curl`, and network access to PyPI. No provider
-  credentials are needed. **Works on Linux and macOS.**
-- **Fully isolated, disposable:** every artifact -- the toolchain and project
-  venvs, config, data, the SQLite database, artifacts, logs, and `pip`/`uv`
-  caches -- lives under one `mktemp -d` runtime directory removed on exit, so
-  the run never touches your real `~/.omnicraft`, `~/.config` / `~/Library`, or
-  package caches. `HOME` is the primary isolation lever (it redirects
-  `~/.config` on Linux and `~/Library` on macOS); the explicit `UV_*` / `PIP_*`
-  / `OMNICRAFT_*` overrides pin the toolchain and app state regardless of OS,
-  and `XDG_*` are set so an `XDG_*` already exported in your shell cannot
-  redirect state back to your real home.
-- **What it does not cover:** the web UI, mobile access, human-in-the-loop
-  approval flows, provider-backed sessions, or agent execution. Use the full
-  local development flow above when working on those areas.
+- **Requer `bash` ou `zsh`** (o shebang `#!/usr/bin/env bash` do script
+  garante isso); não é portável para `sh` POSIX. **Também precisa de**
+  Python 3.12+ como `python3`, `git`, `curl`, e acesso à rede para o PyPI.
+  Nenhuma credencial de provedor é necessária. **Funciona em Linux e macOS.**
+- **Totalmente isolado e descartável:** todo artefato -- o toolchain e os
+  venvs do projeto, config, dados, o banco SQLite, artefatos, logs, e os
+  caches de `pip`/`uv` -- vive dentro de um diretório de execução criado por
+  `mktemp -d` e removido ao final, então a execução nunca toca o seu
+  `~/.omnicraft` real, `~/.config` / `~/Library`, ou os caches de pacotes.
+  `HOME` é a principal alavanca de isolamento (redireciona `~/.config` no
+  Linux e `~/Library` no macOS); as variáveis explícitas `UV_*` / `PIP_*` /
+  `OMNICRAFT_*` fixam o toolchain e o estado da aplicação independente do SO,
+  e as `XDG_*` são definidas para que uma `XDG_*` já exportada no seu shell
+  não consiga redirecionar o estado de volta para o seu home real.
+- **O que não é coberto:** a interface web, acesso mobile, fluxos de
+  aprovação humano-no-loop, sessões apoiadas por provedores, ou execução de
+  agentes. Use o fluxo completo de desenvolvimento local acima ao trabalhar
+  nessas áreas.
 
-## Tests
+## Testes
 
-A change that alters behaviour under `omnicraft/` should ship with a test, and a
-bug fix should add a test that fails before the fix. Pure refactors, renames,
-type-only changes, dependency bumps, and edits with no observable behaviour
-change don't need a new test.
+Uma mudança que altere o comportamento sob `omnicraft/` deve vir acompanhada
+de um teste, e uma correção de bug deve adicionar um teste que falhe antes da
+correção. Refatorações puras, renomeações, mudanças apenas de tipo, updates
+de dependências, e edições sem mudança observável de comportamento não
+precisam de um novo teste.
 
-Prefer the smallest test that covers the change. A fast, focused **unit test**
-in the area suite is the default and what most changes need. Reach for
-`tests/integration/` only when behaviour genuinely spans components, and for
-`tests/e2e/` only for full-stack flows that a unit test can't capture — these
-are slower and (for e2e) gateway-bound, so don't use them where a unit test
-would do.
+Prefira o menor teste que cubra a mudança. Um **teste unitário** rápido e
+focado na suíte da área correspondente é o padrão e o que a maioria das
+mudanças precisa. Recorra a `tests/integration/` somente quando o
+comportamento genuinamente abranger vários componentes, e a `tests/e2e/`
+apenas para fluxos full-stack que um teste unitário não consiga capturar —
+esses são mais lentos e (no caso do e2e) dependentes de gateway, então não os
+use onde um teste unitário resolveria.
 
-Put the test in the suite that matches the area you changed — most backend
-areas mirror their source directory under `tests/`:
+Coloque o teste na suíte que corresponde à área alterada — a maioria das
+áreas do backend espelha seu diretório de origem em `tests/`:
 
-| Area changed (`omnicraft/…`) | Test suite (`tests/…`) |
+| Área alterada (`omnicraft/…`) | Suíte de teste (`tests/…`) |
 | --- | --- |
 | `server/` | `server/` |
 | `runner/` | `runner/` |
@@ -145,7 +157,7 @@ areas mirror their source directory under `tests/`:
 | `tools/` | `tools/` |
 | `inner/` | `inner/` |
 | `llms/` | `llms/` |
-| `db/` | `db/` (a schema migration especially warrants one) |
+| `db/` | `db/` (uma migração de esquema merece especialmente um) |
 | `policies/` | `policies/` |
 | `repl/` | `repl/` |
 | `entities/` | `entities/` |
@@ -153,35 +165,41 @@ areas mirror their source directory under `tests/`:
 | `host/` | `host/` |
 | `spec/` | `spec/` |
 
-Two cross-cutting suites sit on top of these:
+Duas suítes transversais ficam acima dessas:
 
-- `tests/integration/` — behaviour that spans several components (e.g. server +
-  runtime) and isn't captured by any single area's unit test.
-- `tests/e2e/` — full-stack flows driven against a live LLM (sessions, the
-  runtime, sub-agent dispatch, client-tool tunneling, transports, native
-  harness bridges, steering/cancellation). These are slow and gateway-bound, so
-  reserve them for genuine end-to-end behaviour — but a PR that adds new
-  user-facing functionality **must** include at least one e2e happy-path test
-  (see `.github/copilot-instructions.md`).
+- `tests/integration/` — comportamento que abrange vários componentes (por
+  exemplo, server + runtime) e não é capturado pelo teste unitário de
+  nenhuma área isolada.
+- `tests/e2e/` — fluxos full-stack executados contra um LLM real (sessões, o
+  runtime, dispatch de sub-agentes, tunelamento de ferramentas de cliente,
+  transportes, pontes de harness nativas, steering/cancelamento). Esses são
+  lentos e dependentes de gateway, então reserve-os para comportamento
+  genuinamente ponta a ponta — mas um PR que adicione nova funcionalidade
+  voltada ao usuário **deve** incluir ao menos um teste e2e de caminho feliz
+  (happy-path) (veja `.github/copilot-instructions.md`).
 
 ### Frontend (`web/`)
 
-Frontend changes follow the same expectation with a different toolchain:
+Mudanças de frontend seguem a mesma expectativa, com um toolchain diferente:
 
-- Add or update a **colocated Vitest test** — a `*.test.ts`/`*.test.tsx` file
-  next to the component or module you changed — and run it with `npm test`.
-- A change to **user-facing UI behaviour** also needs a Playwright test under
-  `tests/e2e_ui/`. This one is enforced mechanically by the `E2E UI Required`
-  check, so a UI PR won't merge without a covering test (or a maintainer
-  waiver) — see `.github/workflows/e2e-ui-required.yml`.
-- Styling/formatting-only changes, copy tweaks with no flow change, and
-  refactors with no behaviour change are exempt, same as the backend.
+- Adicione ou atualize um **teste Vitest colocalizado** — um arquivo
+  `*.test.ts`/`*.test.tsx` ao lado do componente ou módulo alterado — e rode
+  com `npm test`.
+- Uma mudança no **comportamento de UI voltado ao usuário** também precisa
+  de um teste Playwright em `tests/e2e_ui/`. Isso é reforçado
+  mecanicamente pela verificação `E2E UI Required`, então um PR de UI não
+  será mesclado sem um teste que o cubra (ou uma dispensa de um mantenedor)
+  — veja `.github/workflows/e2e-ui-required.yml`.
+- Mudanças somente de estilo/formatação, ajustes de texto sem mudança de
+  fluxo, e refatorações sem mudança de comportamento são isentos, assim como
+  no backend.
 
 ## Pull requests
 
-- Branch from `main`, keep changes focused, and include tests or docs when relevant.
-- Sign off your commits with `git commit -s` (Developer Certificate of Origin).
-- Fill in the PR template. For **UI / frontend changes**, check the
-  "UI / frontend change" box and attach a **video or images** in the `Demo`
-  section showing the new behaviour, so reviewers can see it without checking
-  out the branch.
+- Parta (branch) da `main`, mantenha as mudanças focadas, e inclua testes ou
+  documentação quando pertinente.
+- Assine seus commits com `git commit -s` (Developer Certificate of Origin).
+- Preencha o template de PR. Para **mudanças de UI / frontend**, marque a
+  caixa "UI / frontend change" e anexe um **vídeo ou imagens** na seção
+  `Demo` mostrando o novo comportamento, para que os revisores possam vê-lo
+  sem precisar fazer checkout da branch.

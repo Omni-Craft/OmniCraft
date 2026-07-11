@@ -10,8 +10,11 @@ import { useEffect } from "react";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
+  ChartColumnIcon,
+  ClipboardCheckIcon,
   GitBranchIcon,
   KeyboardIcon,
+  LayoutGridIcon,
   PaletteIcon,
   PanelRightOpenIcon,
   ShieldCheckIcon,
@@ -32,6 +35,9 @@ export type SettingsSectionId =
   | "git"
   | "shortcuts"
   | "account"
+  | "costs"
+  | "evals"
+  | "gallery"
   | "members"
   | "policies"
   | "archived"
@@ -42,6 +48,9 @@ const SECTION_IDS: readonly SettingsSectionId[] = [
   "git",
   "shortcuts",
   "account",
+  "costs",
+  "evals",
+  "gallery",
   "members",
   "policies",
   "archived",
@@ -95,6 +104,15 @@ export function settingsNavGroups(
     });
   }
   groups.push({ title: "Geral", items: general });
+  // Management/observability surfaces — available to everyone (self-hosted).
+  groups.push({
+    title: "Ferramentas",
+    items: [
+      { id: "costs", label: "Custos e observabilidade", icon: ChartColumnIcon },
+      { id: "evals", label: "Avaliações de agentes", icon: ClipboardCheckIcon },
+      { id: "gallery", label: "Galeria de agentes", icon: LayoutGridIcon },
+    ],
+  });
   // Admin: server-wide management, admin-only. Nested here as sub-categories
   // (rather than links out of the Account section) so entering them stays
   // inside /settings — the sidebar keeps the settings nav instead of snapping

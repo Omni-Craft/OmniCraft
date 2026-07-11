@@ -142,6 +142,13 @@ const MembersPage = lazy(() =>
 const PoliciesPage = lazy(() =>
   import("@/pages/PoliciesPage").then((m) => ({ default: m.PoliciesPage })),
 );
+// Observability / management surfaces (self-hosted, all users). Each owns its
+// full-page layout, so they render directly like Members / Policies.
+const CostPage = lazy(() => import("@/pages/CostPage").then((m) => ({ default: m.CostPage })));
+const EvalsPage = lazy(() => import("@/pages/EvalsPage").then((m) => ({ default: m.EvalsPage })));
+const GalleryPage = lazy(() =>
+  import("@/pages/GalleryPage").then((m) => ({ default: m.GalleryPage })),
+);
 
 /**
  * Settings content panel. The section nav lives in the sidebar card
@@ -168,6 +175,18 @@ export function SettingsPage() {
     return (
       <Suspense fallback={null}>
         {section === "members" ? <MembersPage /> : <PoliciesPage />}
+      </Suspense>
+    );
+  }
+
+  // These surfaces own their full-page layout (their own scroll container), so
+  // render them directly rather than nesting inside the shared PageScroll.
+  if (section === "costs" || section === "evals" || section === "gallery") {
+    return (
+      <Suspense fallback={null}>
+        {section === "costs" && <CostPage />}
+        {section === "evals" && <EvalsPage />}
+        {section === "gallery" && <GalleryPage />}
       </Suspense>
     );
   }

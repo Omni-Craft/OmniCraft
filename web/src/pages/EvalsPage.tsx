@@ -5,7 +5,7 @@ import { useHosts, type Host } from "@/hooks/useHosts";
 import { authenticatedFetch } from "@/lib/identity";
 import { fetchLastAssistantText } from "@/lib/lastAssistantText";
 import { nativeWrapperLabelsForAgent } from "@/lib/nativeCodingAgents";
-import { useNavigate, useParams } from "@/lib/routing";
+import { useNavigate } from "@/lib/routing";
 
 interface Check {
   type: "contains" | "not_contains" | "regex";
@@ -154,8 +154,7 @@ function NewSuite({ onCreated }: { onCreated: (s: Suite) => void }) {
 
 // ── Suites list ────────────────────────────────────────────────────────────
 
-function EvalsList() {
-  const navigate = useNavigate();
+function EvalsList({ onOpen }: { onOpen: (suiteId: string) => void }) {
   const [suites, setSuites] = useState<Suite[] | null>(null);
   const [creating, setCreating] = useState(false);
 
@@ -193,7 +192,7 @@ function EvalsList() {
           onCreated={(s) => {
             setCreating(false);
             void load();
-            navigate(`/evals/${s.id}`);
+            onOpen(s.id);
           }}
         />
       )}
@@ -208,7 +207,7 @@ function EvalsList() {
             <li key={s.id}>
               <button
                 type="button"
-                onClick={() => navigate(`/evals/${s.id}`)}
+                onClick={() => onOpen(s.id)}
                 className="flex w-full items-center justify-between gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-left transition hover:border-white/25"
               >
                 <span className="font-medium">{s.name}</span>
@@ -230,7 +229,7 @@ function passRatioTone(passed: number, total: number): string {
   return r === 1 ? "#30a46c" : r === 0 ? "#e5484d" : "#e3a008";
 }
 
-function SuiteDetail({ suiteId }: { suiteId: string }) {
+function SuiteDetail({ suiteId, onBack }: { suiteId: string; onBack: () => void }) {
   const navigate = useNavigate();
   const { data: agents } = useAvailableAgents();
   const { data: hosts } = useHosts();
@@ -332,7 +331,7 @@ function SuiteDetail({ suiteId }: { suiteId: string }) {
     return (
       <div className="px-6 py-10 text-sm opacity-60">
         Suíte não encontrada.{" "}
-        <button className="underline" onClick={() => navigate("/evals")}>
+        <button className="underline" onClick={onBack}>
           Voltar
         </button>
       </div>
@@ -354,7 +353,7 @@ function SuiteDetail({ suiteId }: { suiteId: string }) {
     <div className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-8">
       <header className="flex items-center justify-between gap-3">
         <div>
-          <button className="text-xs opacity-50 hover:opacity-100" onClick={() => navigate("/evals")}>
+          <button className="text-xs opacity-50 hover:opacity-100" onClick={onBack}>
             ← Avaliações
           </button>
           <h1 className="text-xl font-semibold">{suite.name}</h1>
@@ -492,6 +491,10 @@ function SuiteDetail({ suiteId }: { suiteId: string }) {
 }
 
 export function EvalsPage() {
-  const { suiteId } = useParams<"suiteId">();
-  return suiteId ? <SuiteDetail suiteId={suiteId} /> : <EvalsList />;
+  const [selected, setSelected] = useState<string | null>(null);
+  return selected ? (
+    <SuiteDetail suiteId={selected} onBack={() => setSelected(null)} />
+  ) : (
+    <EvalsList onOpen={setSelected} />
+  );
 }

@@ -62,6 +62,7 @@ from omnicraft.server.routes.comments import create_comments_router
 from omnicraft.server.routes.default_policies import create_default_policies_router
 from omnicraft.server.routes.harnesses import create_harnesses_router
 from omnicraft.server.routes.evals import create_evals_router
+from omnicraft.server.routes.gallery import create_gallery_router
 from omnicraft.server.routes.integrations import create_integrations_router
 from omnicraft.server.routes.observability import create_observability_router
 from omnicraft.server.routes.policy_simulate import create_policy_simulate_router
@@ -2017,6 +2018,13 @@ def create_app(
         create_evals_router(auth_provider=auth_provider),
         prefix="/v1",
         tags=["evals"],
+    )
+    app.include_router(
+        create_gallery_router(
+            agent_store, artifact_store, agent_cache, auth_provider=auth_provider
+        ),
+        prefix="/v1",
+        tags=["gallery"],
     )
     app.include_router(
         create_terminal_attach_router(

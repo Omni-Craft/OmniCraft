@@ -27,6 +27,7 @@ import {
   FolderOpenIcon,
   GitBranchIcon,
   GitPullRequestIcon,
+  LayoutGridIcon,
   InboxIcon,
   ListChecksIcon,
   Loader2Icon,
@@ -577,6 +578,24 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Avaliações de agentes</TooltipContent>
+              </Tooltip>
+              {/* Agent gallery — install the bundled example agents. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Galeria de agentes"
+                    className="rounded-full"
+                    data-testid="gallery-button"
+                  >
+                    <Link to="/gallery" onClick={onNavClick}>
+                      <LayoutGridIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Galeria de agentes</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>

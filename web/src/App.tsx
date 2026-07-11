@@ -26,6 +26,9 @@ const ArenaPage = lazy(() => import("@/pages/ArenaPage").then((m) => ({ default:
 const GithubPage = lazy(() => import("@/pages/GithubPage").then((m) => ({ default: m.GithubPage })));
 const CostPage = lazy(() => import("@/pages/CostPage").then((m) => ({ default: m.CostPage })));
 const EvalsPage = lazy(() => import("@/pages/EvalsPage").then((m) => ({ default: m.EvalsPage })));
+const GalleryPage = lazy(() =>
+  import("@/pages/GalleryPage").then((m) => ({ default: m.GalleryPage })),
+);
 const SettingsPage = lazy(() =>
   import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
@@ -129,6 +132,7 @@ function App({ basename }: AppProps = {}) {
           <Route path={`${prefix}/costs`} element={<CostPage />} />
           <Route path={`${prefix}/evals`} element={<EvalsPage />} />
           <Route path={`${prefix}/evals/:suiteId`} element={<EvalsPage />} />
+          <Route path={`${prefix}/gallery`} element={<GalleryPage />} />
           {/* Settings renders into the chat outlet so the conversations
               sidebar stays put — entering settings only swaps the card's
               content (the section nav) and the main area. The active section

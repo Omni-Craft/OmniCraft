@@ -60,6 +60,24 @@ _lock = threading.Lock()
 # tracked event — must be cheap + non-blocking. ``None`` (runner, tests) skips it.
 _observer: Callable[[str, dict[str, Any]], None] | None = None
 
+# A SECOND, independent observer slot for the web-push approval sender. Kept
+# separate from ``_observer`` (the subagent-wake notifier) so the two features
+# don't contend for the single slot. Same contract: cheap + non-blocking.
+_push_observer: Callable[[str, dict[str, Any]], None] | None = None
+
+
+def set_push_observer(
+    observer: Callable[[str, dict[str, Any]], None] | None,
+) -> None:
+    """Register (or clear) the web-push approval observer.
+
+    :param observer: Callback invoked as ``observer(conversation_id, event)``
+        for every elicitation event, alongside the primary observer. Must be
+        cheap + non-blocking (enqueue the actual send). ``None`` clears it.
+    """
+    global _push_observer
+    _push_observer = observer
+
 
 def set_elicitation_observer(
     observer: Callable[[str, dict[str, Any]], None] | None,
@@ -147,6 +165,9 @@ def _notify_observer(conversation_id: str, event: dict[str, Any]) -> None:
     observer = _observer
     if observer is not None:
         observer(conversation_id, event)
+    push_observer = _push_observer
+    if push_observer is not None:
+        push_observer(conversation_id, event)
 
 
 def resolve(conversation_id: str, elicitation_id: str) -> None:

@@ -48,6 +48,7 @@ import { isNativeShell, onNativeNotificationActivated, setBadgeCount } from "@/l
 import { fetchLastAssistantText } from "@/lib/lastAssistantText";
 import { parseEvent } from "@/lib/sse";
 import { getSession } from "@/lib/sessionsApi";
+import { subscribeWebPush } from "@/lib/webPush";
 import {
   buildElicitationMap,
   buildStatusMap,
@@ -75,9 +76,17 @@ const IDLE_SETTLE_MS = 10_000;
  */
 function useLazyPermissionRequest(): void {
   useEffect(() => {
+    // Already granted (returning user): make sure a Web Push subscription
+    // exists so closed-app approvals still reach this device.
+    if (getNotificationPermission() === "granted") {
+      void subscribeWebPush();
+      return;
+    }
     if (getNotificationPermission() !== "default") return;
     const handler = () => {
-      void requestNotificationPermission();
+      void requestNotificationPermission().then((perm) => {
+        if (perm === "granted") void subscribeWebPush();
+      });
     };
     // `once` auto-removes the listener after it fires the first time.
     window.addEventListener("pointerdown", handler, { once: true });

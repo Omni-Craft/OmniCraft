@@ -62,6 +62,7 @@ from omnicraft.server.routes.comments import create_comments_router
 from omnicraft.server.routes.default_policies import create_default_policies_router
 from omnicraft.server.routes.harnesses import create_harnesses_router
 from omnicraft.server.routes.integrations import create_integrations_router
+from omnicraft.server.routes.push_routes import create_push_router
 from omnicraft.server.routes.policy_registry import create_policy_registry_router
 from omnicraft.server.routes.runner_tunnel import create_runner_tunnel_router
 from omnicraft.server.routes.session_mcp_servers import create_session_mcp_servers_router
@@ -1260,6 +1261,55 @@ def create_app(
             runner_router,
         )
 
+        # Web Push: when a session pauses for approval, deliver a push to the
+        # owner's subscribed browsers so the "Aprovar / Negar" notification
+        # arrives even with the app closed. Runs on the elicitation publish
+        # path, so it only ENQUEUES the (blocking) send onto the loop.
+        from omnicraft.runtime import pending_elicitations as _push_pending
+        from omnicraft.server import push as _web_push
+        from omnicraft.server.routes._auth_helpers import get_session_owner_id
+
+        _push_loop = asyncio.get_running_loop()
+
+        def _push_approval_observer(conversation_id: str, event: dict[str, Any]) -> None:
+            if event.get("type") != "response.elicitation_request":
+                return
+            elicitation_id = event.get("elicitation_id")
+            if not isinstance(elicitation_id, str) or not elicitation_id:
+                return
+            payload = {
+                "title": "OmniCraft",
+                "body": "Uma sessão precisa da sua aprovação.",
+                "tag": f"omnicraft:session:{conversation_id}",
+                "requireInteraction": True,
+                "data": {
+                    "sessionId": conversation_id,
+                    "elicitationId": elicitation_id,
+                    "url": f"/c/{conversation_id}",
+                },
+                "actions": [
+                    {"action": "approve", "title": "Aprovar"},
+                    {"action": "deny", "title": "Negar"},
+                ],
+            }
+
+            async def _dispatch() -> None:
+                owner = (
+                    await asyncio.to_thread(
+                        get_session_owner_id, conversation_id, permission_store
+                    )
+                    or "local"
+                )
+                await asyncio.to_thread(_web_push.deliver_to_user, owner, payload)
+
+            try:
+                asyncio.run_coroutine_threadsafe(_dispatch(), _push_loop)
+            except RuntimeError:
+                # Loop shutting down — nothing to deliver.
+                pass
+
+        _push_pending.set_push_observer(_push_approval_observer)
+
         from omnicraft.runner.resource_registry import (
             SessionResourceRegistry,
         )
@@ -1331,6 +1381,7 @@ def create_app(
 
             await cancel_managed_launch_tasks()
             _uninstall_subagent_block_notifier()
+            _push_pending.set_push_observer(None)
             set_resource_registry(None)
             set_runner_ws_factory(None)
             set_runner_router(None)
@@ -1943,6 +1994,11 @@ def create_app(
         create_integrations_router(auth_provider=auth_provider),
         prefix="/v1",
         tags=["integrations"],
+    )
+    app.include_router(
+        create_push_router(auth_provider=auth_provider),
+        prefix="/v1",
+        tags=["push"],
     )
     app.include_router(
         create_terminal_attach_router(

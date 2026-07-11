@@ -1185,9 +1185,9 @@ class _UpgradeSuggestion:
     """A suggested upgrade command for the user's install shape.
 
     :param command: The shell command (or prose) we display in the
-        nag panel, e.g. ``"uv tool upgrade omnicraft"`` or
-        ``"reinstall omnicraft from your original source"``.
-        Always populated.
+        nag panel, e.g. ``"uv tool install --reinstall
+        git+https://github.com/…"`` or ``"reinstall omnicraft from
+        <repo>"``. Always populated.
     :param runnable: ``True`` when ``command`` is a real shell
         invocation we can execute via ``subprocess.run`` —
         i.e. the installer is one of uv / pip / pipx / poetry
@@ -1318,7 +1318,7 @@ def _run_upgrade_command(command: str, console: Console) -> int:
     ``shell=True``; the command is tokenized with ``shlex.split``.
 
     :param command: Shell-style command line, e.g.
-        ``"uv tool upgrade omnicraft"``.
+        ``"uv tool install --reinstall git+https://github.com/…"``.
     :param console: Rich console (stderr) used for the surrounding
         "Running:" / failure status lines, kept consistent with the
         panel above.
@@ -1346,8 +1346,8 @@ def upgrade_command_for_installed() -> _UpgradeSuggestion | None:
 
     Convenience wrapper used by ``omni upgrade``: reads the installed
     distribution's metadata and maps it to the installer-appropriate
-    upgrade command (``uv tool upgrade omnicraft``, ``pip install -U
-    omnicraft``, etc.).
+    upgrade command. This private fork reinstalls from its source repo
+    (``uv tool install --reinstall git+…``), never the public index.
 
     :returns: A :class:`_UpgradeSuggestion`, or ``None`` when the
         package is not installed as a wheel (e.g. running from a source

@@ -72,8 +72,11 @@ no registered distribution contributes an empty version and is unaffected.)
 4. Stop the server + daemon (`_stop_local_server_and_daemon`) — *before*
    swapping code, so the live process never serves half-upgraded modules.
 5. Run the installer-appropriate command (`_build_upgrade_suggestion` +
-   `_run_upgrade_command`): `uv tool upgrade omnicraft`, `pip install -U
-   omnicraft`, `pipx upgrade omnicraft`, `--reinstall <vcs_url>`, etc.
+   `_run_upgrade_command`). This private fork is not on any public index, so
+   every shape reinstalls from the source repo — `uv tool install --reinstall
+   git+<repo>`, `pip install --force-reinstall git+<repo>`, `--reinstall
+   <vcs_url>` — never `uv tool upgrade omnicraft` (which would resolve a
+   squattable PyPI name).
 6. **Lazy respawn**: do not restart the server. The next `omni` command spawns
    a fresh new-code server via the signature change above.
 

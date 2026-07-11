@@ -1,12 +1,13 @@
-// Sidebar status indicator. Approval surfaces as a "Needs response" tag so
-// it reads at a glance; running/unseen stay as compact dots. Verbose copy
-// (incl. the approval count) lives in the tooltip.
+// Sidebar status indicator. Every state stays a compact marker that fits the
+// row's trailing slot without crowding the title: approval is a distinct amber
+// bell, running is a grey spinner, unseen is a brand-pink dot. The full copy
+// (incl. the approval count) lives in the tooltip + accessible label.
 
 import { RunningDot } from "@/components/RunningDot";
-import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { SessionState } from "@/hooks/useSessionState";
 import { cn } from "@/lib/utils";
+import { BellIcon } from "lucide-react";
 import type { ReactElement } from "react";
 
 export interface SessionStateBadgeProps {
@@ -32,9 +33,10 @@ function describe(state: SessionState): Visual {
         ariaLabel: tooltip,
         tooltip,
         render: () => (
-          <Badge className="border-transparent bg-warning/25 text-warning">
-            Aguardando resposta
-          </Badge>
+          <span className="inline-flex size-5 items-center justify-center rounded-full bg-warning/20 text-warning ring-1 ring-warning/30">
+            <BellIcon className="size-3" aria-hidden />
+            <span className="sr-only">Aguardando resposta</span>
+          </span>
         ),
       };
     }

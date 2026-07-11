@@ -2566,7 +2566,7 @@ function ConversationRow({
       to={selectionMode ? "#" : `/c/${conversation.id}`}
       className={cn(
         "relative flex w-full flex-col gap-0.5 rounded-md px-4 py-2 text-left text-sm hover:bg-muted",
-        !selectionMode && (sessionState?.kind === "awaiting" ? "pr-48 md:pr-29" : "pr-28 md:pr-16"),
+        !selectionMode && "pr-28 md:pr-16",
         selectionMode && "pr-10",
         isActive && "bg-muted",
         selectionMode && isSelected && "bg-primary/5",

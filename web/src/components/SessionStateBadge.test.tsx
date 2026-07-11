@@ -15,13 +15,14 @@ function renderBadge(state: SessionState) {
 afterEach(cleanup);
 
 describe("SessionStateBadge — per-state rendering", () => {
-  it("renders awaiting as a 'Needs response' tag with a count-aware accessible label", () => {
+  it("renders awaiting as a compact amber marker with a count-aware accessible label", () => {
     renderBadge({ kind: "awaiting", count: 3 });
     const badge = screen.getByTestId("session-state-badge");
     expect(badge).toHaveAttribute("data-state", "awaiting");
     expect(badge).toHaveAttribute("aria-label", "3 prompts de aprovação aguardando");
-    // The approval indicator is a visible text tag (not an icon-only dot), so
-    // it reads as "Aguardando resposta" at a glance in the row.
+    // The approval indicator is a compact amber bell (so it never crowds the
+    // row title), but keeps an accessible "Aguardando resposta" label that
+    // screen readers and the collapsed-project header surface.
     expect(badge).toHaveTextContent("Aguardando resposta");
   });
 

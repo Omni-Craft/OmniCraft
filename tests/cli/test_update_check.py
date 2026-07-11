@@ -563,6 +563,10 @@ def _no_real_background_refresh(monkeypatch: pytest.MonkeyPatch) -> None:
 # A git URL with a recognizable host/path so assertions can match a
 # substring of the formatted command. Not a real endpoint — never hit.
 _FAKE_GIT_URL = "git+https://github.com/example-org/omnicraft.git"
+# The fork's source repo — where registry-shape installs are redirected so
+# the bare ``omnicraft`` name is never resolved from a public index.
+from omnicraft.update_check import _REPO_GIT_URL  # noqa: E402
+
 _FAKE_COMMIT = "abcdef1234567890abcdef1234567890abcdef12"
 
 
@@ -857,30 +861,29 @@ def test_read_wheel_info_handles_corrupt_direct_url(
         # uv + git install — recommend ``uv tool install --reinstall``
         # with the original URL so the user pulls a fresh commit.
         ("uv", _FAKE_GIT_URL, f"uv tool install --reinstall {_FAKE_GIT_URL}", True),
-        # uv + registry install — ``uv tool upgrade`` resolves from the
-        # configured index. The user doesn't need to remember the spec.
-        ("uv", None, "uv tool upgrade omnicraft", True),
+        # uv + registry install — this fork is not on any public index,
+        # so we reinstall from the source repo, never ``uv tool upgrade
+        # omnicraft`` (which would resolve a squatted PyPI name).
+        ("uv", None, f"uv tool install --reinstall {_REPO_GIT_URL}", True),
         # pip + git install — pip's ``--force-reinstall`` re-pulls the
         # spec; plain ``pip install`` would no-op because the version
         # tag (or HEAD) is the same string.
         ("pip", _FAKE_GIT_URL, f"pip install --force-reinstall {_FAKE_GIT_URL}", True),
-        # pip + registry — the canonical upgrade incantation.
-        ("pip", None, "pip install -U omnicraft", True),
+        # pip + registry — reinstall from the repo, never ``-U omnicraft``.
+        ("pip", None, f"pip install --force-reinstall {_REPO_GIT_URL}", True),
         # pipx — pipx has its own subcommands; we never recommend the
         # underlying pip command because pipx wraps the venv.
         ("pipx", _FAKE_GIT_URL, "pipx reinstall omnicraft", True),
-        ("pipx", None, "pipx upgrade omnicraft", True),
-        # poetry path — included for completeness; poetry is rare for
-        # CLI tool installs but the format is documented.
-        ("poetry", None, "poetry update omnicraft", True),
+        ("pipx", None, f"pipx reinstall {_REPO_GIT_URL}", True),
+        # poetry path — folded into the repo reinstall (pip-based).
+        ("poetry", None, f"pip install --force-reinstall {_REPO_GIT_URL}", True),
         # Unknown installer WITH a VCS URL — we know the source but
         # not the tool, so the suggestion is prose ("reinstall X from
         # <url>"), not a command. Must be runnable=False so the
         # interactive prompt doesn't offer to execute prose.
         ("custom_tool", _FAKE_GIT_URL, f"reinstall omnicraft from {_FAKE_GIT_URL}", False),
-        # Unknown installer with no source URL — honest fallback.
-        # Must also be runnable=False.
-        (None, None, "reinstall omnicraft from your original source", False),
+        # Unknown installer, no source URL — names the repo, not runnable.
+        (None, None, f"reinstall omnicraft from {_REPO_GIT_URL}", False),
     ],
 )
 def test_build_upgrade_suggestion_matrix(
@@ -950,9 +953,11 @@ def test_pip_upgrade_suggestions_use_running_interpreter(
             detected_installer="pip",
         )
 
+    # Registry-shape install redirects to the source repo (never a
+    # public-index ``omnicraft``), still via the running interpreter's pip.
     assert (
         _build_upgrade_suggestion(_info(None)).command
-        == "/opt/venv/bin/python -m pip install -U omnicraft"
+        == f"/opt/venv/bin/python -m pip install --force-reinstall {_REPO_GIT_URL}"
     )
     assert (
         _build_upgrade_suggestion(_info(_FAKE_GIT_URL)).command
@@ -995,12 +1000,17 @@ def test_wheel_check_no_nag_when_up_to_date(
     assert capsys.readouterr().err == ""
 
 
-def test_wheel_check_nags_when_newer_release_available(
+def test_wheel_check_is_disabled_for_private_fork(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Cached latest > installed → nag naming the release and ``omni upgrade``."""
+    """Even with a cached "newer release", the registry check nags nothing.
+
+    The fork is not on a public index, so the PyPI-driven notice is a
+    no-op: no matter what the cache claims, it prints nothing and never
+    stamps a notified version.
+    """
     monkeypatch.delenv("OMNICRAFT_NO_UPDATE_CHECK", raising=False)
     _point_cache_at(tmp_path, monkeypatch)
     _write_cache(
@@ -1017,15 +1027,11 @@ def test_wheel_check_nags_when_newer_release_available(
     _run_installed_wheel_check()
 
     err = _strip_rich_panel(capsys.readouterr().err)
-    # Names the new release, the installed version, and the command —
-    # proves the message pipeline runs end to end.
-    assert "omnicraft 0.2.0 is out" in err
-    assert "you have 0.1.0" in err
-    assert "omni upgrade" in err
-    # The notified version is stamped so the nag fires once per release.
+    assert err.strip() == ""
+    # No notice fired, so nothing was stamped as "notified".
     refreshed = _read_cache()
     assert refreshed is not None
-    assert refreshed.last_notified_version == "0.2.0"
+    assert not refreshed.last_notified_version
 
 
 def test_wheel_check_fires_once_per_release(
@@ -1102,16 +1108,15 @@ def test_wheel_check_bails_when_distribution_missing(
     assert capsys.readouterr().err == ""
 
 
-def test_wheel_check_refreshes_when_cache_stale(
+def test_wheel_check_never_spawns_network_refresh(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """Stale wheel cache → no nag this run, but a background refresh fires.
+    """A stale wheel cache must NOT trigger the background PyPI refresh.
 
-    The foreground never blocks on the network; it shows nothing when
-    the cached latest is stale and instead kicks off the detached
-    refresh so the *next* invocation has fresh data.
+    The registry check is disabled for this fork, so it never reaches out
+    to a public index — no matter how stale the cached data is.
     """
     monkeypatch.delenv("OMNICRAFT_NO_UPDATE_CHECK", raising=False)
     _point_cache_at(tmp_path, monkeypatch)
@@ -1133,7 +1138,7 @@ def test_wheel_check_refreshes_when_cache_stale(
     _run_installed_wheel_check()
 
     assert capsys.readouterr().err == ""
-    assert spawned == [True]
+    assert spawned == []
 
 
 def test_wheel_check_env_var_disables(
@@ -1198,7 +1203,8 @@ def test_wheel_check_ignores_clone_kind_cache(
         maybe_show_update_notice()
 
     assert capsys.readouterr().err == ""
-    assert spawned == [True]
+    # Registry check is disabled: no refresh regardless of cache shape.
+    assert spawned == []
 
 
 # ------------------------------------------------------------------
@@ -1451,20 +1457,23 @@ def test_build_upgrade_suggestion_allow_prerelease() -> None:
             detected_installer=installer,
         )
 
-    # Default (no pre) is unchanged.
-    assert _build_upgrade_suggestion(_info("uv")).command == "uv tool upgrade omnicraft"
-    # uv / pip registry installs get the right flag appended.
+    # Registry-shape installs redirect to a git reinstall from the source
+    # repo, which has no pre-release channel — so ``allow_prerelease`` is a
+    # no-op there (the command is identical with or without it).
+    assert (
+        _build_upgrade_suggestion(_info("uv")).command
+        == f"uv tool install --reinstall {_REPO_GIT_URL}"
+    )
     assert (
         _build_upgrade_suggestion(_info("uv"), allow_prerelease=True).command
-        == "uv tool upgrade omnicraft --prerelease allow"
+        == f"uv tool install --reinstall {_REPO_GIT_URL}"
     )
-    # pip pins the upgrade to the running interpreter (``<python> -m pip``)
-    # so it can't land in some other env whose ``pip`` shadows ours on PATH.
     assert (
         _build_upgrade_suggestion(_info("pip"), allow_prerelease=True).command
-        == f"{_pip_invocation()} install -U omnicraft --pre"
+        == f"{_pip_invocation()} install --force-reinstall {_REPO_GIT_URL}"
     )
-    # VCS install carries the flag too.
+    # A real VCS install still carries the flag (a tag/branch can point at
+    # a pre-release).
     assert (
         _build_upgrade_suggestion(
             _info("uv", vcs_url="git+https://x/omnicraft.git"), allow_prerelease=True
@@ -1661,7 +1670,9 @@ def test_upgrade_command_for_installed(
     monkeypatch.setattr("omnicraft.update_check._get_distribution", lambda: dist)
     suggestion = upgrade_command_for_installed()
     assert suggestion is not None
-    assert suggestion.command == "uv tool upgrade omnicraft"
+    # Registry-shape install redirects to a repo reinstall, not the
+    # squattable ``uv tool upgrade omnicraft``.
+    assert suggestion.command == f"uv tool install --reinstall {_REPO_GIT_URL}"
     assert suggestion.runnable is True
 
     monkeypatch.setattr("omnicraft.update_check._get_distribution", lambda: None)

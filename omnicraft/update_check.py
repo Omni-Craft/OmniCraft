@@ -62,6 +62,12 @@ _CACHE_FILE = _CACHE_DIR / ".update_check.json"
 _STALENESS_SECONDS = 4 * 60 * 60  # 4 hours
 _GIT_TIMEOUT_SECONDS = 5
 _DIST_NAME = "omnicraft"
+# Private fork: never published to a public package index. Auto-update
+# therefore tracks this git repo, never a registry — resolving the bare
+# ``omnicraft`` name from PyPI would install whatever a name-squatter
+# uploaded (dependency confusion). See ``_build_upgrade_suggestion`` and
+# ``_run_installed_wheel_check``.
+_REPO_GIT_URL = "git+https://github.com/editzffaleta/OmniCraft.git"
 # "Is a newer release out?" is answered against the *configured* package
 # index via the Simple Repository API (PEP 503/691) — the universal
 # protocol every index speaks (pypi.org, a corporate mirror, devpi,
@@ -255,60 +261,15 @@ def _run_installed_wheel_check() -> None:
     ``last_notified_version``. The notice points the user at
     ``omni upgrade``.
 
-    The foreground never touches the network: it reads the cached latest
-    version (written by :func:`refresh_update_cache`) and, when that
-    cache is missing or stale, kicks off a detached background refresh so
-    the *next* invocation has fresh data. This keeps the hot path at zero
-    added latency — the failure mode of the old install-age nag.
+    Disabled for this private fork: it is never published to a public
+    package index, so polling one for a newer ``omnicraft`` release is
+    both pointless (the name 404s) and a dependency-confusion risk (a
+    squatter could upload an ``omnicraft`` that the notice would nudge the
+    user to install). Update tracking is git-only — see the dev-clone path
+    in :func:`maybe_show_update_notice` and :func:`_build_upgrade_suggestion`.
+    A no-op: never reads the cache, never touches the network.
     """
-    try:
-        info = _read_installed_wheel_info()
-    except (OSError, ValueError, KeyError):
-        # Metadata parsing failed — fail open.
-        return
-    if info is None:
-        return
-    if info.is_editable:
-        # Editable install with no .git/ reachable — most likely a
-        # ``pip install -e .`` outside the source tree. The clone path
-        # would have caught this if .git/ were reachable; there's no
-        # PyPI release to compare an editable install against, so bail.
-        return
-    if info.vcs_url:
-        # A git/VCS install tracks a moving ref, not a PyPI release. Its
-        # version string (e.g. a frozen ``0.1.0`` on an unbumped ``main``)
-        # is not comparable to the latest PyPI version: the nag would fire
-        # forever even on a build that is *ahead* of the latest release,
-        # and reinstalling the ref can never change that version. The
-        # ``omni upgrade`` git path re-pulls the ref and reports commit
-        # deltas instead; the passive PyPI nag is simply wrong here.
-        return
-
-    cache = _read_cache()
-    if (
-        cache is not None
-        and cache.kind == "wheel"
-        and cache.latest_version
-        and _is_newer(cache.latest_version, info.package_version)
-        and cache.latest_version != cache.last_notified_version
-    ):
-        _print_pypi_notice(info.package_version, cache.latest_version)
-        # Stamp the version we just nagged about so the notice fires
-        # exactly once per new release (until an even newer one ships).
-        _write_cache(
-            _CacheEntry(
-                last_check_epoch=cache.last_check_epoch,
-                commits_behind=0,
-                kind="wheel",
-                latest_version=cache.latest_version,
-                last_notified_version=cache.latest_version,
-            )
-        )
-
-    # Refresh the cached "latest version" out of band when it is missing,
-    # stale, or was written by the (other-shape) clone path.
-    if cache is None or cache.kind != "wheel" or _is_stale(cache):
-        _spawn_background_refresh()
+    return
 
 
 def _is_newer(latest: str, current: str) -> bool:
@@ -1327,19 +1288,24 @@ def _build_upgrade_suggestion(
             command=f"reinstall {_DIST_NAME} from {info.vcs_url}", runnable=False
         )
 
-    # Registry install — no VCS URL recorded.
+    # No VCS URL recorded. This fork is not on any public index, so the
+    # bare ``omnicraft`` name must never be resolved from a registry (it
+    # would install whatever a name-squatter uploaded). Reinstall straight
+    # from the source repo instead — ``pre`` is dropped since a git ref has
+    # no pre-release channel.
     if installer == "uv":
-        return _UpgradeSuggestion(command=f"uv tool upgrade {_DIST_NAME}{pre}", runnable=True)
-    if installer == "pipx":
-        return _UpgradeSuggestion(command=f"pipx upgrade {_DIST_NAME}{pre}", runnable=True)
-    if installer == "pip":
         return _UpgradeSuggestion(
-            command=f"{_pip_invocation()} install -U {_DIST_NAME}{pre}", runnable=True
+            command=f"uv tool install --reinstall {_REPO_GIT_URL}", runnable=True
         )
-    if installer == "poetry":
-        return _UpgradeSuggestion(command=f"poetry update {_DIST_NAME}", runnable=True)
+    if installer == "pipx":
+        return _UpgradeSuggestion(command=f"pipx reinstall {_REPO_GIT_URL}", runnable=True)
+    if installer in ("pip", "poetry"):
+        return _UpgradeSuggestion(
+            command=f"{_pip_invocation()} install --force-reinstall {_REPO_GIT_URL}", runnable=True
+        )
+    # Unknown installer: name the repo but don't offer to run it.
     return _UpgradeSuggestion(
-        command=f"reinstall {_DIST_NAME} from your original source",
+        command=f"reinstall {_DIST_NAME} from {_REPO_GIT_URL}",
         runnable=False,
     )
 

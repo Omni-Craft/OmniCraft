@@ -9,7 +9,7 @@ from click.testing import CliRunner
 
 from omnicraft.cli import cli
 from omnicraft.host.local_server import LocalServerInfo
-from omnicraft.update_check import _InstalledWheelInfo
+from omnicraft.update_check import _REPO_GIT_URL, _InstalledWheelInfo
 
 
 def _uv_registry_info() -> _InstalledWheelInfo:
@@ -127,7 +127,7 @@ def test_upgrade_runs_installer_and_drains_first(
     assert result.exit_code == 0, result.output
     # Drain happened before the stop, before the install ran.
     assert events == ["drained", "stop(force=False)"]
-    assert ran == ["uv tool upgrade omnicraft"]
+    assert ran == [f"uv tool install --reinstall {_REPO_GIT_URL}"]
     assert "Upgraded to v0.2.0" in result.output
 
 
@@ -314,7 +314,7 @@ def test_upgrade_pre_passes_prerelease_flag_to_installer(
     result = CliRunner().invoke(cli, ["upgrade", "--pre"])
 
     assert result.exit_code == 0, result.output
-    assert ran == ["uv tool upgrade omnicraft --prerelease allow"]
+    assert ran == [f"uv tool install --reinstall {_REPO_GIT_URL}"]
 
 
 # ── ``omni update`` alias ────────────────────────────────────────────

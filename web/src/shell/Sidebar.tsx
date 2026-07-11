@@ -19,6 +19,7 @@ import {
   CheckIcon as CheckMarkIcon,
   ChartColumnIcon,
   ChevronRightIcon,
+  ClipboardCheckIcon,
   CircleStopIcon,
   FolderIcon,
   FolderInputIcon,
@@ -558,6 +559,24 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Custos e observabilidade</TooltipContent>
+              </Tooltip>
+              {/* Agent evaluations / regression suites. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Avaliações de agentes"
+                    className="rounded-full"
+                    data-testid="evals-button"
+                  >
+                    <Link to="/evals" onClick={onNavClick}>
+                      <ClipboardCheckIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Avaliações de agentes</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>

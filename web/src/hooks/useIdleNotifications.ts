@@ -41,10 +41,13 @@ import type { Conversation } from "@/hooks/useConversations";
 import {
   getNotificationPermission,
   requestNotificationPermission,
+  showApprovalNotification,
   showNotification,
 } from "@/lib/browserNotifications";
 import { isNativeShell, onNativeNotificationActivated, setBadgeCount } from "@/lib/nativeBridge";
 import { fetchLastAssistantText } from "@/lib/lastAssistantText";
+import { parseEvent } from "@/lib/sse";
+import { getSession } from "@/lib/sessionsApi";
 import {
   buildElicitationMap,
   buildStatusMap,
@@ -351,10 +354,46 @@ export function useIdleNotifications(activeConversationId?: string): void {
           clearTimeout(pending);
           timers.delete(conversation.id);
         }
-        notify(conversation, ELICITATION_BODY, navigate);
+        notifyApproval(conversation, navigate);
       }
     }
   }, [data, navigate, activeConversationId]);
+}
+
+/**
+ * Notify a pending approval with "Aprovar" / "Negar" actions so it can be
+ * answered from the notification. Fetches the session's pending elicitation id
+ * (best-effort) and shows the actionable notification; on any failure — no id,
+ * no service worker, unsupported — falls back to the plain deep-link toast.
+ */
+function notifyApproval(
+  conversation: Conversation,
+  navigate: ReturnType<typeof useNavigate>,
+): void {
+  void (async () => {
+    const path = `/c/${conversation.id}`;
+    try {
+      const session = await getSession(conversation.id);
+      const raw = session.pendingElicitations?.[0];
+      if (raw) {
+        const evt = parseEvent("response.elicitation_request", raw);
+        if (evt !== null && evt.type === "elicitation_request") {
+          const shown = await showApprovalNotification({
+            title: conversationDisplayLabel(conversation),
+            body: ELICITATION_BODY,
+            tag: `omnicraft:session:${conversation.id}`,
+            sessionId: evt.targetSessionId ?? conversation.id,
+            elicitationId: evt.elicitationId,
+            navigatePath: path,
+          });
+          if (shown) return;
+        }
+      }
+    } catch {
+      // Fall through to the plain notification below.
+    }
+    notify(conversation, ELICITATION_BODY, navigate);
+  })();
 }
 
 /** Show one notification for a session transition; click opens the chat. */

@@ -97,3 +97,72 @@ export function showNotification({
   };
   return notification;
 }
+
+export interface ApprovalNotificationParams {
+  /** Headline — the session's display label. */
+  title: string;
+  /** Secondary line, e.g. "Precisa da sua aprovação". */
+  body?: string;
+  /** Dedupe key. */
+  tag?: string;
+  /** Session id the elicitation belongs to (for the resolve fetch). */
+  sessionId: string;
+  /** The pending elicitation id to resolve on Aprovar/Negar. */
+  elicitationId: string;
+  /** In-app path opened when the body (not an action) is clicked. */
+  navigatePath: string;
+}
+
+/**
+ * Show an APPROVAL notification with "Aprovar" / "Negar" actions, so a policy
+ * pause can be answered from the notification itself.
+ *
+ * Uses the service worker's ``showNotification`` (action buttons aren't
+ * supported on page-scoped ``Notification``); the SW's ``notificationclick``
+ * handler resolves the elicitation or opens the app. Falls back to a plain
+ * deep-link notification when the SW / action support isn't available, and to
+ * the native OS toast inside the Electron shell.
+ *
+ * :returns: ``true`` when an actionable SW notification was shown.
+ */
+export async function showApprovalNotification({
+  title,
+  body,
+  tag,
+  sessionId,
+  elicitationId,
+  navigatePath,
+}: ApprovalNotificationParams): Promise<boolean> {
+  const data = { sessionId, elicitationId, url: navigatePath };
+  // Desktop shell: the native OS toast has no web actions; deep-link on click.
+  if (isNativeShell()) {
+    void nativeNotify({ title, body, navigatePath });
+    return false;
+  }
+  const canUseServiceWorker =
+    isNotificationSupported() &&
+    Notification.permission === "granted" &&
+    typeof navigator !== "undefined" &&
+    "serviceWorker" in navigator;
+  if (canUseServiceWorker) {
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      await registration.showNotification(title, {
+        body,
+        tag,
+        data,
+        requireInteraction: true,
+        actions: [
+          { action: "approve", title: "Aprovar" },
+          { action: "deny", title: "Negar" },
+        ],
+      } as NotificationOptions);
+      return true;
+    } catch {
+      // Fall through to the plain page notification below.
+    }
+  }
+  // No SW / no action support: a plain notification that deep-links on click.
+  showNotification({ title, body, tag, navigatePath });
+  return false;
+}

@@ -14,7 +14,14 @@ vi.mock("@/lib/browserNotifications", () => ({
   getNotificationPermission: vi.fn(),
   requestNotificationPermission: vi.fn(),
   showNotification: vi.fn(),
+  showApprovalNotification: vi.fn(),
 }));
+
+// A new elicitation fetches the session snapshot to read its pending
+// elicitation id, then shows an actionable notification. Mock both so the
+// elicitation path is deterministic without the network.
+vi.mock("@/lib/sessionsApi", () => ({ getSession: vi.fn() }));
+vi.mock("@/lib/sse", () => ({ parseEvent: vi.fn() }));
 
 // The native bridge is mocked so we can assert badge calls and toggle the
 // "running inside the desktop shell" discriminator without a real Electron env.
@@ -39,10 +46,13 @@ import type { Conversation } from "@/hooks/useConversations";
 import {
   getNotificationPermission,
   requestNotificationPermission,
+  showApprovalNotification,
   showNotification,
 } from "@/lib/browserNotifications";
 import { isNativeShell, onNativeNotificationActivated, setBadgeCount } from "@/lib/nativeBridge";
 import { fetchLastAssistantText } from "@/lib/lastAssistantText";
+import { getSession } from "@/lib/sessionsApi";
+import { parseEvent } from "@/lib/sse";
 import {
   __resetReadStateForTests,
   markConversationSeen,
@@ -58,6 +68,9 @@ const isNativeMock = vi.mocked(isNativeShell);
 const onNativeActivatedMock = vi.mocked(onNativeNotificationActivated);
 const setBadgeMock = vi.mocked(setBadgeCount);
 const fetchPreviewMock = vi.mocked(fetchLastAssistantText);
+const showApprovalMock = vi.mocked(showApprovalNotification);
+const getSessionMock = vi.mocked(getSession);
+const parseEventMock = vi.mocked(parseEvent);
 
 /**
  * Flush pending microtasks so the async turn-end notification path (preview
@@ -125,6 +138,18 @@ beforeEach(() => {
   onNativeActivatedMock.mockReturnValue(() => {});
   fetchPreviewMock.mockReset();
   fetchPreviewMock.mockResolvedValue(undefined);
+  // Elicitation path defaults: the session snapshot carries one pending
+  // elicitation whose id the actionable notification uses.
+  showApprovalMock.mockReset();
+  showApprovalMock.mockResolvedValue(true);
+  getSessionMock.mockReset();
+  getSessionMock.mockResolvedValue({ pendingElicitations: [{}] } as never);
+  parseEventMock.mockReset();
+  parseEventMock.mockReturnValue({
+    type: "elicitation_request",
+    elicitationId: "el_1",
+    targetSessionId: undefined,
+  } as never);
   getPermMock.mockReturnValue("granted");
   isNativeMock.mockReturnValue(false);
   // Default: window NOT focused, so attention events surface (the common
@@ -277,20 +302,30 @@ describe("useIdleNotifications turn-end transitions", () => {
 });
 
 describe("useIdleNotifications elicitation transitions", () => {
-  it("notifies when pending_elicitations_count increases (0 -> 1)", () => {
+  it("notifies when pending_elicitations_count increases (0 -> 1)", async () => {
     setConversations([conv("a", "running", 0)]);
     const { rerender } = renderHook(() => useIdleNotifications());
 
     setConversations([conv("a", "running", 1)]);
     rerender();
+    // The actionable path fetches the session snapshot, so flush the promise
+    // chain before asserting.
+    await flushPreview();
 
-    // A new elicitation on a running session is an "asks for input" event.
-    expect(showMock).toHaveBeenCalledOnce();
-    expect(showMock.mock.calls[0][0]).toMatchObject({
+    // A new elicitation surfaces as an actionable "Aprovar / Negar" toast
+    // carrying the session + elicitation ids (targetSessionId falls back to
+    // the row id when the event omits it).
+    expect(showApprovalMock).toHaveBeenCalledOnce();
+    expect(showApprovalMock.mock.calls[0][0]).toMatchObject({
       title: "a",
       body: "O agente está pedindo sua entrada.",
       tag: "omnicraft:session:a",
+      sessionId: "a",
+      elicitationId: "el_1",
+      navigatePath: "/c/a",
     });
+    // The plain toast is NOT used when the actionable one succeeds.
+    expect(showMock).not.toHaveBeenCalled();
   });
 
   it("does not notify on a fresh load with already-pending elicitations", () => {
@@ -309,15 +344,20 @@ describe("useIdleNotifications elicitation transitions", () => {
     // so there's exactly one toast.
     setConversations([conv("a", "idle", 1)]);
     rerender();
+    await flushPreview();
 
-    expect(showMock).toHaveBeenCalledOnce();
-    expect(showMock.mock.calls[0][0]).toMatchObject({
+    // The single toast is the actionable approval; the plain turn-end toast
+    // never fires.
+    expect(showApprovalMock).toHaveBeenCalledOnce();
+    expect(showApprovalMock.mock.calls[0][0]).toMatchObject({
       body: "O agente está pedindo sua entrada.",
     });
+    expect(showMock).not.toHaveBeenCalled();
 
     // Settling confirms the deferred turn-end was cancelled — still one toast.
     await settle();
-    expect(showMock).toHaveBeenCalledOnce();
+    expect(showApprovalMock).toHaveBeenCalledOnce();
+    expect(showMock).not.toHaveBeenCalled();
   });
 });
 

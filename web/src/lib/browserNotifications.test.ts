@@ -3,6 +3,7 @@ import {
   getNotificationPermission,
   isNotificationSupported,
   requestNotificationPermission,
+  showApprovalNotification,
   showNotification,
 } from "./browserNotifications";
 
@@ -151,5 +152,54 @@ describe("showNotification", () => {
     } finally {
       delete (window as unknown as Record<string, unknown>).omnicraftDesktop;
     }
+  });
+});
+
+describe("showApprovalNotification", () => {
+  it("shows an actionable SW notification with Aprovar/Negar + the ids", async () => {
+    installNotification("granted");
+    const swShow = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", {
+      serviceWorker: { ready: Promise.resolve({ showNotification: swShow }) },
+    });
+
+    const shown = await showApprovalNotification({
+      title: "sessão x",
+      body: "precisa da sua aprovação",
+      tag: "omnicraft:session:conv_a",
+      sessionId: "conv_a",
+      elicitationId: "el_1",
+      navigatePath: "/c/conv_a",
+    });
+
+    expect(shown).toBe(true);
+    expect(swShow).toHaveBeenCalledTimes(1);
+    const [title, options] = swShow.mock.calls[0];
+    expect(title).toBe("sessão x");
+    expect(options).toMatchObject({
+      body: "precisa da sua aprovação",
+      data: { sessionId: "conv_a", elicitationId: "el_1", url: "/c/conv_a" },
+      actions: [
+        { action: "approve", title: "Aprovar" },
+        { action: "deny", title: "Negar" },
+      ],
+    });
+  });
+
+  it("falls back to a plain deep-link notification when there's no service worker", async () => {
+    installNotification("granted");
+    vi.stubGlobal("navigator", {}); // no serviceWorker
+
+    const shown = await showApprovalNotification({
+      title: "sessão x",
+      sessionId: "conv_a",
+      elicitationId: "el_1",
+      navigatePath: "/c/conv_a",
+    });
+
+    expect(shown).toBe(false);
+    // The plain page Notification is used instead.
+    expect(instances).toHaveLength(1);
+    expect(instances[0].title).toBe("sessão x");
   });
 });

@@ -40,6 +40,90 @@ self.addEventListener("message", (event) => {
   if (event.data && event.data.type === "SKIP_WAITING") self.skipWaiting();
 });
 
+// ── Approval notifications ───────────────────────────────────────────
+//
+// An approval prompt (a policy pause / tool-permission request) is surfaced as
+// a notification with "Aprovar" / "Negar" actions so it can be answered without
+// opening the app. The page owns "when to notify" (useIdleNotifications) and
+// shows the notification via registration.showNotification with the ids in
+// `data`; here we act on the click.
+//
+// The verdict fetch carries cookies (`credentials: "include"`) — it resolves on
+// a cookie- or no-auth (local single-user) server. A header-auth multi-user
+// server can't be answered straight from the SW (the auth header lives in the
+// page), so there we fall back to just opening the session.
+
+async function resolveElicitation(sessionId, elicitationId, action) {
+  try {
+    await fetch(
+      `/v1/sessions/${encodeURIComponent(sessionId)}/elicitations/${encodeURIComponent(
+        elicitationId,
+      )}/resolve`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+        credentials: "include",
+      },
+    );
+  } catch {
+    // Best-effort — the session stays paused and the user can open it to act.
+  }
+}
+
+async function openApp(url) {
+  const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
+  for (const client of clients) {
+    if ("focus" in client) {
+      if ("navigate" in client && url) {
+        try {
+          await client.navigate(url);
+        } catch {
+          /* cross-origin or detached — just focus */
+        }
+      }
+      return client.focus();
+    }
+  }
+  if (self.clients.openWindow && url) return self.clients.openWindow(url);
+}
+
+self.addEventListener("notificationclick", (event) => {
+  const data = event.notification.data || {};
+  event.notification.close();
+  if (
+    (event.action === "approve" || event.action === "deny") &&
+    data.sessionId &&
+    data.elicitationId
+  ) {
+    const verdict = event.action === "approve" ? "accept" : "decline";
+    event.waitUntil(resolveElicitation(data.sessionId, data.elicitationId, verdict));
+    return;
+  }
+  event.waitUntil(openApp(data.url || "/inbox"));
+});
+
+self.addEventListener("push", (event) => {
+  // Web Push (app closed) delivery — the server-sent payload mirrors the
+  // page's approval notification. Wired now so the push follow-up is
+  // backend-only; harmless without a push subscription.
+  let payload = {};
+  try {
+    payload = event.data ? event.data.json() : {};
+  } catch {
+    payload = {};
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title || "OmniCraft", {
+      body: payload.body,
+      tag: payload.tag,
+      data: payload.data || {},
+      actions: payload.actions || [],
+      requireInteraction: Boolean(payload.requireInteraction),
+    }),
+  );
+});
+
 self.addEventListener("fetch", (event) => {
   // Respond ONLY for the version sentinel (cache-first, network fallback).
   // Everything else — navigations, hashed assets, everything — falls through

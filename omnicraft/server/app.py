@@ -63,6 +63,7 @@ from omnicraft.server.routes.default_policies import create_default_policies_rou
 from omnicraft.server.routes.harnesses import create_harnesses_router
 from omnicraft.server.routes.integrations import create_integrations_router
 from omnicraft.server.routes.observability import create_observability_router
+from omnicraft.server.routes.policy_simulate import create_policy_simulate_router
 from omnicraft.server.routes.push_routes import create_push_router
 from omnicraft.server.routes.policy_registry import create_policy_registry_router
 from omnicraft.server.routes.runner_tunnel import create_runner_tunnel_router
@@ -2005,6 +2006,11 @@ def create_app(
         create_observability_router(conversation_store, auth_provider=auth_provider),
         prefix="/v1",
         tags=["observability"],
+    )
+    app.include_router(
+        create_policy_simulate_router(conversation_store, auth_provider=auth_provider),
+        prefix="/v1",
+        tags=["policies"],
     )
     app.include_router(
         create_terminal_attach_router(

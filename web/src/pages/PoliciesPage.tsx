@@ -12,7 +12,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { PlusIcon, RefreshCwIcon, ShieldCheckIcon, TrashIcon, XIcon } from "lucide-react";
+import {
+  FlaskConicalIcon,
+  PlusIcon,
+  RefreshCwIcon,
+  ShieldCheckIcon,
+  TrashIcon,
+  XIcon,
+} from "lucide-react";
 import { PageScroll } from "@/components/PageScroll";
 import { ModelValueCombobox } from "@/components/ModelValueCombobox";
 import { Button } from "@/components/ui/button";
@@ -34,7 +41,7 @@ import {
 } from "@/hooks/useDefaultPolicies";
 import { usePolicyRegistry, type PolicyRegistryEntry } from "@/hooks/usePolicies";
 import { CLAUDE_NATIVE_MODELS } from "@/lib/claudeNativeModels";
-import { getCurrentIsAdmin, resolveIdentity } from "@/lib/identity";
+import { authenticatedFetch, getCurrentIsAdmin, resolveIdentity } from "@/lib/identity";
 import { useServerInfo } from "@/lib/CapabilitiesContext";
 import { coercePolicyParams } from "@/lib/policyParams";
 
@@ -429,6 +436,148 @@ function AddDefaultPolicyDialog({
 // Main page
 // ---------------------------------------------------------------------------
 
+// ── Simulation: dry-run a policy against a past session ──────────────
+
+interface SimResult {
+  tool: string;
+  result: "ALLOW" | "ASK" | "DENY";
+  reason: string | null;
+}
+interface SimData {
+  results: SimResult[];
+  summary: { ALLOW: number; ASK: number; DENY: number };
+  tool_call_count: number;
+}
+const RESULT_TONE: Record<string, string> = {
+  ALLOW: "#30a46c",
+  ASK: "#e3a008",
+  DENY: "#e5484d",
+};
+
+function SimulatePolicyDialog({ policy, onClose }: { policy: DefaultPolicy; onClose: () => void }) {
+  const [sessions, setSessions] = useState<{ id: string; title: string }[]>([]);
+  const [sessionId, setSessionId] = useState("");
+  const [data, setData] = useState<SimData | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    // kind=any so sub-agent sessions (where most tool calls happen) are pickable.
+    void authenticatedFetch("/v1/sessions?limit=80&kind=any")
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((j: { data?: Array<{ id: string; title?: string; agent_name?: string }> }) =>
+        setSessions(
+          (j.data ?? []).map((s) => ({ id: s.id, title: s.title || s.agent_name || s.id })),
+        ),
+      )
+      .catch(() => {});
+  }, []);
+
+  const run = async () => {
+    if (!sessionId) return;
+    setBusy(true);
+    setError(null);
+    setData(null);
+    try {
+      const res = await authenticatedFetch("/v1/policies/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          handler: policy.handler,
+          factory_params: policy.factory_params ?? undefined,
+          session_id: sessionId,
+        }),
+      });
+      const j = (await res.json().catch(() => ({}))) as SimData & { error?: { message?: string } };
+      if (!res.ok) {
+        setError(j?.error?.message ?? "Falha na simulação.");
+        return;
+      }
+      setData(j);
+    } catch {
+      setError("Falha de rede na simulação.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Simular: {policy.name}</DialogTitle>
+          <DialogDescription>
+            Dry-run desta política contra os tool calls de uma sessão passada — sem afetar nada.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center gap-2">
+          <select
+            value={sessionId}
+            onChange={(e) => setSessionId(e.target.value)}
+            className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+          >
+            <option value="">Escolha uma sessão…</option>
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.title}
+              </option>
+            ))}
+          </select>
+          <Button size="sm" disabled={!sessionId || busy} onClick={() => void run()}>
+            {busy ? "Simulando…" : "Simular"}
+          </Button>
+        </div>
+        {error && <p className="text-sm text-destructive">{error}</p>}
+        {data && (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              {(["ALLOW", "ASK", "DENY"] as const).map((k) => (
+                <span
+                  key={k}
+                  className="rounded-md px-2 py-1 tabular-nums"
+                  style={{ backgroundColor: `${RESULT_TONE[k]}22`, color: RESULT_TONE[k] }}
+                >
+                  {k}: {data.summary[k]}
+                </span>
+              ))}
+              <span className="ml-auto text-xs text-muted-foreground">
+                {data.tool_call_count} tool calls
+              </span>
+            </div>
+            <div className="max-h-72 overflow-auto rounded-md border border-border">
+              {data.results.length === 0 ? (
+                <p className="p-3 text-sm text-muted-foreground">Essa sessão não teve tool calls.</p>
+              ) : (
+                <ul className="divide-y divide-border/60">
+                  {data.results.map((r, i) => (
+                    <li key={i} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                      <span
+                        className="w-12 shrink-0 text-xs font-semibold"
+                        style={{ color: RESULT_TONE[r.result] }}
+                      >
+                        {r.result}
+                      </span>
+                      <span className="truncate font-mono text-xs">{r.tool}</span>
+                      {r.reason && (
+                        <span
+                          className="ml-auto max-w-[45%] truncate text-xs text-muted-foreground"
+                          title={r.reason}
+                        >
+                          {r.reason}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function PoliciesPage() {
   const info = useServerInfo();
   // Plain header/single-user mode: no auth endpoints exist. server_version
@@ -446,6 +595,7 @@ export function PoliciesPage() {
   const deletePolicy = useDeleteDefaultPolicy();
   const [addOpen, setAddOpen] = useState(false);
   const [deleteCandidate, setDeleteCandidate] = useState<DefaultPolicy | null>(null);
+  const [simulateCandidate, setSimulateCandidate] = useState<DefaultPolicy | null>(null);
   const [pendingAction, setPendingAction] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
 
@@ -561,6 +711,15 @@ export function PoliciesPage() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      className="size-8 text-muted-foreground hover:text-foreground"
+                      title="Simular política contra uma sessão"
+                      onClick={() => setSimulateCandidate(p)}
+                    >
+                      <FlaskConicalIcon className="size-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="size-8 text-muted-foreground hover:text-destructive"
                       title="Remover política"
                       onClick={() => setDeleteCandidate(p)}
@@ -611,6 +770,13 @@ export function PoliciesPage() {
         open={addOpen}
         onOpenChange={setAddOpen}
       />
+
+      {simulateCandidate && (
+        <SimulatePolicyDialog
+          policy={simulateCandidate}
+          onClose={() => setSimulateCandidate(null)}
+        />
+      )}
 
       {/* Delete confirmation */}
       <Dialog

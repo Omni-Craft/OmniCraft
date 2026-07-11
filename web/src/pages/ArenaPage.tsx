@@ -43,6 +43,50 @@ function branchSlug(name: string): string {
     .slice(0, 24);
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// Per-harness terminal flags that let a racer edit files without stopping for
+// approval on every change. Safe for an arena because each racer works in its
+// OWN isolated git worktree — nothing lands on the base branch until the user
+// promotes a winner. Harnesses not listed here keep their normal approval
+// prompts (the user approves from the racer's session). Keyed by agent name.
+const AUTO_ACCEPT_ARGS: Record<string, string[]> = {
+  "claude-native-ui": ["--permission-mode", "acceptEdits"],
+  "codex-native-ui": ["--sandbox", "workspace-write", "--ask-for-approval", "never"],
+};
+
+// A native terminal harness (claude-native / codex-native) only picks up a
+// prompt typed into its terminal AFTER its forwarder has subscribed — a
+// message stored before that (as initial_items, or an early event) is read as
+// already-seen history and never injected. So for each racer we wait for the
+// runner to attach, give the native CLI's own startup a moment to settle
+// (Codex's MCP round takes ~25s), then deliver the prompt as a live event.
+const NATIVE_WARMUP_MS = 25_000;
+
+async function deliverPromptWhenReady(sessionId: string, text: string): Promise<void> {
+  const base = `/v1/sessions/${encodeURIComponent(sessionId)}`;
+  for (let i = 0; i < 60; i++) {
+    try {
+      const res = await authenticatedFetch(base);
+      if (res.ok && ((await res.json()) as { runner_id?: string }).runner_id) break;
+    } catch {
+      /* transient — keep polling */
+    }
+    await sleep(1500);
+  }
+  await sleep(NATIVE_WARMUP_MS);
+  await authenticatedFetch(`${base}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      type: "message",
+      data: { role: "user", content: [{ type: "input_text", text }] },
+    }),
+  }).catch(() => {
+    /* best-effort; the racer is still openable and can be prompted by hand */
+  });
+}
+
 function statusTone(status: string | null | undefined): { dot: string; label: string } {
   switch (status) {
     case "in_progress":
@@ -76,10 +120,7 @@ function ArenaSetup() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const harnesses = useMemo(
-    () => (agents ?? []).filter((a) => isNativeCodingAgent(a)),
-    [agents],
-  );
+  const harnesses = useMemo(() => (agents ?? []).filter((a) => isNativeCodingAgent(a)), [agents]);
   const onlineHosts = useMemo(
     () => (hosts ?? []).filter((h: Host) => h.status === "online"),
     [hosts],
@@ -135,32 +176,35 @@ function ArenaSetup() {
             workspace: ws,
             git: { branch_name: `arena-${shortId}-${branchSlug(agent.name)}`, base_branch: base },
             labels,
-            initial_items: [
-              {
-                type: "message",
-                data: { role: "user", content: [{ type: "input_text", text: prompt.trim() }] },
-              },
-            ],
+            terminal_launch_args: AUTO_ACCEPT_ARGS[agent.name],
           }),
         }).then(async (res) => {
           if (!res.ok) throw new Error(`${nativeDisplayNameForAgent(agent)}: ${res.status}`);
+          const j = (await res.json()) as { id: string };
+          return j.id;
         });
       }),
     );
 
-    const failures = results.filter((r) => r.status === "rejected");
-    if (failures.length === racers.length) {
+    const created = results
+      .filter((r): r is PromiseFulfilledResult<string> => r.status === "fulfilled")
+      .map((r) => r.value);
+    const failed = racers.length - created.length;
+    if (created.length === 0) {
       setSubmitting(false);
-      setError(
-        `Nenhum racer pôde ser criado. ${(failures[0] as PromiseRejectedResult).reason}`,
-      );
+      const first = results.find((r) => r.status === "rejected") as
+        | PromiseRejectedResult
+        | undefined;
+      setError(`Nenhum racer pôde ser criado. ${first?.reason ?? ""}`);
       return;
     }
-    if (failures.length > 0) {
-      setError(
-        `${failures.length} de ${racers.length} racers falharam; abrindo os que subiram.`,
-      );
+    if (failed > 0) {
+      setError(`${failed} de ${racers.length} racers falharam; abrindo os que subiram.`);
     }
+    // Deliver the shared prompt to each racer once its runner is up (see
+    // deliverPromptWhenReady). Fire-and-forget so navigation isn't blocked.
+    const promptText = prompt.trim();
+    created.forEach((id) => void deliverPromptWhenReady(id, promptText));
     navigate(`/arena/${arenaId}`);
   };
 
@@ -169,8 +213,8 @@ function ArenaSetup() {
       <header className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold">Arena de agentes</h1>
         <p className="text-sm opacity-70">
-          Mande o <b>mesmo prompt</b> para vários harnesses ao mesmo tempo, cada um no seu
-          worktree isolado, e compare os resultados lado a lado.
+          Mande o <b>mesmo prompt</b> para vários harnesses ao mesmo tempo, cada um no seu worktree
+          isolado, e compare os resultados lado a lado.
         </p>
       </header>
 
@@ -231,7 +275,9 @@ function ArenaSetup() {
                     ? "border-transparent text-black"
                     : "border-white/15 hover:border-white/30"
                 }`}
-                style={hostId === h.host_id ? { backgroundColor: "var(--brand-accent)" } : undefined}
+                style={
+                  hostId === h.host_id ? { backgroundColor: "var(--brand-accent)" } : undefined
+                }
               >
                 {h.name}
               </button>
@@ -276,9 +322,7 @@ function ArenaSetup() {
         >
           {submitting ? "Criando racers…" : `Iniciar arena (${selected.size})`}
         </button>
-        <span className="text-xs opacity-60">
-          Cada competidor roda num worktree git próprio.
-        </span>
+        <span className="text-xs opacity-60">Cada competidor roda num worktree git próprio.</span>
       </div>
     </div>
   );
@@ -409,7 +453,10 @@ function RacerCard({ racer, onOpen }: { racer: RacerSession; onOpen: (id: string
           {branch !== undefined && <span className="ml-1.5 opacity-40">#{Number(branch) + 1}</span>}
         </span>
         <span className="flex shrink-0 items-center gap-1.5 text-xs opacity-80">
-          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: tone.dot }} />
+          <span
+            className="inline-block h-2 w-2 rounded-full"
+            style={{ backgroundColor: tone.dot }}
+          />
           {tone.label}
         </span>
       </div>
@@ -536,9 +583,7 @@ function ArenaCompare({ arenaId }: { arenaId: string }) {
   if (racers.length === 0) {
     return (
       <div className="mx-auto flex max-w-md flex-col items-center gap-4 px-6 py-16 text-center">
-        <p className="text-sm opacity-70">
-          Nenhum competidor encontrado para esta arena.
-        </p>
+        <p className="text-sm opacity-70">Nenhum competidor encontrado para esta arena.</p>
         <button
           type="button"
           onClick={() => navigate("/arena")}
@@ -555,9 +600,7 @@ function ArenaCompare({ arenaId }: { arenaId: string }) {
     <div className="mx-auto flex max-w-6xl flex-col gap-5 px-6 py-8">
       <header className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-xl font-semibold">
-            Arena · {racers.length} competidores
-          </h1>
+          <h1 className="text-xl font-semibold">Arena · {racers.length} competidores</h1>
           <button
             type="button"
             onClick={() => navigate("/arena")}

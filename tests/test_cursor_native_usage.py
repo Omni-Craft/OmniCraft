@@ -330,10 +330,17 @@ class TestForwardLoop:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         usage.record_usage_payload(tmp_path, _TURN1)
-        client = await _run_loop_until(monkeypatch, tmp_path, _usage_posts)
-        # Let several more polls run; with no new turns there must be no 2nd
-        # usage POST and no further idle edge.
-        await asyncio.sleep(0.1)
+        # Wait for BOTH the usage POST and the idle edge to land (they can
+        # arrive on different poll cycles). The loop keeps polling at 0.01s
+        # while we wait, so an unchanged state that wrongly triggered a 2nd
+        # usage POST or a second idle edge would show up here — the ``== 1``
+        # assertions catch it. (A fixed ``sleep`` here was flaky on loaded CI
+        # runners, where the idle edge hadn't posted yet.)
+        client = await _run_loop_until(
+            monkeypatch,
+            tmp_path,
+            lambda c: bool(_usage_posts(c)) and bool(_idle_posts(c)),
+        )
         assert len(_usage_posts(client)) == 1
         assert len(_idle_posts(client)) == 1
 

@@ -38,6 +38,20 @@ def test_parse_minimal(agent_dir: Path) -> None:
     assert spec.sub_agents == []
 
 
+def test_parse_normalizes_legacy_omnigent_executor_type(tmp_path: Path) -> None:
+    """Back-compat: agent bundles / sessions stored before the omnigent→omnicraft
+    rename carry ``executor.type: omnigent``. They must load as ``omnicraft`` so
+    old data keeps working without a data migration."""
+    config = {
+        "spec_version": 1,
+        "name": "legacy-agent",
+        "executor": {"type": "omnigent", "config": {"harness": "claude-sdk"}},
+    }
+    (tmp_path / "config.yaml").write_text(yaml.dump(config))
+    spec = parse(tmp_path)
+    assert spec.executor.type == "omnicraft"
+
+
 def test_parse_missing_config_yaml(tmp_path: Path) -> None:
     with pytest.raises(FileNotFoundError, match=r"config.yaml not found"):
         parse(tmp_path)

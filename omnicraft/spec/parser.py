@@ -572,6 +572,12 @@ def _parse_executor(
     if raw is None:
         return ExecutorSpec()
     etype = str(raw.get("type", "omnicraft"))
+    # Back-compat for the omnigent→omnicraft rename: agent bundles and
+    # sessions stored before the rename carry ``executor.type: omnigent``.
+    # Normalize it here so old data loads without a data migration; the
+    # legacy name is never surfaced (the runtime only ever sees "omnicraft").
+    if etype == "omnigent":
+        etype = "omnicraft"
     # ``config`` is a free-form dict[str, Any] owned by each executor
     # type. Scalar values are coerced to strings so YAML booleans /
     # numbers round-trip as their string form (the omnicraft

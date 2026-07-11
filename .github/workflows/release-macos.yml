@@ -1,0 +1,95 @@
+# Builds the macOS desktop app on a GitHub-hosted macOS runner and attaches
+# the artifacts to a Release — so packaging never depends on a local machine.
+#
+# The build is UNSIGNED (ad-hoc), since this private fork has no Apple Developer
+# identity. On Apple Silicon an unsigned app is killed on launch, so we ad-hoc
+# sign the bundle inside-out (frameworks/helpers first, then the app) — enough
+# to run locally after the user clears quarantine (`xattr -cr OmniCraft.app`)
+# or right-click → Open. It is NOT notarized.
+name: Release macOS app
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach artifacts to (e.g. v0.5.0)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-mac:
+    runs-on: macos-14 # Apple Silicon (arm64)
+    timeout-minutes: 40
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Electron build dependencies
+        working-directory: web/electron
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      # Build only the .app (target: dir). We ad-hoc sign it in the next step
+      # and zip the SIGNED bundle — packaging a dmg/zip here would capture the
+      # unsigned app (electron-builder packages before our signing step runs).
+      - name: Package the macOS app (unsigned)
+        working-directory: web/electron
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder --mac -c.mac.target=dir -c.mac.identity=null
+
+      - name: Ad-hoc sign the app bundle (inside-out)
+        working-directory: web/electron/dist/mac-arm64
+        run: |
+          APP="OmniCraft.app"
+          FWD="$APP/Contents/Frameworks"
+          sign() { codesign --force --sign - --timestamp=none "$1"; }
+          xattr -cr "$APP"
+          FW="$FWD/Electron Framework.framework"
+          for lib in "$FW/Versions/A/Libraries/"*.dylib; do sign "$lib"; done
+          sign "$FW"
+          for f in Mantle ReactiveObjC Squirrel; do
+            [ -d "$FWD/$f.framework" ] && sign "$FWD/$f.framework"
+          done
+          for h in "$FWD/"*.app; do sign "$h"; done
+          sign "$APP"
+          codesign --verify --deep --strict "$APP"
+          echo "Signed and verified $APP"
+
+      - name: Zip the signed .app
+        working-directory: web/electron/dist/mac-arm64
+        run: ditto -c -k --keepParent OmniCraft.app OmniCraft-macos-arm64.zip
+
+      - name: Collect artifacts
+        run: |
+          mkdir -p out
+          cp web/electron/dist/mac-arm64/OmniCraft-macos-arm64.zip out/
+          ls -la out
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: omnicraft-macos-arm64
+          path: out/*
+          if-no-files-found: error
+
+      - name: Attach to Release (tag builds only)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          fail_on_unmatched_files: false
+          body: |
+            Build **não assinado** (ad-hoc) do OmniCraft.app para macOS (Apple Silicon).
+
+            Após baixar: `xattr -cr OmniCraft.app` ou clique-direito → Abrir na
+            primeira vez (o app não é notarizado).

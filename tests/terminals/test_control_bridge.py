@@ -251,10 +251,6 @@ async def test_control_bridge_coalesces_burst_when_send_lags() -> None:
 
 @pytest.mark.skipif(not _HAS_TMUX, reason="tmux not installed")
 @pytest.mark.asyncio
-# Timing-sensitive: on loaded shared CI runners the 2 MB burst drain
-# intermittently drops a few KB of tail; keep it informative locally
-# without blocking CI.
-@pytest.mark.xfail(strict=False, reason="flaky under loaded CI runners (burst-drain timing)")
 async def test_control_bridge_burst_then_exit_delivers_full_tail() -> None:
     """A burst-then-exit program's tail isn't dropped when %exit races the drain.
 
@@ -288,11 +284,22 @@ async def test_control_bridge_burst_then_exit_delivers_full_tail() -> None:
             ws, socket_path=str(sock), tmux_target=target, read_only=False
         )
     )
-    # Wait past attach + burst + the bounded drain (coalesced to ~100 frames of
-    # ~20 KB, so ~0.5 s of 5 ms sends; generous margin below).
-    await asyncio.sleep(10.0)
 
-    total_y = sum(f.count(b"Y") for f in ws.sent)
+    # Poll until the full payload has drained to the browser, up to a generous
+    # ceiling — a fixed sleep raced the drain on loaded CI runners and lost a
+    # few KB of tail. This still catches the real regression (cancel-on-reader-
+    # done dropped ~35%): that never reaches payload_len, so it times out and
+    # the byte assertion below fails.
+    def _total_y() -> int:
+        return sum(f.count(b"Y") for f in ws.sent)
+
+    deadline = asyncio.get_running_loop().time() + 30.0
+    while asyncio.get_running_loop().time() < deadline:
+        if _total_y() >= payload_len:
+            break
+        await asyncio.sleep(0.1)
+
+    total_y = _total_y()
     assert total_y >= payload_len, (
         f"burst-then-exit dropped the tail: got {total_y} Y bytes of {payload_len} "
         "— forwarder was cancelled before draining the queued backlog"

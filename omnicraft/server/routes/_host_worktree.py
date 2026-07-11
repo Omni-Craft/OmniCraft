@@ -17,9 +17,12 @@ from dataclasses import dataclass
 from omnicraft.host.frames import (
     HostCreateWorktreeFrame,
     HostGitDiffFrame,
+    HostListSnapshotsFrame,
     HostListWorktreesFrame,
     HostMergeWorktreeFrame,
     HostRemoveWorktreeFrame,
+    HostRestoreSnapshotFrame,
+    HostSnapshotWorktreeFrame,
     encode_host_frame,
 )
 from omnicraft.server.host_registry import HostConnection, HostRegistry
@@ -369,3 +372,97 @@ async def merge_worktree_on_host(
             f"worktree merge failed: {result.get('error') or 'host reported no detail'}"
         )
     return {"outcome": result.get("outcome"), "detail": result.get("detail")}
+
+
+async def snapshot_worktree_on_host(
+    *,
+    host_registry: HostRegistry,
+    host_conn: HostConnection,
+    worktree_path: str,
+    label: str,
+) -> dict[str, object]:
+    """Send a ``host.snapshot_worktree`` frame and await the created snapshot."""
+    request_id = secrets.token_hex(8)
+    frame = encode_host_frame(
+        HostSnapshotWorktreeFrame(
+            request_id=request_id, worktree_path=worktree_path, label=label
+        )
+    )
+    result = await _await_host_worktree_result(
+        host_registry=host_registry,
+        host_conn=host_conn,
+        pending=host_conn.pending_snapshot_worktrees,
+        request_id=request_id,
+        frame=frame,
+        op="worktree snapshot",
+    )
+    if result.get("status") != "ok":
+        raise WorktreeProxyError(
+            f"snapshot failed: {result.get('error') or 'host reported no detail'}"
+        )
+    snapshot = result.get("snapshot")
+    if not isinstance(snapshot, dict):
+        raise WorktreeProxyError("host returned an incomplete snapshot result")
+    return snapshot
+
+
+async def list_snapshots_on_host(
+    *,
+    host_registry: HostRegistry,
+    host_conn: HostConnection,
+    worktree_path: str,
+) -> list[dict[str, object]]:
+    """Send a ``host.list_snapshots`` frame and await the checkpoint list."""
+    request_id = secrets.token_hex(8)
+    frame = encode_host_frame(
+        HostListSnapshotsFrame(request_id=request_id, worktree_path=worktree_path)
+    )
+    result = await _await_host_worktree_result(
+        host_registry=host_registry,
+        host_conn=host_conn,
+        pending=host_conn.pending_list_snapshots,
+        request_id=request_id,
+        frame=frame,
+        op="snapshot listing",
+    )
+    if result.get("status") != "ok":
+        raise WorktreeProxyError(
+            f"snapshot listing failed: {result.get('error') or 'host reported no detail'}"
+        )
+    snapshots = result.get("snapshots")
+    if not isinstance(snapshots, list):
+        raise WorktreeProxyError("host returned an incomplete snapshot list")
+    return snapshots
+
+
+async def restore_snapshot_on_host(
+    *,
+    host_registry: HostRegistry,
+    host_conn: HostConnection,
+    worktree_path: str,
+    snapshot_id: str,
+    auto_backup: bool = True,
+) -> dict[str, object]:
+    """Send a ``host.restore_snapshot`` frame and await the outcome."""
+    request_id = secrets.token_hex(8)
+    frame = encode_host_frame(
+        HostRestoreSnapshotFrame(
+            request_id=request_id,
+            worktree_path=worktree_path,
+            snapshot_id=snapshot_id,
+            auto_backup=auto_backup,
+        )
+    )
+    result = await _await_host_worktree_result(
+        host_registry=host_registry,
+        host_conn=host_conn,
+        pending=host_conn.pending_restore_snapshots,
+        request_id=request_id,
+        frame=frame,
+        op="snapshot restore",
+    )
+    if result.get("status") != "ok":
+        raise WorktreeProxyError(
+            f"snapshot restore failed: {result.get('error') or 'host reported no detail'}"
+        )
+    return {"restored": result.get("restored"), "backup_id": result.get("backup_id")}

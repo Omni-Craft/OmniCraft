@@ -8,8 +8,12 @@ designs/SESSION_GIT_WORKTREE.md.
 
 from __future__ import annotations
 
+import os
 import re
+import secrets
 import subprocess
+import tempfile
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -102,6 +106,7 @@ def _run_git(
     args: list[str],
     *,
     cwd: str,
+    env: dict[str, str] | None = None,
 ) -> subprocess.CompletedProcess[str]:
     """Run a git command, returning the completed process.
 
@@ -110,6 +115,9 @@ def _run_git(
         shell parsing occurs.
     :param cwd: Working directory to run git in, e.g.
         ``"/Users/alice/myrepo"``.
+    :param env: Full environment for the subprocess (e.g. a scratch
+        ``GIT_INDEX_FILE`` for snapshot plumbing). ``None`` inherits the
+        host process environment.
     :returns: The completed process with captured text stdout/stderr.
     :raises WorktreeError: If git is not installed, or the command
         exceeds :data:`_GIT_TIMEOUT_S`.
@@ -122,6 +130,7 @@ def _run_git(
             text=True,
             timeout=_GIT_TIMEOUT_S,
             check=False,
+            env=env,
         )
     except FileNotFoundError as exc:
         raise WorktreeError("git is not installed on the host") from exc
@@ -615,3 +624,227 @@ def merge_worktree(
         return MergeResult(outcome="merged", detail=merge.stdout.strip() or None)
     _run_git(["merge", "--abort"], cwd=main_repo)
     return MergeResult(outcome="conflict", detail=(merge.stdout or merge.stderr).strip() or None)
+
+
+# ── Worktree snapshots (checkpoint / restore safety net) ─────────────
+
+# Snapshots live under a private ref namespace so they never appear as
+# branches, never move HEAD, and are cheap (they share objects with the repo).
+_SNAPSHOT_REF_PREFIX = "refs/omnicraft/snapshots/"
+_SNAPSHOT_ID_RE = re.compile(r"^[0-9A-Za-z._-]+$")
+_SNAPSHOT_IDENTITY = {
+    "GIT_AUTHOR_NAME": "OmniCraft",
+    "GIT_AUTHOR_EMAIL": "snapshots@omnicraft.local",
+    "GIT_COMMITTER_NAME": "OmniCraft",
+    "GIT_COMMITTER_EMAIL": "snapshots@omnicraft.local",
+}
+
+
+@dataclass
+class SnapshotInfo:
+    """One saved worktree checkpoint.
+
+    :param id: Ref segment / handle, e.g. ``"1783000000-ab12cd"``. The
+        leading number is the creation epoch, so ids sort chronologically.
+    :param commit: The snapshot commit sha whose tree is the saved state.
+    :param label: The user's note, e.g. ``"before the big refactor"``.
+    :param created_at: Creation time, epoch seconds.
+    """
+
+    id: str
+    commit: str
+    label: str
+    created_at: int
+
+
+def _require_worktree(worktree_path: str) -> None:
+    """Raise unless ``worktree_path`` is an existing git work tree."""
+    if not Path(worktree_path).is_dir():
+        raise WorktreeError(f"path is not a directory: {worktree_path}")
+    if _run_git(["rev-parse", "--is-inside-work-tree"], cwd=worktree_path).returncode != 0:
+        raise WorktreeError(f"not a git worktree: {worktree_path}")
+
+
+def snapshot_worktree(*, worktree_path: str, label: str = "") -> SnapshotInfo:
+    """Capture the FULL current worktree state as a restorable checkpoint.
+
+    Records tracked edits, staged changes, and untracked (non-ignored) files
+    into a commit under a private ref — without touching HEAD, the branch, or
+    the working index (a scratch ``GIT_INDEX_FILE`` does the staging). The
+    commit shares objects with the repo, so a snapshot is cheap.
+
+    :param worktree_path: Absolute path of the worktree to checkpoint.
+    :param label: Optional human note stored in the snapshot.
+    :returns: The created :class:`SnapshotInfo`.
+    :raises WorktreeError: If the path isn't a git worktree or git fails.
+    """
+    _require_worktree(worktree_path)
+    head = _run_git(["rev-parse", "--verify", "-q", "HEAD"], cwd=worktree_path)
+    has_head = head.returncode == 0
+
+    with tempfile.TemporaryDirectory() as scratch:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(scratch) / "index")}
+        if has_head:
+            seed = _run_git(["read-tree", "HEAD"], cwd=worktree_path, env=env)
+            if seed.returncode != 0:
+                raise _git_error("git read-tree failed", seed)
+        added = _run_git(["add", "-A"], cwd=worktree_path, env=env)
+        if added.returncode != 0:
+            raise _git_error("git add failed", added)
+        written = _run_git(["write-tree"], cwd=worktree_path, env=env)
+        if written.returncode != 0:
+            raise _git_error("git write-tree failed", written)
+        tree = written.stdout.strip()
+        commit_args = ["commit-tree", tree, "-m", f"snapshot: {label}" if label else "snapshot"]
+        if has_head:
+            commit_args += ["-p", head.stdout.strip()]
+        committed = _run_git(
+            commit_args, cwd=worktree_path, env={**env, **_SNAPSHOT_IDENTITY}
+        )
+        if committed.returncode != 0:
+            raise _git_error("git commit-tree failed", committed)
+        commit = committed.stdout.strip()
+
+    created = int(time.time())
+    snap_id = f"{created}-{secrets.token_hex(3)}"
+    updated = _run_git(
+        ["update-ref", f"{_SNAPSHOT_REF_PREFIX}{snap_id}", commit], cwd=worktree_path
+    )
+    if updated.returncode != 0:
+        raise _git_error("git update-ref failed", updated)
+    return SnapshotInfo(id=snap_id, commit=commit, label=label, created_at=created)
+
+
+def list_snapshots(*, worktree_path: str) -> list[SnapshotInfo]:
+    """List a worktree's checkpoints, newest first.
+
+    :param worktree_path: Absolute path of the worktree.
+    :returns: The snapshots, most recent first.
+    :raises WorktreeError: If the path isn't a git worktree or git fails.
+    """
+    _require_worktree(worktree_path)
+    # A NUL between fields + newline between records survives labels with spaces.
+    result = _run_git(
+        [
+            "for-each-ref",
+            "--sort=-refname",
+            "--format=%(refname)%00%(objectname)%00%(subject)",
+            _SNAPSHOT_REF_PREFIX,
+        ],
+        cwd=worktree_path,
+    )
+    if result.returncode != 0:
+        raise _git_error("git for-each-ref failed", result)
+    snapshots: list[SnapshotInfo] = []
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        refname, commit, subject = line.split("\x00")
+        snap_id = refname[len(_SNAPSHOT_REF_PREFIX) :]
+        label = subject[len("snapshot: ") :] if subject.startswith("snapshot: ") else ""
+        try:
+            created = int(snap_id.split("-", 1)[0])
+        except ValueError:
+            created = 0
+        snapshots.append(
+            SnapshotInfo(id=snap_id, commit=commit, label=label, created_at=created)
+        )
+    return snapshots
+
+
+@dataclass
+class RestoreResult:
+    """Outcome of restoring a snapshot.
+
+    :param restored: The snapshot id that was applied.
+    :param backup_id: The id of the auto-snapshot taken of the pre-restore
+        state (so the restore itself is undoable), or ``None`` if skipped.
+    """
+
+    restored: str
+    backup_id: str | None = None
+
+
+def restore_snapshot(
+    *, worktree_path: str, snapshot_id: str, auto_backup: bool = True
+) -> RestoreResult:
+    """Reset the worktree to exactly match a saved checkpoint.
+
+    Snapshot files are rewritten, files created after the snapshot are removed,
+    and files deleted since are recreated — an exact match. The current branch
+    and HEAD are untouched (the restored state shows as ordinary uncommitted
+    changes). By default the pre-restore state is itself snapshotted first, so
+    a restore can be undone.
+
+    :param worktree_path: Absolute path of the worktree.
+    :param snapshot_id: The snapshot handle from :func:`list_snapshots`.
+    :param auto_backup: When ``True``, snapshot the current state first.
+    :returns: A :class:`RestoreResult`.
+    :raises WorktreeError: If the id is invalid/unknown or git fails.
+    """
+    _require_worktree(worktree_path)
+    if not _SNAPSHOT_ID_RE.match(snapshot_id):
+        raise WorktreeError(f"invalid snapshot id: {snapshot_id!r}")
+    ref = f"{_SNAPSHOT_REF_PREFIX}{snapshot_id}"
+    resolved = _run_git(["rev-parse", "--verify", "-q", ref], cwd=worktree_path)
+    if resolved.returncode != 0:
+        raise WorktreeError(f"snapshot not found: {snapshot_id}")
+    commit = resolved.stdout.strip()
+
+    backup: SnapshotInfo | None = None
+    if auto_backup:
+        backup = snapshot_worktree(worktree_path=worktree_path, label="auto: antes de restaurar")
+
+    # Files in the snapshot tree.
+    listed = _run_git(["ls-tree", "-r", "-z", "--name-only", commit], cwd=worktree_path)
+    if listed.returncode != 0:
+        raise _git_error("git ls-tree failed", listed)
+    snap_files = {f for f in listed.stdout.split("\x00") if f}
+
+    # Files present now (tracked + untracked non-ignored) — anything here but
+    # NOT in the snapshot was created after it and must go.
+    tracked = _run_git(["ls-files", "-z"], cwd=worktree_path).stdout.split("\x00")
+    untracked = _run_git(
+        ["ls-files", "-z", "--others", "--exclude-standard"], cwd=worktree_path
+    ).stdout.split("\x00")
+    current = {f for f in [*tracked, *untracked] if f}
+    for rel in current - snap_files:
+        target = Path(worktree_path) / rel
+        try:
+            target.unlink()
+        except (FileNotFoundError, IsADirectoryError, PermissionError):
+            pass
+
+    # Write every snapshot file back into the worktree (scratch index again).
+    with tempfile.TemporaryDirectory() as scratch:
+        env = {**os.environ, "GIT_INDEX_FILE": str(Path(scratch) / "index")}
+        read = _run_git(["read-tree", commit], cwd=worktree_path, env=env)
+        if read.returncode != 0:
+            raise _git_error("git read-tree failed", read)
+        out = _run_git(["checkout-index", "-a", "-f"], cwd=worktree_path, env=env)
+        if out.returncode != 0:
+            raise _git_error("git checkout-index failed", out)
+
+    # Point the real index back at HEAD so the restored state reads as ordinary
+    # unstaged changes (intuitive: "your uncommitted work is back").
+    if _run_git(["rev-parse", "--verify", "-q", "HEAD"], cwd=worktree_path).returncode == 0:
+        _run_git(["read-tree", "HEAD"], cwd=worktree_path)
+
+    return RestoreResult(restored=snapshot_id, backup_id=backup.id if backup else None)
+
+
+def delete_snapshot(*, worktree_path: str, snapshot_id: str) -> None:
+    """Delete a checkpoint ref (objects are reclaimed by a later ``git gc``).
+
+    :param worktree_path: Absolute path of the worktree.
+    :param snapshot_id: The snapshot handle to remove.
+    :raises WorktreeError: If the id is invalid or git fails.
+    """
+    _require_worktree(worktree_path)
+    if not _SNAPSHOT_ID_RE.match(snapshot_id):
+        raise WorktreeError(f"invalid snapshot id: {snapshot_id!r}")
+    deleted = _run_git(
+        ["update-ref", "-d", f"{_SNAPSHOT_REF_PREFIX}{snapshot_id}"], cwd=worktree_path
+    )
+    if deleted.returncode != 0:
+        raise _git_error("git update-ref -d failed", deleted)

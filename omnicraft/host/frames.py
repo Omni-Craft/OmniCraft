@@ -57,6 +57,12 @@ class HostFrameKind(str, Enum):
     GIT_DIFF_RESULT = "host.git_diff_result"
     MERGE_WORKTREE = "host.merge_worktree"
     MERGE_WORKTREE_RESULT = "host.merge_worktree_result"
+    SNAPSHOT_WORKTREE = "host.snapshot_worktree"
+    SNAPSHOT_WORKTREE_RESULT = "host.snapshot_worktree_result"
+    LIST_SNAPSHOTS = "host.list_snapshots"
+    LIST_SNAPSHOTS_RESULT = "host.list_snapshots_result"
+    RESTORE_SNAPSHOT = "host.restore_snapshot"
+    RESTORE_SNAPSHOT_RESULT = "host.restore_snapshot_result"
     CREATE_DIR = "host.create_dir"
     CREATE_DIR_RESULT = "host.create_dir_result"
 
@@ -552,6 +558,101 @@ class HostMergeWorktreeResultFrame:
 
 
 @dataclass
+class HostSnapshotWorktreeFrame:
+    """Server → host: capture a worktree's full state as a checkpoint.
+
+    :param request_id: Correlates the result, e.g. ``"req_snap_1"``.
+    :param worktree_path: Absolute path of the worktree to snapshot.
+    :param label: Optional human note stored with the snapshot.
+    """
+
+    request_id: str
+    worktree_path: str
+    label: str = ""
+
+
+@dataclass
+class HostSnapshotWorktreeResultFrame:
+    """Host → server: outcome of a snapshot request.
+
+    :param request_id: Correlates to the :class:`HostSnapshotWorktreeFrame`.
+    :param status: ``"ok"`` or ``"failed"``.
+    :param snapshot: The created snapshot as
+        ``{"id", "commit", "label", "created_at"}``. ``None`` on failure.
+    :param error: Error message when ``status`` is ``"failed"``.
+    """
+
+    request_id: str
+    status: str
+    snapshot: dict[str, Any] | None = None
+    error: str | None = None
+
+
+@dataclass
+class HostListSnapshotsFrame:
+    """Server → host: list a worktree's checkpoints.
+
+    :param request_id: Correlates the result, e.g. ``"req_snap_ls_1"``.
+    :param worktree_path: Absolute path of the worktree.
+    """
+
+    request_id: str
+    worktree_path: str
+
+
+@dataclass
+class HostListSnapshotsResultFrame:
+    """Host → server: outcome of a list-snapshots request.
+
+    :param request_id: Correlates to the :class:`HostListSnapshotsFrame`.
+    :param status: ``"ok"`` or ``"failed"``.
+    :param snapshots: One dict per snapshot (``id``/``commit``/``label``/
+        ``created_at``), newest first. ``None`` on failure.
+    :param error: Error message when ``status`` is ``"failed"``.
+    """
+
+    request_id: str
+    status: str
+    snapshots: list[dict[str, Any]] | None = None
+    error: str | None = None
+
+
+@dataclass
+class HostRestoreSnapshotFrame:
+    """Server → host: reset a worktree to a saved checkpoint.
+
+    :param request_id: Correlates the result, e.g. ``"req_snap_rs_1"``.
+    :param worktree_path: Absolute path of the worktree.
+    :param snapshot_id: The snapshot handle to restore.
+    :param auto_backup: When ``True``, snapshot the current state first so
+        the restore is itself undoable.
+    """
+
+    request_id: str
+    worktree_path: str
+    snapshot_id: str
+    auto_backup: bool = True
+
+
+@dataclass
+class HostRestoreSnapshotResultFrame:
+    """Host → server: outcome of a restore-snapshot request.
+
+    :param request_id: Correlates to the :class:`HostRestoreSnapshotFrame`.
+    :param status: ``"ok"`` or ``"failed"``.
+    :param restored: The applied snapshot id. ``None`` on failure.
+    :param backup_id: The auto-backup snapshot id (undo handle), or ``None``.
+    :param error: Error message when ``status`` is ``"failed"``.
+    """
+
+    request_id: str
+    status: str
+    restored: str | None = None
+    backup_id: str | None = None
+    error: str | None = None
+
+
+@dataclass
 class HostCreateDirFrame:
     """Server → host: create a new directory on the host.
 
@@ -616,6 +717,12 @@ HostFrame = (
     | HostGitDiffResultFrame
     | HostMergeWorktreeFrame
     | HostMergeWorktreeResultFrame
+    | HostSnapshotWorktreeFrame
+    | HostSnapshotWorktreeResultFrame
+    | HostListSnapshotsFrame
+    | HostListSnapshotsResultFrame
+    | HostRestoreSnapshotFrame
+    | HostRestoreSnapshotResultFrame
     | HostCreateDirFrame
     | HostCreateDirResultFrame
 )
@@ -864,6 +971,64 @@ def encode_host_frame(frame: HostFrame) -> str:
                 "error": frame.error,
             }
         )
+    if isinstance(frame, HostSnapshotWorktreeFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.SNAPSHOT_WORKTREE.value,
+                "request_id": frame.request_id,
+                "worktree_path": frame.worktree_path,
+                "label": frame.label,
+            }
+        )
+    if isinstance(frame, HostSnapshotWorktreeResultFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.SNAPSHOT_WORKTREE_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "snapshot": frame.snapshot,
+                "error": frame.error,
+            }
+        )
+    if isinstance(frame, HostListSnapshotsFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.LIST_SNAPSHOTS.value,
+                "request_id": frame.request_id,
+                "worktree_path": frame.worktree_path,
+            }
+        )
+    if isinstance(frame, HostListSnapshotsResultFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.LIST_SNAPSHOTS_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "snapshots": frame.snapshots,
+                "error": frame.error,
+            }
+        )
+    if isinstance(frame, HostRestoreSnapshotFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.RESTORE_SNAPSHOT.value,
+                "request_id": frame.request_id,
+                "worktree_path": frame.worktree_path,
+                "snapshot_id": frame.snapshot_id,
+                "auto_backup": frame.auto_backup,
+            }
+        )
+    if isinstance(frame, HostRestoreSnapshotResultFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.RESTORE_SNAPSHOT_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "restored": frame.restored,
+                "backup_id": frame.backup_id,
+                "error": frame.error,
+            }
+        )
     if isinstance(frame, HostCreateDirFrame):
         return _encode_payload(
             {
@@ -982,6 +1147,18 @@ def _decode_known_host_frame(
             return _decode_merge_worktree(msg)
         case HostFrameKind.MERGE_WORKTREE_RESULT:
             return _decode_merge_worktree_result(msg)
+        case HostFrameKind.SNAPSHOT_WORKTREE:
+            return _decode_snapshot_worktree(msg)
+        case HostFrameKind.SNAPSHOT_WORKTREE_RESULT:
+            return _decode_snapshot_worktree_result(msg)
+        case HostFrameKind.LIST_SNAPSHOTS:
+            return _decode_list_snapshots(msg)
+        case HostFrameKind.LIST_SNAPSHOTS_RESULT:
+            return _decode_list_snapshots_result(msg)
+        case HostFrameKind.RESTORE_SNAPSHOT:
+            return _decode_restore_snapshot(msg)
+        case HostFrameKind.RESTORE_SNAPSHOT_RESULT:
+            return _decode_restore_snapshot_result(msg)
         case HostFrameKind.CREATE_DIR:
             return _decode_create_dir(msg)
         case HostFrameKind.CREATE_DIR_RESULT:
@@ -1306,6 +1483,74 @@ def _decode_merge_worktree_result(msg: dict[str, Any]) -> HostMergeWorktreeResul
         status=_required_str(msg, "status"),
         outcome=_optional_nullable_str(msg, "outcome"),
         detail=_optional_nullable_str(msg, "detail"),
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_snapshot_worktree(msg: dict[str, Any]) -> HostSnapshotWorktreeFrame:
+    """Decode a host.snapshot_worktree request frame."""
+    return HostSnapshotWorktreeFrame(
+        request_id=_required_str(msg, "request_id"),
+        worktree_path=_required_str(msg, "worktree_path"),
+        label=msg.get("label") or "",
+    )
+
+
+def _decode_snapshot_worktree_result(msg: dict[str, Any]) -> HostSnapshotWorktreeResultFrame:
+    """Decode a host.snapshot_worktree_result frame."""
+    snapshot = msg.get("snapshot")
+    if snapshot is not None and not isinstance(snapshot, dict):
+        raise ValueError("frame field must be an object or null: 'snapshot'")
+    return HostSnapshotWorktreeResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        snapshot=snapshot,
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_list_snapshots(msg: dict[str, Any]) -> HostListSnapshotsFrame:
+    """Decode a host.list_snapshots request frame."""
+    return HostListSnapshotsFrame(
+        request_id=_required_str(msg, "request_id"),
+        worktree_path=_required_str(msg, "worktree_path"),
+    )
+
+
+def _decode_list_snapshots_result(msg: dict[str, Any]) -> HostListSnapshotsResultFrame:
+    """Decode a host.list_snapshots_result frame."""
+    raw = msg.get("snapshots")
+    if raw is not None:
+        if not isinstance(raw, list):
+            raise ValueError("frame field must be a list or null: 'snapshots'")
+        for entry in raw:
+            if not isinstance(entry, dict):
+                raise ValueError("each entry in 'snapshots' must be a JSON object")
+    return HostListSnapshotsResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        snapshots=raw,
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_restore_snapshot(msg: dict[str, Any]) -> HostRestoreSnapshotFrame:
+    """Decode a host.restore_snapshot request frame."""
+    return HostRestoreSnapshotFrame(
+        request_id=_required_str(msg, "request_id"),
+        worktree_path=_required_str(msg, "worktree_path"),
+        snapshot_id=_required_str(msg, "snapshot_id"),
+        auto_backup=bool(msg.get("auto_backup", True)),
+    )
+
+
+def _decode_restore_snapshot_result(msg: dict[str, Any]) -> HostRestoreSnapshotResultFrame:
+    """Decode a host.restore_snapshot_result frame."""
+    return HostRestoreSnapshotResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        restored=_optional_nullable_str(msg, "restored"),
+        backup_id=_optional_nullable_str(msg, "backup_id"),
         error=_optional_nullable_str(msg, "error"),
     )
 

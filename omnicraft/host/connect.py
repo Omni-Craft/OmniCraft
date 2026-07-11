@@ -38,12 +38,18 @@ from omnicraft.host.frames import (
     HostListDirEntry,
     HostListDirFrame,
     HostListDirResultFrame,
+    HostListSnapshotsFrame,
+    HostListSnapshotsResultFrame,
     HostListWorktreesFrame,
     HostListWorktreesResultFrame,
     HostMergeWorktreeFrame,
     HostMergeWorktreeResultFrame,
     HostRemoveWorktreeFrame,
     HostRemoveWorktreeResultFrame,
+    HostRestoreSnapshotFrame,
+    HostRestoreSnapshotResultFrame,
+    HostSnapshotWorktreeFrame,
+    HostSnapshotWorktreeResultFrame,
     HostRunnerExitedFrame,
     HostStatFrame,
     HostStatResultFrame,
@@ -56,9 +62,12 @@ from omnicraft.host.git_worktree import (
     WorktreeError,
     create_worktree,
     git_diff,
+    list_snapshots,
     list_worktrees,
     merge_worktree,
     remove_worktree,
+    restore_snapshot,
+    snapshot_worktree,
 )
 from omnicraft.host.identity import HostIdentity, load_or_create_host_identity
 from omnicraft.onboarding.harness_install import harness_setup_hint
@@ -1678,6 +1687,81 @@ class HostProcess:
             detail=result.detail,
         )
 
+    async def _handle_snapshot_worktree(
+        self,
+        frame: HostSnapshotWorktreeFrame,
+    ) -> HostSnapshotWorktreeResultFrame:
+        """Handle a ``host.snapshot_worktree`` request (create a checkpoint)."""
+        try:
+            with self._host_subprocess_op():
+                snap = await asyncio.to_thread(
+                    snapshot_worktree,
+                    worktree_path=frame.worktree_path,
+                    label=frame.label,
+                )
+        except WorktreeError as exc:
+            return HostSnapshotWorktreeResultFrame(
+                request_id=frame.request_id, status="failed", error=exc.message
+            )
+        return HostSnapshotWorktreeResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            snapshot={
+                "id": snap.id,
+                "commit": snap.commit,
+                "label": snap.label,
+                "created_at": snap.created_at,
+            },
+        )
+
+    async def _handle_list_snapshots(
+        self,
+        frame: HostListSnapshotsFrame,
+    ) -> HostListSnapshotsResultFrame:
+        """Handle a ``host.list_snapshots`` request."""
+        try:
+            with self._host_subprocess_op():
+                snaps = await asyncio.to_thread(
+                    list_snapshots, worktree_path=frame.worktree_path
+                )
+        except WorktreeError as exc:
+            return HostListSnapshotsResultFrame(
+                request_id=frame.request_id, status="failed", error=exc.message
+            )
+        return HostListSnapshotsResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            snapshots=[
+                {"id": s.id, "commit": s.commit, "label": s.label, "created_at": s.created_at}
+                for s in snaps
+            ],
+        )
+
+    async def _handle_restore_snapshot(
+        self,
+        frame: HostRestoreSnapshotFrame,
+    ) -> HostRestoreSnapshotResultFrame:
+        """Handle a ``host.restore_snapshot`` request (reset to a checkpoint)."""
+        try:
+            with self._host_subprocess_op():
+                result = await asyncio.to_thread(
+                    restore_snapshot,
+                    worktree_path=frame.worktree_path,
+                    snapshot_id=frame.snapshot_id,
+                    auto_backup=frame.auto_backup,
+                )
+        except WorktreeError as exc:
+            return HostRestoreSnapshotResultFrame(
+                request_id=frame.request_id, status="failed", error=exc.message
+            )
+        _logger.info("Restored snapshot %s in %s", frame.snapshot_id, frame.worktree_path)
+        return HostRestoreSnapshotResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            restored=result.restored,
+            backup_id=result.backup_id,
+        )
+
     async def run(self) -> None:
         """Run the host process with reconnection.
 
@@ -2020,6 +2104,12 @@ class HostProcess:
             await ws.send(encode_host_frame(await self._handle_git_diff(frame)))
         elif isinstance(frame, HostMergeWorktreeFrame):
             await ws.send(encode_host_frame(await self._handle_merge_worktree(frame)))
+        elif isinstance(frame, HostSnapshotWorktreeFrame):
+            await ws.send(encode_host_frame(await self._handle_snapshot_worktree(frame)))
+        elif isinstance(frame, HostListSnapshotsFrame):
+            await ws.send(encode_host_frame(await self._handle_list_snapshots(frame)))
+        elif isinstance(frame, HostRestoreSnapshotFrame):
+            await ws.send(encode_host_frame(await self._handle_restore_snapshot(frame)))
 
 
 def run_host_process(

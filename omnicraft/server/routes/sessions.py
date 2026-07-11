@@ -14698,6 +14698,114 @@ def create_sessions_router(
             raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
         return {"outcome": result["outcome"], "detail": result["detail"]}
 
+    async def _checkpoint_worktree_context(
+        request: Request, session_id: str, level: int
+    ) -> tuple[Any, Any, Any]:
+        """Shared resolve: authorize, load the conv, require a worktree + host.
+
+        :returns: ``(conv, host_conn, host_registry)`` ready for a snapshot op.
+        :raises OmniCraftError: 404 (missing), 400 (no worktree), 409 (host off).
+        """
+        user_id = _get_user_id(request, auth_provider)
+        access = await _require_access_and_level(
+            user_id, session_id, level, permission_store, conversation_store
+        )
+        conv = access.conversation
+        if conv is None:
+            conv = await asyncio.to_thread(conversation_store.get_conversation, session_id)
+        if conv is None:
+            raise OmniCraftError("Session not found", code=ErrorCode.NOT_FOUND)
+        if not conv.host_id or not conv.workspace:
+            raise OmniCraftError(
+                "session has no git worktree to checkpoint", code=ErrorCode.INVALID_INPUT
+            )
+        host_conn = _require_host_conn_for_worktree(conv.host_id, request)
+        return conv, host_conn, request.app.state.host_registry
+
+    @router.get("/sessions/{session_id}/checkpoints", response_model=None)
+    async def list_checkpoints(request: Request, session_id: str) -> dict[str, object]:
+        """List a session worktree's saved checkpoints (newest first)."""
+        from omnicraft.server.routes._host_worktree import (
+            WorktreeHostUnavailableError,
+            WorktreeProxyError,
+            list_snapshots_on_host,
+        )
+
+        conv, host_conn, host_registry = await _checkpoint_worktree_context(
+            request, session_id, LEVEL_READ
+        )
+        try:
+            snapshots = await list_snapshots_on_host(
+                host_registry=host_registry, host_conn=host_conn, worktree_path=conv.workspace
+            )
+        except WorktreeHostUnavailableError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.CONFLICT) from exc
+        except WorktreeProxyError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
+        return {"data": snapshots}
+
+    @router.post("/sessions/{session_id}/checkpoints", response_model=None, status_code=201)
+    async def create_checkpoint(request: Request, session_id: str) -> dict[str, object]:
+        """Capture the current worktree state as a checkpoint (optional label)."""
+        from omnicraft.server.routes._host_worktree import (
+            WorktreeHostUnavailableError,
+            WorktreeProxyError,
+            snapshot_worktree_on_host,
+        )
+
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        label = str(body.get("label", "")) if isinstance(body, dict) else ""
+        conv, host_conn, host_registry = await _checkpoint_worktree_context(
+            request, session_id, LEVEL_EDIT
+        )
+        try:
+            snapshot = await snapshot_worktree_on_host(
+                host_registry=host_registry,
+                host_conn=host_conn,
+                worktree_path=conv.workspace,
+                label=label[:200],
+            )
+        except WorktreeHostUnavailableError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.CONFLICT) from exc
+        except WorktreeProxyError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
+        return snapshot
+
+    @router.post("/sessions/{session_id}/checkpoints/restore", response_model=None)
+    async def restore_checkpoint(request: Request, session_id: str) -> dict[str, object]:
+        """Reset the session worktree to a saved checkpoint (undoable)."""
+        from omnicraft.server.routes._host_worktree import (
+            WorktreeHostUnavailableError,
+            WorktreeProxyError,
+            restore_snapshot_on_host,
+        )
+
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        snapshot_id = body.get("snapshot_id") if isinstance(body, dict) else None
+        if not snapshot_id or not isinstance(snapshot_id, str):
+            raise OmniCraftError("snapshot_id is required", code=ErrorCode.INVALID_INPUT)
+        conv, host_conn, host_registry = await _checkpoint_worktree_context(
+            request, session_id, LEVEL_EDIT
+        )
+        try:
+            result = await restore_snapshot_on_host(
+                host_registry=host_registry,
+                host_conn=host_conn,
+                worktree_path=conv.workspace,
+                snapshot_id=snapshot_id,
+            )
+        except WorktreeHostUnavailableError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.CONFLICT) from exc
+        except WorktreeProxyError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
+        return {"restored": result["restored"], "backup_id": result["backup_id"]}
+
     # ── GET /sessions ───────────────────────────────────────────
 
     @router.get(

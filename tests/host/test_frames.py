@@ -24,7 +24,13 @@ from omnicraft.host.frames import (
     HostListWorktreesResultFrame,
     HostMergeWorktreeFrame,
     HostMergeWorktreeResultFrame,
+    HostListSnapshotsFrame,
+    HostListSnapshotsResultFrame,
     HostRemoveWorktreeFrame,
+    HostRestoreSnapshotFrame,
+    HostRestoreSnapshotResultFrame,
+    HostSnapshotWorktreeFrame,
+    HostSnapshotWorktreeResultFrame,
     HostRemoveWorktreeResultFrame,
     HostRunnerExitedFrame,
     HostStatFrame,
@@ -1034,3 +1040,39 @@ def test_merge_worktree_result_frame_round_trip() -> None:
         detail="CONFLICT (content): Merge conflict in f.txt",
     )
     assert decode_host_frame(encode_host_frame(original)) == original
+
+
+def test_snapshot_worktree_frames_round_trip() -> None:
+    """Snapshot request + result survive encode → decode."""
+    req = HostSnapshotWorktreeFrame(request_id="s1", worktree_path="/wt", label="before refactor")
+    assert decode_host_frame(encode_host_frame(req)) == req
+    res = HostSnapshotWorktreeResultFrame(
+        request_id="s1",
+        status="ok",
+        snapshot={"id": "1783-ab", "commit": "deadbeef", "label": "x", "created_at": 1783},
+    )
+    assert decode_host_frame(encode_host_frame(res)) == res
+
+
+def test_list_snapshots_frames_round_trip() -> None:
+    """List request + result (with the snapshot array) survive round-trip."""
+    req = HostListSnapshotsFrame(request_id="s2", worktree_path="/wt")
+    assert decode_host_frame(encode_host_frame(req)) == req
+    res = HostListSnapshotsResultFrame(
+        request_id="s2",
+        status="ok",
+        snapshots=[{"id": "1-a", "commit": "c", "label": "", "created_at": 1}],
+    )
+    assert decode_host_frame(encode_host_frame(res)) == res
+
+
+def test_restore_snapshot_frames_round_trip() -> None:
+    """Restore request + result (restored + undo backup id) survive round-trip."""
+    req = HostRestoreSnapshotFrame(
+        request_id="s3", worktree_path="/wt", snapshot_id="1-a", auto_backup=True
+    )
+    assert decode_host_frame(encode_host_frame(req)) == req
+    res = HostRestoreSnapshotResultFrame(
+        request_id="s3", status="ok", restored="1-a", backup_id="2-b"
+    )
+    assert decode_host_frame(encode_host_frame(res)) == res

@@ -18,10 +18,14 @@ from omnicraft.host.git_worktree import (
     CreatedWorktree,
     WorktreeError,
     create_worktree,
+    delete_snapshot,
     git_diff,
+    list_snapshots,
     list_worktrees,
     merge_worktree,
     remove_worktree,
+    restore_snapshot,
+    snapshot_worktree,
     validate_branch_name,
 )
 
@@ -509,3 +513,92 @@ def test_merge_worktree_aborts_on_conflict_leaving_base_intact(git_repo: Path) -
         text=True,
     ).stdout
     assert status.strip() == ""
+
+
+# ── Worktree snapshots (checkpoint / restore) ────────────────────────
+
+
+def _write(repo: Path, rel: str, content: str) -> None:
+    path = repo / rel
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+
+
+def test_snapshot_restore_is_an_exact_match(git_repo: Path) -> None:
+    """Restore rewrites snapshot files, drops later files, recreates deletions."""
+    _write(git_repo, "keep.txt", "keep\n")
+    _git(git_repo, "add", "-A")
+    _git(git_repo, "commit", "-q", "-m", "seed")
+
+    # State A: edit README, add an untracked file, delete keep.txt.
+    _write(git_repo, "README.md", "STATE A\n")
+    _write(git_repo, "new.txt", "novo A\n")
+    (git_repo / "keep.txt").unlink()
+    snap = snapshot_worktree(worktree_path=str(git_repo), label="estado A")
+    assert snap.label == "estado A"
+
+    # Diverge: change README again, add another file, recreate keep, drop new.
+    _write(git_repo, "README.md", "STATE B\n")
+    _write(git_repo, "another.txt", "B\n")
+    _write(git_repo, "keep.txt", "recreated\n")
+    (git_repo / "new.txt").unlink()
+
+    result = restore_snapshot(worktree_path=str(git_repo), snapshot_id=snap.id)
+
+    assert (git_repo / "README.md").read_text() == "STATE A\n"  # restored
+    assert (git_repo / "new.txt").read_text() == "novo A\n"  # snapshot untracked back
+    assert not (git_repo / "keep.txt").exists()  # deleted-in-A stays deleted
+    assert not (git_repo / "another.txt").exists()  # created-after removed
+    assert result.backup_id is not None  # pre-restore state was captured
+
+
+def test_restore_is_reversible_via_auto_backup(git_repo: Path) -> None:
+    """The auto-backup lets a restore be undone."""
+    _write(git_repo, "f.txt", "V1\n")
+    snap_v1 = snapshot_worktree(worktree_path=str(git_repo), label="v1")
+    _write(git_repo, "f.txt", "V2\n")
+
+    undo = restore_snapshot(worktree_path=str(git_repo), snapshot_id=snap_v1.id)
+    assert (git_repo / "f.txt").read_text() == "V1\n"
+
+    restore_snapshot(worktree_path=str(git_repo), snapshot_id=undo.backup_id, auto_backup=False)
+    assert (git_repo / "f.txt").read_text() == "V2\n"  # back to the pre-restore state
+
+
+def test_snapshot_does_not_move_head_or_create_branches(git_repo: Path) -> None:
+    """Snapshots live under a private ref — never a branch, never moving HEAD."""
+    head_before = _rev_parse(git_repo, "HEAD")
+    _write(git_repo, "wip.txt", "wip\n")
+    snapshot_worktree(worktree_path=str(git_repo), label="wip")
+
+    assert _rev_parse(git_repo, "HEAD") == head_before
+    branches = subprocess.run(
+        ["git", "branch", "--format=%(refname:short)"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+    ).stdout.split()
+    assert branches == ["main"]
+
+
+def test_list_and_delete_snapshots(git_repo: Path) -> None:
+    """Snapshots list newest-first and delete cleanly."""
+    _write(git_repo, "a.txt", "1\n")
+    first = snapshot_worktree(worktree_path=str(git_repo), label="one")
+    _write(git_repo, "a.txt", "2\n")
+    second = snapshot_worktree(worktree_path=str(git_repo), label="two")
+
+    ids = [s.id for s in list_snapshots(worktree_path=str(git_repo))]
+    assert set(ids) >= {first.id, second.id}
+
+    delete_snapshot(worktree_path=str(git_repo), snapshot_id=first.id)
+    remaining = {s.id for s in list_snapshots(worktree_path=str(git_repo))}
+    assert first.id not in remaining and second.id in remaining
+
+
+def test_restore_rejects_unknown_or_malformed_id(git_repo: Path) -> None:
+    """A bad id is a WorktreeError, never a path-injecting ref lookup."""
+    with pytest.raises(WorktreeError):
+        restore_snapshot(worktree_path=str(git_repo), snapshot_id="../../evil")
+    with pytest.raises(WorktreeError):
+        restore_snapshot(worktree_path=str(git_repo), snapshot_id="1783-nope")

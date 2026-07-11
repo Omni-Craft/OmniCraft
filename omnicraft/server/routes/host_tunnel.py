@@ -32,9 +32,12 @@ from omnicraft.host.frames import (
     HostHelloFrame,
     HostLaunchRunnerResultFrame,
     HostListDirResultFrame,
+    HostListSnapshotsResultFrame,
     HostListWorktreesResultFrame,
     HostMergeWorktreeResultFrame,
     HostRemoveWorktreeResultFrame,
+    HostRestoreSnapshotResultFrame,
+    HostSnapshotWorktreeResultFrame,
     HostRunnerExitedFrame,
     HostStatResultFrame,
     HostStopRunnerResultFrame,
@@ -566,6 +569,35 @@ async def _receive_loop(
                         "status": frame.status,
                         "outcome": frame.outcome,
                         "detail": frame.detail,
+                        "error": frame.error,
+                    }
+                )
+            continue
+
+        if isinstance(frame, HostSnapshotWorktreeResultFrame):
+            snap_future = conn.pending_snapshot_worktrees.pop(frame.request_id, None)
+            if snap_future is not None and not snap_future.done():
+                snap_future.set_result(
+                    {"status": frame.status, "snapshot": frame.snapshot, "error": frame.error}
+                )
+            continue
+
+        if isinstance(frame, HostListSnapshotsResultFrame):
+            list_snap_future = conn.pending_list_snapshots.pop(frame.request_id, None)
+            if list_snap_future is not None and not list_snap_future.done():
+                list_snap_future.set_result(
+                    {"status": frame.status, "snapshots": frame.snapshots, "error": frame.error}
+                )
+            continue
+
+        if isinstance(frame, HostRestoreSnapshotResultFrame):
+            restore_future = conn.pending_restore_snapshots.pop(frame.request_id, None)
+            if restore_future is not None and not restore_future.done():
+                restore_future.set_result(
+                    {
+                        "status": frame.status,
+                        "restored": frame.restored,
+                        "backup_id": frame.backup_id,
                         "error": frame.error,
                     }
                 )

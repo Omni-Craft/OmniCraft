@@ -22,6 +22,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { AgentInfoButton } from "@/components/AgentInfo";
+import { CheckpointsButton } from "@/components/CheckpointsButton";
 import { PresenceAvatars } from "@/components/PresenceAvatars";
 import type { Agent } from "@/hooks/useAgents";
 import { cn } from "@/lib/utils";
@@ -271,6 +272,9 @@ export function ChatHeader({
         {/* Agent info: tools & policies for the bound agent. Desktop-only
             popover; self-hides when the agent has neither configured. */}
         {conversationId && <AgentInfoButton agent={boundAgent} sessionId={conversationId} />}
+        {/* Worktree checkpoints (snapshot / restore). Self-hides on sessions
+            that don't run in a git worktree. */}
+        {conversationId && <CheckpointsButton sessionId={conversationId} />}
         {/* Mobile-only three-dot menu folding the action buttons above
             (Share · Agent info) so the header stays
             uncluttered on a phone. The right-panel/rail control is

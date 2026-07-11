@@ -16,7 +16,9 @@ from dataclasses import dataclass
 
 from omnicraft.host.frames import (
     HostCreateWorktreeFrame,
+    HostGitDiffFrame,
     HostListWorktreesFrame,
+    HostMergeWorktreeFrame,
     HostRemoveWorktreeFrame,
     encode_host_frame,
 )
@@ -275,3 +277,95 @@ async def list_worktrees_on_host(
     if not isinstance(worktrees, list):
         raise WorktreeProxyError("host returned an incomplete worktree list")
     return worktrees
+
+
+async def git_diff_on_host(
+    *,
+    host_registry: HostRegistry,
+    host_conn: HostConnection,
+    worktree_path: str,
+    base_ref: str,
+) -> dict[str, object]:
+    """
+    Send a ``host.git_diff`` frame and await the result.
+
+    :param host_registry: Server-side registry; used to enqueue the
+        outbound frame on the host's send queue.
+    :param host_conn: Live host connection that owns the worktree.
+    :param worktree_path: Absolute path of the racer's worktree on the host.
+    :param base_ref: Ref to diff against, e.g. ``"main"`` or ``"HEAD"``.
+    :returns: A dict with ``diff`` (str) and ``truncated`` (bool).
+    :raises WorktreeHostUnavailableError: If the host connection drops
+        or doesn't respond within :data:`_WORKTREE_TIMEOUT_S`.
+    :raises WorktreeProxyError: If the host reports a diff failure.
+    """
+    request_id = secrets.token_hex(8)
+    frame = encode_host_frame(
+        HostGitDiffFrame(
+            request_id=request_id,
+            worktree_path=worktree_path,
+            base_ref=base_ref,
+        )
+    )
+    result = await _await_host_worktree_result(
+        host_registry=host_registry,
+        host_conn=host_conn,
+        pending=host_conn.pending_git_diffs,
+        request_id=request_id,
+        frame=frame,
+        op="git diff",
+    )
+    if result.get("status") != "ok":
+        raise WorktreeProxyError(
+            f"git diff failed: {result.get('error') or 'host reported no detail'}"
+        )
+    return {"diff": result.get("diff") or "", "truncated": bool(result.get("truncated"))}
+
+
+async def merge_worktree_on_host(
+    *,
+    host_registry: HostRegistry,
+    host_conn: HostConnection,
+    worktree_path: str,
+    branch: str,
+    base_branch: str,
+    commit_message: str,
+) -> dict[str, object]:
+    """
+    Send a ``host.merge_worktree`` frame and await the result.
+
+    :param host_registry: Server-side registry; used to enqueue the
+        outbound frame on the host's send queue.
+    :param host_conn: Live host connection that owns the worktree.
+    :param worktree_path: Absolute path of the winning racer's worktree.
+    :param branch: The racer's branch to merge, e.g. ``"arena-ab12-codex"``.
+    :param base_branch: Branch to merge into, e.g. ``"main"``.
+    :param commit_message: Message for the racer work commit + merge commit.
+    :returns: A dict with ``outcome`` (str) and ``detail`` (str | None).
+    :raises WorktreeHostUnavailableError: If the host connection drops
+        or doesn't respond within :data:`_WORKTREE_TIMEOUT_S`.
+    :raises WorktreeProxyError: If the host errors before deciding an outcome.
+    """
+    request_id = secrets.token_hex(8)
+    frame = encode_host_frame(
+        HostMergeWorktreeFrame(
+            request_id=request_id,
+            worktree_path=worktree_path,
+            branch=branch,
+            base_branch=base_branch,
+            commit_message=commit_message,
+        )
+    )
+    result = await _await_host_worktree_result(
+        host_registry=host_registry,
+        host_conn=host_conn,
+        pending=host_conn.pending_merge_worktrees,
+        request_id=request_id,
+        frame=frame,
+        op="worktree merge",
+    )
+    if result.get("status") != "ok":
+        raise WorktreeProxyError(
+            f"worktree merge failed: {result.get('error') or 'host reported no detail'}"
+        )
+    return {"outcome": result.get("outcome"), "detail": result.get("detail")}

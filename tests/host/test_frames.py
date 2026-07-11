@@ -12,6 +12,8 @@ from omnicraft.host.frames import (
     HostCreateDirResultFrame,
     HostCreateWorktreeFrame,
     HostCreateWorktreeResultFrame,
+    HostGitDiffFrame,
+    HostGitDiffResultFrame,
     HostHelloFrame,
     HostLaunchRunnerFrame,
     HostLaunchRunnerResultFrame,
@@ -20,6 +22,8 @@ from omnicraft.host.frames import (
     HostListDirResultFrame,
     HostListWorktreesFrame,
     HostListWorktreesResultFrame,
+    HostMergeWorktreeFrame,
+    HostMergeWorktreeResultFrame,
     HostRemoveWorktreeFrame,
     HostRemoveWorktreeResultFrame,
     HostRunnerExitedFrame,
@@ -986,3 +990,47 @@ def test_create_dir_result_error_round_trip() -> None:
     assert decoded.status == "ok"
     assert decoded.path is None
     assert decoded.error == "directory already exists"
+
+
+def test_git_diff_frame_round_trip() -> None:
+    """HostGitDiffFrame survives encode → decode (arena diff request)."""
+    original = HostGitDiffFrame(
+        request_id="req_diff_1",
+        worktree_path="/Users/alice/myrepo-worktrees/arena-ab12-codex",
+        base_ref="main",
+    )
+    assert decode_host_frame(encode_host_frame(original)) == original
+
+
+def test_git_diff_result_frame_round_trip() -> None:
+    """HostGitDiffResultFrame preserves the diff text and truncation flag."""
+    original = HostGitDiffResultFrame(
+        request_id="req_diff_1",
+        status="ok",
+        diff="@@ -1 +1 @@\n-old\n+new\n",
+        truncated=True,
+    )
+    assert decode_host_frame(encode_host_frame(original)) == original
+
+
+def test_merge_worktree_frame_round_trip() -> None:
+    """HostMergeWorktreeFrame survives encode → decode (promote winner)."""
+    original = HostMergeWorktreeFrame(
+        request_id="req_merge_1",
+        worktree_path="/Users/alice/myrepo-worktrees/arena-ab12-codex",
+        branch="arena-ab12-codex",
+        base_branch="main",
+        commit_message="arena: promote arena-ab12-codex into main",
+    )
+    assert decode_host_frame(encode_host_frame(original)) == original
+
+
+def test_merge_worktree_result_frame_round_trip() -> None:
+    """HostMergeWorktreeResultFrame preserves outcome + detail."""
+    original = HostMergeWorktreeResultFrame(
+        request_id="req_merge_1",
+        status="ok",
+        outcome="conflict",
+        detail="CONFLICT (content): Merge conflict in f.txt",
+    )
+    assert decode_host_frame(encode_host_frame(original)) == original

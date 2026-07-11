@@ -17,6 +17,7 @@ import { useNavigate, useParams } from "@/lib/routing";
 const ARENA_GROUP_LABEL_KEY = "omnicraft.arena.group";
 const ARENA_INDEX_LABEL_KEY = "omnicraft.arena.index";
 const ARENA_PROMPT_LABEL_KEY = "omnicraft.arena.prompt";
+const ARENA_BASE_LABEL_KEY = "omnicraft.arena.base";
 
 const REFRESH_MS = 3000;
 
@@ -101,6 +102,7 @@ function ArenaSetup() {
   const canSubmit =
     prompt.trim().length > 0 &&
     workspaceValid &&
+    baseBranch.trim().length > 0 &&
     hostId !== null &&
     selected.size >= 2 &&
     !submitting;
@@ -112,7 +114,7 @@ function ArenaSetup() {
     const arenaId = `arena_${randomSuffix()}`;
     const shortId = arenaId.slice(-6);
     const ws = workspace.trim();
-    const base = baseBranch.trim() || undefined;
+    const base = baseBranch.trim();
     const racers = harnesses.filter((a) => selected.has(a.id));
 
     const results = await Promise.allSettled(
@@ -122,6 +124,7 @@ function ArenaSetup() {
           [ARENA_GROUP_LABEL_KEY]: arenaId,
           [ARENA_INDEX_LABEL_KEY]: String(index),
           [ARENA_PROMPT_LABEL_KEY]: prompt.trim().slice(0, 500),
+          [ARENA_BASE_LABEL_KEY]: base,
         };
         return authenticatedFetch("/v1/sessions", {
           method: "POST",
@@ -196,15 +199,16 @@ function ArenaSetup() {
           )}
         </label>
         <label className="flex flex-col gap-1.5">
-          <span className="text-sm font-medium">
-            Branch base <span className="opacity-50">(opcional)</span>
-          </span>
+          <span className="text-sm font-medium">Branch base</span>
           <input
             value={baseBranch}
             onChange={(e) => setBaseBranch(e.target.value)}
             placeholder="main"
             className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none focus:border-white/25"
           />
+          <span className="text-xs opacity-50">
+            Os racers partem dela e o vencedor é mesclado de volta nela.
+          </span>
         </label>
       </div>
 
@@ -282,8 +286,52 @@ function ArenaSetup() {
 
 // ── Comparison: watch the racers side by side ─────────────────────────────
 
+/** Colorize a unified diff for display (green adds, red removes, cyan hunks). */
+function DiffView({ diff, truncated }: { diff: string; truncated: boolean }) {
+  if (diff.trim() === "") {
+    return <p className="px-4 py-3 text-sm opacity-40">Nenhuma alteração ainda.</p>;
+  }
+  return (
+    <div className="overflow-auto px-2 py-2 font-mono text-xs leading-snug">
+      <pre className="min-w-max">
+        {diff.split("\n").map((line, i) => {
+          let color: string | undefined;
+          if (line.startsWith("+") && !line.startsWith("+++")) color = "#3fb950";
+          else if (line.startsWith("-") && !line.startsWith("---")) color = "#f85149";
+          else if (line.startsWith("@@")) color = "#39c5cf";
+          else if (line.startsWith("diff ") || line.startsWith("index ")) color = "#8b949e";
+          return (
+            <div key={i} style={color ? { color } : undefined}>
+              {line || " "}
+            </div>
+          );
+        })}
+      </pre>
+      {truncated && <p className="px-2 py-1 text-[11px] opacity-50">diff truncado…</p>}
+    </div>
+  );
+}
+
+type MergeState =
+  | null
+  | "merging"
+  | { outcome: string; detail?: string | null }
+  | { error: string };
+
+const MERGE_MESSAGE: Record<string, { text: string; color: string }> = {
+  merged: { text: "✓ Mesclado na branch base", color: "#3fb950" },
+  conflict: { text: "Conflito — merge abortado, base intacta", color: "#e3a008" },
+  base_dirty: { text: "A cópia principal tem alterações não commitadas", color: "#e3a008" },
+  base_not_checked_out: { text: "A cópia principal não está na branch base", color: "#e3a008" },
+};
+
 function RacerCard({ racer, onOpen }: { racer: RacerSession; onOpen: (id: string) => void }) {
   const [text, setText] = useState<string | undefined>(undefined);
+  const [tab, setTab] = useState<"answer" | "diff">("answer");
+  const [diff, setDiff] = useState<
+    null | "loading" | "error" | { diff: string; truncated: boolean }
+  >(null);
+  const [merge, setMerge] = useState<MergeState>(null);
   const tone = statusTone(racer.status);
 
   useEffect(() => {
@@ -300,37 +348,146 @@ function RacerCard({ racer, onOpen }: { racer: RacerSession; onOpen: (id: string
     };
   }, [racer.id]);
 
-  const branch = racer.labels?.["omnicraft.arena.index"];
+  const loadDiff = useCallback(async () => {
+    setDiff("loading");
+    try {
+      const res = await authenticatedFetch(
+        `/v1/sessions/${encodeURIComponent(racer.id)}/arena/diff`,
+      );
+      if (!res.ok) {
+        setDiff("error");
+        return;
+      }
+      const j = (await res.json()) as { diff?: string; truncated?: boolean };
+      setDiff({ diff: j.diff ?? "", truncated: Boolean(j.truncated) });
+    } catch {
+      setDiff("error");
+    }
+  }, [racer.id]);
+
+  const promote = useCallback(async () => {
+    if (
+      !window.confirm(
+        `Mesclar "${racer.agent_name ?? "este agente"}" na branch base?\n\nO trabalho desse racer é commitado e mesclado na base. Se houver conflito, o merge é abortado sem tocar na base.`,
+      )
+    ) {
+      return;
+    }
+    setMerge("merging");
+    try {
+      const res = await authenticatedFetch(
+        `/v1/sessions/${encodeURIComponent(racer.id)}/arena/merge`,
+        { method: "POST" },
+      );
+      const j = (await res.json().catch(() => ({}))) as {
+        outcome?: string;
+        detail?: string | null;
+        error?: { message?: string };
+      };
+      if (!res.ok) {
+        setMerge({ error: j?.error?.message ?? `HTTP ${res.status}` });
+        return;
+      }
+      setMerge({ outcome: j.outcome ?? "?", detail: j.detail });
+    } catch (e) {
+      setMerge({ error: String(e) });
+    }
+  }, [racer.id, racer.agent_name]);
+
+  const showDiff = (next: "answer" | "diff") => {
+    setTab(next);
+    if (next === "diff" && diff === null) void loadDiff();
+  };
+
+  const branch = racer.labels?.[ARENA_INDEX_LABEL_KEY];
+  const mergeResult = merge && merge !== "merging" ? merge : null;
   return (
-    <div className="flex min-h-[220px] flex-col rounded-xl border border-white/10 bg-black/20">
+    <div className="flex min-h-[260px] flex-col rounded-xl border border-white/10 bg-black/20">
       <div className="flex items-center justify-between gap-2 border-b border-white/10 px-4 py-3">
         <span className="truncate text-sm font-semibold">
           {racer.agent_name ?? "agente"}
           {branch !== undefined && <span className="ml-1.5 opacity-40">#{Number(branch) + 1}</span>}
         </span>
         <span className="flex shrink-0 items-center gap-1.5 text-xs opacity-80">
-          <span
-            className="inline-block h-2 w-2 rounded-full"
-            style={{ backgroundColor: tone.dot }}
-          />
+          <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: tone.dot }} />
           {tone.label}
         </span>
       </div>
-      <div className="flex-1 overflow-auto px-4 py-3 text-sm leading-relaxed opacity-90">
-        {text ? (
-          <p className="whitespace-pre-wrap">{text}</p>
-        ) : (
-          <p className="opacity-40">Aguardando a primeira resposta…</p>
+
+      <div className="flex gap-1 border-b border-white/10 px-2 py-1.5 text-xs">
+        {(["answer", "diff"] as const).map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => showDiff(t)}
+            className={`rounded-md px-2 py-1 transition ${
+              tab === t ? "bg-white/10 font-medium" : "opacity-60 hover:opacity-100"
+            }`}
+          >
+            {t === "answer" ? "Resposta" : "Diff"}
+          </button>
+        ))}
+        {tab === "diff" && (
+          <button
+            type="button"
+            onClick={() => void loadDiff()}
+            className="ml-auto rounded-md px-2 py-1 opacity-60 transition hover:opacity-100"
+          >
+            ↻
+          </button>
         )}
       </div>
-      <div className="flex items-center justify-between border-t border-white/10 px-4 py-2.5">
-        <span className="truncate text-xs opacity-40">{racer.workspace}</span>
+
+      <div className="max-h-72 flex-1 overflow-auto">
+        {tab === "answer" ? (
+          <div className="px-4 py-3 text-sm leading-relaxed opacity-90">
+            {text ? (
+              <p className="whitespace-pre-wrap">{text}</p>
+            ) : (
+              <p className="opacity-40">Aguardando a primeira resposta…</p>
+            )}
+          </div>
+        ) : diff === null || diff === "loading" ? (
+          <p className="px-4 py-3 text-sm opacity-40">Carregando diff…</p>
+        ) : diff === "error" ? (
+          <p className="px-4 py-3 text-sm text-red-400">
+            Não foi possível carregar o diff (a máquina pode estar offline).
+          </p>
+        ) : (
+          <DiffView diff={diff.diff} truncated={diff.truncated} />
+        )}
+      </div>
+
+      <div className="flex items-center justify-between gap-2 border-t border-white/10 px-4 py-2.5">
+        {mergeResult && "outcome" in mergeResult ? (
+          <span
+            className="truncate text-xs"
+            style={{ color: MERGE_MESSAGE[mergeResult.outcome]?.color ?? "#8b949e" }}
+            title={mergeResult.detail ?? undefined}
+          >
+            {MERGE_MESSAGE[mergeResult.outcome]?.text ?? mergeResult.outcome}
+          </span>
+        ) : mergeResult && "error" in mergeResult ? (
+          <span className="truncate text-xs text-red-400" title={mergeResult.error}>
+            Falhou: {mergeResult.error}
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onOpen(racer.id)}
+            className="shrink-0 rounded-md border border-white/15 px-2.5 py-1 text-xs transition hover:border-white/30"
+          >
+            Abrir sessão →
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => onOpen(racer.id)}
-          className="shrink-0 rounded-md border border-white/15 px-2.5 py-1 text-xs transition hover:border-white/30"
+          disabled={merge === "merging"}
+          onClick={() => void promote()}
+          className="shrink-0 rounded-md px-2.5 py-1 text-xs font-medium text-black transition disabled:opacity-40"
+          style={{ backgroundColor: "var(--brand-accent)" }}
         >
-          Abrir sessão →
+          {merge === "merging" ? "Mesclando…" : "Promover vencedor"}
         </button>
       </div>
     </div>

@@ -18,7 +18,9 @@ from omnicraft.host.git_worktree import (
     CreatedWorktree,
     WorktreeError,
     create_worktree,
+    git_diff,
     list_worktrees,
+    merge_worktree,
     remove_worktree,
     validate_branch_name,
 )
@@ -396,3 +398,114 @@ def test_validate_branch_name_rejects_bad(bad: str) -> None:
 def test_validate_branch_name_accepts_good(good: str) -> None:
     """Well-formed branch names pass validation."""
     validate_branch_name(good)  # must not raise
+
+
+# ── Arena: git_diff ──────────────────────────────────────────────────
+
+
+def test_git_diff_includes_tracked_and_untracked(git_repo: Path) -> None:
+    """A racer's diff shows both edited tracked files and new untracked ones."""
+    wt = create_worktree(repo_path=str(git_repo), branch_name="arena-x", base_branch="main")
+    (Path(wt.worktree_path) / "README.md").write_text("hi\nAGENT EDIT\n")
+    (Path(wt.worktree_path) / "novo.py").write_text("print('from agent')\n")
+
+    result = git_diff(worktree_path=wt.worktree_path, base_ref="main")
+
+    assert result.truncated is False
+    assert "AGENT EDIT" in result.diff  # tracked change vs base
+    assert "novo.py" in result.diff and "from agent" in result.diff  # untracked new file
+
+
+def test_git_diff_empty_when_no_changes(git_repo: Path) -> None:
+    """A pristine worktree diffs to the empty string."""
+    wt = create_worktree(repo_path=str(git_repo), branch_name="arena-clean", base_branch="main")
+    assert git_diff(worktree_path=wt.worktree_path, base_ref="main").diff == ""
+
+
+def test_git_diff_rejects_non_worktree(tmp_path: Path) -> None:
+    """A non-git path is a WorktreeError, not a silent empty diff."""
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    with pytest.raises(WorktreeError):
+        git_diff(worktree_path=str(plain), base_ref="HEAD")
+
+
+# ── Arena: merge_worktree (promote winner) ───────────────────────────
+
+
+def test_merge_worktree_commits_and_merges_into_base(git_repo: Path) -> None:
+    """The winner's uncommitted work is committed and merged into a clean base."""
+    wt = create_worktree(repo_path=str(git_repo), branch_name="arena-win", base_branch="main")
+    (Path(wt.worktree_path) / "README.md").write_text("hi\nwinner\n")
+    (Path(wt.worktree_path) / "feature.py").write_text("x = 1\n")
+
+    result = merge_worktree(
+        worktree_path=wt.worktree_path,
+        branch="arena-win",
+        base_branch="main",
+        commit_message="arena: promote",
+    )
+
+    assert result.outcome == "merged"
+    assert (git_repo / "README.md").read_text() == "hi\nwinner\n"
+    assert (git_repo / "feature.py").read_text() == "x = 1\n"
+
+
+def test_merge_worktree_refuses_dirty_base(git_repo: Path) -> None:
+    """A base with uncommitted changes is left untouched (no merge)."""
+    wt = create_worktree(repo_path=str(git_repo), branch_name="arena-d", base_branch="main")
+    (Path(wt.worktree_path) / "README.md").write_text("hi\nracer\n")
+    (git_repo / "README.md").write_text("hi\nDIRTY\n")  # uncommitted change in main
+
+    result = merge_worktree(
+        worktree_path=wt.worktree_path,
+        branch="arena-d",
+        base_branch="main",
+        commit_message="x",
+    )
+
+    assert result.outcome == "base_dirty"
+    assert (git_repo / "README.md").read_text() == "hi\nDIRTY\n"  # untouched
+
+
+def test_merge_worktree_refuses_when_base_not_checked_out(git_repo: Path) -> None:
+    """If the main work tree is on another branch, the merge refuses."""
+    _git(git_repo, "checkout", "-q", "-b", "elsewhere")
+    wt = create_worktree(repo_path=str(git_repo), branch_name="arena-n", base_branch="main")
+    (Path(wt.worktree_path) / "README.md").write_text("hi\nracer\n")
+
+    result = merge_worktree(
+        worktree_path=wt.worktree_path,
+        branch="arena-n",
+        base_branch="main",
+        commit_message="x",
+    )
+
+    assert result.outcome == "base_not_checked_out"
+
+
+def test_merge_worktree_aborts_on_conflict_leaving_base_intact(git_repo: Path) -> None:
+    """A conflicting merge is aborted; the base keeps its content, no merge state."""
+    wt = create_worktree(repo_path=str(git_repo), branch_name="arena-c", base_branch="main")
+    (Path(wt.worktree_path) / "README.md").write_text("RACER VERSION\n")
+    # Advance main on the same line so the merge must conflict.
+    (git_repo / "README.md").write_text("MAIN VERSION\n")
+    _git(git_repo, "commit", "-qam", "main advance")
+
+    result = merge_worktree(
+        worktree_path=wt.worktree_path,
+        branch="arena-c",
+        base_branch="main",
+        commit_message="x",
+    )
+
+    assert result.outcome == "conflict"
+    assert (git_repo / "README.md").read_text() == "MAIN VERSION\n"  # unchanged
+    # No half-finished merge left behind.
+    status = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=git_repo,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert status.strip() == ""

@@ -277,6 +277,7 @@ from omnicraft.stores import AgentStore, ConversationStore
 from omnicraft.stores.artifact_store import ArtifactStore
 from omnicraft.stores.comment_store import CommentStore
 from omnicraft.stores.conversation_store import (
+    ARENA_BASE_LABEL_KEY,
     PROJECT_LABEL_KEY,
     ConversationNotFoundError,
     NameAlreadyExistsError,
@@ -14582,6 +14583,120 @@ def create_sessions_router(
             id=conv.id,
             labels=labels_with_closed_status(conv.labels, conv.title),
         )
+
+    @router.get("/sessions/{session_id}/arena/diff", response_model=None)
+    async def get_arena_diff(request: Request, session_id: str) -> dict[str, object]:
+        """
+        Return a racer session's change set vs the arena base branch.
+
+        Read-only. Diffs the session's git worktree against the arena base
+        (the ``omnicraft.arena.base`` label, or ``HEAD`` when absent) on the
+        host that owns it. Powers the arena comparison view's per-racer diff.
+
+        :param request: The incoming FastAPI request (for auth + host access).
+        :param session_id: Racer session id, e.g. ``"conv_abc123"``.
+        :returns: ``{"diff": str, "truncated": bool, "base_ref": str}``.
+        :raises OmniCraftError: 404 if the session is missing, 400 if it has
+            no worktree, 409 if its host is offline.
+        """
+        from omnicraft.server.routes._host_worktree import (
+            WorktreeHostUnavailableError,
+            WorktreeProxyError,
+            git_diff_on_host,
+        )
+
+        user_id = _get_user_id(request, auth_provider)
+        access = await _require_access_and_level(
+            user_id, session_id, LEVEL_READ, permission_store, conversation_store
+        )
+        conv = access.conversation
+        if conv is None:
+            conv = await asyncio.to_thread(conversation_store.get_conversation, session_id)
+        if conv is None:
+            raise OmniCraftError("Session not found", code=ErrorCode.NOT_FOUND)
+        if not conv.host_id or not conv.workspace:
+            raise OmniCraftError(
+                "session has no git worktree to diff", code=ErrorCode.INVALID_INPUT
+            )
+        base_ref = (conv.labels or {}).get(ARENA_BASE_LABEL_KEY) or "HEAD"
+        host_conn = _require_host_conn_for_worktree(conv.host_id, request)
+        host_registry = request.app.state.host_registry
+        try:
+            result = await git_diff_on_host(
+                host_registry=host_registry,
+                host_conn=host_conn,
+                worktree_path=conv.workspace,
+                base_ref=base_ref,
+            )
+        except WorktreeHostUnavailableError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.CONFLICT) from exc
+        except WorktreeProxyError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
+        return {
+            "diff": result["diff"],
+            "truncated": result["truncated"],
+            "base_ref": base_ref,
+        }
+
+    @router.post("/sessions/{session_id}/arena/merge", response_model=None)
+    async def post_arena_merge(request: Request, session_id: str) -> dict[str, object]:
+        """
+        Promote a racer's branch into the arena base branch (pick the winner).
+
+        Commits the racer's work and merges its branch into
+        ``omnicraft.arena.base`` on the host, conservatively — the host
+        refuses a dirty/other-branch base and aborts on conflict, so the
+        ``outcome`` may be ``"conflict"`` / ``"base_dirty"`` /
+        ``"base_not_checked_out"`` without any change to the repo.
+
+        :param request: The incoming FastAPI request (for auth + host access).
+        :param session_id: Winning racer session id, e.g. ``"conv_abc123"``.
+        :returns: ``{"outcome": str, "detail": str | None}``.
+        :raises OmniCraftError: 404 if missing, 400 if it has no worktree /
+            branch / known base, 409 if its host is offline.
+        """
+        from omnicraft.server.routes._host_worktree import (
+            WorktreeHostUnavailableError,
+            WorktreeProxyError,
+            merge_worktree_on_host,
+        )
+
+        user_id = _get_user_id(request, auth_provider)
+        access = await _require_access_and_level(
+            user_id, session_id, LEVEL_EDIT, permission_store, conversation_store
+        )
+        conv = access.conversation
+        if conv is None:
+            conv = await asyncio.to_thread(conversation_store.get_conversation, session_id)
+        if conv is None:
+            raise OmniCraftError("Session not found", code=ErrorCode.NOT_FOUND)
+        if not conv.host_id or not conv.workspace or not conv.git_branch:
+            raise OmniCraftError(
+                "session has no git worktree to merge", code=ErrorCode.INVALID_INPUT
+            )
+        base_branch = (conv.labels or {}).get(ARENA_BASE_LABEL_KEY)
+        if not base_branch:
+            raise OmniCraftError(
+                "this arena has no known base branch to merge into; start the "
+                "arena with a base branch to enable promoting a winner",
+                code=ErrorCode.INVALID_INPUT,
+            )
+        host_conn = _require_host_conn_for_worktree(conv.host_id, request)
+        host_registry = request.app.state.host_registry
+        try:
+            result = await merge_worktree_on_host(
+                host_registry=host_registry,
+                host_conn=host_conn,
+                worktree_path=conv.workspace,
+                branch=conv.git_branch,
+                base_branch=base_branch,
+                commit_message=f"arena: promote {conv.git_branch} into {base_branch}",
+            )
+        except WorktreeHostUnavailableError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.CONFLICT) from exc
+        except WorktreeProxyError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
+        return {"outcome": result["outcome"], "detail": result["detail"]}
 
     # ── GET /sessions ───────────────────────────────────────────
 

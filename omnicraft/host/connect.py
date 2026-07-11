@@ -30,6 +30,8 @@ from omnicraft.host.frames import (
     HostCreateDirResultFrame,
     HostCreateWorktreeFrame,
     HostCreateWorktreeResultFrame,
+    HostGitDiffFrame,
+    HostGitDiffResultFrame,
     HostHelloFrame,
     HostLaunchRunnerFrame,
     HostLaunchRunnerResultFrame,
@@ -38,6 +40,8 @@ from omnicraft.host.frames import (
     HostListDirResultFrame,
     HostListWorktreesFrame,
     HostListWorktreesResultFrame,
+    HostMergeWorktreeFrame,
+    HostMergeWorktreeResultFrame,
     HostRemoveWorktreeFrame,
     HostRemoveWorktreeResultFrame,
     HostRunnerExitedFrame,
@@ -51,7 +55,9 @@ from omnicraft.host.frames import (
 from omnicraft.host.git_worktree import (
     WorktreeError,
     create_worktree,
+    git_diff,
     list_worktrees,
+    merge_worktree,
     remove_worktree,
 )
 from omnicraft.host.identity import HostIdentity, load_or_create_host_identity
@@ -1595,6 +1601,83 @@ class HostProcess:
             ],
         )
 
+    async def _handle_git_diff(
+        self,
+        frame: HostGitDiffFrame,
+    ) -> HostGitDiffResultFrame:
+        """Handle a ``host.git_diff`` request (arena comparison view).
+
+        Read-only; runs the blocking git work in a worker thread.
+
+        :param frame: The git-diff request frame.
+        :returns: Result frame with the diff text, or ``status: "failed"``.
+        """
+        try:
+            # Pause the orphan reaper while git runs — see
+            # _handle_create_worktree above and _reap_orphans_once.
+            with self._host_subprocess_op():
+                result = await asyncio.to_thread(
+                    git_diff,
+                    worktree_path=frame.worktree_path,
+                    base_ref=frame.base_ref,
+                )
+        except WorktreeError as exc:
+            return HostGitDiffResultFrame(
+                request_id=frame.request_id,
+                status="failed",
+                error=exc.message,
+            )
+        return HostGitDiffResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            diff=result.diff,
+            truncated=result.truncated,
+        )
+
+    async def _handle_merge_worktree(
+        self,
+        frame: HostMergeWorktreeFrame,
+    ) -> HostMergeWorktreeResultFrame:
+        """Handle a ``host.merge_worktree`` request (arena: promote winner).
+
+        Commits the racer's work and merges its branch into the base
+        branch, conservatively (refuses a dirty/other-branch base, aborts
+        on conflict). Runs the blocking git work in a worker thread.
+
+        :param frame: The merge-worktree request frame.
+        :returns: Result frame describing the outcome, or
+            ``status: "failed"`` on an unexpected git error.
+        """
+        try:
+            # Pause the orphan reaper while git runs — see
+            # _handle_create_worktree above and _reap_orphans_once.
+            with self._host_subprocess_op():
+                result = await asyncio.to_thread(
+                    merge_worktree,
+                    worktree_path=frame.worktree_path,
+                    branch=frame.branch,
+                    base_branch=frame.base_branch,
+                    commit_message=frame.commit_message,
+                )
+        except WorktreeError as exc:
+            return HostMergeWorktreeResultFrame(
+                request_id=frame.request_id,
+                status="failed",
+                error=exc.message,
+            )
+        _logger.info(
+            "Arena merge %s -> %s: %s",
+            frame.branch,
+            frame.base_branch,
+            result.outcome,
+        )
+        return HostMergeWorktreeResultFrame(
+            request_id=frame.request_id,
+            status="ok",
+            outcome=result.outcome,
+            detail=result.detail,
+        )
+
     async def run(self) -> None:
         """Run the host process with reconnection.
 
@@ -1933,6 +2016,10 @@ class HostProcess:
             await ws.send(encode_host_frame(await self._handle_remove_worktree(frame)))
         elif isinstance(frame, HostListWorktreesFrame):
             await ws.send(encode_host_frame(await self._handle_list_worktrees(frame)))
+        elif isinstance(frame, HostGitDiffFrame):
+            await ws.send(encode_host_frame(await self._handle_git_diff(frame)))
+        elif isinstance(frame, HostMergeWorktreeFrame):
+            await ws.send(encode_host_frame(await self._handle_merge_worktree(frame)))
 
 
 def run_host_process(

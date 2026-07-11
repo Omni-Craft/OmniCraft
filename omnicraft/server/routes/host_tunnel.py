@@ -28,10 +28,12 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from omnicraft.host.frames import (
     HostCreateDirResultFrame,
     HostCreateWorktreeResultFrame,
+    HostGitDiffResultFrame,
     HostHelloFrame,
     HostLaunchRunnerResultFrame,
     HostListDirResultFrame,
     HostListWorktreesResultFrame,
+    HostMergeWorktreeResultFrame,
     HostRemoveWorktreeResultFrame,
     HostRunnerExitedFrame,
     HostStatResultFrame,
@@ -538,6 +540,32 @@ async def _receive_loop(
                     {
                         "status": frame.status,
                         "worktrees": frame.worktrees,
+                        "error": frame.error,
+                    }
+                )
+            continue
+
+        if isinstance(frame, HostGitDiffResultFrame):
+            git_diff_future = conn.pending_git_diffs.pop(frame.request_id, None)
+            if git_diff_future is not None and not git_diff_future.done():
+                git_diff_future.set_result(
+                    {
+                        "status": frame.status,
+                        "diff": frame.diff,
+                        "truncated": frame.truncated,
+                        "error": frame.error,
+                    }
+                )
+            continue
+
+        if isinstance(frame, HostMergeWorktreeResultFrame):
+            merge_wt_future = conn.pending_merge_worktrees.pop(frame.request_id, None)
+            if merge_wt_future is not None and not merge_wt_future.done():
+                merge_wt_future.set_result(
+                    {
+                        "status": frame.status,
+                        "outcome": frame.outcome,
+                        "detail": frame.detail,
                         "error": frame.error,
                     }
                 )

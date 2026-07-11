@@ -20,6 +20,13 @@ _GIT_TIMEOUT_S: float = 120.0
 # Max directory-collision suffixes (``-2`` .. ``-N``) before giving up.
 _MAX_DIR_COLLISION_SUFFIX: int = 50
 
+# Cap on the diff text carried back over the tunnel, so a runaway change set
+# (generated files, vendored deps) can't produce a multi-megabyte frame.
+_MAX_DIFF_BYTES: int = 200_000
+
+# Cap on untracked files whose full contents are inlined into an arena diff.
+_MAX_UNTRACKED_FILES: int = 100
+
 # Chars git refuses in a ref: space, control chars, ``~^:?*[\``, DEL.
 # (``..``, leading ``-``/``.``, ``/`` edges, ``.lock``, ``@{`` are
 # checked separately.)
@@ -460,3 +467,151 @@ def remove_worktree(
         branch_result = _run_git(["branch", "-D", branch], cwd=main_repo)
         if branch_result.returncode != 0:
             raise _git_error("git branch -D failed", branch_result)
+
+
+@dataclass
+class DiffResult:
+    """A racer worktree's change set relative to a base ref.
+
+    :param diff: Unified diff text (tracked changes vs the base ref, plus
+        the full contents of untracked new files). Empty when nothing
+        changed.
+    :param truncated: ``True`` when the diff exceeded
+        :data:`_MAX_DIFF_BYTES` and was cut off.
+    """
+
+    diff: str
+    truncated: bool
+
+
+def git_diff(*, worktree_path: str, base_ref: str) -> DiffResult:
+    """Read-only diff of a racer's worktree against a base ref.
+
+    Combines committed *and* uncommitted tracked changes
+    (``git diff <base_ref>`` from inside the worktree) with the full
+    contents of untracked new files (each rendered as an add via
+    ``git diff --no-index``). No index or working-tree mutation, so it is
+    safe to run against a worktree an agent is still editing.
+
+    :param worktree_path: Absolute path of the racer's worktree, e.g.
+        ``"/Users/alice/myrepo-worktrees/arena-ab12-codex"``.
+    :param base_ref: Ref to diff against, e.g. ``"main"`` (the arena's
+        base branch) or ``"HEAD"`` (uncommitted changes only).
+    :returns: A :class:`DiffResult`.
+    :raises WorktreeError: If the path is not a git worktree or git fails.
+    """
+    if not Path(worktree_path).is_dir():
+        raise WorktreeError(f"path is not a directory: {worktree_path}")
+    verify = _run_git(["rev-parse", "--is-inside-work-tree"], cwd=worktree_path)
+    if verify.returncode != 0:
+        raise WorktreeError(f"not a git worktree: {worktree_path}")
+
+    tracked = _run_git(["diff", base_ref], cwd=worktree_path)
+    if tracked.returncode != 0:
+        raise _git_error("git diff failed", tracked)
+    parts = [tracked.stdout]
+
+    others = _run_git(
+        ["ls-files", "--others", "--exclude-standard"], cwd=worktree_path
+    )
+    if others.returncode == 0:
+        untracked = [line for line in others.stdout.splitlines() if line]
+        for rel in untracked[:_MAX_UNTRACKED_FILES]:
+            # --no-index compares two paths without touching the index; a
+            # difference exits 1, which is expected, not an error.
+            new_file = _run_git(
+                ["diff", "--no-index", "--", "/dev/null", rel], cwd=worktree_path
+            )
+            if new_file.stdout:
+                parts.append(new_file.stdout)
+
+    text = "".join(parts)
+    if len(text.encode("utf-8", "replace")) > _MAX_DIFF_BYTES:
+        return DiffResult(diff=text.encode("utf-8", "replace")[:_MAX_DIFF_BYTES].decode("utf-8", "ignore"), truncated=True)
+    return DiffResult(diff=text, truncated=False)
+
+
+@dataclass
+class MergeResult:
+    """Outcome of promoting a racer's branch into the arena base branch.
+
+    :param outcome: One of ``"merged"`` (base advanced),
+        ``"conflict"`` (merge aborted cleanly, base untouched),
+        ``"base_not_checked_out"`` (the main work tree is on another
+        branch), or ``"base_dirty"`` (the main work tree has uncommitted
+        changes). Every non-``merged`` outcome leaves the repo untouched.
+    :param detail: Human-readable extra context, e.g. the merge commit
+        subject, the conflicting files, or the blocking branch/state.
+    """
+
+    outcome: str
+    detail: str | None = None
+
+
+def merge_worktree(
+    *,
+    worktree_path: str,
+    branch: str,
+    base_branch: str,
+    commit_message: str,
+) -> MergeResult:
+    """Commit a racer's work and merge its branch into the base branch.
+
+    Conservative by design — it refuses to touch a main work tree that is
+    not sitting cleanly on ``base_branch``, and aborts (never leaves a
+    half-merged tree) on conflict:
+
+    1. Stage and commit any uncommitted changes on the racer branch
+       (skipped when the worktree is already clean).
+    2. Require the main work tree to be checked out on ``base_branch`` and
+       have no uncommitted changes — otherwise return without merging.
+    3. ``git merge --no-ff`` the racer branch; on conflict
+       ``git merge --abort`` and report, leaving the base untouched.
+
+    :param worktree_path: Absolute path of the winning racer's worktree.
+    :param branch: The racer's branch, e.g. ``"arena-ab12-codex"``.
+    :param base_branch: Branch to merge into, e.g. ``"main"``.
+    :param commit_message: Message for the racer's work commit + merge.
+    :returns: A :class:`MergeResult` describing what happened.
+    :raises WorktreeError: If a path is invalid or a git command errors
+        in a way that isn't a normal merge conflict.
+    """
+    main_repo = _main_repo_for_worktree(worktree_path)
+
+    # 1. Capture the agent's work as a commit on its own branch.
+    status = _run_git(["status", "--porcelain"], cwd=worktree_path)
+    if status.returncode != 0:
+        raise _git_error("git status failed", status)
+    if status.stdout.strip():
+        add = _run_git(["add", "-A"], cwd=worktree_path)
+        if add.returncode != 0:
+            raise _git_error("git add failed", add)
+        commit = _run_git(["commit", "-m", commit_message], cwd=worktree_path)
+        if commit.returncode != 0:
+            raise _git_error("git commit failed", commit)
+
+    # 2. The base must be checked out cleanly in the main work tree.
+    head = _run_git(["symbolic-ref", "--quiet", "--short", "HEAD"], cwd=main_repo)
+    current = head.stdout.strip() if head.returncode == 0 else ""
+    if current != base_branch:
+        return MergeResult(
+            outcome="base_not_checked_out",
+            detail=f"a cópia principal está em {current or 'HEAD destacado'}, não em {base_branch}",
+        )
+    base_status = _run_git(["status", "--porcelain"], cwd=main_repo)
+    if base_status.returncode != 0:
+        raise _git_error("git status failed", base_status)
+    if base_status.stdout.strip():
+        return MergeResult(
+            outcome="base_dirty",
+            detail=f"{base_branch} tem alterações não commitadas na cópia principal",
+        )
+
+    # 3. Merge, aborting cleanly on conflict.
+    merge = _run_git(
+        ["merge", "--no-ff", "-m", commit_message, branch], cwd=main_repo
+    )
+    if merge.returncode == 0:
+        return MergeResult(outcome="merged", detail=merge.stdout.strip() or None)
+    _run_git(["merge", "--abort"], cwd=main_repo)
+    return MergeResult(outcome="conflict", detail=(merge.stdout or merge.stderr).strip() or None)

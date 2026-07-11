@@ -53,6 +53,10 @@ class HostFrameKind(str, Enum):
     REMOVE_WORKTREE_RESULT = "host.remove_worktree_result"
     LIST_WORKTREES = "host.list_worktrees"
     LIST_WORKTREES_RESULT = "host.list_worktrees_result"
+    GIT_DIFF = "host.git_diff"
+    GIT_DIFF_RESULT = "host.git_diff_result"
+    MERGE_WORKTREE = "host.merge_worktree"
+    MERGE_WORKTREE_RESULT = "host.merge_worktree_result"
     CREATE_DIR = "host.create_dir"
     CREATE_DIR_RESULT = "host.create_dir_result"
 
@@ -475,6 +479,79 @@ class HostListWorktreesResultFrame:
 
 
 @dataclass
+class HostGitDiffFrame:
+    """Server → host: read-only diff of a racer worktree vs a base ref.
+
+    Backs the arena comparison view ("what did this agent change?").
+
+    :param request_id: Correlates the result, e.g. ``"req_diff_1"``.
+    :param worktree_path: Absolute path of the racer's worktree.
+    :param base_ref: Ref to diff against, e.g. ``"main"`` or ``"HEAD"``.
+    """
+
+    request_id: str
+    worktree_path: str
+    base_ref: str
+
+
+@dataclass
+class HostGitDiffResultFrame:
+    """Host → server: outcome of a git-diff request.
+
+    :param request_id: Correlates to the :class:`HostGitDiffFrame`.
+    :param status: ``"ok"`` or ``"failed"``.
+    :param diff: Unified diff text. ``None`` on failure.
+    :param truncated: ``True`` when the diff was capped for size.
+    :param error: Error message when ``status`` is ``"failed"``.
+    """
+
+    request_id: str
+    status: str
+    diff: str | None = None
+    truncated: bool = False
+    error: str | None = None
+
+
+@dataclass
+class HostMergeWorktreeFrame:
+    """Server → host: promote a racer's branch into the arena base branch.
+
+    :param request_id: Correlates the result, e.g. ``"req_merge_1"``.
+    :param worktree_path: Absolute path of the winning racer's worktree.
+    :param branch: The racer's branch, e.g. ``"arena-ab12-codex"``.
+    :param base_branch: Branch to merge into, e.g. ``"main"``.
+    :param commit_message: Message for the work commit + merge commit.
+    """
+
+    request_id: str
+    worktree_path: str
+    branch: str
+    base_branch: str
+    commit_message: str
+
+
+@dataclass
+class HostMergeWorktreeResultFrame:
+    """Host → server: outcome of a merge-worktree request.
+
+    :param request_id: Correlates to the :class:`HostMergeWorktreeFrame`.
+    :param status: ``"ok"`` (the request ran; see ``outcome``) or
+        ``"failed"`` (git errored before any decision).
+    :param outcome: ``"merged"``, ``"conflict"``, ``"base_not_checked_out"``
+        or ``"base_dirty"``. ``None`` on ``failed``.
+    :param detail: Human-readable context (merge subject, conflict list,
+        or the blocking state). ``None`` when absent.
+    :param error: Error message when ``status`` is ``"failed"``.
+    """
+
+    request_id: str
+    status: str
+    outcome: str | None = None
+    detail: str | None = None
+    error: str | None = None
+
+
+@dataclass
 class HostCreateDirFrame:
     """Server → host: create a new directory on the host.
 
@@ -535,6 +612,10 @@ HostFrame = (
     | HostRemoveWorktreeResultFrame
     | HostListWorktreesFrame
     | HostListWorktreesResultFrame
+    | HostGitDiffFrame
+    | HostGitDiffResultFrame
+    | HostMergeWorktreeFrame
+    | HostMergeWorktreeResultFrame
     | HostCreateDirFrame
     | HostCreateDirResultFrame
 )
@@ -741,6 +822,48 @@ def encode_host_frame(frame: HostFrame) -> str:
                 "error": frame.error,
             }
         )
+    if isinstance(frame, HostGitDiffFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.GIT_DIFF.value,
+                "request_id": frame.request_id,
+                "worktree_path": frame.worktree_path,
+                "base_ref": frame.base_ref,
+            }
+        )
+    if isinstance(frame, HostGitDiffResultFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.GIT_DIFF_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "diff": frame.diff,
+                "truncated": frame.truncated,
+                "error": frame.error,
+            }
+        )
+    if isinstance(frame, HostMergeWorktreeFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.MERGE_WORKTREE.value,
+                "request_id": frame.request_id,
+                "worktree_path": frame.worktree_path,
+                "branch": frame.branch,
+                "base_branch": frame.base_branch,
+                "commit_message": frame.commit_message,
+            }
+        )
+    if isinstance(frame, HostMergeWorktreeResultFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.MERGE_WORKTREE_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "outcome": frame.outcome,
+                "detail": frame.detail,
+                "error": frame.error,
+            }
+        )
     if isinstance(frame, HostCreateDirFrame):
         return _encode_payload(
             {
@@ -851,6 +974,14 @@ def _decode_known_host_frame(
             return _decode_list_worktrees(msg)
         case HostFrameKind.LIST_WORKTREES_RESULT:
             return _decode_list_worktrees_result(msg)
+        case HostFrameKind.GIT_DIFF:
+            return _decode_git_diff(msg)
+        case HostFrameKind.GIT_DIFF_RESULT:
+            return _decode_git_diff_result(msg)
+        case HostFrameKind.MERGE_WORKTREE:
+            return _decode_merge_worktree(msg)
+        case HostFrameKind.MERGE_WORKTREE_RESULT:
+            return _decode_merge_worktree_result(msg)
         case HostFrameKind.CREATE_DIR:
             return _decode_create_dir(msg)
         case HostFrameKind.CREATE_DIR_RESULT:
@@ -1133,6 +1264,48 @@ def _decode_list_worktrees_result(
         request_id=_required_str(msg, "request_id"),
         status=_required_str(msg, "status"),
         worktrees=raw,
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_git_diff(msg: dict[str, Any]) -> HostGitDiffFrame:
+    """Decode a host.git_diff request frame."""
+    return HostGitDiffFrame(
+        request_id=_required_str(msg, "request_id"),
+        worktree_path=_required_str(msg, "worktree_path"),
+        base_ref=_required_str(msg, "base_ref"),
+    )
+
+
+def _decode_git_diff_result(msg: dict[str, Any]) -> HostGitDiffResultFrame:
+    """Decode a host.git_diff_result frame."""
+    return HostGitDiffResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        diff=_optional_nullable_str(msg, "diff"),
+        truncated=bool(msg.get("truncated", False)),
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_merge_worktree(msg: dict[str, Any]) -> HostMergeWorktreeFrame:
+    """Decode a host.merge_worktree request frame."""
+    return HostMergeWorktreeFrame(
+        request_id=_required_str(msg, "request_id"),
+        worktree_path=_required_str(msg, "worktree_path"),
+        branch=_required_str(msg, "branch"),
+        base_branch=_required_str(msg, "base_branch"),
+        commit_message=_required_str(msg, "commit_message"),
+    )
+
+
+def _decode_merge_worktree_result(msg: dict[str, Any]) -> HostMergeWorktreeResultFrame:
+    """Decode a host.merge_worktree_result frame."""
+    return HostMergeWorktreeResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
+        outcome=_optional_nullable_str(msg, "outcome"),
+        detail=_optional_nullable_str(msg, "detail"),
         error=_optional_nullable_str(msg, "error"),
     )
 

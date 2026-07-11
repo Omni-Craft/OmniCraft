@@ -92,6 +92,12 @@ PROJECT_LABEL_KEY = "omni_project"
 # mirrors the literal as ``ARENA_GROUP_LABEL_KEY``.
 ARENA_GROUP_LABEL_KEY = "omnicraft.arena.group"
 
+# The arena's base branch, stamped on every racer so the comparison view can
+# diff each worktree against it and the "promote winner" merge knows its
+# target. Empty/absent falls back to ``HEAD`` for diffs (uncommitted changes
+# only) and blocks the merge (which needs an explicit target).
+ARENA_BASE_LABEL_KEY = "omnicraft.arena.base"
+
 # Labels that must NOT cross into a new session context — deliberately
 # dropped both when forking (not copied to the clone) and on an in-place
 # agent switch (deleted from the switched session). Two distinct reasons

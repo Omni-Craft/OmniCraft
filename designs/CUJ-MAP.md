@@ -8,7 +8,7 @@ journey actually works, with code anchors + the verified capability matrix) live
 **How to contribute:** add new journeys under the right domain as `- [ ] <journey>`; add questions to §5.
 Keep this file **answer-free** — findings/mechanisms go in the analysis file.
 
-**Scope:** Claude (sdk + native), Codex (sdk + native), Polly / general custom agents. Other harnesses out of scope.
+**Scope:** Claude (sdk + native), Codex (sdk + native), Fucho / general custom agents. Other harnesses out of scope.
 
 ---
 
@@ -22,7 +22,7 @@ Keep this file **answer-free** — findings/mechanisms go in the analysis file.
 
 ## 1. Matrix axes (replay each journey across these)
 ```
-HARNESS:    claude (sdk + native) · codex (sdk + native) · Polly = custom agents (run on a harness)
+HARNESS:    claude (sdk + native) · codex (sdk + native) · Fucho = custom agents (run on a harness)
 CLIENT:     TUI / REPL · WebUI
 CONN STATE: connected · mid-disconnect · reconnected · resumed(new runner) · forked
 TURN STATE: idle · working · awaiting-elicitation · interrupted · compacting
@@ -95,7 +95,7 @@ TURN STATE: idle · working · awaiting-elicitation · interrupted · compacting
 - [ ] Subagent depth limits ⚠️
 - [ ] Intelligent routing (#10)
 - [ ] Runner dispatch / affinity ⚠️
-- [ ] Create & store a custom agent (Polly)
+- [ ] Create & store a custom agent (Fucho)
 - [ ] How a custom agent's own subagents get initialized
 - [ ] Async work / inbox mechanics
 - [ ] Resume dispatch (which harness gets re-launched?)
@@ -127,7 +127,7 @@ TURN STATE: idle · working · awaiting-elicitation · interrupted · compacting
 ---
 
 ## 4. Per-harness capability matrix — axes to fill
-Per harness (claude-sdk · claude-native · codex · codex-native; **Polly inherits its harness's row**), confirm:
+Per harness (claude-sdk · claude-native · codex · codex-native; **Fucho inherits its harness's row**), confirm:
 **interrupt · queue · subagents · reasoning-effort · elicitation · mid-session model.**
 → Filled, code-verified matrix lives in `CUJ-ANALYSIS.md §4`.
 

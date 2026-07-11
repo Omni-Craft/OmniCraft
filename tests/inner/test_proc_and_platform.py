@@ -126,14 +126,14 @@ def test_stable_user_id_is_stable_and_path_safe() -> None:
 @pytest.mark.windows_only
 def test_resolve_repo_symlink_dereferences_git_stub(tmp_path: Path) -> None:
     # Real target the Git symlink points at.
-    target = tmp_path / "examples" / "polly"
+    target = tmp_path / "examples" / "fucho"
     target.mkdir(parents=True)
-    (target / "config.yaml").write_text("name: polly\n", encoding="utf-8")
+    (target / "config.yaml").write_text("name: fucho\n", encoding="utf-8")
     # Stub file Git leaves on a no-symlink Windows checkout: content is the
     # relative link target, no trailing newline.
-    stub = tmp_path / "resources" / "polly"
+    stub = tmp_path / "resources" / "fucho"
     stub.parent.mkdir(parents=True)
-    stub.write_text("../examples/polly", encoding="utf-8")
+    stub.write_text("../examples/fucho", encoding="utf-8")
 
     resolved = _platform.resolve_repo_symlink(stub)
     assert resolved == target.resolve()

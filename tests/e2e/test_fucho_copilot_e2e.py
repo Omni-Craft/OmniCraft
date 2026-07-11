@@ -1,0 +1,159 @@
+"""Gated real-network e2e: fucho's orchestrator brain on the GitHub Copilot SDK.
+
+Unlike the mock-LLM smoke in ``test_fucho_e2e.py`` (which swaps fucho's brain to
+``openai-agents`` against a fake server), the Copilot SDK talks only to GitHub's
+Copilot backend, so this exercises the REAL harness. It is **skipped** unless a
+Copilot-capable GitHub token is resolvable — the ``copilot:`` config block
+written by ``omnicraft setup``, or an ambient ``COPILOT_GITHUB_TOKEN`` /
+``GH_TOKEN`` / ``GITHUB_TOKEN`` — so CI without a token skips it, mirroring how
+the harness probes skip when a CLI binary is absent from ``PATH``.
+
+It boots a throwaway local server from this working tree (which carries fucho's
+in-tree ``omnicraft.inner.nessie.policies`` guardrails, resolved server-side) and
+runs the real ``examples/fucho`` bundle with its orchestrator brain overridden
+to ``--harness copilot``. The committed assertion is a brain-only smoke (boots +
+coherent reply). The full dispatch→collect→synthesize orchestration loop on a
+copilot brain is exercised by the ``copilot-sdk-e2e-dev`` skill's fucho driver
+(smoke / fanout / review-pr CUJs), which additionally needs the sub-agent CLIs.
+
+Run manually (with a Copilot token configured)::
+
+    pytest tests/e2e/test_fucho_copilot_e2e.py -v
+"""
+
+from __future__ import annotations
+
+import os
+import subprocess
+import sys
+import time
+from collections.abc import Iterator
+from pathlib import Path
+
+import pytest
+
+from tests.e2e.test_fucho_e2e import (
+    _MIN_REPLY_CHARS,
+    _FUCHO,
+    _REPO,
+    _SERVER_BOOT_TIMEOUT_SEC,
+    _free_port,
+    _wait_for_health,
+)
+
+# A real Copilot turn (network round-trip to GitHub's backend + bundled-CLI
+# spin-up) is slower than the mock path; give it a generous one-shot bound.
+_COPILOT_RUN_TIMEOUT_SEC = 280
+
+
+def _copilot_token_available() -> bool:
+    """Return whether a Copilot-capable GitHub token is resolvable on this host."""
+    try:
+        from omnicraft.onboarding.copilot_auth import (
+            COPILOT_TOKEN_ENV_VARS,
+            copilot_github_token_configured,
+        )
+    except Exception:  # pragma: no cover - defensive: copilot auth module missing
+        return False
+    if copilot_github_token_configured():
+        return True
+    return any(os.environ.get(var) for var in COPILOT_TOKEN_ENV_VARS)
+
+
+pytestmark = pytest.mark.skipif(
+    not _copilot_token_available(),
+    reason=(
+        "no Copilot-capable GitHub token configured "
+        "(copilot: config block or COPILOT_GITHUB_TOKEN / GH_TOKEN / GITHUB_TOKEN)"
+    ),
+)
+
+
+@pytest.fixture
+def local_fucho_server_real(tmp_path: Path) -> Iterator[str]:
+    """Boot a throwaway local ``omnicraft server`` from this working tree.
+
+    Unlike ``test_fucho_e2e.local_fucho_server`` this does NOT strip the
+    developer's credentials — the Copilot harness needs the real GitHub token to
+    reach GitHub's backend. Own sqlite DB + artifact dir under ``tmp_path`` keep
+    it isolated from the developer's real state.
+
+    :param tmp_path: pytest-provided per-test temp dir for the DB + artifacts.
+    :yields: The base URL of the running server, e.g. ``"http://127.0.0.1:8811"``.
+    """
+    port = _free_port()
+    base_url = f"http://127.0.0.1:{port}"
+    proc = subprocess.Popen(
+        [
+            sys.executable,
+            "-m",
+            "omnicraft",
+            "server",
+            "--host",
+            "127.0.0.1",
+            "--port",
+            str(port),
+            "--database-uri",
+            f"sqlite:///{tmp_path / 'fucho_copilot_e2e.db'}",
+            "--artifact-location",
+            str(tmp_path / "artifacts"),
+        ],
+        cwd=str(_REPO),
+        env={**os.environ, "OMNICRAFT_SKIP_ONBOARD": "1", "OMNICRAFT_NO_UPDATE_CHECK": "1"},
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    try:
+        _wait_for_health(base_url, time.monotonic() + _SERVER_BOOT_TIMEOUT_SEC)
+        yield base_url
+    finally:
+        proc.terminate()
+        try:
+            proc.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+
+def test_fucho_brain_on_copilot_boots_and_responds(local_fucho_server_real: str) -> None:
+    """fucho with a ``--harness copilot`` brain boots and returns a coherent reply.
+
+    Runs the real ``examples/fucho`` bundle with its orchestrator brain
+    overridden to the Copilot SDK harness (``--harness copilot --model auto``)
+    against the local server, and asserts exit 0 + a non-trivial reply. This is
+    the regression guard that the Copilot SDK harness can serve as fucho's brain
+    end-to-end: GitHub token resolution, egress, the bundled Copilot CLI, the
+    harness wrap, and server-side guardrail resolution all working together. A
+    blank reply or non-zero exit means the copilot brain can't drive fucho.
+    """
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "omnicraft",
+            "run",
+            str(_FUCHO),
+            "--server",
+            local_fucho_server_real,
+            "--harness",
+            "copilot",
+            "--model",
+            "auto",
+            "-p",
+            "In one short sentence, what are you and how do you handle a coding task?",
+        ],
+        cwd=str(_REPO),
+        env={**os.environ, "OMNICRAFT_SKIP_ONBOARD": "1", "OMNICRAFT_NO_UPDATE_CHECK": "1"},
+        capture_output=True,
+        text=True,
+        timeout=_COPILOT_RUN_TIMEOUT_SEC,
+    )
+    assert result.returncode == 0, (
+        f"fucho(copilot) run exited {result.returncode}\n--- stdout ---\n{result.stdout}\n"
+        f"--- stderr ---\n{result.stderr}"
+    )
+    reply = result.stdout.strip()
+    assert len(reply) >= _MIN_REPLY_CHARS, (
+        f"fucho(copilot) produced no/short reply ({len(reply)} chars): {reply!r}\n"
+        f"--- stderr ---\n{result.stderr}"
+    )

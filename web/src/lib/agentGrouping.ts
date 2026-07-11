@@ -22,8 +22,8 @@ export const BUILTIN_AGENTS = new Set([
   "goose-native-ui", // Goose
   "qwen-native-ui", // Qwen Code
   "kimi-native-ui", // Kimi
-  "polly",
-  "debby",
+  "fucho",
+  "lilo",
 ]);
 
 // Preferred display order for the built-in group. The server returns
@@ -40,8 +40,8 @@ export const AGENT_DISPLAY_ORDER = [
   "Antigravity",
   "Qwen Code",
   "Kimi",
-  "Polly",
-  "Debby",
+  "Fucho",
+  "Lilo",
 ];
 
 function displayRank(name: string): number {

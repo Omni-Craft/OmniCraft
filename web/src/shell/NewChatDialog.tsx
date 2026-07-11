@@ -119,7 +119,7 @@ import { CreateAgentDialog } from "./CreateAgentDialog";
 import { buildAgentBundle, type AgentBundleInput } from "@/lib/agentBundle";
 import { createBundledSession, launchRunner } from "@/lib/sessionsApi";
 
-// Hidden from the new-session picker only. `nessie` is superseded by polly.
+// Hidden from the new-session picker only. `nessie` is superseded by fucho.
 // `kimi` / `kimi-code` are the headless SDK harness (kept for sub-agent / `run
 // --harness kimi` use) — the picker offers only the native TUI (`kimi-native-ui`).
 const NEW_SESSION_HIDDEN_AGENTS = new Set(["nessie", "kimi", "kimi-code"]);
@@ -127,14 +127,14 @@ const NEW_SESSION_HIDDEN_AGENTS = new Set(["nessie", "kimi", "kimi-code"]);
 // Short picker-row blurbs — the spec descriptions are long paragraphs that
 // truncate badly in the dropdown; other dialogs keep the server values.
 const AGENT_PICKER_DESCRIPTIONS: Record<string, string> = {
-  polly: "Multi-agent coding",
-  debby: "Multi-agent debate",
+  fucho: "Multi-agent coding",
+  lilo: "Multi-agent debate",
 };
 
 // Agents whose bundled skills render as always-visible pills under the
 // landing composer. Deliberately an allowlist while the pattern proves
 // out — other agents keep the "/" menu as the only skill surface.
-const SKILL_PILL_AGENTS = new Set(["polly", "debby"]);
+const SKILL_PILL_AGENTS = new Set(["fucho", "lilo"]);
 
 // Claude Code's `claude --permission-mode` choices (v2.1). Claude-native
 // sessions only. "default" is Claude's own default and sends no flag; any
@@ -1236,7 +1236,7 @@ function PickerSectionHeader({ children }: { children: ReactNode }) {
  * Unified two-level agent/harness picker for the landing composer.
  *
  * **Level 1** groups every available agent under "Agents" (SDK / bundle
- * agents like Polly & Debby, plus custom user agents) and "Harnesses" (the
+ * agents like Fucho & Lilo, plus custom user agents) and "Harnesses" (the
  * native terminal CLIs — Claude Code, Codex, Cursor, …). **Level 2** is a
  * per-entry submenu of that entry's run-config knobs: model / effort /
  * permission mode for Claude Code, approval mode (+ bypass) for Codex,
@@ -1745,9 +1745,9 @@ export function NewChatLandingScreen() {
   );
 
   // Split the picker into "Harnesses" (the native terminal CLIs) and
-  // "Agents" (SDK / bundle agents like Polly & Debby plus any custom
+  // "Agents" (SDK / bundle agents like Fucho & Lilo plus any custom
   // user-registered agents). This is the isNativeCodingAgent split, NOT the
-  // builtins/customs split: Polly & Debby are built-ins but belong under
+  // builtins/customs split: Fucho & Lilo are built-ins but belong under
   // "Agents", not "Harnesses".
   const harnessEntries = useMemo(
     () => agentList.filter((a) => isNativeCodingAgent(a)),
@@ -1928,7 +1928,7 @@ export function NewChatLandingScreen() {
   const [cursorExecMode, setCursorExecMode] = useState<string>(
     () => landingDraft?.cursorExecMode ?? CURSOR_NATIVE_DEFAULT_EXEC_MODE,
   );
-  // Per-session brain-harness override for bundle agents (polly / debby).
+  // Per-session brain-harness override for bundle agents (fucho / lilo).
   // null = the agent spec's declared harness (no override sent). On agent
   // switch, seeded from the user's last stored pick for that agent.
   const [pickedHarness, setPickedHarness] = useState<string | null>(

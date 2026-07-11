@@ -628,7 +628,7 @@ async def test_reset_state_closes_terminals_and_publishes_deleted(tmp_path: Path
     workspace.mkdir()
 
     terminal_registry = TerminalRegistry(conversation_link_base_url="http://127.0.0.1:8000")
-    # Seed the old agent's live terminal (the debby CLI's ``tui:main``).
+    # Seed the old agent's live terminal (the lilo CLI's ``tui:main``).
     # Private-attr seed matches the existing resource-registry test
     # convention (no real tmux).
     _seed_registry(terminal_registry, conv_id, [_make_instance("tui", "main", tmp_path)])
@@ -1197,7 +1197,7 @@ async def test_create_terminal_resolves_declared_placeholder_cwd_to_workspace(
     workspace = tmp_path / "workspace"
     workspace.mkdir()
     # Declared shell owns its os_env with the placeholder cwd — the
-    # real ``examples/polly`` ``shell`` terminal shape.
+    # real ``examples/fucho`` ``shell`` terminal shape.
     declared_shell = TerminalEnvSpec(
         command="bash",
         os_env=OSEnvSpec(
@@ -1207,7 +1207,7 @@ async def test_create_terminal_resolves_declared_placeholder_cwd_to_workspace(
         ),
     )
     agent = AgentDef(
-        name="polly-like",
+        name="fucho-like",
         os_env=OSEnvSpec(
             type="caller_process",
             cwd=".",
@@ -1217,7 +1217,7 @@ async def test_create_terminal_resolves_declared_placeholder_cwd_to_workspace(
     )
 
     async def _session_handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"id": "conv_test", "agent_id": "agent_polly"})
+        return httpx.Response(200, json={"id": "conv_test", "agent_id": "agent_fucho"})
 
     async def _resolver(agent_id: str, session_id: str) -> AgentDef:
         return agent

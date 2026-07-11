@@ -163,7 +163,7 @@ describe("MainTerminalView — terminal-first SDK sessions", () => {
       "data-terminal-id",
       "terminal_bash_s1",
     );
-    // The header names the shell only — an agent tab ("polly"/"tui")
+    // The header names the shell only — an agent tab ("fucho"/"tui")
     // here is the reported regression: the shell view must not imply
     // the shell is the agent.
     expect(screen.getByText("bash")).toBeInTheDocument();

@@ -562,7 +562,7 @@ def test_fork_native_source_into_sdk_carries_history(
     transcript replay — the SDK target serializes the copied OmniCraft
     transcript as context). The clone binds the built-in ``sdk-chat-builtin``
     (a plain claude-sdk chat agent seeded via OMNICRAFT_BUILTIN_AGENT_DIRS —
-    NOT the polly supervisor, so the recall is deterministic). It runs on
+    NOT the fucho supervisor, so the recall is deterministic). It runs on
     the host daemon via the Claude CLI's OAuth, like claude-native.
 
     Also guards the presentation-label fix: switching to an SDK target must

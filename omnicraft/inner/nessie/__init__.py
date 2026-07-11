@@ -1,4 +1,4 @@
-"""Runner-side support for the polly coding orchestrator (examples/polly).
+"""Runner-side support for the fucho coding orchestrator (examples/fucho).
 
 The policy implementations have moved to
 ``omnicraft.policies.builtins.orchestration``; ``omnicraft.inner.nessie.policies``

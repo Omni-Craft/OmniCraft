@@ -34,7 +34,7 @@ DEFAULT_POLICY_CLASSIFIER_TIMEOUT = 30
 # card to a neutral "Resolved elsewhere" — surprising for an
 # interactive session. Headless/unattended agents that want a fast
 # fail-closed should override this per-policy via ``PolicySpec.ask_timeout``
-# or spec-wide via ``GuardrailsSpec.ask_timeout`` (see polly's config).
+# or spec-wide via ``GuardrailsSpec.ask_timeout`` (see fucho's config).
 # See POLICIES.md §7, §13.
 DEFAULT_ASK_TIMEOUT = 86400
 

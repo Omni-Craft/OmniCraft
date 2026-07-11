@@ -14457,7 +14457,7 @@ async def test_auto_create_claude_terminal_inherits_agent_sandbox(
     passed no ``parent_os_env``, so ``launch_terminal`` fell back to
     ``_default_sandbox_for_platform`` (``linux_bwrap`` / ``darwin_seatbelt``)
     and ignored the agent YAML. A claude-native agent that declares
-    ``os_env.sandbox.type: none`` (e.g. Polly's ``claude_code`` worker,
+    ``os_env.sandbox.type: none`` (e.g. Fucho's ``claude_code`` worker,
     which relies on the outer container/VM as the boundary) was wrongly
     forced into bwrap, which then failed to start in a hardened container.
 
@@ -14520,7 +14520,7 @@ async def test_auto_create_claude_terminal_inherits_agent_sandbox(
     )
 
     # An agent that declares sandbox: none (runs unconfined; the outer
-    # container/VM is the boundary) — exactly Polly's coding sub-agents.
+    # container/VM is the boundary) — exactly Fucho's coding sub-agents.
     agent_os_env = OSEnvSpec(
         type="caller_process",
         cwd=".",

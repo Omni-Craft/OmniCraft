@@ -119,10 +119,10 @@ def _codex_native_agents_body() -> str:
     )
 
 
-def _polly_codex_agents_body() -> str:
+def _fucho_codex_agents_body() -> str:
     """Stub body for ``GET /v1/agents``: a bundle agent on the codex brain harness.
 
-    Polly is a multi-agent bundle (not a native terminal wrapper), so its
+    Fucho is a multi-agent bundle (not a native terminal wrapper), so its
     Advanced menu renders the **Agent Harness** radio group with a row per brain
     harness (including ``codex``). That row carries the readiness *badge* when the
     host reports the harness unavailable — the second selector under test. Sole
@@ -132,9 +132,9 @@ def _polly_codex_agents_body() -> str:
         {
             "data": [
                 {
-                    "id": "ag_polly_e2e",
-                    "name": "polly",
-                    "display_name": "Polly",
+                    "id": "ag_fucho_e2e",
+                    "name": "fucho",
+                    "display_name": "Fucho",
                     "description": "Multi-agent coding",
                     "harness": "codex",
                     "skills": [],
@@ -199,7 +199,7 @@ async def _open_entry_config(page, agent_id: str) -> None:
 
     :param page: The Playwright page (the landing picker is already mounted).
     :param agent_id: The stubbed agent id whose submenu to open, e.g.
-        ``"ag_polly_e2e"``.
+        ``"ag_fucho_e2e"``.
     """
     await page.get_by_test_id("new-chat-landing-agent-select").click()
     row = page.get_by_test_id(f"new-chat-landing-agent-{agent_id}")
@@ -299,7 +299,7 @@ def test_codex_needs_auth_badge_in_harness_menu(
 ) -> None:
     """A bundle agent's harness picker badges the Codex row "needs auth".
 
-    For a brain-harness bundle agent (Polly), the composer's harness picker
+    For a brain-harness bundle agent (Fucho), the composer's harness picker
     lists each brain harness as a radio row. When the selected host reports the
     ``codex`` harness as ``needs-auth``, that row carries the warning badge
     (``new-chat-landing-harness-warning-codex``) reading "needs auth" — the
@@ -317,7 +317,7 @@ async def _drive_codex_badge(base_url: str) -> None:
         try:
             await _register_routes(
                 page,
-                agents_body=_polly_codex_agents_body(),
+                agents_body=_fucho_codex_agents_body(),
                 configured_harnesses={"codex": "needs-auth"},
             )
             await page.add_init_script(
@@ -332,9 +332,9 @@ async def _drive_codex_badge(base_url: str) -> None:
                 state="visible", timeout=30_000
             )
 
-            # Polly auto-selects (sole agent); its brain-harness radio group lives
+            # Fucho auto-selects (sole agent); its brain-harness radio group lives
             # in the picker's per-entry config submenu.
-            await _open_entry_config(page, "ag_polly_e2e")
+            await _open_entry_config(page, "ag_fucho_e2e")
             badge = page.get_by_test_id("new-chat-landing-harness-warning-codex")
             await expect(badge).to_be_visible(timeout=30_000)
             await expect(badge).to_contain_text("needs auth")

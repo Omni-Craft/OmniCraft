@@ -535,7 +535,7 @@ def test_share_public_registers_share_tool_advertising_public() -> None:
 def test_both_grants_compose() -> None:
     """
     A spec with BOTH ``tools.agents`` and ``spawn: true`` (the
-    nessie/polly shape) gets the union: named-mode send over the
+    nessie/fucho shape) gets the union: named-mode send over the
     declared enum, close, AND create for self-defined children. If
     composition regressed (e.g. one arm short-circuiting the other),
     an orchestrator would lose either its declared sub-agents or its

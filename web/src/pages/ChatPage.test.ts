@@ -668,7 +668,7 @@ describe("shouldShowWorkingIndicator", () => {
   it("shows Working for a running main session with no hydrated bubbles", () => {
     // Full-page reload can restore the server `running` status before any
     // committed item or pending input has been rebuilt into a bubble. The
-    // indicator must still stay visible for the main polly/custom-agent turn.
+    // indicator must still stay visible for the main fucho/custom-agent turn.
     expect(shouldShowWorkingIndicator(true, [])).toBe(true);
   });
 

@@ -180,23 +180,23 @@ omnicraft hermes      # Hermes Agent (Nous Research)
 omnicraft pi          # Pi
 ```
 
-#### 🐙 Polly e 🟠🔵 Debby
+#### 🐙 Fucho e 🟠🔵 Lilo
 
 Dois agentes de exemplo acompanham o repositório e são ótimas primeiras
 sessões:
 
 ```bash
-omnicraft run examples/polly/
-omnicraft run examples/debby/
+omnicraft run examples/fucho/
+omnicraft run examples/lilo/
 ```
 
-**🐙 Polly** é uma orquestradora multi-agente de código que não escreve código
+**🐙 Fucho** é uma orquestradora multi-agente de código que não escreve código
 sozinha. Ela é a tech lead: planeja, delega o trabalho a sub-agentes de código
 (Claude Code, Codex ou Pi) em worktrees git paralelos, e depois roteia cada
 diff para um revisor de um fornecedor diferente daquele que escreveu. Você faz
 o merge.
 
-**🟠🔵 Debby** é uma parceira de brainstorming com duas cabeças, uma Claude e
+**🟠🔵 Lilo** é uma parceira de brainstorming com duas cabeças, uma Claude e
 uma GPT. Toda pergunta vai para ambas, e ela dispõe as duas respostas lado a
 lado. Digite `/debate` e as cabeças criticam uma à outra por algumas rodadas
 antes de convergir. (Precisa de uma credencial Claude e uma OpenAI; veja o
@@ -408,7 +408,7 @@ omnicraft run caminho/para/meu_agente.yaml
 ```
 
 O mesmo arquivo pode declarar sub-agentes e revisores. Para um exemplo mais
-completo, veja a Polly em [`examples/polly/`](examples/polly/), e a
+completo, veja a Fucho em [`examples/fucho/`](examples/fucho/), e a
 [especificação de Agent YAML](docs/AGENT_YAML_SPEC.md) para o schema completo.
 
 ---

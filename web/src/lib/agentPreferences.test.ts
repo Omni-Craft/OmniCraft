@@ -14,10 +14,10 @@ describe("agentPreferences", () => {
   });
 
   it("round-trips a written agent id", () => {
-    writeLastAgentId("ag_polly");
+    writeLastAgentId("ag_fucho");
     // The exact id written must come back — this is what seeds the picker
     // on the next visit.
-    expect(readLastAgentId()).toBe("ag_polly");
+    expect(readLastAgentId()).toBe("ag_fucho");
   });
 
   it("overwrites the previous pick", () => {

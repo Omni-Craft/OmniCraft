@@ -887,7 +887,7 @@ def test_reap_orphans_never_steals_tracked_runner_exit_code(tmp_path: Path) -> N
 def test_reaper_does_not_steal_host_owned_subprocess_exit_code(tmp_path: Path) -> None:
     """The reaper must not reap a host-owned subprocess's child (#1782).
 
-    Regression for the Polly-flagged race: the host also spawns *direct*
+    Regression for the Fucho-flagged race: the host also spawns *direct*
     children that are not tracked runners — the ``git`` commands in
     :mod:`omnicraft.host.git_worktree`, run via ``subprocess.run`` under
     ``asyncio.to_thread`` from the worktree handlers. If the 2s reaper sweep

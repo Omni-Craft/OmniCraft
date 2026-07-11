@@ -106,12 +106,12 @@ describe("parseCostRoutingVerdict", () => {
 
 describe("isCostRoutingSession", () => {
   it("matches any top-level session with an agent name", () => {
-    expect(isCostRoutingSession({ agentName: "polly", parentSessionId: null })).toBe(true);
-    expect(isCostRoutingSession({ agentName: "debby", parentSessionId: null })).toBe(true);
+    expect(isCostRoutingSession({ agentName: "fucho", parentSessionId: null })).toBe(true);
+    expect(isCostRoutingSession({ agentName: "lilo", parentSessionId: null })).toBe(true);
   });
 
   it("rejects a child session", () => {
-    expect(isCostRoutingSession({ agentName: "polly", parentSessionId: "conv_parent987" })).toBe(
+    expect(isCostRoutingSession({ agentName: "fucho", parentSessionId: "conv_parent987" })).toBe(
       false,
     );
   });

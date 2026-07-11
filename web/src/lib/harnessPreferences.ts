@@ -1,7 +1,7 @@
 // Persisted, app-global preference for which brain harness override the
 // new-session landing composer starts on, keyed by agent id.
 //
-// Bundle agents (e.g. Polly, Debby) let the user pick a brain harness
+// Bundle agents (e.g. Fucho, Lilo) let the user pick a brain harness
 // (claude-sdk, openai-agents, …) that overrides the agent spec's default.
 // This store remembers the last pick per agent so returning users start on
 // the harness they used last. A stale value (harness removed server-side)

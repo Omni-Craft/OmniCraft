@@ -599,7 +599,7 @@ def builtin_agent_id(name: str) -> str:
     dangle a persisted ``conversation.agent_id``. Do NOT revert built-in seeding
     to :func:`generate_agent_id` (guarded by the ``builtin_agent_id`` tests).
 
-    :param name: The built-in agent's unique name, e.g. ``"polly"``.
+    :param name: The built-in agent's unique name, e.g. ``"fucho"``.
     :returns: A deterministic id of the form ``"ag_<32-char hex>"``.
     """
     digest = hashlib.sha256(f"builtin:{name}".encode()).hexdigest()

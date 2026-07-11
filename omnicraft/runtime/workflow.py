@@ -535,7 +535,7 @@ def configure_agent_harness_with_provider(
       bridges into the per-session ``CODEX_HOME``. Codex harness only.
     - ``databricks`` — delegate to the existing ucode path keyed on the
       provider's profile, reusing :func:`configure_agent_harness_with_ucode`
-      so the ``polly`` / Databricks coding-agent flow is unchanged.
+      so the ``fucho`` / Databricks coding-agent flow is unchanged.
     - ``bedrock`` — rejected (raises): AWS Bedrock mode is wired only into
       the native ``omnicraft claude`` launch, not the in-process / gateway
       harnesses.
@@ -626,7 +626,7 @@ def configure_agent_harness_with_provider(
 
     if entry.kind == DATABRICKS_KIND:
         # A Databricks profile: reuse the existing ucode path so the
-        # Databricks coding agent / polly keep working unchanged. The
+        # Databricks coding agent / fucho keep working unchanged. The
         # profile name drives model + base URL + auth-command lookup from
         # ~/.databrickscfg + ucode state. This mirrors the legacy
         # DatabricksAuth branch: enable the neutral gateway transport (the
@@ -1022,7 +1022,7 @@ def _resolve_provider_for_build(
        ambient-detected default.
     5. (``for_launch`` only) the first credential that can serve the family even
        though it is not marked default — so a launch credentials the head (e.g.
-       Debby's codex head with only a never-defaulted Databricks workspace)
+       Lilo's codex head with only a never-defaulted Databricks workspace)
        rather than failing with "Invalid API key". Off for the readout / cost
        paths so they never show a provider the user did not choose.
 

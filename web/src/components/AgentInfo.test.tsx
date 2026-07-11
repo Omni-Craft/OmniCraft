@@ -825,11 +825,11 @@ describe("agentDisplayLabel", () => {
     // into the model picker. agentRootName peels every layer to the root.
     expect(agentDisplayLabel("pi-native-ui (fork conv_a) (fork conv_b)")).toBe("Pi");
     expect(agentDisplayLabel("claude-native-ui (fork conv_a) (switch conv_b)")).toBe("Claude");
-    expect(agentDisplayLabel("polly (fork conv_a) (fork conv_b)")).toBe("Polly");
+    expect(agentDisplayLabel("fucho (fork conv_a) (fork conv_b)")).toBe("Fucho");
   });
 
   it("capitalizes non-native names and strips their clone suffix", () => {
-    expect(agentDisplayLabel("polly")).toBe("Polly");
-    expect(agentDisplayLabel("polly (fork conv_ab12)")).toBe("Polly");
+    expect(agentDisplayLabel("fucho")).toBe("Fucho");
+    expect(agentDisplayLabel("fucho (fork conv_ab12)")).toBe("Fucho");
   });
 });

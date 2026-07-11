@@ -196,7 +196,7 @@ def test_custom_native_harness_session_without_wrapper_label_is_native(
     """A chat-first custom agent on a native harness is still single-writer.
 
     A user agent that declares ``executor.harness: codex-native`` but is not a
-    built-in ``*-native-ui`` wrapper (e.g. a ``polly`` orchestrator) carries NO
+    built-in ``*-native-ui`` wrapper (e.g. a ``fucho`` orchestrator) carries NO
     ``omnicraft.wrapper`` label — it renders chat-first on purpose. Its runner
     still runs a native transcript forwarder, so the persist decision must
     treat it as native via the RESOLVED harness; otherwise the inbound user
@@ -205,11 +205,11 @@ def test_custom_native_harness_session_without_wrapper_label_is_native(
     from omnicraft.server.routes import sessions as sessions_routes
 
     conv = Conversation(
-        id="conv_polly",
+        id="conv_fucho",
         created_at=0,
         updated_at=0,
-        root_conversation_id="conv_polly",
-        agent_id="ag_polly",
+        root_conversation_id="conv_fucho",
+        agent_id="ag_fucho",
         labels={},  # chat-first: no wrapper / ui presentation labels
     )
     monkeypatch.setattr(sessions_routes, "_resolve_harness", lambda _c: "codex-native")

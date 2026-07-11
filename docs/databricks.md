@@ -515,9 +515,9 @@ up the MLflow OTel exporter. No code changes in the agent.
 For a single agent turn that calls one tool and one LLM:
 
 ```
-[agent:debby]                         (root span)
+[agent:lilo]                         (root span)
   gen_ai.operation.name = invoke_agent
-  gen_ai.agent.name     = debby
+  gen_ai.agent.name     = lilo
   gen_ai.provider.name  = databricks
   gen_ai.request.model  = databricks-claude-sonnet-4
   session.id            = conv_e4f5a6b7c8d9e0f1
@@ -553,7 +553,7 @@ Trace ID:     tr-f13c03f61e44a0442c8865ab2c79e5a4
 Total traces found: 1
   trace_id: tr-f13c03f61e44a0442c8865ab2c79e5a4
   spans: 3
-    'agent:debby' attrs: ['gen_ai.agent.name', 'gen_ai.operation.name',
+    'agent:lilo' attrs: ['gen_ai.agent.name', 'gen_ai.operation.name',
                           'gen_ai.provider.name', 'gen_ai.request.model']
     'llm_call' attrs: ['gen_ai.operation.name', 'gen_ai.provider.name',
                        'gen_ai.request.model']

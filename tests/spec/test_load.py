@@ -444,8 +444,8 @@ def test_load_omnicraft_yaml_missing_harness_omits_version_skew_hint(
 
 # ── prune_invalid_sub_agents (execution-path backwards compat) ──────────
 #
-# The motivating incident: a newer server bumped polly to a definition with an
-# ``opencode`` sub-agent, and older clients failed to launch *any* polly
+# The motivating incident: a newer server bumped fucho to a definition with an
+# ``opencode`` sub-agent, and older clients failed to launch *any* fucho
 # because the unknown ``opencode-native`` harness failed the whole spec's
 # validation. ``opencode-native`` is itself a recognized harness now, so these
 # tests use a deliberately-synthetic harness name to stand in for "whatever the

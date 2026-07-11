@@ -74,7 +74,7 @@ def _worker_spec(harness: str, **executor_kwargs: object) -> AgentSpec:
     :param harness: The worker harness, e.g. ``"claude-native"``.
     :param executor_kwargs: Extra :class:`ExecutorSpec` fields, e.g.
         ``auth=DatabricksAuth(profile="p")``.
-    :returns: An :class:`AgentSpec` shaped like a polly worker.
+    :returns: An :class:`AgentSpec` shaped like a fucho worker.
     """
     return AgentSpec(
         spec_version=1,

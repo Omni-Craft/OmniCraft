@@ -3213,7 +3213,7 @@ describe("chatStore — handleSessionEvent (session.* events)", () => {
     }
 
     it("sdk→native switch: refreshed binding stops idle from clearing the optimistic bubble (first-message regression)", async () => {
-      // The reported bug: a session bound while on an SDK agent (debby,
+      // The reported bug: a session bound while on an SDK agent (lilo,
       // isNativeTerminalSession=false) is switched in place to a native
       // agent (Claude Code). The store never re-binds (same URL), so
       // without the agent_changed refresh the stale false flag lets the
@@ -5698,7 +5698,7 @@ describe("chatStore — pumpStreamEvents frame batching", () => {
           status: "completed",
           role: "assistant",
           content: [{ type: "output_text", text: segment }],
-          model: "polly",
+          model: "fucho",
         },
       }),
     );
@@ -5778,7 +5778,7 @@ describe("chatStore — pumpStreamEvents frame batching", () => {
           status: "completed",
           role: "assistant",
           content: [{ type: "output_text", text: segment }],
-          model: "polly",
+          model: "fucho",
         },
       }),
     );
@@ -5822,7 +5822,7 @@ describe("chatStore — pumpStreamEvents frame batching", () => {
           status: "completed",
           role: "assistant",
           content: [{ type: "output_text", text: "Non-streamed reply." }],
-          model: "polly",
+          model: "fucho",
         },
       }),
     );

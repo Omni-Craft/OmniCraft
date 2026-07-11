@@ -122,7 +122,7 @@ class Conversation:
         process. Only valid for ``executor.type: omnicraft`` agents;
         the create route validates against ``OMNICRAFT_HARNESSES``.
         Sub-agent sessions never *inherit* the parent brain's override,
-        so e.g. polly's workers keep their declared harnesses when the
+        so e.g. fucho's workers keep their declared harnesses when the
         brain is overridden. A sub-agent session MAY, however, carry its
         own create-time override when ``sys_session_send`` supplied an
         allowlisted ``args.harness`` (gated by the sub-agent spec's

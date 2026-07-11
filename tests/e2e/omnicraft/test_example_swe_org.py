@@ -6,7 +6,7 @@ director root delegates to a team of role sub-agents that run on *different*
 models for different jobs (Claude for backend / QA / staff-review, GPT for
 frontend / design), all able to inspect the repo through inherited ``os_env``
 tools, with two function-policy guardrails. Pure spec-load — no LLM, no
-credentials — modeled on ``test_example_polly.py``.
+credentials — modeled on ``test_example_fucho.py``.
 
 What breaks if this fails:
 - a team role is dropped/renamed (the org loses a function),

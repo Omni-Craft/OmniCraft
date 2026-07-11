@@ -127,8 +127,8 @@ def test_skills_filter_always_set() -> None:
 
 def test_name_threads_into_agent_name_env_var() -> None:
     """``spec.name`` is forwarded as ``HARNESS_CURSOR_AGENT_NAME``."""
-    env = _build_cursor_spawn_env(_make_spec(name="polly"))
-    assert env["HARNESS_CURSOR_AGENT_NAME"] == "polly"
+    env = _build_cursor_spawn_env(_make_spec(name="fucho"))
+    assert env["HARNESS_CURSOR_AGENT_NAME"] == "fucho"
 
 
 def test_workdir_threads_into_bundle_dir_env_var(tmp_path: Path) -> None:

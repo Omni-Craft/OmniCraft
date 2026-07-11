@@ -851,7 +851,7 @@ export function ChatPage() {
     () => parseCostRoutingVerdict(activeSessionLabels),
     [activeSessionLabels],
   );
-  // Orchestrator-only: polly's children inherit its agentName, so the gate
+  // Orchestrator-only: fucho's children inherit its agentName, so the gate
   // needs the session predicate (parent linkage), not a bare name check.
   const serverInfo = useServerInfo();
   const costRoutingEligible =
@@ -1349,7 +1349,7 @@ interface MainAgentSurfaceProps {
   showCodexGoal?: boolean;
   /** Latest advisor verdict for the cost-routing pill; null when none. */
   costRoutingVerdict: CostRoutingVerdict | null;
-  /** Session passes `isCostRoutingSession` (polly orchestrator, not a child). */
+  /** Session passes `isCostRoutingSession` (fucho orchestrator, not a child). */
   costRoutingEligible: boolean;
   /**
    * Sub-agent instance label when the active session is a child, e.g.
@@ -2615,7 +2615,7 @@ export function RunnerStartingIndicator({ variant }: { variant: "hero" | "row" }
       : undefined;
   // `terminalStartingUp` is computed for ALL sessions in AppShell (it does not
   // check isTerminalFirst), so gate on isTerminalFirst too: regular agents
-  // (e.g. polly) get the generic ConnectionIndicator "Connecting…" band and
+  // (e.g. fucho) get the generic ConnectionIndicator "Connecting…" band and
   // must not also render this.
   const terminalSpinUp = Boolean(
     terminalFirst?.isTerminalFirst && terminalFirst.terminalStartingUp,
@@ -3317,7 +3317,7 @@ interface ComposerProps {
   unreachable?: boolean;
   /** Latest parsed advisor verdict for the cost-routing pill; `null`/omitted when none. */
   costRoutingVerdict?: CostRoutingVerdict | null;
-  /** Session passes `isCostRoutingSession` (polly orchestrator, not a child); see that predicate. */
+  /** Session passes `isCostRoutingSession` (fucho orchestrator, not a child); see that predicate. */
   costRoutingEligible?: boolean;
   /**
    * Sub-agent instance label when the active session is a child, e.g.
@@ -3491,7 +3491,7 @@ export function formatModelEffortStatusLabel(
  * Identity label for the composer status tray: which harness/agent is
  * running this session. Native vendor wrappers read as the bare vendor
  * name ("Claude" / "Codex"); SDK/bundle agents read as the agent name
- * with the brain harness in parens ("Polly (Pi)"). This moved OUT of the
+ * with the brain harness in parens ("Fucho (Pi)"). This moved OUT of the
  * picker trigger (which now shows model/effort) — the trigger is the
  * model/effort control, so the harness identity belongs in the read-only
  * shelf below.
@@ -3556,7 +3556,7 @@ function ComposerStatusLine({
   // self-hides when the session isn't host-bound, so this is a visibility gate,
   // not a host-presence claim.
   const showHost = !!conversationId && !isSubAgentSession;
-  // The harness/agent identity (e.g. "Claude", "Polly (Pi)") lives here now;
+  // The harness/agent identity (e.g. "Claude", "Fucho (Pi)") lives here now;
   // the picker trigger above owns the model/effort label since it's the
   // control that changes them.
   const showHarness = !!conversationId && harnessLabel !== null;
@@ -3798,7 +3798,7 @@ export function Composer({
     modelPickerKind,
     // For a sub-agent (head) session, identify the head family being viewed
     // (e.g. the GPT head → "Gpt") rather than the bundle orchestrator
-    // ("Debby") — the bundle is already named in the breadcrumb / Agents rail.
+    // ("Lilo") — the bundle is already named in the breadcrumb / Agents rail.
     subAgentName ??
       agents?.find((a) => a.id === selectedAgentId)?.name ??
       agents?.[0]?.name ??
@@ -5352,7 +5352,7 @@ function AgentPicker({
   // applied to them, so their live model is the session's own — the applied
   // override or the bound default — never `selectedModel` (a pick carried over
   // from an unrelated session, e.g. a gpt-5.5 left from a Codex session showing
-  // on a Claude-SDK agent like Polly). claude-/codex-native keep `selectedModel`:
+  // on a Claude-SDK agent like Fucho). claude-/codex-native keep `selectedModel`:
   // there the sticky IS the applied model.
   const nonNativeModel =
     modelPickerKind === null

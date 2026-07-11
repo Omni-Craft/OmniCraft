@@ -107,10 +107,10 @@ COPY pyproject.toml setup.py ./
 COPY LICENSE NOTICE ./
 COPY sdks/ ./sdks/
 COPY omnicraft/ ./omnicraft/
-# The built-in polly agent's packaged bundle (omnicraft/resources/examples/
-# polly) is a symlink into the top-level examples/ tree. Ship examples/ so the
+# The built-in fucho agent's packaged bundle (omnicraft/resources/examples/
+# fucho) is a symlink into the top-level examples/ tree. Ship examples/ so the
 # symlink resolves at boot; without it the new-session picker silently drops
-# polly (the seeder skips it when its bundle is absent). ~120K of YAML.
+# fucho (the seeder skips it when its bundle is absent). ~120K of YAML.
 COPY examples/ ./examples/
 
 # Standalone venv we can copy out as a single directory. VIRTUAL_ENV

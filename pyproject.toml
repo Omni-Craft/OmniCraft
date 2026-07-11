@@ -278,7 +278,7 @@ include = ["omnicraft*"]
 [tool.setuptools.package-data]
 "omnicraft.db" = ["alembic.ini"]
 "omnicraft.db.migrations" = ["script.py.mako"]
-"omnicraft.resources.examples" = ["*.yaml", "*.sh", "debby/**/*", "polly/**/*"]
+"omnicraft.resources.examples" = ["*.yaml", "*.sh", "lilo/**/*", "fucho/**/*"]
 "omnicraft.resources.pi_native" = ["*.js"]
 # include UI assets in build, plus the static API-only landing page served
 # at "/" when no web UI bundle is present

@@ -204,7 +204,7 @@ describe("agentRootName", () => {
     // agentRootName recurses to the root so a multi-fork clone of a built-in
     // still matches the built-in catalog (and is dropped by the agent picker).
     expect(agentRootName("claude-native-ui (fork ag_a) (fork ag_b)")).toBe("claude-native-ui");
-    expect(agentRootName("polly (fork conv_a) (switch conv_b)")).toBe("polly");
+    expect(agentRootName("fucho (fork conv_a) (switch conv_b)")).toBe("fucho");
   });
 
   it("leaves interior or non-clone parentheses alone", () => {

@@ -8,7 +8,7 @@ afterEach(() => {
 
 describe("harnessPreferences", () => {
   it("returns null when nothing is stored", () => {
-    expect(readLastHarness("ag_polly")).toBeNull();
+    expect(readLastHarness("ag_fucho")).toBeNull();
   });
 
   it("returns null for null/undefined agent id", () => {
@@ -17,27 +17,27 @@ describe("harnessPreferences", () => {
   });
 
   it("round-trips a written harness override", () => {
-    writeLastHarness("ag_polly", "openai-agents");
-    expect(readLastHarness("ag_polly")).toBe("openai-agents");
+    writeLastHarness("ag_fucho", "openai-agents");
+    expect(readLastHarness("ag_fucho")).toBe("openai-agents");
   });
 
   it("stores per-agent preferences independently", () => {
-    writeLastHarness("ag_polly", "openai-agents");
-    writeLastHarness("ag_debby", "claude-sdk");
-    expect(readLastHarness("ag_polly")).toBe("openai-agents");
-    expect(readLastHarness("ag_debby")).toBe("claude-sdk");
+    writeLastHarness("ag_fucho", "openai-agents");
+    writeLastHarness("ag_lilo", "claude-sdk");
+    expect(readLastHarness("ag_fucho")).toBe("openai-agents");
+    expect(readLastHarness("ag_lilo")).toBe("claude-sdk");
   });
 
   it("overwrites the previous pick for the same agent", () => {
-    writeLastHarness("ag_polly", "openai-agents");
-    writeLastHarness("ag_polly", "claude-sdk");
-    expect(readLastHarness("ag_polly")).toBe("claude-sdk");
+    writeLastHarness("ag_fucho", "openai-agents");
+    writeLastHarness("ag_fucho", "claude-sdk");
+    expect(readLastHarness("ag_fucho")).toBe("claude-sdk");
   });
 
   it("clears the override when null is written", () => {
-    writeLastHarness("ag_polly", "openai-agents");
-    writeLastHarness("ag_polly", null);
-    expect(readLastHarness("ag_polly")).toBeNull();
+    writeLastHarness("ag_fucho", "openai-agents");
+    writeLastHarness("ag_fucho", null);
+    expect(readLastHarness("ag_fucho")).toBeNull();
   });
 
   it("never throws when storage is inaccessible", () => {

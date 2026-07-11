@@ -507,25 +507,25 @@ def seed_stores(tmp_path: Path, db_uri: str) -> _SeedStores:
 
 
 @pytest.fixture()
-def polly_src_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+def fucho_src_copy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """
-    A writable copy of the packaged polly bundle, wired as the seed
+    A writable copy of the packaged fucho bundle, wired as the seed
     source.
 
-    The seeder reads from ``server_app._POLLY_BUNDLE_SOURCE`` (a
+    The seeder reads from ``server_app._FUCHO_BUNDLE_SOURCE`` (a
     read-only path inside the install). Tests that need to mutate the
     spec (change the subtitle) or its file mtimes (simulate a wheel
     reinstall) copy it here and point the seeder at the copy.
 
     :param tmp_path: Per-test temp dir for the copy.
-    :param monkeypatch: Used to repoint ``_POLLY_BUNDLE_SOURCE``.
-    :returns: Path to the copied polly bundle directory.
+    :param monkeypatch: Used to repoint ``_FUCHO_BUNDLE_SOURCE``.
+    :returns: Path to the copied fucho bundle directory.
     """
     import shutil
 
-    dest = tmp_path / "polly_src"
-    shutil.copytree(server_app._POLLY_BUNDLE_SOURCE, dest)
-    monkeypatch.setattr(server_app, "_POLLY_BUNDLE_SOURCE", dest)
+    dest = tmp_path / "fucho_src"
+    shutil.copytree(server_app._FUCHO_BUNDLE_SOURCE, dest)
+    monkeypatch.setattr(server_app, "_FUCHO_BUNDLE_SOURCE", dest)
     return dest
 
 
@@ -554,13 +554,13 @@ def test_builtin_agent_id_is_stable_across_independent_stores(tmp_path: Path) ->
 
     a = _independent_seed_stores(tmp_path, "a")
     b = _independent_seed_stores(tmp_path, "b")
-    server_app._ensure_default_polly_agent(a.agent_store, a.artifact_store, a.agent_cache)
-    server_app._ensure_default_polly_agent(b.agent_store, b.artifact_store, b.agent_cache)
+    server_app._ensure_default_fucho_agent(a.agent_store, a.artifact_store, a.agent_cache)
+    server_app._ensure_default_fucho_agent(b.agent_store, b.artifact_store, b.agent_cache)
 
-    seeded_a = a.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
-    seeded_b = b.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
+    seeded_a = a.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
+    seeded_b = b.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
     assert seeded_a is not None and seeded_b is not None
-    assert seeded_a.id == seeded_b.id == builtin_agent_id(server_app._POLLY_AGENT_NAME)
+    assert seeded_a.id == seeded_b.id == builtin_agent_id(server_app._FUCHO_AGENT_NAME)
 
 
 def test_ensure_extra_builtin_agents_skips_bad_path_and_seeds_good(
@@ -643,23 +643,23 @@ def test_ensure_default_qwen_agent_is_idempotent(seed_stores: _SeedStores) -> No
     assert qwen_rows[0].version == first.version == 1
 
 
-def test_ensure_default_polly_agent_seeds_card(seed_stores: _SeedStores) -> None:
+def test_ensure_default_fucho_agent_seeds_card(seed_stores: _SeedStores) -> None:
     """
-    Seeding registers polly as a built-in the picker can render.
+    Seeding registers fucho as a built-in the picker can render.
 
     The new-session picker reads built-ins from ``GET /v1/agents`` and
-    renders each as a card; this is what makes polly launchable next
+    renders each as a card; this is what makes fucho launchable next
     to Claude Code.
     """
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
 
-    seeded = seed_stores.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
-    assert seeded is not None, "polly was not registered"
-    assert seeded.name == "polly"
+    seeded = seed_stores.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
+    assert seeded is not None, "fucho was not registered"
+    assert seeded.name == "fucho"
     # The bundle must be retrievable, not just referenced.
     assert seed_stores.artifact_store.get(seeded.bundle_location) is not None
 
@@ -712,67 +712,67 @@ def test_ensure_default_agents_includes_antigravity(seed_stores: _SeedStores) ->
     )
 
 
-def test_ensure_default_polly_agent_is_idempotent(seed_stores: _SeedStores) -> None:
+def test_ensure_default_fucho_agent_is_idempotent(seed_stores: _SeedStores) -> None:
     """
     A second seed call is a no-op — it must not register a duplicate.
 
     Startup runs the seeder every boot; a non-idempotent seeder would
-    accumulate a new polly agent on each restart and break the
+    accumulate a new fucho agent on each restart and break the
     unique-name invariant the store enforces.
     """
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
-    first = seed_stores.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
+    first = seed_stores.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
     assert first is not None
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
 
-    # Exactly one polly row, and it's the same agent id as the first
+    # Exactly one fucho row, and it's the same agent id as the first
     # seed (no replacement, no duplicate).
     page = seed_stores.agent_store.list(limit=100)
-    polly_rows = [a for a in page.data if a.name == "polly"]
-    assert len(polly_rows) == 1
-    assert polly_rows[0].id == first.id
+    fucho_rows = [a for a in page.data if a.name == "fucho"]
+    assert len(fucho_rows) == 1
+    assert fucho_rows[0].id == first.id
     # Unchanged re-seed must not bump version (a bump = nondeterministic bundle).
-    assert polly_rows[0].version == first.version == 1
+    assert fucho_rows[0].version == first.version == 1
 
 
-def test_ensure_default_polly_agent_refreshes_on_spec_change(
-    seed_stores: _SeedStores, polly_src_copy: Path
+def test_ensure_default_fucho_agent_refreshes_on_spec_change(
+    seed_stores: _SeedStores, fucho_src_copy: Path
 ) -> None:
     """
     A changed on-disk bundle refreshes the existing row in place.
 
     This is the regression guard for the seed-once bug: when a new wheel
-    shipped a changed polly spec, the old seeder saw the row already
+    shipped a changed fucho spec, the old seeder saw the row already
     existed and returned early, so the deployed app kept serving the
     stale bundle forever. The fix re-bundles and updates in place.
     """
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
-    first = seed_stores.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
+    first = seed_stores.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
     assert first is not None
     assert first.version == 1
 
     # Simulate a new wheel shipping changed bundle content.
-    (polly_src_copy / "NEW_FILE.md").write_text("shipped in the new wheel")
+    (fucho_src_copy / "NEW_FILE.md").write_text("shipped in the new wheel")
 
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
 
-    refreshed = seed_stores.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
+    refreshed = seed_stores.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
     assert refreshed is not None
     # Same agent_id keeps task history (a delete would cascade the tasks FK).
     assert refreshed.id == first.id
@@ -781,12 +781,12 @@ def test_ensure_default_polly_agent_refreshes_on_spec_change(
     assert refreshed.bundle_location != first.bundle_location
     # One row (refresh, not duplicate); new bundle is retrievable.
     page = seed_stores.agent_store.list(limit=100)
-    assert len([a for a in page.data if a.name == "polly"]) == 1
+    assert len([a for a in page.data if a.name == "fucho"]) == 1
     assert seed_stores.artifact_store.get(refreshed.bundle_location) is not None
 
 
-def test_ensure_default_polly_agent_no_churn_on_mtime_change(
-    seed_stores: _SeedStores, polly_src_copy: Path
+def test_ensure_default_fucho_agent_no_churn_on_mtime_change(
+    seed_stores: _SeedStores, fucho_src_copy: Path
 ) -> None:
     """
     A redeploy with unchanged content does NOT refresh the row.
@@ -799,36 +799,36 @@ def test_ensure_default_polly_agent_no_churn_on_mtime_change(
     """
     import os
 
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
-    first = seed_stores.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
+    first = seed_stores.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
     assert first is not None
     assert first.version == 1
 
     # Simulate a wheel reinstall: same content, brand-new mtimes.
     bumped = 1_700_000_000  # fixed mtime, != the copy's
-    os.utime(polly_src_copy, (bumped, bumped))
-    for path in polly_src_copy.rglob("*"):
+    os.utime(fucho_src_copy, (bumped, bumped))
+    for path in fucho_src_copy.rglob("*"):
         os.utime(path, (bumped, bumped))
 
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
 
-    after = seed_stores.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
+    after = seed_stores.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
     assert after is not None
     # Unchanged content → no-op; a v2 here means tar mtimes leaked into the hash.
     assert after.version == 1
     assert after.bundle_location == first.bundle_location
 
 
-def test_ensure_default_polly_agent_repairs_stale_cache(
-    seed_stores: _SeedStores, polly_src_copy: Path
+def test_ensure_default_fucho_agent_repairs_stale_cache(
+    seed_stores: _SeedStores, fucho_src_copy: Path
 ) -> None:
     """
     A matching-hash re-seed repairs a stale local agent cache.
@@ -845,18 +845,18 @@ def test_ensure_default_polly_agent_repairs_stale_cache(
 
     import yaml
 
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
-    agent = seed_stores.agent_store.get_by_name(server_app._POLLY_AGENT_NAME)
+    agent = seed_stores.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME)
     assert agent is not None
     real_desc = seed_stores.agent_cache.load(agent.id, agent.bundle_location).spec.description
 
     # Poison the local cache with a different spec (a lagging replica's stale cache).
-    stale_src = polly_src_copy.parent / "stale"
-    shutil.copytree(polly_src_copy, stale_src)
+    stale_src = fucho_src_copy.parent / "stale"
+    shutil.copytree(fucho_src_copy, stale_src)
     config = stale_src / "config.yaml"
     raw = yaml.safe_load(config.read_text())
     raw["description"] = "STALE CACHED SPEC"
@@ -868,7 +868,7 @@ def test_ensure_default_polly_agent_repairs_stale_cache(
     assert poisoned == "STALE CACHED SPEC"
 
     # Re-seed: source unchanged → hash matches the row (the early-return path).
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
@@ -928,70 +928,70 @@ def test_tar_gz_dir_ignores_mode_bits(tmp_path: Path) -> None:
     assert build(0o600) == build(0o644)
 
 
-def test_ensure_default_polly_agent_skips_when_bundle_absent(
+def test_ensure_default_fucho_agent_skips_when_bundle_absent(
     seed_stores: _SeedStores, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """
     No bundle on disk → no card. Seeding is skipped, not errored.
 
-    On a deployment that didn't package the ``examples/polly`` bundle,
+    On a deployment that didn't package the ``examples/fucho`` bundle,
     seeding must skip silently so startup doesn't fail and no broken
     card (an agent that can't launch here) appears.
     """
-    monkeypatch.setattr(server_app, "_POLLY_BUNDLE_SOURCE", tmp_path / "no-such-polly")
+    monkeypatch.setattr(server_app, "_FUCHO_BUNDLE_SOURCE", tmp_path / "no-such-fucho")
 
-    server_app._ensure_default_polly_agent(
+    server_app._ensure_default_fucho_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
 
-    assert seed_stores.agent_store.get_by_name(server_app._POLLY_AGENT_NAME) is None
+    assert seed_stores.agent_store.get_by_name(server_app._FUCHO_AGENT_NAME) is None
 
 
-def test_ensure_default_debby_agent_seeds_card(seed_stores: _SeedStores) -> None:
+def test_ensure_default_lilo_agent_seeds_card(seed_stores: _SeedStores) -> None:
     """
-    Seeding registers debby as a built-in the picker can render.
+    Seeding registers lilo as a built-in the picker can render.
 
     The new-session picker reads built-ins from ``GET /v1/agents`` and
-    renders each as a card; this is what makes debby launchable next
-    to Claude Code, Codex, and polly. The deeper refresh/idempotency
+    renders each as a card; this is what makes lilo launchable next
+    to Claude Code, Codex, and fucho. The deeper refresh/idempotency
     behavior lives in the shared ``_ensure_builtin_agent`` and is
-    covered by the polly tests above — this verifies debby's wiring
+    covered by the fucho tests above — this verifies lilo's wiring
     (name constant, packaged bundle source) specifically.
     """
-    server_app._ensure_default_debby_agent(
+    server_app._ensure_default_lilo_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
 
-    seeded = seed_stores.agent_store.get_by_name(server_app._DEBBY_AGENT_NAME)
-    assert seeded is not None, "debby was not registered"
-    assert seeded.name == "debby"
+    seeded = seed_stores.agent_store.get_by_name(server_app._LILO_AGENT_NAME)
+    assert seeded is not None, "lilo was not registered"
+    assert seeded.name == "lilo"
     # The bundle must be retrievable, not just referenced.
     assert seed_stores.artifact_store.get(seeded.bundle_location) is not None
 
 
-def test_ensure_default_debby_agent_skips_when_bundle_absent(
+def test_ensure_default_lilo_agent_skips_when_bundle_absent(
     seed_stores: _SeedStores, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """
     No bundle on disk → no card. Seeding is skipped, not errored.
 
-    On a deployment that didn't package the ``examples/debby`` bundle,
+    On a deployment that didn't package the ``examples/lilo`` bundle,
     seeding must skip silently so startup doesn't fail and no broken
     card (an agent that can't launch here) appears.
     """
-    monkeypatch.setattr(server_app, "_DEBBY_BUNDLE_SOURCE", tmp_path / "no-such-debby")
+    monkeypatch.setattr(server_app, "_LILO_BUNDLE_SOURCE", tmp_path / "no-such-lilo")
 
-    server_app._ensure_default_debby_agent(
+    server_app._ensure_default_lilo_agent(
         seed_stores.agent_store,
         seed_stores.artifact_store,
         seed_stores.agent_cache,
     )
 
-    assert seed_stores.agent_store.get_by_name(server_app._DEBBY_AGENT_NAME) is None
+    assert seed_stores.agent_store.get_by_name(server_app._LILO_AGENT_NAME) is None
 
 
 def _build_api_only_app(db_uri: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> FastAPI:

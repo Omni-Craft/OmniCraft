@@ -98,7 +98,7 @@ def startup_banner_strings(
     has, padding with blank rows so the full mascot shows even when
     there is only a title.
 
-    :param agent_label: Bold title row, e.g. the agent name ``"polly"``.
+    :param agent_label: Bold title row, e.g. the agent name ``"fucho"``.
     :param hint_line: Dimmed hint shown as the single info row when
         *info_lines* is not given. ``None`` uses the default hint;
         ``""`` omits the hint row (back-compat with the bare-banner

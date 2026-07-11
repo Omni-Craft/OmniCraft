@@ -126,7 +126,7 @@ describe("useAvailableAgents", () => {
     expect(urls).toContain("/v1/agents?after=ag_codex_fork");
   });
 
-  it("maps rows into AvailableAgent and applies native, nessie, and debby display names", async () => {
+  it("maps rows into AvailableAgent and applies native, nessie, and lilo display names", async () => {
     routeFetch({
       [BUILTINS_URL]: mockResponse({
         object: "list",
@@ -169,8 +169,8 @@ describe("useAvailableAgents", () => {
             skills: [{ name: "review-pr", description: "Review a pull request" }],
           },
           {
-            id: "ag_debby",
-            name: "debby",
+            id: "ag_lilo",
+            name: "lilo",
             description: "A two-headed brainstorming partner.",
             harness: "claude-sdk",
           },
@@ -190,8 +190,8 @@ describe("useAvailableAgents", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     // Native terminal wrappers show product names ("Claude Code" / "Pi").
-    // nessie's and debby's lowercase slugs are
-    // title-cased to "Nessie" / "Debby". A regression in DISPLAY_NAMES
+    // nessie's and lilo's lowercase slugs are
+    // title-cased to "Nessie" / "Lilo". A regression in DISPLAY_NAMES
     // would surface the raw slug to users. Other agents pass their name through as the
     // display name. `harness` is passed through verbatim so the picker
     // can pick a glyph by kind — a custom Codex agent (ag_yaml) keeps
@@ -249,9 +249,9 @@ describe("useAvailableAgents", () => {
         skills: [{ name: "review-pr", description: "Review a pull request" }],
       },
       {
-        id: "ag_debby",
-        name: "debby",
-        display_name: "Debby",
+        id: "ag_lilo",
+        name: "lilo",
+        display_name: "Lilo",
         description: "A two-headed brainstorming partner.",
         harness: "claude-sdk",
         skills: [],
@@ -565,7 +565,7 @@ describe("useAvailableAgents", () => {
         object: "list",
         data: [
           // Seeded built-in — protected, always listed verbatim.
-          { id: "ag_debby", name: "debby", harness: "claude-sdk", builtin: true, created_at: 100 },
+          { id: "ag_lilo", name: "lilo", harness: "claude-sdk", builtin: true, created_at: 100 },
           // User-registered template for "agent-a" (older).
           {
             id: "ag_template",
@@ -602,11 +602,11 @@ describe("useAvailableAgents", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     // Exactly one "agent-a", bound to the newer upload (ag_upload_v2). The
-    // seeded debby is untouched. ag_template winning would mean the stale
+    // seeded lilo is untouched. ag_template winning would mean the stale
     // template shadowed the upload (the original bug); two agent-a rows would
     // mean the template and upload both leaked.
     const ids = result.current.data?.map((a) => a.id);
-    expect(ids).toEqual(["ag_debby", "ag_upload_v2"]);
+    expect(ids).toEqual(["ag_lilo", "ag_upload_v2"]);
     // The enrich ran against the upload's session, not the template-bound one.
     const enrichCalls = fetchMock.mock.calls
       .map((c) => c[0] as string)
@@ -655,20 +655,20 @@ describe("useAvailableAgents", () => {
 
   it("protects a seeded built-in from a same-named upload (builtin: true)", async () => {
     // Option-1 half of the policy: a same-named upload must NOT shadow a
-    // SEEDED built-in (unlike a user-registered template). debby stays canonical.
+    // SEEDED built-in (unlike a user-registered template). lilo stays canonical.
     routeFetch({
       [BUILTINS_URL]: mockResponse({
         object: "list",
         data: [
-          { id: "ag_debby", name: "debby", harness: "claude-sdk", builtin: true, created_at: 100 },
+          { id: "ag_lilo", name: "lilo", harness: "claude-sdk", builtin: true, created_at: 100 },
         ],
         has_more: false,
       }),
       [SCAN_URL]: mockResponse({
         object: "list",
         data: [
-          // A newer upload named "debby" — must be dropped, not surfaced.
-          { id: "conv_x", agent_id: "ag_fake_debby", agent_name: "debby", created_at: 999 },
+          // A newer upload named "lilo" — must be dropped, not surfaced.
+          { id: "conv_x", agent_id: "ag_fake_lilo", agent_name: "lilo", created_at: 999 },
         ],
         has_more: false,
       }),
@@ -677,9 +677,9 @@ describe("useAvailableAgents", () => {
     const { result } = renderHook(() => useAvailableAgents(), { wrapper });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
-    // Only the seeded debby; the same-named upload is shadowed (Option 1) and
+    // Only the seeded lilo; the same-named upload is shadowed (Option 1) and
     // never enriched, even though it is newer than the built-in.
-    expect(result.current.data?.map((a) => a.id)).toEqual(["ag_debby"]);
+    expect(result.current.data?.map((a) => a.id)).toEqual(["ag_lilo"]);
     const enrichCalls = fetchMock.mock.calls
       .map((c) => c[0] as string)
       .filter((u) => u.endsWith("/agent"));

@@ -38,7 +38,7 @@ prompt: |
   1. **Core user-journey update** — it changes something a user *does, sees, or
      configures*: install / setup / onboarding, how they run or interact with
      OmniCraft (terminal, web UI, mobile, desktop), the built-in agents users
-     invoke (Polly, Debby), contextual policies they set, or
+     invoke (Fucho, Lilo), contextual policies they set, or
      collaboration / shared-server / deploy flows.
   2. **Integration update** — a harness, model provider, MCP / tool, sandbox, or
      deploy target is **added, removed, or changes how it is configured**

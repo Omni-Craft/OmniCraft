@@ -696,7 +696,7 @@ async def test_sys_tools_exposed_as_callables_routing_through_executor(
     """OmniCraft tools become callable SDK tools whose calls hit ``_tool_executor``.
 
     This is what lets an Antigravity agent drive OmniCraft's sys / sub-agent
-    tools under policy (needed to run Polly / Debby).
+    tools under policy (needed to run Fucho / Lilo).
     """
     captured = _install_fake_sdk(monkeypatch, scripts=[[_text_step("done")]])
     executor = AntigravityExecutor()

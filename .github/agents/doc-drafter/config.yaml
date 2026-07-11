@@ -30,11 +30,11 @@ async: true
 cancellable: true
 
 # os_env runs unsandboxed (sandbox: none) — the same posture as the in-repo CI
-# reviewer `examples/polly` (polly-review.yml), which also reads files with the
-# LLM key in env. The drafter sits in a STRONGER trust position than Polly:
+# reviewer `examples/fucho` (fucho-review.yml), which also reads files with the
+# LLM key in env. The drafter sits in a STRONGER trust position than Fucho:
 #   - It only runs on ALREADY-MERGED PRs (a maintainer reviewed + merged the diff),
-#     whereas Polly runs on open, un-reviewed PRs.
-#   - The only secret in this process's env is LLM_API_KEY (same as Polly). The
+#     whereas Fucho runs on open, un-reviewed PRs.
+#   - The only secret in this process's env is LLM_API_KEY (same as Fucho). The
 #     omnicraft-site write-token is minted by the workflow AFTER this agent finishes
 #     and is never present while the (PR-influenced) drafter runs.
 #   - It is fed only the code diff (via DIFF_FILE) — never the PR title/description
@@ -48,7 +48,7 @@ cancellable: true
 # allowlist WOULD close this exfil path and is the real mitigation — we don't use
 # one only because it proved fragile/unverifiable in CI (uv-venv interpreter exec
 # under bwrap/seatbelt), so we accept the same residual risk already accepted for
-# polly-review. cwd is the workspace root (holds the PR-diff file the drafter reads
+# fucho-review. cwd is the workspace root (holds the PR-diff file the drafter reads
 # and the omnicraft-site checkout it writes).
 os_env:
   type: caller_process

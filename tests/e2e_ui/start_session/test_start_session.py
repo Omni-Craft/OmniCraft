@@ -218,13 +218,13 @@ def _canonical_codex_second_page_body() -> str:
 def _bundle_agents_body() -> str:
     """Stub body for ``GET /v1/agents``: the two harness-overridable bundle agents.
 
-    Polly and Debby are multi-agent bundles, not native terminal wrappers, so
+    Fucho and Lilo are multi-agent bundles, not native terminal wrappers, so
     their spec declares a brain harness (``harness: "claude-sdk"``) that lands
     them in ``BRAIN_HARNESS_LABELS``. That — and the fact that neither is named
     ``claude-native-ui`` — is what makes the composer render the harness picker
     (an **Agent Harness** radio group) instead of Claude Code's permission-mode
-    pill. Polly is
-    ranked ahead of Debby by ``AGENT_DISPLAY_ORDER``, so it auto-selects and no
+    pill. Fucho is
+    ranked ahead of Lilo by ``AGENT_DISPLAY_ORDER``, so it auto-selects and no
     explicit agent pick is needed. ``harness: null`` would suppress the section
     entirely, so it must be a real harness id here.
     """
@@ -232,17 +232,17 @@ def _bundle_agents_body() -> str:
         {
             "data": [
                 {
-                    "id": "ag_polly_e2e",
-                    "name": "polly",
-                    "display_name": "Polly",
+                    "id": "ag_fucho_e2e",
+                    "name": "fucho",
+                    "display_name": "Fucho",
                     "description": "Multi-agent coding",
                     "harness": "claude-sdk",
                     "skills": [],
                 },
                 {
-                    "id": "ag_debby_e2e",
-                    "name": "debby",
-                    "display_name": "Debby",
+                    "id": "ag_lilo_e2e",
+                    "name": "lilo",
+                    "display_name": "Lilo",
                     "description": "Multi-agent debate",
                     "harness": "claude-sdk",
                     "skills": [],
@@ -1162,10 +1162,10 @@ async def _drive_bypass_sandbox(base_url: str, session_id: str) -> None:
 
 
 def test_start_session_select_harness(seeded_session: tuple[str, str]) -> None:
-    """For a bundle agent (Polly/Debby), the composer offers an agent-harness pick.
+    """For a bundle agent (Fucho/Lilo), the composer offers an agent-harness pick.
 
-    Unlike Claude Code — whose submenu shows permission/model knobs — Polly and
-    Debby declare a brain harness, so their config submenu renders an "Agent
+    Unlike Claude Code — whose submenu shows permission/model knobs — Fucho and
+    Lilo declare a brain harness, so their config submenu renders an "Agent
     Harness" radio group. Selecting a dynamically registered community harness
     must (a) show the label from ``/v1/harnesses`` and (b) reach
     ``POST /v1/sessions`` as ``harness_override: "community-brain"``.
@@ -1199,12 +1199,12 @@ async def _drive_select_harness(base_url: str, session_id: str) -> None:
             await page.route("**/v1/harnesses", handle_harness_catalog)
 
             # Neutralize agent discovery so only the stubbed bundle agents
-            # (Polly/Debby) feed the picker. The landing picker merges
+            # (Fucho/Lilo) feed the picker. The landing picker merges
             # `/v1/agents` with agents found by scanning the caller's sessions
             # (`/v1/sessions?kind=any`); on the shared e2e_ui server, a native
             # fork another test left behind sorts ahead of bundle agents and
             # auto-selects, so the composer would show a permission-mode pill
-            # (or nothing) instead of Polly's harness picker. Registered after
+            # (or nothing) instead of Fucho's harness picker. Registered after
             # _register_common_routes so it wins the kind=any scan.
             async def handle_agent_scan(route: Route) -> None:
                 await route.fulfill(
@@ -1228,9 +1228,9 @@ async def _drive_select_harness(base_url: str, session_id: str) -> None:
             await page.get_by_test_id("new-chat-landing-input").wait_for(
                 state="visible", timeout=30_000
             )
-            # Polly auto-selects (ranked ahead of Debby); its brain-harness
+            # Fucho auto-selects (ranked ahead of Lilo); its brain-harness
             # override radios live in the picker's per-entry config submenu.
-            await _open_entry_config(page, "ag_polly_e2e")
+            await _open_entry_config(page, "ag_fucho_e2e")
             # The built-in brain harnesses render as radio rows, in registry
             # order (openai-agents is intentionally not offered in the picker).
             for harness in ("claude-sdk", "codex", "pi"):
@@ -1243,7 +1243,7 @@ async def _drive_select_harness(base_url: str, session_id: str) -> None:
             await expect(community_harness).to_be_visible()
             await expect(community_harness).to_contain_text("Community Brain")
             # Picking a harness commits and closes the menu (the agent chip keeps
-            # the bare agent label "Polly"); the override rides along on create.
+            # the bare agent label "Fucho"); the override rides along on create.
             await community_harness.click()
 
             await page.get_by_test_id("new-chat-landing-input").fill("debate the design")
@@ -1251,7 +1251,7 @@ async def _drive_select_harness(base_url: str, session_id: str) -> None:
 
             await _wait_until(lambda: len(create_bodies) == 1)
             body = create_bodies[0]
-            assert body["agent_id"] == "ag_polly_e2e", body
+            assert body["agent_id"] == "ag_fucho_e2e", body
             assert body["host_id"] == _HOST_ID, body
             assert body["workspace"] == "/work/repo", body
             assert body.get("harness_override") == "community-brain", body

@@ -155,18 +155,18 @@ _HERMES_NATIVE_AGENT_NAME = HERMES_NATIVE_CODING_AGENT.agent_name
 _ANTIGRAVITY_NATIVE_AGENT_NAME = ANTIGRAVITY_NATIVE_CODING_AGENT.agent_name
 _QWEN_NATIVE_AGENT_NAME = QWEN_NATIVE_CODING_AGENT.agent_name
 _KIMI_NATIVE_AGENT_NAME = KIMI_NATIVE_CODING_AGENT.agent_name
-_DEBBY_AGENT_NAME = "debby"
-_POLLY_AGENT_NAME = "polly"
+_LILO_AGENT_NAME = "lilo"
+_FUCHO_AGENT_NAME = "fucho"
 _UNMATCHED_ROUTE_TEMPLATE = "<unmatched>"
 _SESSION_PATH_RE = re.compile(r"/v1/sessions/([^/]+)")
-# polly's and debby's multi-file bundles are packaged under
+# fucho's and lilo's multi-file bundles are packaged under
 # omnicraft.resources.examples (see pyproject package-data), so they resolve
 # in both a repo checkout and an installed wheel. The presence check in each
 # seeder is a safety net.
 # resolve_repo_symlink dereferences the packaged symlink on a no-symlink
 # Windows checkout (where Git leaves it as a stub text file); a no-op elsewhere.
-_DEBBY_BUNDLE_SOURCE = resolve_repo_symlink(Path(_examples_resources.__file__).parent / "debby")
-_POLLY_BUNDLE_SOURCE = resolve_repo_symlink(Path(_examples_resources.__file__).parent / "polly")
+_LILO_BUNDLE_SOURCE = resolve_repo_symlink(Path(_examples_resources.__file__).parent / "lilo")
+_FUCHO_BUNDLE_SOURCE = resolve_repo_symlink(Path(_examples_resources.__file__).parent / "fucho")
 
 
 class _FastAPICallNext(Protocol):
@@ -373,7 +373,7 @@ def _ensure_builtin_agent(
     :param artifact_store: Store for agent bundles.
     :param agent_cache: Cache for loaded agent specs; exposes
         ``replace`` and ``evict``.
-    :param name: Built-in agent's unique name, e.g. ``"polly"``.
+    :param name: Built-in agent's unique name, e.g. ``"fucho"``.
     :param bundle_bytes: Freshly built gzipped tarball of the spec.
     """
     import hashlib
@@ -440,13 +440,13 @@ def _ensure_default_agents(
     _ensure_default_antigravity_agent(agent_store, artifact_store, agent_cache)
     _ensure_default_qwen_agent(agent_store, artifact_store, agent_cache)
     _ensure_default_kimi_native_agent(agent_store, artifact_store, agent_cache)
-    _ensure_default_debby_agent(agent_store, artifact_store, agent_cache)
-    _ensure_default_polly_agent(agent_store, artifact_store, agent_cache)
+    _ensure_default_lilo_agent(agent_store, artifact_store, agent_cache)
+    _ensure_default_fucho_agent(agent_store, artifact_store, agent_cache)
     _ensure_extra_builtin_agents(agent_store, artifact_store, agent_cache)
 
 
 # Env var listing extra built-in agent specs to seed at startup, in addition
-# to the packaged claude-native-ui / codex-native-ui / polly set. Each
+# to the packaged claude-native-ui / codex-native-ui / fucho set. Each
 # ``os.pathsep``-separated entry is a path to an agent spec (single-file
 # YAML or a bundle dir); it is registered as a built-in (``session_id NULL``)
 # under the spec path's stem (file) or directory name. Lets a deployment —
@@ -944,11 +944,11 @@ def _ensure_default_kimi_native_agent(
     )
 
 
-def _build_debby_bundle() -> bytes:
+def _build_lilo_bundle() -> bytes:
     """
-    Build a gzipped tarball of the ``examples/debby`` agent bundle.
+    Build a gzipped tarball of the ``examples/lilo`` agent bundle.
 
-    debby is a multi-file image (``config.yaml`` plus ``agents/`` and
+    lilo is a multi-file image (``config.yaml`` plus ``agents/`` and
     ``skills/`` subdirectories), so the source is the directory itself
     rather than a generated single YAML.
 
@@ -959,36 +959,36 @@ def _build_debby_bundle() -> bytes:
     from omnicraft.spec import materialize_bundle
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        bundle_dir = materialize_bundle(_DEBBY_BUNDLE_SOURCE, Path(tmpdir) / "bundle")
+        bundle_dir = materialize_bundle(_LILO_BUNDLE_SOURCE, Path(tmpdir) / "bundle")
         return _tar_gz_dir(bundle_dir)
 
 
-def _ensure_default_debby_agent(
+def _ensure_default_lilo_agent(
     agent_store: AgentStore,
     artifact_store: ArtifactStore,
     agent_cache: Any,
 ) -> None:
     """
-    Register the debby brainstorming agent if its bundle ships here.
+    Register the lilo brainstorming agent if its bundle ships here.
 
     Called during server lifespan startup so the Web UI's new-session
-    picker can offer debby as a host-launchable card next to Claude
-    Code, Codex, and polly. When the bundle is absent (generic
+    picker can offer lilo as a host-launchable card next to Claude
+    Code, Codex, and fucho. When the bundle is absent (generic
     deployment that didn't package it), seeding is skipped so no card
     is offered for an agent that can't be launched here — same pattern
-    as :func:`_ensure_default_polly_agent`. Content-aware via
+    as :func:`_ensure_default_fucho_agent`. Content-aware via
     :func:`_ensure_builtin_agent`: when a new wheel ships a changed
-    debby spec, the existing row is refreshed in place instead of
+    lilo spec, the existing row is refreshed in place instead of
     being ignored.
 
     :param agent_store: Store for agent metadata.
     :param artifact_store: Store for agent bundles.
     :param agent_cache: Cache for loaded agent specs.
     """
-    if not (_DEBBY_BUNDLE_SOURCE / "config.yaml").is_file():
+    if not (_LILO_BUNDLE_SOURCE / "config.yaml").is_file():
         _logger.debug(
-            "debby bundle not found at %s; skipping seed",
-            _DEBBY_BUNDLE_SOURCE,
+            "lilo bundle not found at %s; skipping seed",
+            _LILO_BUNDLE_SOURCE,
         )
         return
 
@@ -996,16 +996,16 @@ def _ensure_default_debby_agent(
         agent_store,
         artifact_store,
         agent_cache,
-        name=_DEBBY_AGENT_NAME,
-        bundle_bytes=_build_debby_bundle(),
+        name=_LILO_AGENT_NAME,
+        bundle_bytes=_build_lilo_bundle(),
     )
 
 
-def _build_polly_bundle() -> bytes:
+def _build_fucho_bundle() -> bytes:
     """
-    Build a gzipped tarball of the ``examples/polly`` agent bundle.
+    Build a gzipped tarball of the ``examples/fucho`` agent bundle.
 
-    polly is a multi-file image (``config.yaml`` plus ``agents/`` and
+    fucho is a multi-file image (``config.yaml`` plus ``agents/`` and
     ``skills/`` subdirectories), so the source is the directory itself
     rather than a generated single YAML.
 
@@ -1016,19 +1016,19 @@ def _build_polly_bundle() -> bytes:
     from omnicraft.spec import materialize_bundle
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        bundle_dir = materialize_bundle(_POLLY_BUNDLE_SOURCE, Path(tmpdir) / "bundle")
+        bundle_dir = materialize_bundle(_FUCHO_BUNDLE_SOURCE, Path(tmpdir) / "bundle")
         return _tar_gz_dir(bundle_dir)
 
 
-def _ensure_default_polly_agent(
+def _ensure_default_fucho_agent(
     agent_store: AgentStore,
     artifact_store: ArtifactStore,
     agent_cache: Any,
 ) -> None:
     """
-    Register the polly orchestrator agent if its bundle ships here.
+    Register the fucho orchestrator agent if its bundle ships here.
 
-    polly is the multi-agent coding orchestrator (successor to the
+    fucho is the multi-agent coding orchestrator (successor to the
     deleted nessie example); seeding it lets the Web UI's new-session
     picker offer it as a host-launchable card next to Claude Code and
     Codex. When the bundle is absent (generic deployment that didn't
@@ -1036,17 +1036,17 @@ def _ensure_default_polly_agent(
     that can't be launched here — mirroring the ``_WEB_UI_DIST``
     "asset present → enable feature" pattern. Content-aware via
     :func:`_ensure_builtin_agent`: when a new wheel ships a changed
-    polly spec, the existing row is refreshed in place instead of
+    fucho spec, the existing row is refreshed in place instead of
     being ignored.
 
     :param agent_store: Store for agent metadata.
     :param artifact_store: Store for agent bundles.
     :param agent_cache: Cache for loaded agent specs.
     """
-    if not (_POLLY_BUNDLE_SOURCE / "config.yaml").is_file():
+    if not (_FUCHO_BUNDLE_SOURCE / "config.yaml").is_file():
         _logger.debug(
-            "polly bundle not found at %s; skipping seed",
-            _POLLY_BUNDLE_SOURCE,
+            "fucho bundle not found at %s; skipping seed",
+            _FUCHO_BUNDLE_SOURCE,
         )
         return
 
@@ -1054,8 +1054,8 @@ def _ensure_default_polly_agent(
         agent_store,
         artifact_store,
         agent_cache,
-        name=_POLLY_AGENT_NAME,
-        bundle_bytes=_build_polly_bundle(),
+        name=_FUCHO_AGENT_NAME,
+        bundle_bytes=_build_fucho_bundle(),
     )
 
 

@@ -30,7 +30,7 @@ def test_resolve_effective_context_window_prefers_declared_window(
     A spec-declared ``executor.context_window`` wins over the catalog lookup.
 
     Regression for the runner over-compaction bug: an agent that declares a
-    1M window (e.g. Polly) must be budgeted against 1M, not the 128K catalog
+    1M window (e.g. Fucho) must be budgeted against 1M, not the 128K catalog
     default. If the resolver fell back to the catalog here, the compaction
     budget would be ~8x too small and fire constantly.
     """
@@ -252,7 +252,7 @@ def test_fetch_model_pricing_databricks_alias_falls_back_to_base_model(
     list even though anthropic's ``claude-opus-4-8`` is priced. Without the
     de-prefix fallback, every unpinned claude-sdk agent on the Databricks
     gateway (which defaults to ``databricks-claude-opus-4-8``) would show
-    "unpriced" — the exact gap reported for the debbie/debby supervisors.
+    "unpriced" — the exact gap reported for the debbie/lilo supervisors.
     """
     monkeypatch.delenv("OMNICRAFT_DISABLE_CATALOG_LOOKUP", raising=False)
 

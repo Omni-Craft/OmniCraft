@@ -174,7 +174,7 @@ async def _run_tmux_capture(socket_path: str, tmux_target: str) -> bytes | None:
 
     **Scrollback**, conditioned on the screen mode:
 
-    - **Primary screen** (a shell, the polly REPL): capture from the start of
+    - **Primary screen** (a shell, the fucho REPL): capture from the start of
       history (``-S -``) so the browser recovers the full scrollback, not just
       the visible screen. The extra history lines scroll into xterm's own
       scrollback as they're written; the cursor CUP is screen-relative so it

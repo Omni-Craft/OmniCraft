@@ -277,7 +277,7 @@ async def test_relay_text_flush_publishes_persisted_item(db_uri: str) -> None:
     turn_events: list[dict[str, Any]] = [
         {
             "type": "response.in_progress",
-            "response": {"id": response_id, "model": "debby"},
+            "response": {"id": response_id, "model": "lilo"},
         },
         # Scaffold-style deltas: no message_id, so no per-message
         # output_item.done ever arrives from the runner itself.
@@ -287,7 +287,7 @@ async def test_relay_text_flush_publishes_persisted_item(db_uri: str) -> None:
         # cost-accumulation path, which this test doesn't exercise.
         {
             "type": "response.completed",
-            "response": {"id": response_id, "model": "debby"},
+            "response": {"id": response_id, "model": "lilo"},
         },
     ]
     release = asyncio.Event()

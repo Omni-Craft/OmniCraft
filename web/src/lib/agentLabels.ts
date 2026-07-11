@@ -9,7 +9,7 @@ import { authenticatedFetch } from "@/lib/identity";
 
 /**
  * Brain harnesses offered as a per-session override on bundle agents
- * (executor.type: omnicraft — polly, debby, and other YAML agents). Keys
+ * (executor.type: omnicraft — fucho, lilo, and other YAML agents). Keys
  * are canonical server harness ids, values are picker labels. Native
  * terminal wrappers (claude-native / codex-native) are deliberately
  * absent: an agent whose declared harness isn't in this map gets no
@@ -55,7 +55,7 @@ export function useBrainHarnessLabels(): Record<string, string> {
 
 /**
  * Capitalize the first letter of an agent name for display, e.g.
- * ``"polly"`` → ``"Polly"``. Server agent names are lowercase slugs;
+ * ``"fucho"`` → ``"Fucho"``. Server agent names are lowercase slugs;
  * both composers show them capital-first.
  */
 export function capitalizeAgentName(name: string): string {

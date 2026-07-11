@@ -905,7 +905,7 @@ def _subagent_message_from_args(args: dict[str, Any]) -> str | None:
     Extract the user message from ``sys_session_send`` arguments.
 
     The public ``SysSessionSendTool`` contract accepts ``args`` as a plain
-    string. polly also sends an object with ``input`` plus metadata such as
+    string. fucho also sends an object with ``input`` plus metadata such as
     ``purpose`` so its guardrail can classify headless helper usage.
 
     :param args: Parsed ``sys_session_send`` arguments, e.g.

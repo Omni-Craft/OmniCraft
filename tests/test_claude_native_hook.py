@@ -2126,7 +2126,7 @@ def test_evaluate_policy_fails_closed_when_reauth_unavailable(
 # subprocesses) every <=30s for 24h — the spin half of the zombie pileup. The
 # fix bounds CONSECUTIVE HARD failures (server down/sick), classified by
 # EXCEPTION KIND + held time, while leaving a proxy-severed HELD poll (a slow
-# human waiting) untouched. The Polly review flagged that a pure wall-clock
+# human waiting) untouched. The Fucho review flagged that a pure wall-clock
 # threshold couldn't tell a 60s proxy-severed parked poll from a 60s connect
 # failure — hence the kind-based classification exercised below.
 
@@ -2282,7 +2282,7 @@ def test_reattach_bad_env_max_retries_falls_back(monkeypatch: pytest.MonkeyPatch
 def test_reattach_proxy_severed_held_poll_never_caps(monkeypatch: pytest.MonkeyPatch) -> None:
     """A proxy severing a HELD poll must never cap a slow human (#1782 review).
 
-    This is the exact scenario Polly flagged: a legitimately-parked approval
+    This is the exact scenario Fucho flagged: a legitimately-parked approval
     behind a proxy that severs the idle long-poll every ~60s. Each sever is an
     established-then-dropped ``RemoteProtocolError`` held past the floor — a
     held-poll sever, NOT a hard failure — so the counter resets every time and

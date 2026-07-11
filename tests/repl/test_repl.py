@@ -1495,7 +1495,7 @@ def test_startup_header_shows_server_version_on_url_line() -> None:
         r"\x1b\[[0-9;]*m",
         "",
         _render_startup_banner_ansi(
-            "polly", server_url=remote, server_version="0.3.0.dev0", header=header
+            "fucho", server_url=remote, server_version="0.3.0.dev0", header=header
         ),
     )
     assert "server 0.3.0.dev0" in plain
@@ -1531,7 +1531,7 @@ def test_startup_header_shows_local_server_url_with_version() -> None:
         r"\x1b\[[0-9;]*m",
         "",
         _render_startup_banner_ansi(
-            "polly", server_url=local, server_version="0.3.0.dev0", header=header
+            "fucho", server_url=local, server_version="0.3.0.dev0", header=header
         ),
     )
     # The loopback URL and the version share one row in the header box.
@@ -1566,7 +1566,7 @@ def test_startup_header_shows_databricks_workspace_url_not_api_mount() -> None:
         # Pass a version to prove the renderer suppresses it for a workspace
         # mount regardless of what the caller hands in.
         _render_startup_banner_ansi(
-            "polly", server_url=api_mount, server_version="0.3.0.dev0", header=header
+            "fucho", server_url=api_mount, server_version="0.3.0.dev0", header=header
         ),
     )
     # The clean workspace URL is shown, the internal API path is NOT.
@@ -1596,7 +1596,7 @@ def test_startup_header_omits_server_version_when_unresolved() -> None:
     plain = re.sub(
         r"\x1b\[[0-9;]*m",
         "",
-        _render_startup_banner_ansi("polly", server_url=None, server_version=None, header=header),
+        _render_startup_banner_ansi("fucho", server_url=None, server_version=None, header=header),
     )
     assert "server " not in plain
 
@@ -1861,7 +1861,7 @@ def test_build_startup_header_creds_line_includes_pi_surface(tmp_path, monkeypat
     """
     The per-surface creds line resolves the pi surface's effective default.
 
-    What this proves: polly's header (a pi brain spawning claude/codex
+    What this proves: fucho's header (a pi brain spawning claude/codex
     sub-agents → surfaces ``["anthropic", "openai", "pi"]``) shows what
     EACH harness would actually use — the family surfaces show their
     subscriptions, while the Pi segment shows the explicit pi-scoped

@@ -298,7 +298,7 @@ def test_codex_falls_back_to_first_available_openai_credential(
 
     The headline fix: a user who configured an openai-family credential via
     ``omnicraft setup`` (a Databricks workspace, or any key/gateway) but never
-    marked it ``default`` would otherwise launch Debby's GPT (codex) head with NO
+    marked it ``default`` would otherwise launch Lilo's GPT (codex) head with NO
     credential — codex's own "Invalid API key". The spawn-env builder now falls
     back to the first credential that can serve the head's family, so the head
     launches. This lives in the RUNNER — every launch surface (CLI, web UI, a
@@ -325,7 +325,7 @@ def test_codex_falls_back_to_first_available_openai_credential(
     }
     _write_config(config_home, config)
     before = (config_home / "config.yaml").read_text()
-    spec = _make_spec(harness="codex")  # unpinned, no auth — like Debby's GPT head
+    spec = _make_spec(harness="codex")  # unpinned, no auth — like Lilo's GPT head
 
     env = _build_codex_spawn_env(spec, workdir=None)
 
@@ -346,8 +346,8 @@ def test_claude_sdk_falls_back_to_first_available_anthropic_credential(
     """
     A configured-but-not-default anthropic credential routes the BRAIN head at spawn.
 
-    The brain-head counterpart to the codex fallback — Debby's Claude head /
-    Polly's claude-sdk brain, the most-used surface. With an anthropic
+    The brain-head counterpart to the codex fallback — Lilo's Claude head /
+    Fucho's claude-sdk brain, the most-used surface. With an anthropic
     credential configured but never marked default, the spawn-env builder falls
     back to it via the same `first_available_provider`, so the brain launches
     instead of hitting api.anthropic.com with no key. Resolved per spawn; the
@@ -370,7 +370,7 @@ def test_claude_sdk_falls_back_to_first_available_anthropic_credential(
     }
     _write_config(config_home, config)
     before = (config_home / "config.yaml").read_text()
-    spec = _make_spec(harness="claude-sdk")  # unpinned, no auth — like Debby's Claude head
+    spec = _make_spec(harness="claude-sdk")  # unpinned, no auth — like Lilo's Claude head
 
     env = _build_claude_sdk_spawn_env(spec, workdir=None)
 

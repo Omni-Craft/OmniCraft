@@ -1029,7 +1029,7 @@ def test_client_server_attachment_extension_parity() -> None:
     """The web client's TEXT_CODE_EXTENSIONS must all be accepted server-side,
     even when the browser reports a non-text MIME — the parity contract the two
     share. Guards against the client gate admitting a file the upload route then
-    415s (the divergence Polly flagged)."""
+    415s (the divergence Fucho flagged)."""
     import re
     from pathlib import Path
 

@@ -858,7 +858,7 @@ def test_canonicalize_local_agent_path_promotes_root_config_yaml(tmp_path: Path)
     """A directory agent's root ``config.yaml`` resolves to its bundle root.
 
     This is the shape users naturally type for bundles like
-    ``examples/polly/config.yaml``. If the helper returns the file instead
+    ``examples/fucho/config.yaml``. If the helper returns the file instead
     of the parent, the bundler treats it as a standalone YAML and drops
     sibling ``agents/`` / ``skills/`` directories.
     """
@@ -922,7 +922,7 @@ def test_chat_via_daemon_uses_directory_bundle_for_root_config_yaml(
 ) -> None:
     """Passing ``bundle/config.yaml`` uploads and labels the whole bundle.
 
-    Regression guard for directory agents such as ``examples/polly``: the
+    Regression guard for directory agents such as ``examples/fucho``: the
     daemon path must feed the parent directory into materialization, skill
     discovery, and bundling. If it feeds the file, sub-agents and skills are
     silently excluded from the uploaded session bundle.
@@ -1568,14 +1568,14 @@ def test_apply_overrides_writes_nested_config_harness_for_spec_version_bundle() 
     ``executor.config.harness`` — the ONLY harness location that
     format's parser reads.
 
-    Regression guard for the polly no-op: ``omnicraft run
-    examples/polly --harness pi`` used to write the flat
+    Regression guard for the fucho no-op: ``omnicraft run
+    examples/fucho --harness pi`` used to write the flat
     ``executor.harness`` key, which ``_parse_executor`` ignores for
     spec_version specs — the brain silently stayed on claude-sdk.
     """
     raw: dict[str, object] = {
         "spec_version": 1,
-        "name": "polly",
+        "name": "fucho",
         "prompt": "orchestrate",
         "executor": {
             "type": "omnicraft",
@@ -1678,12 +1678,12 @@ def test_apply_overrides_harness_and_model_together_for_spec_version_bundle() ->
     parser-read locations: nested ``config.harness`` and flat
     ``executor.model``.
 
-    This is the polly-on-GPT invocation shape: ``omnicraft run
-    examples/polly --harness openai-agents --model <gpt>``.
+    This is the fucho-on-GPT invocation shape: ``omnicraft run
+    examples/fucho --harness openai-agents --model <gpt>``.
     """
     raw: dict[str, object] = {
         "spec_version": 1,
-        "name": "polly",
+        "name": "fucho",
         "prompt": "orchestrate",
         "executor": {"type": "omnicraft", "config": {"harness": "claude-sdk"}},
     }
@@ -1810,12 +1810,12 @@ def test_nested_config_harness_skips_ad_hoc_model_fallback(
     """
     A single-file spec that declares its harness under the bundle-style
     ``executor.config.harness`` (no flat ``harness:``, no ``model:``) must
-    NOT trigger the ``_DEFAULT_AD_HOC_MODEL`` fallback — this is the polly
-    shape (``examples/polly/config.yaml`` run as a file).
+    NOT trigger the ``_DEFAULT_AD_HOC_MODEL`` fallback — this is the fucho
+    shape (``examples/fucho/config.yaml`` run as a file).
 
     Regression guard for the ``databricks-gpt-5-4`` injection: before
     ``_spec_declares_harness_or_model`` looked under ``config``, an unpinned
-    polly loaded as a single file got force-fed the GPT ad-hoc default,
+    fucho loaded as a single file got force-fed the GPT ad-hoc default,
     which the claude-sdk harness can't speak. With the nested-harness check,
     ``_materialize_override_bundle`` returns the source unchanged (no rewrite,
     no injected model), letting normal provider resolution pick the model.
@@ -1839,7 +1839,7 @@ def test_nested_config_harness_skips_ad_hoc_model_fallback(
             "unchanged for a nested executor.config.harness spec, but it "
             "rewrote the bundle — the ad-hoc-model fallback fired because "
             "_spec_declares_harness_or_model didn't recognize the nested "
-            "harness. An unpinned polly would get databricks-gpt-5-4."
+            "harness. An unpinned fucho would get databricks-gpt-5-4."
         )
     finally:
         if materialized != src:
@@ -1873,7 +1873,7 @@ def test_apply_overrides_skips_default_for_nested_harness(
     monkeypatch.setenv("OMNICRAFT_MODEL", "databricks-gpt-5-4")
     raw: dict[str, object] = {
         "spec_version": 1,
-        "name": "debby",
+        "name": "lilo",
         "prompt": "hi",
         "executor": {"type": "omnicraft", "config": {"harness": "claude-sdk"}},
     }
@@ -1886,7 +1886,7 @@ def test_apply_overrides_skips_default_for_nested_harness(
         f"executor.model should NOT be injected for a nested "
         f"executor.config.harness spec, but got {executor.get('model')!r}. "
         f"The ad-hoc fallback fired despite a declared (nested) harness — "
-        f"this is the Debby regression where the claude-sdk brain got "
+        f"this is the Lilo regression where the claude-sdk brain got "
         f"force-fed databricks-gpt-5-4."
     )
 
@@ -1899,7 +1899,7 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
     A directory bundle with a nested claude-sdk harness, materialized for
     an executor-unrelated override, must come back WITHOUT a pinned GPT model.
 
-    End-to-end reproduction of the Debby breakage through the real
+    End-to-end reproduction of the Lilo breakage through the real
     ``mkdtemp`` → ``copytree`` → ``yaml.safe_load`` →
     ``_apply_overrides_to_raw`` → ``yaml.safe_dump`` pipeline.
     ``--system-prompt`` forces materialization (any override does), and
@@ -1924,11 +1924,11 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
     monkeypatch.setenv("OMNICRAFT_MODEL", "databricks-gpt-5-4")
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
 
-    agent_dir = tmp_path / "debby"
+    agent_dir = tmp_path / "lilo"
     agent_dir.mkdir()
     (agent_dir / "config.yaml").write_text(
         "spec_version: 1\n"
-        "name: debby\n"
+        "name: lilo\n"
         "prompt: hi\n"
         "executor:\n"
         "  type: omnicraft\n"
@@ -1951,7 +1951,7 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
         # The crux: no model is pinned, so the claude-sdk harness resolves a
         # Claude model via ucode/provider instead of the GPT ad-hoc default.
         assert "model" not in executor, (
-            f"Materialized debby config pinned executor.model="
+            f"Materialized lilo config pinned executor.model="
             f"{executor.get('model')!r}; expected none. A GPT model here "
             f"(databricks-gpt-5-4) is the regression that sent "
             f"anthropic/v1/messages to a GPT gateway endpoint."
@@ -1965,7 +1965,7 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
     ("bundle_name", "expected_workers"),
     [
         (
-            "polly",
+            "fucho",
             {
                 "claude_code": "claude-native",
                 "codex": "codex-native",
@@ -1975,7 +1975,7 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
                 "pi": "pi",
             },
         ),
-        ("debby", {"claude": "claude-sdk", "gpt": "codex"}),
+        ("lilo", {"claude": "claude-sdk", "gpt": "codex"}),
     ],
 )
 def test_materialize_bundle_overrides_brain_harness(
@@ -1986,14 +1986,14 @@ def test_materialize_bundle_overrides_brain_harness(
     brain_harness: str,
 ) -> None:
     """
-    A REAL bundled orchestrator (polly / debby), materialized with
+    A REAL bundled orchestrator (fucho / lilo), materialized with
     ``--harness``, parses to a valid spec whose brain runs the requested
     harness and whose sub-agents keep their own declared harnesses.
 
     End-to-end through the production pipeline: ``copytree`` →
     ``_apply_overrides_to_raw`` → ``yaml.safe_dump`` → ``omnicraft.spec.load``
-    → ``validate``. This is the exact path ``omnicraft run examples/polly
-    --harness pi`` (or ``examples/debby``) takes before the bundle reaches
+    → ``validate``. This is the exact path ``omnicraft run examples/fucho
+    --harness pi`` (or ``examples/lilo``) takes before the bundle reaches
     a server.
 
     What this proves: (1) the override reaches ``executor.config.harness``
@@ -2001,11 +2001,11 @@ def test_materialize_bundle_overrides_brain_harness(
     key and the brain silently stayed claude-sdk; (2) the rewritten spec
     still validates (the harness is in OMNICRAFT_HARNESSES); (3) the
     override never leaks into the sub-agents, which would break
-    cross-vendor orchestration (polly's workers) and debby's claude-vs-gpt
+    cross-vendor orchestration (fucho's workers) and lilo's claude-vs-gpt
     debate pairing.
 
     :param bundle_name: Packaged example bundle under
-        ``omnicraft.resources.examples``, e.g. ``"polly"``.
+        ``omnicraft.resources.examples``, e.g. ``"fucho"``.
     :param expected_workers: Sub-agent name → declared harness mapping the
         override must leave untouched.
     :param brain_harness: The ``--harness`` value under test, e.g. ``"pi"``.
@@ -3556,25 +3556,25 @@ async def test_query_sessions_once_multi_turn_async_orchestrator(
 ) -> None:
     """Extra auto-woken turns are collected and joined with the first turn's text.
 
-    Simulates an async orchestrator (e.g. polly) that dispatches sub-agents
+    Simulates an async orchestrator (e.g. fucho) that dispatches sub-agents
     in turn 1, then is auto-woken for turn 2 when they complete. The headless
     ``-p`` path must not exit after turn 1 — it must follow the session until
     idle and concatenate all turns.
 
-    If this fails, multi-turn orchestrators like polly will always produce
+    If this fails, multi-turn orchestrators like fucho will always produce
     partial output (only turn 1's narration, never the final synthesis).
     """
     monkeypatch.setattr(
         "omnicraft_client.SessionsChat",
         _fake_sessions_chat_cls(
             _return_text,
-            extra_turns=["<!-- POLLY_REVIEW_START -->\n## Summary\nLooks good."],
+            extra_turns=["<!-- FUCHO_REVIEW_START -->\n## Summary\nLooks good."],
         ),
     )
     client = _FakeAPClient([], list_items_must_not_be_called=True)
     result = await _query_sessions_once(
         client=client,
-        agent_name="polly",
+        agent_name="fucho",
         tool_handler=None,
         prompt="review this PR",
         session_bundle=b"bundle-bytes",
@@ -3583,7 +3583,7 @@ async def test_query_sessions_once_multi_turn_async_orchestrator(
     )
     assert result is not None
     assert "direct answer" in result
-    assert "<!-- POLLY_REVIEW_START -->" in result
+    assert "<!-- FUCHO_REVIEW_START -->" in result
     assert "Looks good." in result
 
 
@@ -3662,18 +3662,18 @@ async def test_query_sessions_once_reraises_on_failed_with_only_partial_item(
 def test_spec_used_families_pi_brain_agent_contributes_pi_surface(tmp_path) -> None:
     """A pi-brain orchestrator surfaces ``pi`` alongside its sub-agents' families.
 
-    Proves the data behind polly's startup-header creds line: the pi
+    Proves the data behind fucho's startup-header creds line: the pi
     harness maps to no single model family (it consumes both), so it must
     contribute its own ``pi`` surface — the header then resolves that
     surface's effective credential. A regression that drops the pi branch
     leaves only the sub-agents' families and the header silently omits
     "Pi → …".
     """
-    root = tmp_path / "polly-like"
+    root = tmp_path / "fucho-like"
     (root / "agents" / "worker").mkdir(parents=True)
     (root / "config.yaml").write_text(
         "spec_version: 1\n"
-        "name: polly-like\n"
+        "name: fucho-like\n"
         "prompt: orchestrate\n"
         "executor:\n"
         "  type: omnicraft\n"

@@ -7,12 +7,12 @@ conflate them:
 
 | Identity | Used for | Why this identity |
 | --- | --- | --- |
-| `omnicraft <noreply@omnicraft.ai>` | Co-author trailer on commits authored by **polly's coding sub-agents** | These commits are produced by `git commit` in a worker's local worktree — they are **not** GitHub Actions runs, so a plain org co-author is the honest attribution. No GitHub App user is involved. |
+| `omnicraft <noreply@omnicraft.ai>` | Co-author trailer on commits authored by **fucho's coding sub-agents** | These commits are produced by `git commit` in a worker's local worktree — they are **not** GitHub Actions runs, so a plain org co-author is the honest attribution. No GitHub App user is involved. |
 | `omnicraft-ci[bot]` (GitHub App) | **CI automation**: lockfile-regen commits/PRs **and** automated PR-review comments | These actions genuinely run inside GitHub Actions, where the App's private key lives and a short-lived installation token is minted per run. The App is an org-owned, least-privilege identity. |
 
 > **Why two identities and not one?** An earlier draft of this work tried to use
 > `omnicraft-ci[bot]` everywhere, including the sub-agent commit trailer. That was
-> corrected: polly's workers don't run in Actions and never touch the App key, so
+> corrected: fucho's workers don't run in Actions and never touch the App key, so
 > attributing their commits to the Actions-minted bot user was misleading. Local
 > work → plain org co-author; Actions-minted work → the App bot.
 
@@ -102,7 +102,7 @@ In **`omnicraft-ai/omnicraft` → Settings → Secrets and variables → Actions
 
 ### Sub-agent commit co-author trailer
 
-polly never commits directly; its coding sub-agents (`claude_code`, `codex`,
+fucho never commits directly; its coding sub-agents (`claude_code`, `codex`,
 `pi`) run `git commit` / `gh pr create` in their own worktrees. Each such commit
 ends with a co-author trailer attributing it to the org:
 
@@ -112,17 +112,17 @@ Co-authored-by: omnicraft <noreply@omnicraft.ai>
 
 This requirement lives in the worker IMPLEMENT instructions:
 
-- `examples/polly/agents/claude_code/config.yaml`
-- `examples/polly/agents/codex/config.yaml`
-- `examples/polly/agents/pi/config.yaml`
+- `examples/fucho/agents/claude_code/config.yaml`
+- `examples/fucho/agents/codex/config.yaml`
+- `examples/fucho/agents/pi/config.yaml`
 
 > A `Co-authored-by` trailer is GitHub's lightweight attribution mechanism — it
 > attributes the commit to the org in addition to the worker author and needs no
 > signing key. It is **not** cryptographic signing (GPG/sigstore), which is a
 > separate, heavier concern.
 
-> The packaged copies under `omnicraft/resources/examples/polly/...` are a
-> **symlink** to the `examples/polly/...` source, so there is a single source of
+> The packaged copies under `omnicraft/resources/examples/fucho/...` are a
+> **symlink** to the `examples/fucho/...` source, so there is a single source of
 > truth — no dual copies to keep in sync.
 
 ### CI commits/PRs as `omnicraft-ci[bot]`
@@ -151,7 +151,7 @@ missing App config falls back to `github-actions[bot]` rather than failing.
 
 ### Automated PR review posted as `omnicraft-ci[bot]`
 
-`.github/workflows/polly-review.yml` runs a full cross-vendor Polly review of a
+`.github/workflows/fucho-review.yml` runs a full cross-vendor Fucho review of a
 PR diff (on PR open/reopen/ready, a `/review` comment from a write-access user,
 or `workflow_dispatch`) and posts the findings as a PR comment. It mints the App
 token and posts the review **as `omnicraft-ci[bot]`**:
@@ -184,9 +184,9 @@ token and posts the review **as `omnicraft-ci[bot]`**:
 
 | Surface | Identity on the artifact | Where it's wired |
 | --- | --- | --- |
-| polly sub-agent commits | `omnicraft <noreply@omnicraft.ai>` (co-author trailer) | `examples/polly/agents/*/config.yaml` |
+| fucho sub-agent commits | `omnicraft <noreply@omnicraft.ai>` (co-author trailer) | `examples/fucho/agents/*/config.yaml` |
 | Lockfile-regen commits/PRs | `omnicraft-ci[bot]` | `oss-regenerate-and-smoke.yml`, `oss-regen-on-comment.yml` |
-| Automated PR review comments | `omnicraft-ci[bot]` (fallback `github-actions[bot]`) | `polly-review.yml` |
+| Automated PR review comments | `omnicraft-ci[bot]` (fallback `github-actions[bot]`) | `fucho-review.yml` |
 
 **Config:** variable `OMNICRAFT_BOT_APP_ID` = `4082516`, secret
 `OMNICRAFT_BOT_APP_KEY` = App private key. The old `OSS_REGEN_APP_*` config and

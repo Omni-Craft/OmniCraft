@@ -60,7 +60,7 @@ import { useSessionHostVersion } from "@/hooks/RunnerHealthProvider";
 /**
  * Display label for an agent name: the wrapper alias when mapped, else
  * the name capital-first (server agent names are lowercase slugs, e.g.
- * ``"polly"`` → ``"Polly"``). Keeps the chat surfaces consistent with
+ * ``"fucho"`` → ``"Fucho"``). Keeps the chat surfaces consistent with
  * the new-chat picker's capitalization.
  *
  * Strips EVERY `" (fork <id>)"` / `" (switch <id>)"` suffix the fork/switch

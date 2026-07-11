@@ -1,6 +1,6 @@
 """Regression repro: native sub-agent harness must survive a cache refill.
 
-Reproduces the production failure where polly (``claude-sdk``) spawns a
+Reproduces the production failure where fucho (``claude-sdk``) spawns a
 ``claude_code`` sub-agent (``claude-native``) and the web UI then shows
 *"Bridge closed: terminal resource not found or not running"*.
 
@@ -11,7 +11,7 @@ swapping the parent spec to the named sub-agent's sub-spec
 ``body["sub_agent_name"]``. The streaming dispatch path
 (``_stream_message_to_harness`` -> ``_resolve_harness_config``) skips the
 swap entirely: it derives the harness from the session's bound ``agent_id``
-(the *parent* polly agent) and so resolves ``claude-sdk``. After a tunnel
+(the *parent* fucho agent) and so resolves ``claude-sdk``. After a tunnel
 reconnect / spec-cache eviction (when the in-memory map is empty), a turn
 that takes this path asks ``HarnessProcessManager.get_client`` for
 ``claude-sdk``; the manager sees the harness change
@@ -52,15 +52,15 @@ from tests.runner.test_app_sessions_native import (
     _sse,
 )
 
-PARENT_AGENT_ID = "ag_polly"
+PARENT_AGENT_ID = "ag_fucho"
 CHILD_SESSION_ID = "conv_child_claude_code"
 SUB_AGENT_NAME = "claude_code"
 
 
-def _polly_spec_tree() -> AgentSpec:
-    """Parent polly (claude-sdk) with a claude_code (claude-native) child.
+def _fucho_spec_tree() -> AgentSpec:
+    """Parent fucho (claude-sdk) with a claude_code (claude-native) child.
 
-    Mirrors ``examples/polly/config.yaml`` + its ``claude_code`` sub-agent.
+    Mirrors ``examples/fucho/config.yaml`` + its ``claude_code`` sub-agent.
     """
     child = AgentSpec(
         spec_version=1,
@@ -69,21 +69,21 @@ def _polly_spec_tree() -> AgentSpec:
     )
     return AgentSpec(
         spec_version=1,
-        name="polly",
+        name="fucho",
         executor=ExecutorSpec(type="omnicraft", config={"harness": "claude-sdk"}),
         sub_agents=[child],
     )
 
 
 async def _parent_spec_resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
-    """Resolve any agent_id to the parent polly tree (as the live server does).
+    """Resolve any agent_id to the parent fucho tree (as the live server does).
 
     A sub-agent session is bound to its *parent* agent_id server-side, so the
     runner's spec_resolver returns the parent tree; only the sub-agent-name
     swap turns it into the child spec.
     """
     del agent_id, session_id
-    return _polly_spec_tree()
+    return _fucho_spec_tree()
 
 
 class _SubAgentSnapshotServer(NullServerClient):
@@ -115,7 +115,7 @@ class _SubAgentSnapshotServer(NullServerClient):
                 {
                     "agent_id": PARENT_AGENT_ID,
                     "sub_agent_name": SUB_AGENT_NAME,
-                    "parent_session_id": "conv_parent_polly",
+                    "parent_session_id": "conv_parent_fucho",
                     "created_at": 0,
                     "workspace": None,
                 }
@@ -267,7 +267,7 @@ class _CatchUpServer(_SubAgentSnapshotServer):
                 {
                     "agent_id": PARENT_AGENT_ID,
                     "sub_agent_name": SUB_AGENT_NAME,
-                    "parent_session_id": "conv_parent_polly",
+                    "parent_session_id": "conv_parent_fucho",
                     "created_at": 0,
                     "workspace": None,
                 }

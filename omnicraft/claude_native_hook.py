@@ -743,7 +743,7 @@ def _post_hook_with_reattach(
         except httpx.HTTPError as exc:
             # Classify by HOW it failed, not by elapsed time (a proxy severs a
             # legitimately-held poll in seconds-to-minutes, so wall-clock can't
-            # tell it from a down server — #1782 Polly review).
+            # tell it from a down server — #1782 Fucho review).
             never_connected = isinstance(exc, _NEVER_CONNECTED_ERRORS)
             held_s = time.monotonic() - attempt_started
             # Hard failure iff the server was never reached, OR an established

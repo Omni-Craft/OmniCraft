@@ -108,7 +108,7 @@ def test_ask_on_os_tools_asks_for_pi_native_tools(
     Pi names its in-process tools ``read`` / ``bash`` / ``write`` /
     ``edit`` — distinct from the Claude/Codex casing covered above. The
     pi executor routes these through the same TOOL_CALL verdict, so the
-    builtin must recognize the lowercase names; otherwise a polly pi
+    builtin must recognize the lowercase names; otherwise a fucho pi
     worker calling native ``read`` (enabled for skills) is silently
     un-gated. If any returns ALLOW, the lowercase name isn't covered.
 

@@ -1722,7 +1722,7 @@ def approval_session(
     Same runner-respawn + bind contract as :func:`terminal_session`. The
     agent is registered through the strict ``config.yaml`` parser (it carries
     ``spec_version: 1`` + ``executor.config.harness``, plus the ``os_env`` and
-    ``guardrails`` blocks that path supports — see ``examples/polly``).
+    ``guardrails`` blocks that path supports — see ``examples/fucho``).
 
     :param live_server: Spawned server fixture.
     :param mock_llm_server_url: Session-scoped mock LLM server URL; used to
@@ -1855,7 +1855,7 @@ def server_pid(live_server: str) -> int:
 # registers a plain ``openai-agents`` agent (the ``echo_probe`` spec below) —
 # the same harness family as ``hello_world`` — fresh, so it stands in for "spin
 # up a different agent" without the multi-provider sprawl of the packaged
-# ``polly`` / ``debby`` examples.
+# ``fucho`` / ``lilo`` examples.
 #
 # ``native_claude_session`` is the native-CLI counterpart: it spins up a real
 # ``claude-native`` ("Claude Code") wrapper session — the same terminal-first

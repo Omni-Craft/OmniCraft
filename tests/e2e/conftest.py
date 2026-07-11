@@ -191,7 +191,7 @@ _SYS_TERMINAL_TEST_DIR = _REPO_ROOT / "tests" / "resources" / "agents" / "sys-te
 # A plain claude-sdk chat agent seeded as a BUILT-IN (via the server's
 # OMNICRAFT_BUILTIN_AGENT_DIRS hook) so fork-switch e2e tests have a
 # deterministic SDK target to switch INTO — built-in because the fork route
-# only binds built-in agents, and plain (not the polly supervisor) so a
+# only binds built-in agents, and plain (not the fucho supervisor) so a
 # recall assertion isn't flaky.
 _SDK_CHAT_BUILTIN_SPEC = _REPO_ROOT / "tests" / "resources" / "agents" / "sdk-chat-builtin.yaml"
 

@@ -2,7 +2,7 @@
 
 The sub-agent-elicitation contract: when a sub-agent (child session) raises an
 elicitation, the prompt must surface on the PARENT session (so a user
-in the parent — e.g. polly — chat sees it) stamped with
+in the parent — e.g. fucho — chat sees it) stamped with
 ``params.target_session_id`` (the child that owns the parked Future),
 and resolving against that CHILD session id must release the worker.
 
@@ -15,7 +15,7 @@ approval policy — no ``yolo``) sub-agents run in PROMPTING mode, so a
 delegated shell command makes the worker raise a real approval that
 must be forwarded and answered from the parent.
 
-OPT-IN. Like ``test_polly_e2e.py`` this needs the dev-box toolset CI
+OPT-IN. Like ``test_fucho_e2e.py`` this needs the dev-box toolset CI
 runners lack (a logged-in ``oss`` Databricks OAuth profile + the
 ``claude``/``codex`` binaries), so it is gated behind
 ``OMNICRAFT_E2E_SUBAGENT_ELICIT=1`` and is not collected by default::
@@ -51,7 +51,7 @@ _REPO = Path(__file__).resolve().parents[2]
 _PROFILE = "oss"
 
 # ── Fixture agent bundle (materialized into a tmp dir by ``agent_dir``) ──
-# A polly-style supervisor whose claude_code and codex sub-agents run in
+# A fucho-style supervisor whose claude_code and codex sub-agents run in
 # PROMPTING (ask) permission mode — NOT bypass/yolo — so a worker raises a
 # real approval the parent must surface and resolve. Inlined
 # here rather than checked in under tests/resources so the fixture lives
@@ -60,13 +60,13 @@ _SUPERVISOR_CONFIG_YAML = """\
 spec_version: 1
 name: ask-mode-supervisor
 description: >-
-  E2E fixture: a polly-style supervisor whose claude_code and codex
+  E2E fixture: a fucho-style supervisor whose claude_code and codex
   sub-agents run in PROMPTING (ask) permission mode — they are NOT in
   bypass / yolo. Used to e2e-verify that a sub-agent's approval prompt
   surfaces on the parent session and is answerable by resolving against
   the child session id (PR 2272 — sub-agent elicitation routing).
 
-# Orchestrator brain: claude-sdk (in-process), like polly. It only
+# Orchestrator brain: claude-sdk (in-process), like fucho. It only
 # delegates; the substantive command-running work is done by the native
 # sub-agents, which run in their own terminal and prompt for approval.
 executor:
@@ -165,7 +165,7 @@ os_env:
 """
 # Brain model for the claude-sdk orchestrator. The agent pins no model;
 # on a workspace whose default is a non-Claude model the claude-sdk brain
-# 400s, so name a Claude model here (mirrors test_polly_e2e / the driver).
+# 400s, so name a Claude model here (mirrors test_fucho_e2e / the driver).
 _BRAIN_MODEL = "databricks-claude-opus-4-8"
 _SERVER_BOOT_TIMEOUT_SEC = 90
 _POLL_INTERVAL_SEC = 4.0
@@ -731,7 +731,7 @@ def test_subagent_prompt_surfaces_on_parent_and_resolves_via_child(
         # in-process event to await across that boundary, so each phase is a
         # bounded ``time.sleep``-paced poll on a monotonic deadline — the
         # standard shape for this repo's real-server e2e tests
-        # (cf. ``test_polly_e2e.py``).
+        # (cf. ``test_fucho_e2e.py``).
 
         # 1) Discover the parent session this run created (bounded — a brain
         #    that never connects fails fast with the run log rather than

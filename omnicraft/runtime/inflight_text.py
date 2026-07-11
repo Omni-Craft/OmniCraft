@@ -2,7 +2,7 @@
 
 Lets the OmniCraft server replay the text streamed so far when a client
 (re)connects mid-turn — fixing the bug where, for non-claude-native
-agents (e.g. polly), a cold reload / new tab / navigate-away-and-back
+agents (e.g. fucho), a cold reload / new tab / navigate-away-and-back
 showed only "a few tokens" of an in-flight response and the visible
 text differed on every reload.
 
@@ -130,7 +130,7 @@ class _InFlightTurn:
         ``response.in_progress`` event so :func:`snapshot_for` can
         replay a faithful ``response.created`` (carrying ``id`` and
         ``model``), or ``None`` if no lifecycle event was seen yet,
-        e.g. ``{"id": "resp_abc", "model": "polly", "status":
+        e.g. ``{"id": "resp_abc", "model": "fucho", "status":
         "in_progress", "created_at": 1730000000}``.
     :param parts: Accumulated ``response.output_text.delta`` strings in
         arrival order, e.g. ``["Let me ", "plan this."]``.

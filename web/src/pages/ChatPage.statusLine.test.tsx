@@ -187,22 +187,22 @@ describe("Composer status line (branch + context ring)", () => {
   });
 
   it("shows the agent + brain harness identity for SDK sessions", () => {
-    // SDK/bundle agents read as "<Agent> (<Harness>)" — e.g. Polly on Pi.
+    // SDK/bundle agents read as "<Agent> (<Harness>)" — e.g. Fucho on Pi.
     useChatStore.setState({ sessionHarness: "pi" });
-    renderComposer({ agents: [{ id: "a1", name: "polly" }], selectedAgentId: "a1" });
+    renderComposer({ agents: [{ id: "a1", name: "fucho" }], selectedAgentId: "a1" });
 
-    expect(screen.getByTestId("composer-harness")).toHaveTextContent("Polly (Pi)");
+    expect(screen.getByTestId("composer-harness")).toHaveTextContent("Fucho (Pi)");
   });
 
   it("names the sub-agent head, not the bundle, for a head session", () => {
-    // A Debby GPT head session: the tray identifies the head being viewed
-    // ("Gpt"), not the bundle orchestrator ("Debby").
+    // A Lilo GPT head session: the tray identifies the head being viewed
+    // ("Gpt"), not the bundle orchestrator ("Lilo").
     useChatStore.setState({ sessionHarness: "codex", subAgentName: "gpt" });
-    renderComposer({ agents: [{ id: "a1", name: "debby" }], selectedAgentId: "a1" });
+    renderComposer({ agents: [{ id: "a1", name: "lilo" }], selectedAgentId: "a1" });
 
     const harness = screen.getByTestId("composer-harness");
     expect(harness).toHaveTextContent("Gpt (Codex)");
-    expect(harness).not.toHaveTextContent("Debby");
+    expect(harness).not.toHaveTextContent("Lilo");
   });
 
   it("no longer renders model/effort in the status tray (moved to the picker trigger)", () => {
@@ -339,12 +339,12 @@ describe("composerHarnessLabel", () => {
   });
 
   it("reads SDK agents as '<Agent> (<Harness>)'", () => {
-    expect(composerHarnessLabel(null, "polly", "pi")).toBe("Polly (Pi)");
+    expect(composerHarnessLabel(null, "fucho", "pi")).toBe("Fucho (Pi)");
   });
 
   it("falls back to the agent name alone when the harness is unmapped", () => {
-    expect(composerHarnessLabel(null, "polly", "some-unknown-harness")).toBe("Polly");
-    expect(composerHarnessLabel(null, "polly", null)).toBe("Polly");
+    expect(composerHarnessLabel(null, "fucho", "some-unknown-harness")).toBe("Fucho");
+    expect(composerHarnessLabel(null, "fucho", null)).toBe("Fucho");
   });
 
   it("returns null when nothing is known", () => {

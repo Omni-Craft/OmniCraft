@@ -3718,7 +3718,7 @@ async def _persist_model_change_note(
     skipped (see the ``live_forward`` guard in ``update_session``). The gate
     keys on ``omnicraft.wrapper`` rather than ``omnicraft.ui == "terminal"``
     because the latter is also set on chat-first SDK sessions that expose a
-    REPL terminal view (e.g. polly / debby), which DO want the note. The note
+    REPL terminal view (e.g. fucho / lilo), which DO want the note. The note
     is a user-role message, so the agent sees it in history on the next turn —
     consistent with other ``[System: ...]`` markers (timer fired, sub-agent
     done).
@@ -7201,7 +7201,7 @@ def _native_coding_agent_for_session(conv: Conversation) -> NativeCodingAgent | 
       codex``); resolved directly and cheaply here (short-circuits the harness
       load below); and
     * the bound agent's RESOLVED harness — for a CUSTOM agent that declares a
-      native harness (e.g. a user ``polly`` orchestrator with
+      native harness (e.g. a user ``fucho`` orchestrator with
       ``executor.harness: codex-native``) but is intentionally CHAT-first, so
       it carries no wrapper label. Its runner still runs a native transcript
       forwarder (the single writer for the conversation), so its web messages
@@ -11910,7 +11910,7 @@ def _resolve_subagent_spec(
     cannot smuggle in launch config a sub-agent's own bundle did not
     declare.
 
-    :param agent: The parent agent row, e.g. the ``polly`` orchestrator,
+    :param agent: The parent agent row, e.g. the ``fucho`` orchestrator,
         whose bundle contains the sub-agent specs.
     :param sub_agent_name: The dispatched sub-agent's name, e.g.
         ``"claude_code"``.
@@ -11989,7 +11989,7 @@ def _derive_terminal_launch_args_from_spec(sub_spec: AgentSpec) -> list[str] | N
     """
     Derive native-terminal YOLO pass-through args from a trusted sub-spec.
 
-    polly's native workers (claude-native / codex-native) launch in a
+    fucho's native workers (claude-native / codex-native) launch in a
     headless pane where no human can answer an ApprovalCard, so every
     Edit/Write/Bash that prompts stalls the worker. This translates a
     worker bundle's declared full-bypass intent into the per-session
@@ -12084,7 +12084,7 @@ def _native_subagent_wrapper_labels(
     sub-agent's spec from the parent bundle and returns the labels to stamp,
     or an empty dict when the sub-agent is not native (e.g. ``claude-sdk``).
 
-    :param agent: The parent agent row, e.g. the ``polly`` orchestrator,
+    :param agent: The parent agent row, e.g. the ``fucho`` orchestrator,
         whose bundle contains the sub-agent specs.
     :param sub_agent_name: The dispatched sub-agent's name, e.g.
         ``"claude_code"``.
@@ -15470,7 +15470,7 @@ def create_sessions_router(
             # Append a durable [System: model changed to X] note for sessions
             # whose history OmniCraft writes. Gate on the wrapper label (NOT
             # omnicraft.ui, which chat-first SDK terminal-view sessions like
-            # polly/debby also carry) — see _persist_model_change_note for the
+            # fucho/lilo also carry) — see _persist_model_change_note for the
             # full rationale. live_forward (== not silent) already excludes
             # bind-time auto-applies, so only an explicit /model lands a note.
             if not _is_native_terminal_session(updated):
@@ -19133,7 +19133,7 @@ def create_sessions_router(
             _mcp_elicit_payload = event.model_dump()
             session_stream.publish(session_id, _mcp_elicit_payload)
             # Mirror the prompt into ancestor streams so a sub-agent MCP
-            # elicitation surfaces in the parent (polly) chat with a
+            # elicitation surfaces in the parent (fucho) chat with a
             # ``target_session_id`` pointing back at this child. The
             # verdict still arrives via the generic ``approval`` event,
             # which mirrors the resolved signal back up through

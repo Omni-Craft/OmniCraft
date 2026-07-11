@@ -1455,7 +1455,7 @@ async def test_declared_window_keeps_large_fill_under_budget(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """
-    A declared 1M window keeps a Polly-scale fill (~197K) under budget.
+    A declared 1M window keeps a Fucho-scale fill (~197K) under budget.
 
     Regression for the runner over-compaction bug: budget is
     ``context_window * trigger_threshold``. With the declared 1M window

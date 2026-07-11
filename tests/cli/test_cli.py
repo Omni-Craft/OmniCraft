@@ -643,7 +643,7 @@ def test_kiro_command_rejects_kiro_resume_passthrough_flags(
     assert "Kiro resume flags are reserved" in result.output
 
 
-# ── bundled-agent shorthands (omnicraft polly / omnicraft debby) ──────────
+# ── bundled-agent shorthands (omnicraft fucho / omnicraft lilo) ──────────
 
 
 def _invoke_bundled_agent_command(
@@ -656,7 +656,7 @@ def _invoke_bundled_agent_command(
     observes exactly what the forwarded ``run`` invocation would launch.
 
     :param monkeypatch: Pytest monkeypatch fixture.
-    :param args: Full CLI argv, e.g. ``["polly", "-p", "hi"]``.
+    :param args: Full CLI argv, e.g. ``["fucho", "-p", "hi"]``.
     :returns: The Click invocation result and the ``_dispatch_run`` mock.
     """
     monkeypatch.setattr("omnicraft.cli._load_effective_config", dict)
@@ -666,37 +666,37 @@ def _invoke_bundled_agent_command(
     return result, dispatch
 
 
-def test_polly_command_runs_bundled_polly_and_forwards_run_flags(
+def test_fucho_command_runs_bundled_fucho_and_forwards_run_flags(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """``omnicraft polly`` dispatches ``run`` on the packaged polly agent.
+    """``omnicraft fucho`` dispatches ``run`` on the packaged fucho agent.
 
-    The shorthand must target the same bundled polly directory the bare
+    The shorthand must target the same bundled fucho directory the bare
     ``omnicraft`` first-run plan uses, and pass-through ``run`` flags
     (``-p``, ``--model``) must survive the forwarding unchanged.
     """
     result, dispatch = _invoke_bundled_agent_command(
-        monkeypatch, ["polly", "-p", "review the last commit", "--model", "m1"]
+        monkeypatch, ["fucho", "-p", "review the last commit", "--model", "m1"]
     )
 
     assert result.exit_code == 0, result.output
     dispatch.assert_called_once()
     kwargs = dispatch.call_args.kwargs
-    assert kwargs["target"] == _bundled_example_path("polly")
+    assert kwargs["target"] == _bundled_example_path("fucho")
     assert kwargs["prompt"] == "review the last commit"
     assert kwargs["model"] == "m1"
     # The resume replay prefix must be the canonical (re-runnable) run form,
-    # not "omnicraft polly <path>" which would parse the path as a 2nd target.
-    assert kwargs["resume_parts"][:3] == ["omnicraft", "run", _bundled_example_path("polly")]
+    # not "omnicraft fucho <path>" which would parse the path as a 2nd target.
+    assert kwargs["resume_parts"][:3] == ["omnicraft", "run", _bundled_example_path("fucho")]
 
 
-def test_debby_command_runs_bundled_debby(monkeypatch: pytest.MonkeyPatch) -> None:
-    """``omnicraft debby`` dispatches ``run`` on the packaged debby agent."""
-    result, dispatch = _invoke_bundled_agent_command(monkeypatch, ["debby"])
+def test_lilo_command_runs_bundled_lilo(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``omnicraft lilo`` dispatches ``run`` on the packaged lilo agent."""
+    result, dispatch = _invoke_bundled_agent_command(monkeypatch, ["lilo"])
 
     assert result.exit_code == 0, result.output
     dispatch.assert_called_once()
-    assert dispatch.call_args.kwargs["target"] == _bundled_example_path("debby")
+    assert dispatch.call_args.kwargs["target"] == _bundled_example_path("lilo")
 
 
 def test_bundled_agent_command_rejects_extra_positional_target(
@@ -708,19 +708,19 @@ def test_bundled_agent_command_rejects_extra_positional_target(
     supplies (the bundled path); a second one must fail loudly rather than
     silently launching the wrong agent.
     """
-    result, dispatch = _invoke_bundled_agent_command(monkeypatch, ["polly", "other_agent.yaml"])
+    result, dispatch = _invoke_bundled_agent_command(monkeypatch, ["fucho", "other_agent.yaml"])
 
     assert result.exit_code != 0
     dispatch.assert_not_called()
 
 
-def test_first_run_plan_and_polly_command_agree_on_bundled_path(
+def test_first_run_plan_and_fucho_command_agree_on_bundled_path(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Bare ``omnicraft`` (Claude creds) and ``omnicraft polly`` launch the SAME agent.
+    """Bare ``omnicraft`` (Claude creds) and ``omnicraft fucho`` launch the SAME agent.
 
     Pins the "same thing as bare ``omni``" contract: the first-run plan's
-    default agent and the polly shorthand resolve to one bundled directory.
+    default agent and the fucho shorthand resolve to one bundled directory.
     """
     monkeypatch.setattr(
         "omnicraft.onboarding.provider_config.default_provider_for_harness",
@@ -728,7 +728,7 @@ def test_first_run_plan_and_polly_command_agree_on_bundled_path(
     )
     plan = _pick_first_run_harness()
     assert plan is not None
-    assert plan.agent == _bundled_example_path("polly")
+    assert plan.agent == _bundled_example_path("fucho")
 
 
 def _write_isolated_provider_config(
@@ -747,13 +747,13 @@ def _write_isolated_provider_config(
     return config_path
 
 
-@pytest.mark.parametrize("shorthand", ["polly", "debby"])
+@pytest.mark.parametrize("shorthand", ["fucho", "lilo"])
 def test_bundled_agent_launches_with_first_available_credential(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     shorthand: str,
 ) -> None:
-    """Polly/Debby launch with the first available credential (#334).
+    """Fucho/Lilo launch with the first available credential (#334).
 
     With a Claude (``anthropic``) credential configured but NOT marked
     ``default: true``, the shorthand must mark it the default for the
@@ -827,7 +827,7 @@ def test_bundled_agent_leaves_existing_default_credential_alone(
     dispatch = Mock()
     monkeypatch.setattr("omnicraft.cli._dispatch_run", dispatch)
 
-    result = CliRunner().invoke(cli, ["polly"])
+    result = CliRunner().invoke(cli, ["fucho"])
 
     assert result.exit_code == 0, result.output
     assert config_path.read_text() == before  # unchanged — default already set
@@ -865,7 +865,7 @@ def test_bundled_agent_no_credential_does_not_write_config(
     dispatch = Mock()
     monkeypatch.setattr("omnicraft.cli._dispatch_run", dispatch)
 
-    result = CliRunner().invoke(cli, ["polly"])
+    result = CliRunner().invoke(cli, ["fucho"])
 
     assert result.exit_code == 0, result.output
     assert config_path.read_text() == before  # no default fabricated
@@ -908,7 +908,7 @@ def test_bundled_agent_unreadable_global_config_degrades_to_launch(
     dispatch = Mock()
     monkeypatch.setattr("omnicraft.cli._dispatch_run", dispatch)
 
-    result = CliRunner().invoke(cli, ["polly"])
+    result = CliRunner().invoke(cli, ["fucho"])
 
     # Degrades cleanly: no traceback, and the launch still dispatches so the
     # harness surfaces any credential error through the normal path.
@@ -960,7 +960,7 @@ def test_bundled_agent_ambiguous_default_config_degrades_to_launch(
     dispatch = Mock()
     monkeypatch.setattr("omnicraft.cli._dispatch_run", dispatch)
 
-    result = CliRunner().invoke(cli, ["polly"])
+    result = CliRunner().invoke(cli, ["fucho"])
 
     assert result.exit_code == 0, result.output
     assert result.exception is None, result.exception
@@ -4342,11 +4342,11 @@ def _fake_provider_for(*configured: str):
     return _fn
 
 
-def test_pick_first_run_prefers_claude_with_polly(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Claude configured → claude-sdk + the bundled polly agent.
+def test_pick_first_run_prefers_claude_with_fucho(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Claude configured → claude-sdk + the bundled fucho agent.
 
     Claude wins the priority order and is the only family that gets a default
-    *example* agent (polly). A regression that dropped polly or picked the
+    *example* agent (fucho). A regression that dropped fucho or picked the
     wrong harness fails here.
     """
     monkeypatch.setattr(
@@ -4356,7 +4356,7 @@ def test_pick_first_run_prefers_claude_with_polly(monkeypatch: pytest.MonkeyPatc
     plan = _pick_first_run_harness()
     assert plan is not None
     assert plan.harness == "claude-sdk"
-    assert plan.agent is not None and plan.agent.endswith("polly")
+    assert plan.agent is not None and plan.agent.endswith("fucho")
 
 
 def test_pick_first_run_harness_codex_then_pi_no_agent(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -4399,8 +4399,8 @@ def test_resolve_first_run_plan_does_not_persist_derived_default(
 
     Persisting it would pin a Codex-only user to Codex even after they add
     Claude. Keeping it ephemeral lets the next bare ``run`` re-derive from the
-    current creds (and promote them to polly). Asserts the resolved plan is
-    Claude→polly yet no global ``harness`` / ``default_agent`` was written.
+    current creds (and promote them to fucho). Asserts the resolved plan is
+    Claude→fucho yet no global ``harness`` / ``default_agent`` was written.
     """
     monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
     monkeypatch.setattr("omnicraft.cli._promote_global_auth_to_provider", Mock())
@@ -4413,7 +4413,7 @@ def test_resolve_first_run_plan_does_not_persist_derived_default(
     plan = _resolve_first_run_plan()
 
     assert plan is not None and plan.harness == "claude-sdk"
-    assert plan.agent is not None and plan.agent.endswith("polly")
+    assert plan.agent is not None and plan.agent.endswith("fucho")
     # No global harness / default_agent was persisted — the pick is ephemeral.
     config_path = tmp_path / "config.yaml"
     saved = yaml.safe_load(config_path.read_text()) if config_path.exists() else {}
@@ -4426,11 +4426,11 @@ def test_resolve_first_run_plan_does_not_persist_derived_default(
 def test_resolve_first_run_plan_re_derives_when_creds_change(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    """Adding Claude promotes a Codex-only user to polly on the next bare run.
+    """Adding Claude promotes a Codex-only user to fucho on the next bare run.
 
     Because the pick is never persisted, the second resolution reflects the
     *current* creds: Codex-only → a bare codex REPL; after Claude is added →
-    claude-sdk + polly (our primary). A regression that re-persisted the first
+    claude-sdk + fucho (our primary). A regression that re-persisted the first
     pick would pin the user to codex and fail the second half.
     """
     monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
@@ -4445,7 +4445,7 @@ def test_resolve_first_run_plan_re_derives_when_creds_change(
     first = _resolve_first_run_plan()
     assert first is not None and first.harness == "codex" and first.agent is None
 
-    # 2) Claude added (now both configured) → promoted to claude-sdk + polly,
+    # 2) Claude added (now both configured) → promoted to claude-sdk + fucho,
     #    NOT pinned to the earlier codex pick.
     monkeypatch.setattr(
         "omnicraft.onboarding.provider_config.default_provider_for_harness",
@@ -4453,7 +4453,7 @@ def test_resolve_first_run_plan_re_derives_when_creds_change(
     )
     second = _resolve_first_run_plan()
     assert second is not None and second.harness == "claude-sdk"
-    assert second.agent is not None and second.agent.endswith("polly")
+    assert second.agent is not None and second.agent.endswith("fucho")
 
 
 def test_resolve_first_run_plan_drops_into_configure_when_empty(

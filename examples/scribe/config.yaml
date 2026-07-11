@@ -2,7 +2,7 @@
 #
 # Scribe turns change context (git diffs, commit history, PR metadata) into
 # release notes, README updates, and migration guides. It is the docs
-# counterpart to Polly: Scribe authors the prose itself and delegates only
+# counterpart to Fucho: Scribe authors the prose itself and delegates only
 # read-only code investigation to a `researcher` sub-agent (claude-sdk), then
 # can fact-check a draft with a `reviewer` on a different vendor (codex). It
 # writes no product source code or tests.
@@ -123,7 +123,7 @@ os_env:
   sandbox:
     type: none
 
-# Same blast-radius guardrail Polly and Debby use: the catastrophic set
+# Same blast-radius guardrail Fucho and Lilo use: the catastrophic set
 # (force-push, `rm -rf /`, hard-reset to a remote ref) is denied outright, while
 # everything else — including the read-only git/gh Scribe relies on — runs
 # without an ASK (`gate_pushes: false`), since a headless orchestrator can't

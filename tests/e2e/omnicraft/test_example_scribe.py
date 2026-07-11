@@ -1,9 +1,9 @@
 """Structural test for the Scribe documentation bundle (examples/scribe).
 
-Scribe is the docs counterpart to Polly: it authors prose itself and delegates
+Scribe is the docs counterpart to Fucho: it authors prose itself and delegates
 read-only code investigation to a ``researcher`` sub-agent (claude-sdk), with an
 optional cross-vendor fact-check by a ``reviewer`` sub-agent (codex). Pure
-spec-load — no LLM, no credentials — modeled on ``test_example_debby.py``.
+spec-load — no LLM, no credentials — modeled on ``test_example_lilo.py``.
 
 What breaks if this fails:
 - a sub-agent is dropped or renamed (Scribe loses investigation or the

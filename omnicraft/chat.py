@@ -1399,7 +1399,7 @@ class _AttachSessionInfo:
     :param runner_online: ``True`` when the session is bound to a runner the
         server does not report as offline — i.e. a host is live to dispatch
         co-drive turns to. ``attach`` fails loud when ``False``.
-    :param agent_name: The session's agent name, e.g. ``"polly"``, used as
+    :param agent_name: The session's agent name, e.g. ``"fucho"``, used as
         the REPL display name (so ``attach`` never has to pick from the
         server's agent list). ``None`` if the snapshot omits it.
     :param harness: The session's harness, e.g. ``"codex"``, shown in the
@@ -2403,7 +2403,7 @@ async def _query_sessions_once(
     elif (reconciled := await _persisted_turn_text(client, bound.id)) is not None:
         all_text_parts.append(reconciled)
 
-    # Multi-turn loop for async orchestrators (e.g. polly) that dispatch
+    # Multi-turn loop for async orchestrators (e.g. fucho) that dispatch
     # sub-agents and are auto-woken by inbox completions across multiple
     # turns.
     #
@@ -3023,7 +3023,7 @@ def _spec_declares_harness_or_model(raw: _YamlMapping) -> bool:
 
     Recognizes the harness in either shape: a flat ``executor.harness``
     or the bundle-style nested ``executor.config.harness`` (e.g.
-    ``examples/polly``). Without the nested check, an unpinned bundle
+    ``examples/fucho``). Without the nested check, an unpinned bundle
     that declares its harness only under ``config`` would look
     harness-less and get force-fed :data:`_DEFAULT_AD_HOC_MODEL` — a
     GPT endpoint the claude-sdk harness can't speak.
@@ -3253,9 +3253,9 @@ def _apply_harness_override_to_executor(
 
     Single-file omnicraft YAMLs (``name`` + ``prompt``, no
     ``spec_version``) read the flat ``executor.harness`` key.
-    ``spec_version`` bundles (e.g. ``examples/polly``) read ONLY
+    ``spec_version`` bundles (e.g. ``examples/fucho``) read ONLY
     ``executor.config.harness`` — writing the flat key there is a
-    silent no-op, which made ``omnicraft run examples/polly
+    silent no-op, which made ``omnicraft run examples/fucho
     --harness pi`` keep the claude-sdk brain.
 
     :param raw: Parsed top-level YAML mapping (used to detect the
@@ -3388,7 +3388,7 @@ def _canonicalize_local_agent_path(agent_path: Path) -> Path:
     uploaded bundle, so canonicalize it to the bundle root.
 
     :param agent_path: Existing local path supplied to ``omnicraft run``,
-        e.g. ``Path("examples/polly/config.yaml")``.
+        e.g. ``Path("examples/fucho/config.yaml")``.
     :returns: The bundle root for root ``config.yaml`` paths, otherwise
         the original path.
     """
@@ -3745,9 +3745,9 @@ def _spec_used_families(agent_yaml: Path | None) -> list[str]:
 
     Walks the agent's executor harness plus every sub-agent's harness and
     maps each to its surface, so the REPL startup header can show a
-    per-surface creds line for a multi-vendor agent (e.g. polly's
+    per-surface creds line for a multi-vendor agent (e.g. fucho's
     ``claude-sdk`` brain + ``claude-native`` / ``codex-native`` sub-agents
-    yield ``["anthropic", "openai"]``; polly's ``pi`` brain adds the
+    yield ``["anthropic", "openai"]``; fucho's ``pi`` brain adds the
     ``pi`` surface). Parsing is done WITHOUT env expansion — only harness
     names are needed, so unresolved secrets must not make this fail — and
     any error degrades to an empty list (the header simply omits the
@@ -3951,7 +3951,7 @@ def _run_repl(
 
         # Families the agent's harnesses (incl. sub-agents) consume — drives
         # the per-family creds line in the startup header for multi-vendor
-        # agents like polly. Best-effort; empty on any failure.
+        # agents like fucho. Best-effort; empty on any failure.
         used_families = _spec_used_families(agent_yaml)
 
         # Attach has no local spec; the host's harness comes from the session

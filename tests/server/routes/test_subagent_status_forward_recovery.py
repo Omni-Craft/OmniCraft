@@ -207,7 +207,7 @@ async def test_recover_deleted_child_race_degrades_to_none(
     rebind, ``replace_runner_id`` raises ``ConversationNotFoundError``. Recovery
     is best-effort: it must swallow that benign race and return ``None`` so the
     caller falls through to the existing 503/no-op, not surface an unhandled
-    500. (Polly review note on PR #1446.)
+    500. (Fucho review note on PR #1446.)
     """
     child = _conv("conv_child", runner_id="runner_old", parent_id="conv_parent")
     store = _FakeStore(_conv("conv_parent", runner_id="runner_new"), raise_on_rebind=True)

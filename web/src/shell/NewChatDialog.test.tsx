@@ -787,9 +787,9 @@ describe("NewChatLandingScreen", () => {
         skills: [],
       },
       {
-        id: "a_polly",
-        name: "polly",
-        display_name: "Polly",
+        id: "a_fucho",
+        name: "fucho",
+        display_name: "Fucho",
         description: null,
         harness: "claude-sdk",
         skills: [],
@@ -800,10 +800,10 @@ describe("NewChatLandingScreen", () => {
     const cursor = screen.getByTestId("new-chat-landing-agent-a_cursor");
     const pi = screen.getByTestId("new-chat-landing-agent-a_pi");
     const kiro = screen.getByTestId("new-chat-landing-agent-a_kiro");
-    const polly = screen.getByTestId("new-chat-landing-agent-a_polly");
+    const fucho = screen.getByTestId("new-chat-landing-agent-a_fucho");
     expect(cursor.compareDocumentPosition(pi) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(pi.compareDocumentPosition(kiro) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(kiro.compareDocumentPosition(polly) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(kiro.compareDocumentPosition(fucho) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("seeds the working directory from the host's most-recent path", async () => {
@@ -1780,7 +1780,7 @@ describe("NewChatLandingScreen skills menu", () => {
 });
 
 // Always-visible skill pills under the landing composer for allowlisted
-// orchestrators (polly/debby): pills surface bundled skills without
+// orchestrators (fucho/lilo): pills surface bundled skills without
 // typing "/", and clicking one prefills the composer — it never sends.
 describe("NewChatLandingScreen skill pills", () => {
   beforeEach(setupLandingMocks);
@@ -1789,12 +1789,12 @@ describe("NewChatLandingScreen skill pills", () => {
     localStorage.clear();
   });
 
-  /** Debby — allowlisted for pills, carrying two bundled skills. */
-  function debbyAgent(): AvailableAgent {
+  /** Lilo — allowlisted for pills, carrying two bundled skills. */
+  function liloAgent(): AvailableAgent {
     return {
-      id: "ag_debby",
-      name: "debby",
-      display_name: "Debby",
+      id: "ag_lilo",
+      name: "lilo",
+      display_name: "Lilo",
       description: "Multi-agent debate",
       harness: "claude-sdk",
       skills: [
@@ -1809,7 +1809,7 @@ describe("NewChatLandingScreen skill pills", () => {
   }
 
   it("renders bundled skills as pills without typing anything", () => {
-    mockAgents([debbyAgent()]);
+    mockAgents([liloAgent()]);
     renderLanding();
     // Both pills render on a pristine screen — proving the pills are
     // always-visible (not gated on a "/" draft like the slash menu) and
@@ -1837,9 +1837,9 @@ describe("NewChatLandingScreen skill pills", () => {
   });
 
   it("appears when the user switches the picker to an allowlisted agent", () => {
-    // Claude Code ranks first (AGENT_DISPLAY_ORDER), so debby is NOT the
+    // Claude Code ranks first (AGENT_DISPLAY_ORDER), so lilo is NOT the
     // default selection — no pills until the user picks her. This is the
-    // core interaction: click debby in the picker, her skills appear.
+    // core interaction: click lilo in the picker, her skills appear.
     mockAgents([
       {
         id: "a1",
@@ -1849,17 +1849,17 @@ describe("NewChatLandingScreen skill pills", () => {
         harness: "claude-native",
         skills: [],
       },
-      debbyAgent(),
+      liloAgent(),
     ]);
     renderLanding();
     expect(screen.queryByTestId("skill-pills")).toBeNull();
     fireEvent.pointerDown(screen.getByTestId("new-chat-landing-agent-select"), { button: 0 });
-    fireEvent.click(screen.getByTestId("new-chat-landing-agent-ag_debby"));
+    fireEvent.click(screen.getByTestId("new-chat-landing-agent-ag_lilo"));
     expect(screen.getByTestId("skill-pill-debate")).toBeTruthy();
   });
 
   it("fills '/name ' into an empty draft on click without sending", () => {
-    mockAgents([debbyAgent()]);
+    mockAgents([liloAgent()]);
     renderLanding();
     fireEvent.click(screen.getByTestId("skill-pill-debate"));
     // Trailing space = caret ready for args; pills never auto-execute
@@ -1868,7 +1868,7 @@ describe("NewChatLandingScreen skill pills", () => {
   });
 
   it("hides the prompt text and pills once the user types", () => {
-    mockAgents([debbyAgent()]);
+    mockAgents([liloAgent()]);
     renderLanding();
     // Pristine empty draft: the prompt text and the pills share the first
     // line as one affordance.
@@ -1883,7 +1883,7 @@ describe("NewChatLandingScreen skill pills", () => {
   });
 
   it("shows the skill description bubble on focus, like the / menu detail card", () => {
-    mockAgents([debbyAgent()]);
+    mockAgents([liloAgent()]);
     renderLanding();
     // Description is nowhere in the DOM until the pill is focused/hovered.
     expect(screen.queryByText("Have both heads argue it out")).toBeNull();

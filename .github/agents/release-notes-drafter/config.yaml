@@ -13,10 +13,10 @@
 # Run headlessly:  omnicraft run .github/agents/release-notes-drafter -p "<pr list>" --no-session
 #
 # Security posture (mirrors doc-classifier / doc-drafter, a STRONGER trust position
-# than polly-review):
+# than fucho-review):
 #   - Runs only on ALREADY-MERGED, released history (a maintainer reviewed + merged
 #     every PR it sees), and only at release-cut on the trusted default branch.
-#   - The only secret in this process's env is LLM_API_KEY (same as Polly/doc-sync).
+#   - The only secret in this process's env is LLM_API_KEY (same as Fucho/doc-sync).
 #     The omnicraft write-token that opens the CHANGELOG PR / edits the release is
 #     minted by the workflow AFTER this agent finishes, so it never coexists with
 #     model input.
@@ -27,7 +27,7 @@
 #     env, an injection could drive an outbound request that exfiltrates the key; a
 #     network-denying sandbox is the real mitigation but is not used here for the
 #     same CI-fragility reason documented in .github/agents/doc-drafter/config.yaml.
-#     We accept the same residual risk already accepted for polly-review.
+#     We accept the same residual risk already accepted for fucho-review.
 
 spec_version: 1
 name: release-notes-drafter

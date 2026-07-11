@@ -44,8 +44,8 @@ export interface AvailableAgent {
 const DISPLAY_NAMES: Record<string, string> = {
   // nessie is no longer seeded, but older deployments retain their row.
   nessie: "Nessie",
-  polly: "Polly",
-  debby: "Debby",
+  fucho: "Fucho",
+  lilo: "Lilo",
 };
 
 function displayNameForAgent(name: string, harness?: string | null): string {

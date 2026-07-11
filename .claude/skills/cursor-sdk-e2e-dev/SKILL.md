@@ -64,7 +64,7 @@ YAML
 ```
 
 For sub-agents, tools, guardrails/policies, copy the field shapes from
-`examples/polly/config.yaml` and `examples/debby/config.yaml`.
+`examples/fucho/config.yaml` and `examples/lilo/config.yaml`.
 
 ## Step 3 — run a turn (and smoke-test)
 

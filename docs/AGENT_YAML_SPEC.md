@@ -391,8 +391,8 @@ tools:
   Databricks-only configuration unless the example is explicitly internal.
 - Prefer `instructions: AGENTS.md` for long prompts that are shared with other
   tooling.
-- Start from a bundled example such as `examples/polly/config.yaml` or
-  `examples/debby/config.yaml` and remove tools you do not need.
+- Start from a bundled example such as `examples/fucho/config.yaml` or
+  `examples/lilo/config.yaml` and remove tools you do not need.
 - Run the YAML before publishing it:
 
   ```bash

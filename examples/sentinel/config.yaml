@@ -143,7 +143,7 @@ os_env:
 
 # Three guardrails enforce Sentinel's contract at the policy layer, not just in
 # the prompt:
-#   - blast_radius: the same one Polly and Scribe use. The catastrophic set
+#   - blast_radius: the same one Fucho and Scribe use. The catastrophic set
 #     (force-push, `rm -rf /`, hard-reset to a remote ref) is denied outright,
 #     while everything else (including the read-only git commands Sentinel
 #     relies on) runs without an ASK (`gate_pushes: false`), since a headless

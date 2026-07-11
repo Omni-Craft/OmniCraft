@@ -44,13 +44,13 @@ class _GenerateBuildInfo(build_py):
     def _bundle_examples(self) -> None:
         """Copy bundled example agents into the wheel as real directories.
 
-        ``omnicraft/resources/examples/{polly,debby}`` may exist as symlinks
+        ``omnicraft/resources/examples/{fucho,lilo}`` may exist as symlinks
         into the top-level ``examples/`` tree (or not at all) depending on
         the checkout, and setuptools' ``package-data`` never materializes
         symlinks into the built wheel — a directory symlink is not walked.
         A plain ``pip install`` / ``uv tool install`` would then ship a
-        package whose ``omnicraft.resources.examples`` has no ``polly`` /
-        ``debby`` subdir, and bare ``omnicraft`` (first-run default → polly)
+        package whose ``omnicraft.resources.examples`` has no ``fucho`` /
+        ``lilo`` subdir, and bare ``omnicraft`` (first-run default → fucho)
         dies with "Agent path not found".
 
         Fix: after ``build_py`` has populated ``build_lib``, copy the real
@@ -58,7 +58,7 @@ class _GenerateBuildInfo(build_py):
         checkout) into
         ``build_lib/omnicraft/resources/examples/<name>`` so every wheel is
         self-contained. This honors the contract documented in cli.py's
-        ``_bundled_polly_path``: a symlink in a checkout, a real directory in
+        ``_bundled_fucho_path``: a symlink in a checkout, a real directory in
         an installed wheel. Editable installs (``uv sync``) resolve the
         in-checkout symlink directly and don't need this.
         """
@@ -66,7 +66,7 @@ class _GenerateBuildInfo(build_py):
 
         root = Path(__file__).resolve().parent
         dest_root = Path(self.build_lib) / "omnicraft" / "resources" / "examples"
-        for name in ("debby", "polly"):
+        for name in ("lilo", "fucho"):
             src = root / "examples" / name
             if not src.is_dir():
                 continue

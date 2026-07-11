@@ -8,7 +8,7 @@ description: >-
 
 # Single-file launcher shape — matches what ``omnicraft run --harness kimi``
 # generates internally. For multi-agent bundles, prefer the directory layout
-# under ``examples/polly/`` / ``examples/debby/``.
+# under ``examples/fucho/`` / ``examples/lilo/``.
 executor:
   harness: kimi
   # Override per-invocation via ``-m kimi-k2-turbo`` or ``/model`` in the REPL.

@@ -1718,7 +1718,7 @@ describe("Embedded REPL terminal rail inventory", () => {
     // The runner auto-creates terminal_tui_main (the embedded OmniCraft
     // REPL) for every runner-hosted SDK session. It backs the pill's
     // Terminal view; a rail entry for it reads as a phantom "main"
-    // terminal on agents (Debby/Polly) that don't run a TUI. The pill
+    // terminal on agents (Lilo/Fucho) that don't run a TUI. The pill
     // must stay openable: data-terminals-available reads the FULL list.
     useEnvironmentMock.mockReturnValue({
       data: { available: true, root: null, home: null },
@@ -1798,7 +1798,7 @@ describe("Embedded REPL terminal rail inventory", () => {
       error: null,
     });
     useSessionAgentMock.mockReturnValue({
-      data: { id: "ag_x", name: "polly", terminals: ["zsh"] },
+      data: { id: "ag_x", name: "fucho", terminals: ["zsh"] },
     } as ReturnType<typeof useSessionAgent>);
     mockConversations([
       {
@@ -2479,7 +2479,7 @@ describe("Mobile session menu", () => {
       error: null,
     });
     useSessionAgentMock.mockReturnValue({
-      data: { id: "ag_x", name: "polly", terminals: ["zsh"] },
+      data: { id: "ag_x", name: "fucho", terminals: ["zsh"] },
     } as ReturnType<typeof useSessionAgent>);
 
     renderShell("/c/conv_sdk");

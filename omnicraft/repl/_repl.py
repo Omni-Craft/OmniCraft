@@ -141,7 +141,7 @@ class _SessionSnapshot(Protocol):
 
     :param agent_id: Durable agent id, e.g. ``"ag_abc123"``.
     :param agent_name: Human-readable name of the bound agent,
-        e.g. ``"polly"``. Changes when the session is switched
+        e.g. ``"fucho"``. Changes when the session is switched
         in place to a different agent; ``None`` when the server
         couldn't resolve the agent row (or an old server omits it).
     :param runner_id: Bound runner id, e.g. ``"runner_abc123"``,
@@ -306,8 +306,8 @@ def _summarize_description(description: str | None) -> str | None:
     scalars carrying newlines), takes the first sentence, and caps the
     length so the header box stays compact.
 
-    :param description: The raw spec ``description``, e.g. polly's
-        ``"Multi-agent coding orchestrator. polly never …"``; ``None``
+    :param description: The raw spec ``description``, e.g. fucho's
+        ``"Multi-agent coding orchestrator. fucho never …"``; ``None``
         when absent.
     :returns: A trimmed one-liner, e.g. ``"Multi-agent coding
         orchestrator"``, or ``None`` when *description* is empty.
@@ -361,10 +361,10 @@ def _build_startup_header(
         for a remote-URL target with no local harness (then only folder
         + description are populated, no credential).
     :param agent_description: The agent spec's ``description`` (raw),
-        e.g. polly's multi-line summary; ``None`` when absent.
+        e.g. fucho's multi-line summary; ``None`` when absent.
     :param used_families: Harness surfaces the agent's harnesses (incl.
         sub-agents) consume, e.g. ``["anthropic", "openai", "pi"]`` for
-        polly (a pi brain spawning claude/codex sub-agents); a list of
+        fucho (a pi brain spawning claude/codex sub-agents); a list of
         length > 1 produces the per-surface creds line. ``None`` / a
         single surface omits it.
     :returns: The resolved :class:`_StartupHeader`.
@@ -3025,11 +3025,11 @@ async def run_repl(
         remote-URL target (no local spec).
     :param agent_description: The agent spec's ``description``, surfaced
         as the one-line summary row in the startup header, e.g.
-        polly's ``"Multi-agent coding orchestrator. …"``. ``None``
+        fucho's ``"Multi-agent coding orchestrator. …"``. ``None``
         omits the summary row.
     :param used_families: Provider families the agent's harnesses (incl.
         sub-agents) consume, e.g. ``["anthropic", "openai"]`` for
-        polly. A multi-family agent gets a per-family creds line under
+        fucho. A multi-family agent gets a per-family creds line under
         the startup header. ``None`` / a single family omits that line.
     :returns: The conversation id from the last active conversation,
         or ``None`` if the user exited before any conversation was

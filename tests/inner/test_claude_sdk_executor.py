@@ -3093,7 +3093,7 @@ async def test_assistant_message_model_flows_to_turn_usage() -> None:
     concrete model on each ``AssistantMessage``. The executor captures it and
     forwards it as ``usage["model"]`` so the server cost path can price the
     turn. A regression here leaves cost unpriced ("—") for every unpinned
-    claude-sdk agent (the debbie/debby supervisors).
+    claude-sdk agent (the debbie/lilo supervisors).
     """
     from unittest.mock import patch
 

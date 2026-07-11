@@ -5543,7 +5543,7 @@ async def test_patch_model_override_records_note_for_terminal_view_sdk_session(
     (``omnicraft.ui == "terminal"`` but NO ``omnicraft.wrapper``) DOES get the
     note.
 
-    This is the polly / debby case: when such an agent is launched via
+    This is the fucho / lilo case: when such an agent is launched via
     ``omnicraft run``, the runner stamps ``omnicraft.ui: terminal`` to enable
     the web Chat/Terminal toggle (runner ``app.py``), but the brain is an
     in-process claude-sdk agent whose history OmniCraft writes — so a web
@@ -5568,7 +5568,7 @@ async def test_patch_model_override_records_note_for_terminal_view_sdk_session(
     session = await _create_session(
         client,
         agent["id"],
-        # Terminal VIEW only — no native wrapper. Mirrors a polly/debby
+        # Terminal VIEW only — no native wrapper. Mirrors a fucho/lilo
         # session launched via `omnicraft run`.
         labels={"omnicraft.ui": "terminal"},
     )
@@ -5580,7 +5580,7 @@ async def test_patch_model_override_records_note_for_terminal_view_sdk_session(
     assert patch.status_code == 200, patch.text
     # Note IS recorded: ``omnicraft.ui == "terminal"`` alone must not suppress
     # it. An empty list here means the gate regressed to keying on
-    # ``omnicraft.ui``, re-breaking the polly/debby web ``/model`` feedback.
+    # ``omnicraft.ui``, re-breaking the fucho/lilo web ``/model`` feedback.
     assert _model_change_notes(published) == [
         "[System: model changed to databricks-claude-sonnet-4-6]"
     ]

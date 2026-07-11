@@ -77,7 +77,7 @@ YAML
 ```
 
 For sub-agents, tools, guardrails/policies, copy the field shapes from
-`examples/polly/config.yaml` and `examples/debby/config.yaml`.
+`examples/fucho/config.yaml` and `examples/lilo/config.yaml`.
 
 ## Step 3 — run a turn (and smoke-test)
 
@@ -104,7 +104,7 @@ streaming, harness.
 | Model routing | run the same bundle with several `--model` Gemini ids; note which actually runs |
 | Vertex AI auth | set `executor.config.vertex: true` + `project`/`location` and use GCP application-default creds instead of an API key |
 | Policy / guardrail | add a guardrail that denies a keyword; confirm it blocks (see the **sharp edges** below — LLM-phase + tool-call enforcement was incomplete at merge) |
-| Per-session brain override | run a bundle agent (polly/debby) and select `antigravity` as the brain harness (it's in `BRAIN_HARNESS_LABELS`) |
+| Per-session brain override | run a bundle agent (fucho/lilo) and select `antigravity` as the brain harness (it's in `BRAIN_HARNESS_LABELS`) |
 | Concurrency / leaks | fire several `omni run … &` at once; then `pgrep -af localharness` to check for orphaned native subprocesses |
 
 ## Gotchas (these cost real time)

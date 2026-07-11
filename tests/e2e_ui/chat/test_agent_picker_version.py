@@ -34,7 +34,7 @@ _SESSIONS_RE = re.compile(r"/v1/sessions(\?.*)?$")
 
 # Seeded built-in (protected), an older user-registered template, and the
 # newer same-named upload discovered on a session.
-_DEBBY_ID = "ag_debby_seeded"
+_LILO_ID = "ag_lilo_seeded"
 _TEMPLATE_ID = "ag_agenta_template"  # builtin:false, older
 _UPLOAD_ID = "ag_agenta_upload_v2"  # session-scoped, newer — must win
 _SCAN_TEMPLATE_SESSION = "conv_bound_template"
@@ -64,8 +64,8 @@ def _agents_body() -> str:
         {
             "data": [
                 {
-                    "id": _DEBBY_ID,
-                    "name": "debby",
+                    "id": _LILO_ID,
+                    "name": "lilo",
                     "description": "Seeded built-in",
                     "harness": "claude-sdk",
                     "skills": [],
@@ -205,10 +205,10 @@ async def _drive(base_url: str, created_session_id: str) -> None:
                 return page.get_by_test_id(f"new-chat-landing-agent-{agent_id}")
 
             # Agent A is offered as the NEWER upload id — the stale template id
-            # must not appear (it was superseded). The seeded debby is present
+            # must not appear (it was superseded). The seeded lilo is present
             # and untouched.
             await expect(option(_UPLOAD_ID)).to_be_visible()
-            await expect(option(_DEBBY_ID)).to_be_visible()
+            await expect(option(_LILO_ID)).to_be_visible()
             assert await option(_TEMPLATE_ID).count() == 0, (
                 "stale template version leaked into the picker"
             )

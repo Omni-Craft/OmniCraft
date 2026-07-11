@@ -432,7 +432,7 @@ class _FirstRunPlan:
     never persisted (see :func:`_resolve_first_run_plan`).
 
     :param harness: The canonical harness id to launch, e.g. ``"claude-sdk"``.
-    :param agent: The default agent target to launch (the bundled polly path
+    :param agent: The default agent target to launch (the bundled fucho path
         for Claude), or ``None`` for a bare harness REPL (codex / pi).
     """
 
@@ -447,7 +447,7 @@ def _bundled_example_path(name: str) -> str:
     ``examples/<name>`` in a dev checkout, real directories in an installed
     wheel), mirroring how the model catalog is located.
 
-    :param name: Bundled example directory name, e.g. ``"polly"``.
+    :param name: Bundled example directory name, e.g. ``"fucho"``.
     :returns: Absolute path string to the agent directory.
     """
     import importlib.resources
@@ -462,7 +462,7 @@ def _pick_first_run_harness() -> _FirstRunPlan | None:
     """Pick the harness a bare first ``run`` should launch, by configured creds.
 
     Priority Claude → Codex → Pi over the ambient-merged config (a detected env
-    key / CLI login counts as configured). Claude gets the bundled polly
+    key / CLI login counts as configured). Claude gets the bundled fucho
     orchestrator as its default agent; Codex / Pi launch a bare harness REPL.
     Shared with ``configure harnesses`` via
     :func:`~omnicraft.onboarding.provider_config.default_provider_for_harness`,
@@ -479,7 +479,7 @@ def _pick_first_run_harness() -> _FirstRunPlan | None:
 
     config = effective_config_with_detected(load_config())
     if default_provider_for_harness(config, "claude-sdk") is not None:
-        return _FirstRunPlan(harness="claude-sdk", agent=_bundled_example_path("polly"))
+        return _FirstRunPlan(harness="claude-sdk", agent=_bundled_example_path("fucho"))
     if default_provider_for_harness(config, "codex") is not None:
         return _FirstRunPlan(harness="codex", agent=None)
     if default_provider_for_harness(config, "pi") is not None:
@@ -500,15 +500,15 @@ def _resolve_first_run_plan() -> _FirstRunPlan | None:
     """Resolve the harness + default agent for a bare ``omnicraft run``.
 
     Adopts ambient-detected credentials, then picks a harness from what's
-    configured (Claude→polly / Codex / Pi). When nothing is configured,
+    configured (Claude→fucho / Codex / Pi). When nothing is configured,
     prints a notice, drops the user into ``configure harnesses``, then
     re-checks once.
 
     The pick is **deliberately not persisted** as a global default: it is
     derived state, recomputed on every bare ``run`` from the *current*
     credentials. So a user who starts with only Codex (→ a codex REPL) and
-    later adds Claude is promoted to polly on their next bare ``run`` —
-    keeping polly as the primary experience — rather than being pinned to
+    later adds Claude is promoted to fucho on their next bare ``run`` —
+    keeping fucho as the primary experience — rather than being pinned to
     the earlier fallback. An *explicit* default (a user-set global
     ``harness`` / ``default_agent``, or ``run <agent>`` / ``--harness``)
     still short-circuits this path upstream and is always honored.
@@ -1175,7 +1175,7 @@ _CLICK_SUBCOMMANDS: frozenset[str] = frozenset(
         "codex",
         "config",
         "cursor",
-        "debby",
+        "lilo",
         "debug",
         "goose",
         "hermes",
@@ -1188,7 +1188,7 @@ _CLICK_SUBCOMMANDS: frozenset[str] = frozenset(
         "pane-picker",
         "pane-split",
         "pi",
-        "polly",
+        "fucho",
         "qwen",
         "resume",
         "run",
@@ -4618,12 +4618,12 @@ def _bundled_agent_brain_harness(name: str) -> str | None:
 
     Reads the brain harness (``executor.config.harness``, falling back to
     ``executor.harness`` / ``executor.type``) from the bundled agent's
-    ``config.yaml`` — e.g. polly's and debby's ``claude-sdk`` brain — so
+    ``config.yaml`` — e.g. fucho's and lilo's ``claude-sdk`` brain — so
     credential fallback can target the model family the brain actually
     runs on. Mirrors :func:`_peek_default_agent_harness`'s YAML-reading
     style.
 
-    :param name: Bundled example directory name, e.g. ``"polly"``.
+    :param name: Bundled example directory name, e.g. ``"fucho"``.
     :returns: The canonical harness id, e.g. ``"claude-sdk"``, or ``None``
         when the bundle is missing/unreadable or declares no brain harness.
     """
@@ -4653,7 +4653,7 @@ def _bundled_agent_brain_harness(name: str) -> str | None:
 def _ensure_bundled_agent_brain_credential(name: str) -> None:
     """Ensure the bundled agent's brain harness has a credential to launch with.
 
-    Polly and Debby launch with the *first available* credential for their
+    Fucho and Lilo launch with the *first available* credential for their
     brain's model family rather than requiring a specific one to be marked
     ``default: true`` up front — so users can start without manually
     picking/configuring one. When no default provider is configured for the
@@ -4669,7 +4669,7 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
     mirrors :func:`_add_provider_entry`'s "a first provider just works"
     adoption (see :func:`omnicraft.setup`).
 
-    :param name: Bundled example directory name, e.g. ``"polly"``.
+    :param name: Bundled example directory name, e.g. ``"fucho"``.
     """
     from omnicraft.errors import OmniCraftError
     from omnicraft.onboarding.configure_models import family_label
@@ -5320,7 +5320,7 @@ def qwen(
 def _run_bundled_agent(name: str, run_args: tuple[str, ...]) -> None:
     """Forward a bundled-agent subcommand to ``run`` on its packaged path.
 
-    Implements ``omnicraft polly`` / ``omnicraft debby``: resolves the bundled
+    Implements ``omnicraft fucho`` / ``omnicraft lilo``: resolves the bundled
     example directory and re-dispatches through the ``run`` command's own
     parser, so every ``run`` flag (``--server``, ``-p``, ``--resume``, ...)
     works unchanged on the agent shorthands without duplicating ``run``'s
@@ -5331,11 +5331,11 @@ def _run_bundled_agent(name: str, run_args: tuple[str, ...]) -> None:
     as the canonical ``omnicraft run <path>`` form, which stays valid when
     replayed.
 
-    :param name: Bundled example directory name, e.g. ``"polly"``.
+    :param name: Bundled example directory name, e.g. ``"fucho"``.
     :param run_args: Unparsed pass-through CLI args for ``run``,
         e.g. ``("-p", "review the last commit")``.
     """
-    # Polly/Debby launch with the first available credential for their
+    # Fucho/Lilo launch with the first available credential for their
     # brain's family when no specific one is configured up front (#334).
     _ensure_bundled_agent_brain_credential(name)
     # standalone_mode=False propagates ClickExceptions to main()'s handler
@@ -5355,22 +5355,22 @@ def _run_bundled_agent(name: str, run_args: tuple[str, ...]) -> None:
     }
 )
 @click.argument("run_args", nargs=-1, type=click.UNPROCESSED)
-def polly(run_args: tuple[str, ...]) -> None:
+def fucho(run_args: tuple[str, ...]) -> None:
     # Param docs live in comments — Click uses the docstring for --help.
     # :param run_args: Pass-through args for ``run``.
-    """Launch polly, the bundled multi-agent coding orchestrator.
+    """Launch fucho, the bundled multi-agent coding orchestrator.
 
-    Shorthand for ``omnicraft run`` on the packaged polly agent — the same
+    Shorthand for ``omnicraft run`` on the packaged fucho agent — the same
     agent a bare ``omnicraft`` launches when a Claude credential is
     configured. All ``run`` options are accepted and forwarded.
 
     \b
     Examples:
-      omnicraft polly
-      omnicraft polly -p "review the last commit"
-      omnicraft polly --server https://<app>.databricksapps.com
+      omnicraft fucho
+      omnicraft fucho -p "review the last commit"
+      omnicraft fucho --server https://<app>.databricksapps.com
     """
-    _run_bundled_agent("polly", run_args)
+    _run_bundled_agent("fucho", run_args)
 
 
 @cli.command(
@@ -5380,22 +5380,22 @@ def polly(run_args: tuple[str, ...]) -> None:
     }
 )
 @click.argument("run_args", nargs=-1, type=click.UNPROCESSED)
-def debby(run_args: tuple[str, ...]) -> None:
+def lilo(run_args: tuple[str, ...]) -> None:
     # Param docs live in comments — Click uses the docstring for --help.
     # :param run_args: Pass-through args for ``run``.
-    """Launch debby, the bundled two-headed brainstorming agent.
+    """Launch lilo, the bundled two-headed brainstorming agent.
 
-    Shorthand for ``omnicraft run`` on the packaged debby agent. Debby fans
+    Shorthand for ``omnicraft run`` on the packaged lilo agent. Lilo fans
     every question out to both a Claude and a GPT sub-agent, so a Claude
     and an OpenAI provider must both be configured. All ``run`` options are
     accepted and forwarded.
 
     \b
     Examples:
-      omnicraft debby
-      omnicraft debby -p "name ideas for a CLI that runs agents"
+      omnicraft lilo
+      omnicraft lilo -p "name ideas for a CLI that runs agents"
     """
-    _run_bundled_agent("debby", run_args)
+    _run_bundled_agent("lilo", run_args)
 
 
 @cli.command(
@@ -6625,15 +6625,15 @@ def run(
 
     # First-run smart defaults: a bare `run` with no AGENT, no --harness, and no
     # explicit persisted default → derive a harness from the *current* creds
-    # (Claude→polly, else Codex, else Pi); or drop into `configure harnesses`
+    # (Claude→fucho, else Codex, else Pi); or drop into `configure harnesses`
     # when nothing is set up. The derived pick is NOT persisted, so it tracks
-    # the credentials — adding Claude later promotes a Codex-only user to polly.
+    # the credentials — adding Claude later promotes a Codex-only user to fucho.
     if target is None and harness is None and not direct_server_cli:
         plan = _resolve_first_run_plan()
         if plan is None:
             return  # nothing configured even after offering configure — exit cleanly
         harness = plan.harness
-        target = plan.agent  # polly path for Claude; None (bare harness) for codex/pi
+        target = plan.agent  # fucho path for Claude; None (bare harness) for codex/pi
 
     # Interactive ``omnicraft run`` opens the live conversation in the
     # browser by default so users discover the web UI once the server is up

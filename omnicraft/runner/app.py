@@ -4775,7 +4775,7 @@ async def _codex_session_needs_runner_terminal(
       so the runner must create it regardless of whether the *parent* was
       host- or CLI-spawned. (Gating on the parent's ``host_id`` was a
       regression: codex-native sub-agents under a CLI-driven parent —
-      e.g. polly run via ``omnicraft run --server`` — silently never got
+      e.g. fucho run via ``omnicraft run --server`` — silently never got
       a terminal and the dispatch no-op'd.)
 
     - **CLI top-level sessions** have neither ``host_id`` nor
@@ -14057,7 +14057,7 @@ def create_runner_app(
         # session-init / ensure-terminal path, but a sub-agent's FIRST turn can
         # arrive while the boot is still in flight (or before it starts): the
         # turn then found no ready server, produced no result, and silently hung
-        # the parent orchestrator (polly). Ensure the terminal here, idempotent
+        # the parent orchestrator (fucho). Ensure the terminal here, idempotent
         # and under the SAME per-session lock the session-init path uses, so this
         # turn WAITS for the boot instead of racing it (the events POST budget is
         # ~1 day, so a one-time cold-boot wait is safe). A boot failure surfaces

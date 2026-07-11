@@ -77,8 +77,8 @@ async def test_builtin_flag_distinguishes_seeded_from_registered(
     built-in.
     """
     agent_store = SqlAlchemyAgentStore(db_uri)
-    seeded_id = builtin_agent_id("polly")
-    agent_store.create(seeded_id, name="polly", bundle_location="test:///polly")
+    seeded_id = builtin_agent_id("fucho")
+    agent_store.create(seeded_id, name="fucho", bundle_location="test:///fucho")
     registered_id = generate_agent_id()
     agent_store.create(registered_id, name="my-agent", bundle_location="test:///mine")
 

@@ -299,7 +299,7 @@ export interface Session {
    * Effective brain harness for the session, e.g. ``"claude-sdk"`` or
    * ``"pi"``. Reflects a create-time ``harness_override`` when one was
    * picked, else the agent spec's declared harness. Drives the chat
-   * composer's "Polly (Pi)" pill suffix.
+   * composer's "Fucho (Pi)" pill suffix.
    */
   harness?: string | null;
   /**

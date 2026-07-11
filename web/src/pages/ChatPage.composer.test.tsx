@@ -665,11 +665,11 @@ describe("AgentPicker trigger label", () => {
   });
 
   it("surfaces an SDK/bundle session's model from the override, not the cross-session sticky", () => {
-    // Polly/Debby (claude-sdk) repro: a model picked in some other (Codex)
+    // Fucho/Lilo (claude-sdk) repro: a model picked in some other (Codex)
     // session lingers in the global sticky `selectedModel`. SDK/bundle sessions
     // (modelPickerKind === null) never have the sticky applied, so the trigger
     // must read the session's own applied model (`sessionModelOverride`), never
-    // the stale sticky — the "gpt-5.5 on a Claude-SDK Polly" report.
+    // the stale sticky — the "gpt-5.5 on a Claude-SDK Fucho" report.
     useChatStore.setState({
       selectedModel: "gpt-5.5", // stale cross-session sticky — must be ignored
       sessionModelOverride: "claude-opus-4-8",
@@ -679,7 +679,7 @@ describe("AgentPicker trigger label", () => {
     renderWithTooltips(
       <Composer
         {...composerProps({
-          agents: [{ id: "a1", name: "polly" }],
+          agents: [{ id: "a1", name: "fucho" }],
           selectedAgentId: "a1",
           modelPickerKind: null,
         })}
@@ -691,7 +691,7 @@ describe("AgentPicker trigger label", () => {
   });
 
   it("does not leak the cross-session sticky model on an SDK/bundle session with no applied model", () => {
-    // The exact report: a Polly (claude-sdk) session with no override and no
+    // The exact report: a Fucho (claude-sdk) session with no override and no
     // bound model, but a `gpt-5.5` left in the sticky from a prior Codex
     // session. The model label stays empty — only the real effort shows.
     useChatStore.setState({
@@ -703,7 +703,7 @@ describe("AgentPicker trigger label", () => {
     renderWithTooltips(
       <Composer
         {...composerProps({
-          agents: [{ id: "a1", name: "polly" }],
+          agents: [{ id: "a1", name: "fucho" }],
           selectedAgentId: "a1",
           modelPickerKind: null,
         })}
@@ -1233,7 +1233,7 @@ describe("Composer — queued-message flush gating", () => {
     useChatStore.setState({ queuedMessages: [] });
   });
 
-  // Regression (Polly review 3a): the level-triggered flush effect must NOT
+  // Regression (Fucho review 3a): the level-triggered flush effect must NOT
   // drain the queue while the session is unreachable — flushing would POST
   // into a void, bypassing onSend's reconnect dialog. It must drain once
   // reachable again.

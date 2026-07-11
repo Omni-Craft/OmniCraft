@@ -3,7 +3,7 @@
 **This is the answers/findings companion to [`CUJ-MAP.md`](./CUJ-MAP.md).** `CUJ-MAP.md` is the
 team-editable *list* of CUJs + open questions; **this file is how each one actually works** — code
 findings with `file:line` anchors, the verified per-harness matrix (§4), the API surface (§5), and
-reliability-gap findings (§6). Scoped to **Claude, Codex, and Polly / custom agents** (others out of scope).
+reliability-gap findings (§6). Scoped to **Claude, Codex, and Fucho / custom agents** (others out of scope).
 Don't add inventory items or open questions here — those go in `CUJ-MAP.md`.
 
 > Status: **first full pass complete; matrix (§4) code-verified.** All 7 domain sections (2.A–2.G)
@@ -26,7 +26,7 @@ What you have is not one tree — it's a **tree × a matrix**, checked against *
 - **Cross-cutting invariants** — properties that must hold at *every* node (§3). Not tree
   nodes; things you re-test at each node.
 - **Matrix axes** — the same journey behaves differently per harness and per client (§1).
-  "How does claude-code / codex / polly behave on disconnect" = one node × the harness axis.
+  "How does claude-code / codex / fucho behave on disconnect" = one node × the harness axis.
 
 Because the goal is reliability, the high-value nodes are the **failure branches**
 (disconnect mid-turn, creds expire mid-turn, first message dropped) — that's where the
@@ -39,7 +39,7 @@ bugs already cluster. Failure branches are marked ⚠️.
 ```
 HARNESS:    claude   (claude-sdk + claude-native)
             codex    (codex + codex-native)
-            Polly  = general custom agents (run on a chosen harness, typically claude-sdk; inherit its row)
+            Fucho  = general custom agents (run on a chosen harness, typically claude-sdk; inherit its row)
             [other harnesses — cursor, pi, goose, hermes, antigravity, kimi, qwen, kiro, opencode,
              copilot, openai-agents — are OUT OF SCOPE for this cleanup]
 CLIENT:     TUI / REPL   ·   WebUI
@@ -47,7 +47,7 @@ CONN STATE: connected · mid-disconnect · reconnected · resumed(new runner) ·
 TURN STATE: idle · working · awaiting-elicitation · interrupted · compacting
 ```
 
-**Scope:** this map is intentionally limited to **Claude (sdk + native), Codex (sdk + native), and Polly /
+**Scope:** this map is intentionally limited to **Claude (sdk + native), Codex (sdk + native), and Fucho /
 general custom agents**. Other harnesses are out of scope and have been dropped from the analysis below.
 
 Every leaf below is really "(leaf) × HARNESS × CLIENT × CONN STATE".
@@ -109,7 +109,7 @@ runner binding via atomic CAS (`set_runner_id`, `WHERE runner_id IS NULL`).
 **Taxonomy — two families** (this split explains most behavior differences). *In scope: claude + codex only.*
 - **SDK harnesses** — in-process agent loop; OmniCraft owns prompt + tool set + turn loop;
   user sees only the OmniCraft WebUI; transcript is 100% OmniCraft. Base `omnicraft/inner/executor.py`.
-  (in scope: **claude-sdk**, **codex** — headless. **Polly / custom agents** run here too, typically on claude-sdk.)
+  (in scope: **claude-sdk**, **codex** — headless. **Fucho / custom agents** run here too, typically on claude-sdk.)
 - **Native harnesses** — drive a resident vendor CLI/TUI in a tmux pane and **mirror** its
   transcript back; the *vendor* owns the system prompt + tool set; transcript lives in the
   vendor store + mirrored. Base `omnicraft/native_server_harness.py`; dispatch
@@ -221,9 +221,9 @@ Engine `runtime/policies/engine.py`; registry `policies/registry.py`; docs `POLI
   |---|---|---|
   | claude-native | PreToolUse + PermissionRequest | **long-poll HTTP** (verdict in held response body) |
   | codex-native | `codex-elicitation-request` | long-poll HTTP |
-  | SDK / runner (claude-sdk, codex, Polly) | server `type=approval` event | runner `pending_approvals` Future |
+  | SDK / runner (claude-sdk, codex, Fucho) | server `type=approval` event | runner `pending_approvals` Future |
   So for the in-scope harnesses, verdicts return via **long-poll HTTP** (claude-native / codex-native) or an
-  **`approval` event** (SDK — claude-sdk / codex / Polly) — no keystroke emulation involved. (Other native
+  **`approval` event** (SDK — claude-sdk / codex / Fucho) — no keystroke emulation involved. (Other native
   harnesses use tmux-keystroke delivery, but they're out of scope.)
 - **Form elicitations** — `requestedSchema` JSON-schema forms (beyond binary); mostly custom/future.
 - **Pending-elicitation tracking** — `runtime/pending_elicitations.py`; sidebar badge count; replayed on cold load.
@@ -426,8 +426,8 @@ all ❌ except `supports_tool_calling`) + native permission modules. SDK and nat
 | claude-native | ✅ (Escape via bridge `inject_interrupt`) | ✅ | ✅ | ✅ via `/effort` | ✅ | ✅ (next turn) |
 | codex-native | ✅ (turn/interrupt RPC) | ✅ | ⚠️† | ✅ {…openai} | ✅ | ✅ |
 
-**Polly / general custom agents** have no row of their own — they run on a chosen harness (typically **claude-sdk**)
-and inherit that harness's capabilities. A Polly agent on claude-sdk reads exactly as the claude-sdk row.
+**Fucho / general custom agents** have no row of their own — they run on a chosen harness (typically **claude-sdk**)
+and inherit that harness's capabilities. A Fucho agent on claude-sdk reads exactly as the claude-sdk row.
 
 † **codex subagents** = implicit via subprocess `CODEX_HOME` isolation, not a declared capability.
 ‡ **codex (SDK) elicitation** = executor returns base ❌; the forwarder *may* handle it but unverified at the executor

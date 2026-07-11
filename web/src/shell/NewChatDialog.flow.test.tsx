@@ -898,10 +898,10 @@ describe("NewChatLandingScreen create flow", () => {
   });
 
   it("posts harness_override when a brain harness is picked from the harness menu", async () => {
-    // polly's spec declares claude-sdk; the harness dropdown offers the
+    // fucho's spec declares claude-sdk; the harness dropdown offers the
     // override set.
     setAgents([
-      agent({ id: "ag_polly", name: "polly", display_name: "Polly", harness: "claude-sdk" }),
+      agent({ id: "ag_fucho", name: "fucho", display_name: "Fucho", harness: "claude-sdk" }),
     ]);
     vi.mocked(authenticatedFetch).mockResolvedValueOnce({
       ok: true,
@@ -910,9 +910,9 @@ describe("NewChatLandingScreen create flow", () => {
 
     renderLanding();
     await waitForWorkspaceSeed();
-    // Open Polly's config submenu and pick the Pi harness (single section →
+    // Open Fucho's config submenu and pick the Pi harness (single section →
     // selecting it commits the agent pick and closes the menu).
-    openAgentConfig("ag_polly");
+    openAgentConfig("ag_fucho");
     fireEvent.click(screen.getByTestId("new-chat-landing-harness-pi"));
     expect(screen.getByTestId("new-chat-landing-agent-select").textContent).not.toContain("(");
     typeMessage("go");
@@ -924,12 +924,12 @@ describe("NewChatLandingScreen create flow", () => {
     // The pick must travel at create time — the harness spawns on the first
     // turn, so there is no later surface to apply it.
     expect(body.harness_override).toBe("pi");
-    expect(body.agent_id).toBe("ag_polly");
+    expect(body.agent_id).toBe("ag_fucho");
   });
 
   it("omits harness_override and shows the spec default when no harness is picked", async () => {
     setAgents([
-      agent({ id: "ag_polly", name: "polly", display_name: "Polly", harness: "claude-sdk" }),
+      agent({ id: "ag_fucho", name: "fucho", display_name: "Fucho", harness: "claude-sdk" }),
     ]);
     vi.mocked(authenticatedFetch).mockResolvedValueOnce({
       ok: true,
@@ -940,7 +940,7 @@ describe("NewChatLandingScreen create flow", () => {
     await waitForWorkspaceSeed();
     // With no explicit pick the pill shows just the agent name — the spec
     // default is not suffixed (it lives in the Advanced menu's radios).
-    expect(screen.getByTestId("new-chat-landing-agent-select").textContent).toContain("Polly");
+    expect(screen.getByTestId("new-chat-landing-agent-select").textContent).toContain("Fucho");
     expect(screen.getByTestId("new-chat-landing-agent-select").textContent).not.toContain(
       "Claude SDK",
     );
@@ -957,7 +957,7 @@ describe("NewChatLandingScreen create flow", () => {
 
   it("re-picking the spec default clears a previous harness override", async () => {
     setAgents([
-      agent({ id: "ag_polly", name: "polly", display_name: "Polly", harness: "claude-sdk" }),
+      agent({ id: "ag_fucho", name: "fucho", display_name: "Fucho", harness: "claude-sdk" }),
     ]);
     vi.mocked(authenticatedFetch).mockResolvedValueOnce({
       ok: true,
@@ -968,9 +968,9 @@ describe("NewChatLandingScreen create flow", () => {
     await waitForWorkspaceSeed();
     // Pick Pi, then change mind back to the spec default (Claude SDK). Each
     // pick closes the single-section submenu, so reopen between the two.
-    openAgentConfig("ag_polly");
+    openAgentConfig("ag_fucho");
     fireEvent.click(screen.getByTestId("new-chat-landing-harness-pi"));
-    openAgentConfig("ag_polly");
+    openAgentConfig("ag_fucho");
     fireEvent.click(screen.getByTestId("new-chat-landing-harness-claude-sdk"));
     typeMessage("go");
     fireEvent.click(screen.getByTestId("new-chat-landing-submit"));
@@ -984,10 +984,10 @@ describe("NewChatLandingScreen create flow", () => {
   });
 
   // Skipped while the toggle is hidden behind the false-gate in NewChatDialog; un-skip when re-enabling.
-  it.skip("posts cost_control_mode_override when the intelligent-model toggle is flipped on (polly)", async () => {
-    // Cost control is a polly-only feature, so the toggle only renders when
-    // the selected agent is polly. Seed polly as the sole (auto-selected) agent.
-    setAgents([agent({ id: "ag_polly", name: "polly", display_name: "Polly" })]);
+  it.skip("posts cost_control_mode_override when the intelligent-model toggle is flipped on (fucho)", async () => {
+    // Cost control is a fucho-only feature, so the toggle only renders when
+    // the selected agent is fucho. Seed fucho as the sole (auto-selected) agent.
+    setAgents([agent({ id: "ag_fucho", name: "fucho", display_name: "Fucho" })]);
     vi.mocked(authenticatedFetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "conv_new" }),
@@ -1008,16 +1008,16 @@ describe("NewChatLandingScreen create flow", () => {
     expect(body.cost_control_mode_override).toBe("on");
   });
 
-  it("hides the Cost Optimized pill for non-polly agents", async () => {
-    // The default seeded agent is a plain YAML agent (hello_world), not polly,
-    // so the cost pill must not render at all — cost control is polly-only.
+  it("hides the Cost Optimized pill for non-fucho agents", async () => {
+    // The default seeded agent is a plain YAML agent (hello_world), not fucho,
+    // so the cost pill must not render at all — cost control is fucho-only.
     renderLanding();
     await waitForWorkspaceSeed();
     expect(screen.queryByTestId("cost-toggle-trigger")).toBeNull();
   });
 
-  it("omits cost_control_mode_override when the pill is left at spec default (polly)", async () => {
-    setAgents([agent({ id: "ag_polly", name: "polly", display_name: "Polly" })]);
+  it("omits cost_control_mode_override when the pill is left at spec default (fucho)", async () => {
+    setAgents([agent({ id: "ag_fucho", name: "fucho", display_name: "Fucho" })]);
     vi.mocked(authenticatedFetch).mockResolvedValueOnce({
       ok: true,
       json: async () => ({ id: "conv_new" }),
@@ -1032,7 +1032,7 @@ describe("NewChatLandingScreen create flow", () => {
     const [, init] = vi.mocked(authenticatedFetch).mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(init.body as string);
     // Anchor on a required field so the absence check can't pass vacuously.
-    expect(body.agent_id).toBe("ag_polly");
+    expect(body.agent_id).toBe("ag_fucho");
     // Unset = defer to the spec default; the field must be absent (an
     // explicit null at create would be a pointless write, and "off" here
     // would wrongly disable a spec-configured mode).

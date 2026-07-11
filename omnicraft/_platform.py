@@ -184,8 +184,8 @@ def resolve_repo_symlink(path: Path) -> Path:
     On Windows with ``core.symlinks=false`` (the default when Developer Mode is
     off and Git was not run elevated), Git materializes a repository symlink as a
     *regular file* whose entire content is the link target — e.g. the checked-out
-    ``omnicraft/resources/examples/polly`` is a 23-byte file containing
-    ``../../../examples/polly`` rather than a link to that directory. Code that
+    ``omnicraft/resources/examples/fucho`` is a 23-byte file containing
+    ``../../../examples/fucho`` rather than a link to that directory. Code that
     expects to open the linked directory then reads this stub instead (the
     symptom: ``expected YAML mapping at top level, got str``).
 

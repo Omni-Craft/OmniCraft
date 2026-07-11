@@ -160,7 +160,7 @@ def test_run_harness_live_matrix_covers_registered_coding_harnesses() -> None:
     GitHub's Copilot backend (no Databricks gateway path), so ``_build_copilot_spawn_env``
     emits none of the shared ``HARNESS_<H>_GATEWAY`` / profile probe vars this
     matrix drives. Its live round-trip is covered by the gated
-    ``tests/e2e/test_polly_copilot_e2e.py`` and the ``copilot-sdk-e2e-dev`` skill.
+    ``tests/e2e/test_fucho_copilot_e2e.py`` and the ``copilot-sdk-e2e-dev`` skill.
 
     ``cursor-native`` is excluded for the union of both reasons above.
 

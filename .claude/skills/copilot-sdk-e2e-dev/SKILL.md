@@ -72,7 +72,7 @@ YAML
 ```
 
 For sub-agents, tools, guardrails/policies, copy the field shapes from
-`examples/polly/config.yaml` and `examples/debby/config.yaml`. (Declare policies
+`examples/fucho/config.yaml` and `examples/lilo/config.yaml`. (Declare policies
 under `guardrails.policies:` — a top-level `policies:` key is silently dropped on
 the `spec_version` + `config.yaml` path.)
 
@@ -101,24 +101,24 @@ the full stack is good: token, egress, bundled CLI, harness.
 | LLM-phase policy | add a guardrail that denies a keyword; confirm `PHASE_LLM_REQUEST`/`PHASE_LLM_RESPONSE` blocks it |
 | Concurrency / leaks | fire several `omni run … &` at once; then `pgrep -af "copilot/bin/copilot"` to check for orphaned bundled-CLI subprocesses |
 
-## Running polly (or any orchestrator) on a copilot brain
+## Running fucho (or any orchestrator) on a copilot brain
 
-The copilot harness can serve as an **async orchestrator** brain (polly / debby),
+The copilot harness can serve as an **async orchestrator** brain (fucho / lilo),
 not just a standalone agent — it dispatches to sub-agents via the bridged
 `sys_*` tools and synthesizes their results. Two ways to exercise it:
 
 **1. Committed regression guard (brain smoke).**
-`tests/e2e/test_polly_copilot_e2e.py` boots a local server from your checkout and
-runs `examples/polly` with `--harness copilot --model auto`, asserting the brain
+`tests/e2e/test_fucho_copilot_e2e.py` boots a local server from your checkout and
+runs `examples/fucho` with `--harness copilot --model auto`, asserting the brain
 boots and replies. It is **skipped** unless a Copilot token is configured (so CI
 without one skips it). Run it with:
 
 ```bash
-.venv/bin/python -m pytest -o addopts="" tests/e2e/test_polly_copilot_e2e.py -v
+.venv/bin/python -m pytest -o addopts="" tests/e2e/test_fucho_copilot_e2e.py -v
 ```
 
 **2. Full orchestration (dispatch → collect → synthesize).** Use the
-`polly-e2e-dev` driver (in the internal `agent-framework` clone) — it boots a
+`fucho-e2e-dev` driver (in the internal `agent-framework` clone) — it boots a
 local server, polls the AP API, auto-answers elicitations, and asserts the
 fan-out. Drive the brain on copilot with `--brain-harness copilot`, and **always
 pass a Copilot-catalog `--brain-model`** (`auto`, `claude-haiku-4.5`,
@@ -126,7 +126,7 @@ pass a Copilot-catalog `--brain-model`** (`auto`, `claude-haiku-4.5`,
 (no Databricks gateway) can't route. From the agent-framework clone:
 
 ```bash
-.venv/bin/python .claude/skills/polly-e2e-dev/polly_driver.py \
+.venv/bin/python .claude/skills/fucho-e2e-dev/fucho_driver.py \
   --local --code-dir <this-worktree> \
   --cuj smoke --brain-harness copilot --brain-model auto      # brain only
 # --cuj fanout  …  and  --cuj review-pr --repo omnicraft-ai/omnicraft --pr <n>  …

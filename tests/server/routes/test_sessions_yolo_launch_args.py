@@ -93,7 +93,7 @@ def test_codex_native_without_yolo_field_defaults_to_bypass() -> None:
     """
     A headless codex-native sub-agent defaults to full bypass (issue #171).
 
-    A codex worker launched by polly runs headless: no human can answer
+    A codex worker launched by fucho runs headless: no human can answer
     codex's ``approval_policy=on-request`` prompts, and codex's own command
     sandbox often cannot even start (e.g. in a hardened container), so the
     default stance stalls the worker on its first Edit/Write/Bash. The

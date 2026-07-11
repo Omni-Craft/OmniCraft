@@ -1049,6 +1049,25 @@
   animation: otto-blink 3.4s ease-in-out infinite;
 }
 
+/* Hero mascot "floating in water": a slow, gentle vertical drift with a small
+ * rotational sway. Opt-in via .otto-float (the new-chat hero). The global
+ * reduced-motion gate below freezes it. */
+@keyframes otto-float {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-2deg);
+  }
+  50% {
+    transform: translateY(-7%) rotate(2deg);
+  }
+}
+
+.otto-float {
+  transform-origin: center;
+  animation: otto-float 4.5s ease-in-out infinite;
+  will-change: transform;
+}
+
 @keyframes compaction-slide {
   0% {
     transform: translateX(-100%);

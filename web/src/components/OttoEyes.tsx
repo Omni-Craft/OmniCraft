@@ -4,5 +4,12 @@ import { OttoIcon } from "@/components/icons/OttoIcon";
 // cursor; the mascot is now the OmniCraft fish logo (raster art), so this is a
 // thin wrapper that renders it as a meaningful, labelled image.
 export function OttoEyes({ className }: { className?: string }) {
-  return <OttoIcon className={className} role="img" aria-label="OmniCraft" aria-hidden={false} />;
+  return (
+    <OttoIcon
+      className={["otto-float", className].filter(Boolean).join(" ")}
+      role="img"
+      aria-label="OmniCraft"
+      aria-hidden={false}
+    />
+  );
 }

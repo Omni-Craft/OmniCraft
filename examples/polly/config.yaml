@@ -1,14 +1,13 @@
 spec_version: 1
 name: polly
 description: >-
-  A coding orchestrator that breaks your goal into pieces and hands them
-  to a team of Claude Code, Codex, OpenCode, Cursor, Hermes, and Pi sub-agents
-  to build. Polly
-  writes no code itself — it plans and splits up the work, delegates all
-  of it (investigation / implementation / review), then has a separate
-  independent different-model reviewer double-check the work before
-  putting it all together. Best for bigger tasks you want planned and
-  split up.
+  Uma orquestradora de programação que divide seu objetivo em partes e as
+  entrega a um time de sub-agentes Claude Code, Codex, OpenCode, Cursor,
+  Hermes e Pi para construir. A Polly não escreve código — ela planeja e
+  divide o trabalho, delega tudo (investigação / implementação / revisão)
+  e então faz um revisor independente, de um modelo diferente, conferir o
+  trabalho antes de juntar tudo. Ideal para tarefas maiores que você quer
+  planejadas e divididas.
 
 # Beyond the declared sub-agents (tools.agents below), polly may also spawn
 # child sessions it defines itself: spawn: true registers

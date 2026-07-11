@@ -672,14 +672,14 @@
     transition-duration: 1ms;
   }
 }
-/* Share button — glassy pink effect (both modes). The vertical
+/* Share button — glassy turquoise effect (both modes). The vertical
  * gradient alone does the embossed work (lighter top = light catch,
  * darker bottom = shadow, simulating a convex surface lit from above);
  * no border or inset shine. Light mode: gentler gradient, no shadow —
  * the full emboss + dark depth shadow reads too heavy on the light
  * canvas. Dark mode: stronger emboss plus the grounding shadow. */
 .share-button-glassy {
-  background: linear-gradient(to bottom, #fa3d99 0%, #f22286 40%, #d51d74 100%);
+  background: linear-gradient(to bottom, #1ec9d0 0%, #0fb5bd 40%, #0a8f97 100%);
   border: none;
   box-shadow: none;
   color: #ffffff;
@@ -687,11 +687,11 @@
 
 .share-button-glassy:hover {
   /* Darken the gradient slightly on hover */
-  background: linear-gradient(to bottom, #ec3790 0%, #e51b7d 40%, #c41a6b 100%);
+  background: linear-gradient(to bottom, #14bcc3 0%, #0ca7af 40%, #08838b 100%);
 }
 
 .dark .share-button-glassy {
-  background: linear-gradient(150deg, #ff4da6 0%, #f22286 40%, #b8185f 100%);
+  background: linear-gradient(150deg, #34d6dc 0%, #12b8c0 40%, #0a8a92 100%);
   border: none;
   box-shadow:
     0 4px 16px rgba(0, 0, 0, 0.5),
@@ -700,7 +700,7 @@
 }
 
 .dark .share-button-glassy:hover {
-  background: linear-gradient(150deg, #f0408f 0%, #e51b7d 40%, #a51455 100%);
+  background: linear-gradient(150deg, #22cbd2 0%, #0fb5bd 40%, #077e86 100%);
 }
 
 @layer base {

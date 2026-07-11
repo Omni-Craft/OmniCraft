@@ -17,6 +17,7 @@ import {
   ArchiveRestoreIcon,
   CheckIcon,
   CheckIcon as CheckMarkIcon,
+  ChartColumnIcon,
   ChevronRightIcon,
   CircleStopIcon,
   FolderIcon,
@@ -539,6 +540,24 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Integração GitHub</TooltipContent>
+              </Tooltip>
+              {/* Live cost / observability panel. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Custos e observabilidade"
+                    className="rounded-full"
+                    data-testid="costs-button"
+                  >
+                    <Link to="/costs" onClick={onNavClick}>
+                      <ChartColumnIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Custos e observabilidade</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>

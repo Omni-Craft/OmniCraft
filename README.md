@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="docs/images/omnicraft-mascot.png" alt="" height="42" valign="middle" /> OmniCraft
+# <img src="docs/images/omnicraft-mascot.png" alt="" height="88" valign="middle" /> OmniCraft
 
 ### O meta-harness open-source para todos os seus agentes de IA.
 
@@ -17,7 +17,7 @@ ou o app desktop nativo.
 </div>
 
 <p align="center">
-  <img src="docs/images/omnicraft-desktop.png" alt="O app desktop do OmniCraft: iniciando uma nova sessão, com sessões fixadas e agrupadas por projeto na barra lateral" width="720" />
+  <img src="docs/images/omnicraft-desktop.png" alt="O app desktop do OmniCraft: a tela de nova sessão com o mascote peixe, o campo para descrever uma tarefa e a barra lateral de sessões" width="760" />
 </p>
 
 > **Sobre este fork.** Este é um fork em **português do Brasil** com identidade

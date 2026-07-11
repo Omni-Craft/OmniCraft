@@ -15,7 +15,7 @@
 // click opens it in a new tab, matching the sidebar's behavior.
 
 import { lazy, Suspense, useState } from "react";
-import type { ComponentType, SVGProps } from "react";
+import type { ComponentType } from "react";
 import {
   BookOpenIcon,
   BotIcon,
@@ -67,7 +67,9 @@ const CODEX_NATIVE_SUBAGENT_WRAPPER = "codex-native-ui-subagent";
 const OPENCODE_NATIVE_SUBAGENT_WRAPPER = "opencode-native-ui-subagent";
 // Pi children are scaffold (no wrapper label); the spawn title's agent-type head (``tool``) is the signal.
 const PI_AGENT_NAME = "pi";
-type AgentRowIcon = ComponentType<SVGProps<SVGSVGElement>>;
+// Row icons are lucide SVG components plus the OmniCraft mascot (an <img>);
+// all are rendered with just a className, so accept any such component.
+type AgentRowIcon = ComponentType<{ className?: string }>;
 
 /**
  * Build a rail-link search string from the current URL, dropping the

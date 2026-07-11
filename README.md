@@ -1,6 +1,6 @@
 <div align="center">
 
-# <img src="docs/images/omnicraft-logo.svg" alt="" height="38" valign="middle" /> OmniCraft
+# <img src="docs/images/omnicraft-mascot.png" alt="" height="42" valign="middle" /> OmniCraft
 
 ### O meta-harness open-source para todos os seus agentes de IA.
 

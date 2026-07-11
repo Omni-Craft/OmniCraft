@@ -82,6 +82,16 @@ CODEX_NATIVE_BYPASS_SANDBOX_LABEL_KEY = "omnicraft.codex_native.bypass_sandbox"
 # and the web client mirrors the literal as ``PROJECT_LABEL_KEY``.
 PROJECT_LABEL_KEY = "omni_project"
 
+# Reserved label key that ties a session to an "arena" group — a set of
+# sibling racer sessions launched together with the SAME prompt across
+# different harnesses/worktrees so their results can be compared. Every racer
+# in one arena carries this key with the shared arena id as the value; the
+# comparison view lists them via ``list_conversations(arena_group=<id>)``.
+# Namespaced under ``omnicraft.arena.*`` so it never collides with the
+# user-facing project term or the reserved cost-control keys. The web client
+# mirrors the literal as ``ARENA_GROUP_LABEL_KEY``.
+ARENA_GROUP_LABEL_KEY = "omnicraft.arena.group"
+
 # Labels that must NOT cross into a new session context — deliberately
 # dropped both when forking (not copied to the clone) and on an in-place
 # agent switch (deleted from the switched session). Two distinct reasons
@@ -484,6 +494,7 @@ class ConversationStore(ABC):
         owned_by: str | None = None,
         include_archived: bool = False,
         project: str | None = None,
+        arena_group: str | None = None,
         title: str | None = None,
     ) -> PagedList[Conversation]:
         """

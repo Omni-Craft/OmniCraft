@@ -14603,6 +14603,7 @@ def create_sessions_router(
         include_archived: bool = Query(default=False),
         kind: str = Query(default="default", pattern="^(default|sub_agent|any)$"),
         project: str | None = Query(default=None),
+        arena_group: str | None = Query(default=None),
     ) -> PaginatedList:
         """
         List sessions with cursor-based pagination.
@@ -14687,6 +14688,7 @@ def create_sessions_router(
             search_query=normalized_query,
             include_archived=include_archived,
             project=project,
+            arena_group=arena_group,
         )
         # list_conversations may return rows with agent_id=None for
         # legacy conversations; skip them before building the batch IDs.

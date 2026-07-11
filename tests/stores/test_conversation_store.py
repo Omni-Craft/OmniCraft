@@ -4525,6 +4525,33 @@ def test_list_conversations_project_none_disables_filter(
     assert ids >= {filed.id, unfiled.id}
 
 
+def test_list_conversations_filters_by_arena_group(
+    conversation_store: SqlAlchemyConversationStore,
+) -> None:
+    """``arena_group="X"`` returns only the racers carrying that arena label."""
+    racer_a = conversation_store.create_conversation()
+    racer_b = conversation_store.create_conversation()
+    conversation_store.create_conversation()  # unrelated session
+
+    conversation_store.set_labels(racer_a.id, {"omnicraft.arena.group": "arena_1"})
+    conversation_store.set_labels(racer_b.id, {"omnicraft.arena.group": "arena_1"})
+
+    ids = {c.id for c in conversation_store.list_conversations(arena_group="arena_1").data}
+    assert ids == {racer_a.id, racer_b.id}
+
+
+def test_list_conversations_arena_group_none_disables_filter(
+    conversation_store: SqlAlchemyConversationStore,
+) -> None:
+    """``arena_group=None`` (the default) does not scope to any arena."""
+    racer = conversation_store.create_conversation()
+    plain = conversation_store.create_conversation()
+    conversation_store.set_labels(racer.id, {"omnicraft.arena.group": "arena_1"})
+
+    ids = {c.id for c in conversation_store.list_conversations().data}
+    assert ids >= {racer.id, plain.id}
+
+
 def test_list_projects_owned_by_excludes_shared_only_projects(
     conversation_store: SqlAlchemyConversationStore,
     db_uri: str,

@@ -39,6 +39,7 @@ import {
   SearchIcon,
   SettingsIcon,
   ShareIcon,
+  SwordsIcon,
   SquareIcon,
   SquareCheckIcon,
   SquarePenIcon,
@@ -501,6 +502,24 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">Caixa de entrada</TooltipContent>
+              </Tooltip>
+              {/* Arena: race one prompt across several harnesses and compare. */}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    asChild
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Arena de agentes"
+                    className="rounded-full"
+                    data-testid="arena-button"
+                  >
+                    <Link to="/arena" onClick={onNavClick}>
+                      <SwordsIcon className="size-4" />
+                    </Link>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">Arena de agentes</TooltipContent>
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>

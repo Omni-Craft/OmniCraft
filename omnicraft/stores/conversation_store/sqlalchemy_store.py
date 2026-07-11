@@ -68,6 +68,7 @@ from omnicraft.entities import (
 )
 from omnicraft.stores.conversation_store import (
     _INSTANCE_SCOPED_LABEL_KEYS,
+    ARENA_GROUP_LABEL_KEY,
     FORK_CARRY_HISTORY_LABEL_KEY,
     FORK_SOURCE_EXTERNAL_SESSION_LABEL_KEY,
     FORK_SOURCE_LABEL_KEY,
@@ -1779,6 +1780,7 @@ class SqlAlchemyConversationStore(ConversationStore):
         owned_by: str | None = None,
         include_archived: bool = False,
         project: str | None = None,
+        arena_group: str | None = None,
         title: str | None = None,
     ) -> PagedList[Conversation]:
         """
@@ -1921,6 +1923,18 @@ class SqlAlchemyConversationStore(ConversationStore):
                             )
                         )
                     )
+            if arena_group:
+                # Only the racer sessions that carry this arena group id — the
+                # comparison view's member fetch (mirrors the project filter).
+                stmt = stmt.where(
+                    SqlConversation.id.in_(
+                        select(SqlConversationLabel.conversation_id).where(
+                            SqlConversationLabel.workspace_id == current_workspace_id(),
+                            SqlConversationLabel.key == ARENA_GROUP_LABEL_KEY,
+                            SqlConversationLabel.value == arena_group,
+                        )
+                    )
+                )
             if after:
                 stmt = self._apply_cursor(
                     stmt,

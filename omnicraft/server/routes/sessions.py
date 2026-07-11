@@ -14806,6 +14806,33 @@ def create_sessions_router(
             raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
         return {"restored": result["restored"], "backup_id": result["backup_id"]}
 
+    @router.delete("/sessions/{session_id}/checkpoints/{snapshot_id}", response_model=None)
+    async def delete_checkpoint(
+        request: Request, session_id: str, snapshot_id: str
+    ) -> dict[str, bool]:
+        """Delete a saved checkpoint from the session worktree."""
+        from omnicraft.server.routes._host_worktree import (
+            WorktreeHostUnavailableError,
+            WorktreeProxyError,
+            delete_snapshot_on_host,
+        )
+
+        conv, host_conn, host_registry = await _checkpoint_worktree_context(
+            request, session_id, LEVEL_EDIT
+        )
+        try:
+            await delete_snapshot_on_host(
+                host_registry=host_registry,
+                host_conn=host_conn,
+                worktree_path=conv.workspace,
+                snapshot_id=snapshot_id,
+            )
+        except WorktreeHostUnavailableError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.CONFLICT) from exc
+        except WorktreeProxyError as exc:
+            raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
+        return {"deleted": True}
+
     # ── GET /sessions ───────────────────────────────────────────
 
     @router.get(

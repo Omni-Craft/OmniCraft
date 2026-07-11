@@ -16,6 +16,7 @@ from dataclasses import dataclass
 
 from omnicraft.host.frames import (
     HostCreateWorktreeFrame,
+    HostDeleteSnapshotFrame,
     HostGitDiffFrame,
     HostListSnapshotsFrame,
     HostListWorktreesFrame,
@@ -466,3 +467,31 @@ async def restore_snapshot_on_host(
             f"snapshot restore failed: {result.get('error') or 'host reported no detail'}"
         )
     return {"restored": result.get("restored"), "backup_id": result.get("backup_id")}
+
+
+async def delete_snapshot_on_host(
+    *,
+    host_registry: HostRegistry,
+    host_conn: HostConnection,
+    worktree_path: str,
+    snapshot_id: str,
+) -> None:
+    """Send a ``host.delete_snapshot`` frame and await the result."""
+    request_id = secrets.token_hex(8)
+    frame = encode_host_frame(
+        HostDeleteSnapshotFrame(
+            request_id=request_id, worktree_path=worktree_path, snapshot_id=snapshot_id
+        )
+    )
+    result = await _await_host_worktree_result(
+        host_registry=host_registry,
+        host_conn=host_conn,
+        pending=host_conn.pending_delete_snapshots,
+        request_id=request_id,
+        frame=frame,
+        op="snapshot delete",
+    )
+    if result.get("status") != "ok":
+        raise WorktreeProxyError(
+            f"snapshot delete failed: {result.get('error') or 'host reported no detail'}"
+        )

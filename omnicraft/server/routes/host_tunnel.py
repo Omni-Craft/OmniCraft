@@ -28,6 +28,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from omnicraft.host.frames import (
     HostCreateDirResultFrame,
     HostCreateWorktreeResultFrame,
+    HostDeleteSnapshotResultFrame,
     HostGitDiffResultFrame,
     HostHelloFrame,
     HostLaunchRunnerResultFrame,
@@ -601,6 +602,12 @@ async def _receive_loop(
                         "error": frame.error,
                     }
                 )
+            continue
+
+        if isinstance(frame, HostDeleteSnapshotResultFrame):
+            del_snap_future = conn.pending_delete_snapshots.pop(frame.request_id, None)
+            if del_snap_future is not None and not del_snap_future.done():
+                del_snap_future.set_result({"status": frame.status, "error": frame.error})
             continue
 
         if isinstance(frame, HostCreateDirResultFrame):

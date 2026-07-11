@@ -63,6 +63,8 @@ class HostFrameKind(str, Enum):
     LIST_SNAPSHOTS_RESULT = "host.list_snapshots_result"
     RESTORE_SNAPSHOT = "host.restore_snapshot"
     RESTORE_SNAPSHOT_RESULT = "host.restore_snapshot_result"
+    DELETE_SNAPSHOT = "host.delete_snapshot"
+    DELETE_SNAPSHOT_RESULT = "host.delete_snapshot_result"
     CREATE_DIR = "host.create_dir"
     CREATE_DIR_RESULT = "host.create_dir_result"
 
@@ -653,6 +655,34 @@ class HostRestoreSnapshotResultFrame:
 
 
 @dataclass
+class HostDeleteSnapshotFrame:
+    """Server → host: delete a checkpoint ref.
+
+    :param request_id: Correlates the result, e.g. ``"req_snap_del_1"``.
+    :param worktree_path: Absolute path of the worktree.
+    :param snapshot_id: The snapshot handle to delete.
+    """
+
+    request_id: str
+    worktree_path: str
+    snapshot_id: str
+
+
+@dataclass
+class HostDeleteSnapshotResultFrame:
+    """Host → server: outcome of a delete-snapshot request.
+
+    :param request_id: Correlates to the :class:`HostDeleteSnapshotFrame`.
+    :param status: ``"ok"`` or ``"failed"``.
+    :param error: Error message when ``status`` is ``"failed"``.
+    """
+
+    request_id: str
+    status: str
+    error: str | None = None
+
+
+@dataclass
 class HostCreateDirFrame:
     """Server → host: create a new directory on the host.
 
@@ -723,6 +753,8 @@ HostFrame = (
     | HostListSnapshotsResultFrame
     | HostRestoreSnapshotFrame
     | HostRestoreSnapshotResultFrame
+    | HostDeleteSnapshotFrame
+    | HostDeleteSnapshotResultFrame
     | HostCreateDirFrame
     | HostCreateDirResultFrame
 )
@@ -1029,6 +1061,24 @@ def encode_host_frame(frame: HostFrame) -> str:
                 "error": frame.error,
             }
         )
+    if isinstance(frame, HostDeleteSnapshotFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.DELETE_SNAPSHOT.value,
+                "request_id": frame.request_id,
+                "worktree_path": frame.worktree_path,
+                "snapshot_id": frame.snapshot_id,
+            }
+        )
+    if isinstance(frame, HostDeleteSnapshotResultFrame):
+        return _encode_payload(
+            {
+                "kind": HostFrameKind.DELETE_SNAPSHOT_RESULT.value,
+                "request_id": frame.request_id,
+                "status": frame.status,
+                "error": frame.error,
+            }
+        )
     if isinstance(frame, HostCreateDirFrame):
         return _encode_payload(
             {
@@ -1159,6 +1209,10 @@ def _decode_known_host_frame(
             return _decode_restore_snapshot(msg)
         case HostFrameKind.RESTORE_SNAPSHOT_RESULT:
             return _decode_restore_snapshot_result(msg)
+        case HostFrameKind.DELETE_SNAPSHOT:
+            return _decode_delete_snapshot(msg)
+        case HostFrameKind.DELETE_SNAPSHOT_RESULT:
+            return _decode_delete_snapshot_result(msg)
         case HostFrameKind.CREATE_DIR:
             return _decode_create_dir(msg)
         case HostFrameKind.CREATE_DIR_RESULT:
@@ -1551,6 +1605,24 @@ def _decode_restore_snapshot_result(msg: dict[str, Any]) -> HostRestoreSnapshotR
         status=_required_str(msg, "status"),
         restored=_optional_nullable_str(msg, "restored"),
         backup_id=_optional_nullable_str(msg, "backup_id"),
+        error=_optional_nullable_str(msg, "error"),
+    )
+
+
+def _decode_delete_snapshot(msg: dict[str, Any]) -> HostDeleteSnapshotFrame:
+    """Decode a host.delete_snapshot request frame."""
+    return HostDeleteSnapshotFrame(
+        request_id=_required_str(msg, "request_id"),
+        worktree_path=_required_str(msg, "worktree_path"),
+        snapshot_id=_required_str(msg, "snapshot_id"),
+    )
+
+
+def _decode_delete_snapshot_result(msg: dict[str, Any]) -> HostDeleteSnapshotResultFrame:
+    """Decode a host.delete_snapshot_result frame."""
+    return HostDeleteSnapshotResultFrame(
+        request_id=_required_str(msg, "request_id"),
+        status=_required_str(msg, "status"),
         error=_optional_nullable_str(msg, "error"),
     )
 

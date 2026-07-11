@@ -30,6 +30,8 @@ from omnicraft.host.frames import (
     HostCreateDirResultFrame,
     HostCreateWorktreeFrame,
     HostCreateWorktreeResultFrame,
+    HostDeleteSnapshotFrame,
+    HostDeleteSnapshotResultFrame,
     HostGitDiffFrame,
     HostGitDiffResultFrame,
     HostHelloFrame,
@@ -61,6 +63,7 @@ from omnicraft.host.frames import (
 from omnicraft.host.git_worktree import (
     WorktreeError,
     create_worktree,
+    delete_snapshot,
     git_diff,
     list_snapshots,
     list_worktrees,
@@ -1762,6 +1765,24 @@ class HostProcess:
             backup_id=result.backup_id,
         )
 
+    async def _handle_delete_snapshot(
+        self,
+        frame: HostDeleteSnapshotFrame,
+    ) -> HostDeleteSnapshotResultFrame:
+        """Handle a ``host.delete_snapshot`` request."""
+        try:
+            with self._host_subprocess_op():
+                await asyncio.to_thread(
+                    delete_snapshot,
+                    worktree_path=frame.worktree_path,
+                    snapshot_id=frame.snapshot_id,
+                )
+        except WorktreeError as exc:
+            return HostDeleteSnapshotResultFrame(
+                request_id=frame.request_id, status="failed", error=exc.message
+            )
+        return HostDeleteSnapshotResultFrame(request_id=frame.request_id, status="ok")
+
     async def run(self) -> None:
         """Run the host process with reconnection.
 
@@ -2110,6 +2131,8 @@ class HostProcess:
             await ws.send(encode_host_frame(await self._handle_list_snapshots(frame)))
         elif isinstance(frame, HostRestoreSnapshotFrame):
             await ws.send(encode_host_frame(await self._handle_restore_snapshot(frame)))
+        elif isinstance(frame, HostDeleteSnapshotFrame):
+            await ws.send(encode_host_frame(await self._handle_delete_snapshot(frame)))
 
 
 def run_host_process(

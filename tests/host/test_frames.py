@@ -12,6 +12,8 @@ from omnicraft.host.frames import (
     HostCreateDirResultFrame,
     HostCreateWorktreeFrame,
     HostCreateWorktreeResultFrame,
+    HostDeleteSnapshotFrame,
+    HostDeleteSnapshotResultFrame,
     HostGitDiffFrame,
     HostGitDiffResultFrame,
     HostHelloFrame,
@@ -1075,4 +1077,12 @@ def test_restore_snapshot_frames_round_trip() -> None:
     res = HostRestoreSnapshotResultFrame(
         request_id="s3", status="ok", restored="1-a", backup_id="2-b"
     )
+    assert decode_host_frame(encode_host_frame(res)) == res
+
+
+def test_delete_snapshot_frames_round_trip() -> None:
+    """Delete request + result survive encode -> decode."""
+    req = HostDeleteSnapshotFrame(request_id="d1", worktree_path="/wt", snapshot_id="1-a")
+    assert decode_host_frame(encode_host_frame(req)) == req
+    res = HostDeleteSnapshotResultFrame(request_id="d1", status="ok")
     assert decode_host_frame(encode_host_frame(res)) == res

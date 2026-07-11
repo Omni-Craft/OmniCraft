@@ -1,4 +1,4 @@
-import { HistoryIcon } from "lucide-react";
+import { HistoryIcon, XIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -83,6 +83,26 @@ export function CheckpointsButton({ sessionId }: { sessionId: string }) {
       }
     } catch {
       setNote("Falha de rede ao criar o checkpoint.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async (snap: Snapshot) => {
+    setBusy(true);
+    setNote(null);
+    try {
+      const res = await authenticatedFetch(`${base}/${encodeURIComponent(snap.id)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        setNote(j?.error?.message ?? "Falha ao excluir.");
+      } else {
+        setSnapshots((prev) => prev.filter((s) => s.id !== snap.id));
+      }
+    } catch {
+      setNote("Falha de rede ao excluir.");
     } finally {
       setBusy(false);
     }
@@ -177,16 +197,29 @@ export function CheckpointsButton({ sessionId }: { sessionId: string }) {
                     <span className="block truncate text-sm">{s.label || "sem rótulo"}</span>
                     <span className="text-xs text-muted-foreground">{relTime(s.created_at)}</span>
                   </span>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={busy}
-                    onClick={() => void restore(s)}
-                    className="h-7 shrink-0 rounded-md text-xs"
-                  >
-                    Restaurar
-                  </Button>
+                  <span className="flex shrink-0 items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => void restore(s)}
+                      className="h-7 rounded-md text-xs"
+                    >
+                      Restaurar
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-sm"
+                      disabled={busy}
+                      aria-label="Excluir checkpoint"
+                      onClick={() => void remove(s)}
+                      className="size-7 rounded-md text-muted-foreground hover:text-foreground"
+                    >
+                      <XIcon className="size-3.5" />
+                    </Button>
+                  </span>
                 </li>
               ))}
             </ul>

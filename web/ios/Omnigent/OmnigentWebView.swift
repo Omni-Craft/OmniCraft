@@ -74,7 +74,8 @@ struct OmniCraftWebView: UIViewRepresentable {
   }
 
   static func dismantleUIView(_ uiView: WKWebView, coordinator: Coordinator) {
-    uiView.configuration.userContentController.removeScriptMessageHandler(forName: "omnicraftNative")
+    uiView.configuration.userContentController.removeScriptMessageHandler(
+      forName: "omnicraftNative")
     coordinator.detach()
   }
 

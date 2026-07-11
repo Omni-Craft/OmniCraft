@@ -621,9 +621,7 @@ export function WorkspacePicker({
         >
           <AlertTriangleIcon className="mt-0.5 size-3.5 shrink-0" />
           <span>
-            {occupiedCount === 1
-              ? "1 outro agente está"
-              : `${occupiedCount} outros agentes estão`}{" "}
+            {occupiedCount === 1 ? "1 outro agente está" : `${occupiedCount} outros agentes estão`}{" "}
             trabalhando neste diretório. Operações de escrita podem gerar conflitos — nomeie uma
             branch do git para trabalhar em uma cópia isolada.
           </span>

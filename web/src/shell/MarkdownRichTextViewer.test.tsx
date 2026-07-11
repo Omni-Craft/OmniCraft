@@ -194,7 +194,9 @@ describe("MarkdownRichTextViewer dirty banners", () => {
     // "Unsaved changes —", not "Saving…".
     setupEditHooks({ isDirty: true, hasExternalUpdate: false });
     renderViewer("content");
-    expect(screen.getByText(/Alterações não salvas — os comentários ficam\s+disponíveis após salvar/)).toBeDefined();
+    expect(
+      screen.getByText(/Alterações não salvas — os comentários ficam\s+disponíveis após salvar/),
+    ).toBeDefined();
     expect(screen.queryByText(/Salvando…/)).toBeNull();
     expect(screen.queryByText(/Executor offline/)).toBeNull();
     expect(screen.queryByText(/modificado externamente/)).toBeNull();
@@ -210,7 +212,9 @@ describe("MarkdownRichTextViewer dirty banners", () => {
       mutateAsync: vi.fn(),
     } as unknown as ReturnType<typeof writeHook.useWriteFileContent>);
     renderViewer("content");
-    expect(screen.getByText(/Salvando… os comentários ficam\s+disponíveis após salvar/)).toBeDefined();
+    expect(
+      screen.getByText(/Salvando… os comentários ficam\s+disponíveis após salvar/),
+    ).toBeDefined();
     expect(screen.queryByText(/Alterações não salvas/)).toBeNull();
   });
 

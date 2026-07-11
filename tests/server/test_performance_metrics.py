@@ -733,7 +733,8 @@ def test_otel_publisher_emits_snapshot_values_and_counter_deltas() -> None:
     publisher.publish(second)
 
     assert [
-        record.amount for record in meter.counters["omnicraft.server.http.requests.started"].records
+        record.amount
+        for record in meter.counters["omnicraft.server.http.requests.started"].records
     ] == [9, 2]
     assert [
         record.amount
@@ -821,7 +822,8 @@ async def test_publish_server_metrics_periodically_exports_until_cancelled() -> 
             await task
 
     assert [
-        record.amount for record in meter.counters["omnicraft.server.http.requests.started"].records
+        record.amount
+        for record in meter.counters["omnicraft.server.http.requests.started"].records
     ] == [1]
     assert meter.gauges["omnicraft.server.http.requests.in_flight"].records[-1].amount == 1
 

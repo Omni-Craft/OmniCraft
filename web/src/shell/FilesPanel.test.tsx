@@ -410,7 +410,9 @@ describe("FilesPanel changed files search", () => {
       </MemoryRouter>,
     );
 
-    expect(screen.getByRole("searchbox", { name: "Buscar arquivos alterados" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("searchbox", { name: "Buscar arquivos alterados" }),
+    ).toBeInTheDocument();
   });
 
   it("filters already-loaded changed files case-insensitively", () => {
@@ -754,7 +756,9 @@ describe("FilesPanel tree (Explore) search", () => {
     );
 
     // Changed view has its own search box; tree search must not be present
-    expect(screen.getByRole("searchbox", { name: "Buscar arquivos alterados" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("searchbox", { name: "Buscar arquivos alterados" }),
+    ).toBeInTheDocument();
     expect(screen.queryByRole("searchbox", { name: "Buscar todos os arquivos" })).toBeNull();
   });
 

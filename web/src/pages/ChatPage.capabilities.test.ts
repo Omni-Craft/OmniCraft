@@ -53,7 +53,9 @@ describe("shouldShowModelPicker", () => {
     // --model at launch; claude, codex, and cursor native wrappers all honor
     // it, so the gate is keyed on those exact labels.
     expect(shouldShowModelPicker({ labels: { "omnicraft.wrapper": NATIVE } })).toBe(true);
-    expect(shouldShowModelPicker({ labels: { "omnicraft.wrapper": "codex-native-ui" } })).toBe(true);
+    expect(shouldShowModelPicker({ labels: { "omnicraft.wrapper": "codex-native-ui" } })).toBe(
+      true,
+    );
     expect(shouldShowModelPicker({ labels: { "omnicraft.wrapper": "cursor-native-ui" } })).toBe(
       true,
     );

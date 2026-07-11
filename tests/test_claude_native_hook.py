@@ -759,7 +759,8 @@ def test_permission_request_hook_posts_to_active_session_from_bridge_config(
     # id the server uses to re-park the prompt across severed polls.
     assert {k: v for k, v in sent.items() if k != "_omnicraft_elicitation_id"} == payload
     assert re.fullmatch(r"elicit_claude_[0-9a-f]{32}", sent["_omnicraft_elicitation_id"]), (
-        f"re-attach id outside the claude-hook namespace: {sent.get('_omnicraft_elicitation_id')!r}"
+        "re-attach id outside the claude-hook namespace: "
+        f"{sent.get('_omnicraft_elicitation_id')!r}"
     )
     assert posted["headers"] == {"Authorization": "Bearer xyz"}
     assert json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "allow"

@@ -4938,7 +4938,8 @@ def _build_model_readout_lines(
         # provider; switching the active provider mid-session is not wired,
         # so it goes through `configure harnesses` + a restart.
         lines.append(
-            "  /model <name> changes the model. To switch provider: omnicraft setup (then restart)."
+            "  /model <name> changes the model. "
+            "To switch provider: omnicraft setup (then restart)."
         )
     return lines
 

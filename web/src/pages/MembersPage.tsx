@@ -350,9 +350,9 @@ export function MembersPage() {
           <DialogHeader>
             <DialogTitle>URL de convite</DialogTitle>
             <DialogDescription>
-              Envie esta URL para o novo membro. Ela expira em{" "}
-              {formatTtl(inviteResult?.expires_at)} e é de uso único — depois de resgatada, não
-              pode ser usada novamente. Esta URL é mostrada apenas uma vez.
+              Envie esta URL para o novo membro. Ela expira em {formatTtl(inviteResult?.expires_at)}{" "}
+              e é de uso único — depois de resgatada, não pode ser usada novamente. Esta URL é
+              mostrada apenas uma vez.
             </DialogDescription>
           </DialogHeader>
           {inviteResult !== null && <CopyableValue value={rebaseUrl(inviteResult.register_url)} />}
@@ -373,8 +373,8 @@ export function MembersPage() {
           <DialogHeader>
             <DialogTitle>Nova senha para {resetResult?.id}</DialogTitle>
             <DialogDescription>
-              Envie esta senha ao usuário por outro canal (por exemplo, DM no Slack). Ela é
-              mostrada apenas uma vez.
+              Envie esta senha ao usuário por outro canal (por exemplo, DM no Slack). Ela é mostrada
+              apenas uma vez.
             </DialogDescription>
           </DialogHeader>
           {resetResult !== null && <CopyableValue value={resetResult.new_password} />}
@@ -399,9 +399,9 @@ export function MembersPage() {
           <DialogHeader>
             <DialogTitle>Remover {deleteCandidate}?</DialogTitle>
             <DialogDescription>
-              Isso exclui a conta do usuário e revoga todas as suas permissões de sessão. As
-              sessões que ele possui ficam inacessíveis, a menos que outro usuário tenha direitos
-              de gerenciamento sobre elas. Esta ação não pode ser desfeita.
+              Isso exclui a conta do usuário e revoga todas as suas permissões de sessão. As sessões
+              que ele possui ficam inacessíveis, a menos que outro usuário tenha direitos de
+              gerenciamento sobre elas. Esta ação não pode ser desfeita.
             </DialogDescription>
           </DialogHeader>
           {actionError !== null && (

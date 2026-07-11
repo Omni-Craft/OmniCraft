@@ -129,11 +129,14 @@ class AccountsConfig:
         base_url = _require("OMNICRAFT_ACCOUNTS_BASE_URL").rstrip("/")
         if not base_url.startswith(("http://", "https://")):
             raise RuntimeError(
-                f"OMNICRAFT_ACCOUNTS_BASE_URL must start with http:// or https://; got {base_url!r}"
+                "OMNICRAFT_ACCOUNTS_BASE_URL must start with http:// or https://; "
+                f"got {base_url!r}"
             )
 
         session_ttl_hours = int(os.environ.get("OMNICRAFT_ACCOUNTS_SESSION_TTL_HOURS", "8"))
-        invite_ttl_seconds = int(os.environ.get("OMNICRAFT_ACCOUNTS_INVITE_TTL_HOURS", "72")) * 3600
+        invite_ttl_seconds = (
+            int(os.environ.get("OMNICRAFT_ACCOUNTS_INVITE_TTL_HOURS", "72")) * 3600
+        )
         magic_ttl_seconds = int(os.environ.get("OMNICRAFT_ACCOUNTS_MAGIC_TTL_MINUTES", "10")) * 60
 
         # INIT_ADMIN_PASSWORD: explicit empty string ("") is treated as

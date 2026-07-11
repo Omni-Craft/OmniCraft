@@ -887,7 +887,9 @@ function FileViewerBody({
   if (viewMode === "diff") {
     toolbarActions.push({
       key: "hide-whitespace",
-      label: hideWhitespace ? "Mostrar alterações de espaço em branco" : "Ocultar alterações de espaço em branco",
+      label: hideWhitespace
+        ? "Mostrar alterações de espaço em branco"
+        : "Ocultar alterações de espaço em branco",
       icon: hideWhitespace ? <EyeIcon className="size-4" /> : <EyeOffIcon className="size-4" />,
       active: hideWhitespace,
       onSelect: () => setHideWhitespace((prev) => !prev),

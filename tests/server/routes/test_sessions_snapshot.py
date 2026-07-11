@@ -1595,5 +1595,7 @@ async def test_persist_error_labels_short_message_stored_verbatim() -> None:
 
     await _persist_session_status_error_labels("conv_456", error, _MockStore())  # type: ignore[arg-type]
 
-    assert captured["conv_456"]["omnicraft.last_task_error_message"] == "Process exited with code 1"
+    assert (
+        captured["conv_456"]["omnicraft.last_task_error_message"] == "Process exited with code 1"
+    )
     assert captured["conv_456"]["omnicraft.last_task_error_code"] == "runner_error"

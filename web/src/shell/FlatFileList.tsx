@@ -179,7 +179,9 @@ export function FlatFileList({
     if (error instanceof RunnerOfflineError) {
       if (runnerWentOffline) return <RunnerAsleepHint />;
       return (
-        <p className="px-2 py-1 text-muted-foreground text-xs">Nenhuma alteração no workspace ainda</p>
+        <p className="px-2 py-1 text-muted-foreground text-xs">
+          Nenhuma alteração no workspace ainda
+        </p>
       );
     }
     return (
@@ -190,7 +192,9 @@ export function FlatFileList({
   }
   if (!files || files.length === 0) {
     return (
-      <p className="px-2 py-1 text-muted-foreground text-xs">Nenhuma alteração no workspace ainda</p>
+      <p className="px-2 py-1 text-muted-foreground text-xs">
+        Nenhuma alteração no workspace ainda
+      </p>
     );
   }
   const normalizedSearchQuery = normalizeSearchQuery(searchQuery);
@@ -231,8 +235,7 @@ export function FlatFileList({
     <>
       {hiddenCount > 0 && (
         <p className="px-2 py-1 text-muted-foreground text-xs">
-          {hiddenCount} arquivo{hiddenCount === 1 ? "" : "s"} oculto{hiddenCount === 1 ? "" : "s"}.
-          {" "}
+          {hiddenCount} arquivo{hiddenCount === 1 ? "" : "s"} oculto{hiddenCount === 1 ? "" : "s"}.{" "}
           <button
             type="button"
             className="cursor-pointer underline hover:text-foreground"

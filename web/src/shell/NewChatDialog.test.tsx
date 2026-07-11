@@ -1328,7 +1328,9 @@ describe("NewChatLandingScreen", () => {
     // regressed to host-first, the chip would read "machine-1".
     renderLanding({ managed_sandboxes_enabled: true });
     await waitFor(() =>
-      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain("Novo Sandbox"),
+      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain(
+        "Novo Sandbox",
+      ),
     );
     // Sandbox mode chrome comes with the default: repository chip in,
     // workspace/worktree chips out.
@@ -1359,7 +1361,9 @@ describe("NewChatLandingScreen", () => {
     mockHosts([]);
     renderLanding({ managed_sandboxes_enabled: true });
     await waitFor(() =>
-      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain("Novo Sandbox"),
+      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain(
+        "Novo Sandbox",
+      ),
     );
     expect(screen.getByTestId("new-chat-landing-host-chip").textContent).not.toContain(
       "Sem máquinas",
@@ -1371,7 +1375,9 @@ describe("NewChatLandingScreen", () => {
     // Sandbox is the default; switch to the host first so the test
     // exercises both directions of the toggle.
     await waitFor(() =>
-      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain("Novo Sandbox"),
+      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain(
+        "Novo Sandbox",
+      ),
     );
     fireEvent.pointerDown(screen.getByTestId("new-chat-landing-host-chip"), { button: 0 });
     // The sandbox option is pinned FIRST in the menu, above the host list —
@@ -1398,7 +1404,9 @@ describe("NewChatLandingScreen", () => {
     fireEvent.pointerDown(screen.getByTestId("new-chat-landing-host-chip"), { button: 0 });
     fireEvent.click(screen.getByTestId("new-chat-landing-sandbox-option"));
     await waitFor(() =>
-      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain("Novo Sandbox"),
+      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain(
+        "Novo Sandbox",
+      ),
     );
     expect(screen.queryByTestId("new-chat-landing-workspace-chip")).toBeNull();
     expect(screen.queryByTestId("new-chat-landing-branch-chip")).toBeNull();
@@ -1620,7 +1628,9 @@ describe("NewChatLandingScreen", () => {
     });
     renderLanding({ managed_sandboxes_enabled: true });
     await waitFor(() =>
-      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain("Novo Sandbox"),
+      expect(screen.getByTestId("new-chat-landing-host-chip").textContent).toContain(
+        "Novo Sandbox",
+      ),
     );
     fireEvent.click(screen.getByTestId("new-chat-landing-repo-chip"));
     const helpButton = screen.getByLabelText("Como configurar as credenciais do Git do Databricks");

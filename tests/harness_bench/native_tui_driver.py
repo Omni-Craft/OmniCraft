@@ -134,7 +134,10 @@ _NATIVE_TOOL_PROVOCATION: dict[str, tuple[str, str]] = {
     "goose-native": ("developer__shell", _SHELL_PROMPT),
     "hermes-native": ("terminal", _SHELL_PROMPT),
     "antigravity-native": ("run_command", _SHELL_PROMPT),
-    "kimi-native": ("Bash", "Use the Bash tool to run this exact command: echo omnicraft-bench-ok"),
+    "kimi-native": (
+        "Bash",
+        "Use the Bash tool to run this exact command: echo omnicraft-bench-ok",
+    ),
 }
 
 
@@ -338,7 +341,13 @@ class NativeTuiDriver:
         # Keep the real HOME so the vendor login remains available.
         log = (self._tmp / "host-daemon.log").open("wb")
         return subprocess.Popen(
-            [runner_executable(), "-m", "omnicraft.host._daemon_entry", "--server", self._base_url],
+            [
+                runner_executable(),
+                "-m",
+                "omnicraft.host._daemon_entry",
+                "--server",
+                self._base_url,
+            ],
             env=apply_runner_env(base_env),
             cwd=compat_runner_cwd(),
             stdout=subprocess.DEVNULL,

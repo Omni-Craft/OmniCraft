@@ -7627,7 +7627,8 @@ async def _persist_host_launch_failure_turn(
             # the code, but the banner must stay actionable if a
             # third-party host omits it.
             else (
-                "the agent's harness is not configured on the selected host — run `omnicraft setup`"
+                "the agent's harness is not configured on the selected host — "
+                "run `omnicraft setup`"
             )
         ),
     )

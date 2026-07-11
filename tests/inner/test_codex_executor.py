@@ -2684,7 +2684,9 @@ async def test_codex_cli_version_times_out_and_kills_proc(
         return proc
 
     # Shrink the probe budget so the test does not actually wait the full 5s.
-    monkeypatch.setattr("omnicraft.inner.codex_executor._CODEX_VERSION_PROBE_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr(
+        "omnicraft.inner.codex_executor._CODEX_VERSION_PROBE_TIMEOUT_SECONDS", 0.05
+    )
     monkeypatch.setattr("omnicraft.inner.codex_executor._create_subprocess_exec", _fake_exec)
 
     assert await _codex_cli_version("/usr/local/bin/codex") is None

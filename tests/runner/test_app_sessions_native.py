@@ -14698,7 +14698,9 @@ async def _run_auto_create_cursor_terminal(
     workspace.mkdir()
     monkeypatch.setattr(cursor_native_bridge, "_BRIDGE_ROOT", tmp_path / "cursor-bridge")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:8000")
-    monkeypatch.setattr("omnicraft.cursor_native.resolve_cursor_executable", lambda: "cursor-agent")
+    monkeypatch.setattr(
+        "omnicraft.cursor_native.resolve_cursor_executable", lambda: "cursor-agent"
+    )
 
     async def _no_op_forwarder(**kwargs: Any) -> None:
         del kwargs
@@ -15698,7 +15700,9 @@ async def test_create_session_auto_create_guard_skips_rotation_targets(
         del resource_registry, publish_event
         created.append(session_id)
 
-    monkeypatch.setattr("omnicraft.runner.app._auto_create_claude_terminal", _recording_auto_create)
+    monkeypatch.setattr(
+        "omnicraft.runner.app._auto_create_claude_terminal", _recording_auto_create
+    )
 
     native_spec = AgentSpec(
         spec_version=1,

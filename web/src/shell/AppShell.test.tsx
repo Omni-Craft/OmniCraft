@@ -1683,7 +1683,10 @@ describe("Right workspace card visibility", () => {
     renderShell("/c/conv_tabmem");
 
     expect(screen.getByRole("tab", { name: /Agentes/i })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: /Arquivos/i })).toHaveAttribute("aria-selected", "false");
+    expect(screen.getByRole("tab", { name: /Arquivos/i })).toHaveAttribute(
+      "aria-selected",
+      "false",
+    );
   });
 
   it("restores the open file tabs per session (independent of the ?file= param)", () => {
@@ -2836,7 +2839,9 @@ describe("Mobile header actions menu", () => {
       renderShell("/c/conv_host");
       openActionsMenu();
 
-      expect(screen.getByRole("menuitem", { name: /^compartilhar$/i })).toHaveAttribute("data-disabled");
+      expect(screen.getByRole("menuitem", { name: /^compartilhar$/i })).toHaveAttribute(
+        "data-disabled",
+      );
     });
   });
 

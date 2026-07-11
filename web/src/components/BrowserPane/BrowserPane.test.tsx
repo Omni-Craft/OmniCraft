@@ -200,7 +200,9 @@ describe("BrowserPane toolbar navigation + URL bar", () => {
     render(<BrowserPane conversationId={conversationId} />);
     await screen.findByRole("textbox", { name: /barra de endereço/i });
     fireCreated?.({ conversationId });
-    await waitFor(() => expect(screen.getByRole("button", { name: /recarregar/i })).not.toBeDisabled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /recarregar/i })).not.toBeDisabled(),
+    );
     return { bridge, fireUrl: () => fireUrl, fireNav: () => fireNav };
   }
 
@@ -228,9 +230,7 @@ describe("BrowserPane toolbar navigation + URL bar", () => {
     act(() => {
       fireNav()?.({ conversationId: "conv_hist", canGoBack: true, canGoForward: true });
     });
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: /voltar/i })).not.toBeDisabled(),
-    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /voltar/i })).not.toBeDisabled());
     expect(screen.getByRole("button", { name: /avançar/i })).not.toBeDisabled();
   });
 

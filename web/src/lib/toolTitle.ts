@@ -101,7 +101,9 @@ const FORMATTERS: Record<string, ArgFormatter> = {
   list_tasks: () => verbOnly("Listar tarefas"),
   sys_cancel_async: (args) => {
     const id = asString(args.handle_id);
-    return id === null ? verbOnly("Cancelar assíncrono") : { verb: "Cancelar assíncrono:", body: id };
+    return id === null
+      ? verbOnly("Cancelar assíncrono")
+      : { verb: "Cancelar assíncrono:", body: id };
   },
   sys_cancel_task: (args) => {
     const id = asString(args.task_id);

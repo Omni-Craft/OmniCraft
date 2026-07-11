@@ -926,7 +926,9 @@ describe("FileViewer markdown preview/edit/source modes", () => {
   // toolbar was too full for three side-by-side buttons). Open it, then click
   // the wanted option. Radix menus open on pointerdown, not click.
   const openModeMenu = () =>
-    fireEvent.pointerDown(screen.getByRole("button", { name: /^Modo de visualização/ }), { button: 0 });
+    fireEvent.pointerDown(screen.getByRole("button", { name: /^Modo de visualização/ }), {
+      button: 0,
+    });
   const selectMode = (mode: "Pré-visualização" | "Editar" | "Origem") => {
     openModeMenu();
     fireEvent.click(screen.getByRole("menuitem", { name: mode }));

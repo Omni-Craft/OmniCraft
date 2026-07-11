@@ -272,9 +272,7 @@ describe("AgentInfoButton session id row", () => {
 
     expect(copyTextMock).toHaveBeenCalledTimes(1);
     expect(copyTextMock).toHaveBeenCalledWith("conv_info123");
-    expect(
-      await screen.findByRole("button", { name: "ID da sessão copiado" }),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "ID da sessão copiado" })).toBeInTheDocument();
   });
 });
 

@@ -240,7 +240,9 @@ export function ResumeWithDirectoryDialog({
       handleOpenChange(false);
       onBound?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível iniciar a sessão. Tente novamente.");
+      setError(
+        e instanceof Error ? e.message : "Não foi possível iniciar a sessão. Tente novamente.",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -261,8 +263,8 @@ export function ResumeWithDirectoryDialog({
         <DialogHeader>
           <DialogTitle>Retomar esta sessão</DialogTitle>
           <DialogDescription>
-            Este clone ainda não escolheu um diretório de trabalho. Escolha um host e um
-            diretório para continuar a conversa com seus arquivos.
+            Este clone ainda não escolheu um diretório de trabalho. Escolha um host e um diretório
+            para continuar a conversa com seus arquivos.
           </DialogDescription>
         </DialogHeader>
 
@@ -314,7 +316,9 @@ export function ResumeWithDirectoryDialog({
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-xs font-medium text-muted-foreground">Diretório de trabalho</span>
+              <span className="text-xs font-medium text-muted-foreground">
+                Diretório de trabalho
+              </span>
               {selectedHostId ? (
                 <>
                   <WorkspacePathField
@@ -405,8 +409,8 @@ export function ResumeWithDirectoryDialog({
               )}
               <p className="text-xs text-muted-foreground">
                 Cria um git worktree para uma nova branch em um diretório isolado — evita que o
-                clone conflite com o original pelos mesmos arquivos. Deixe em branco para iniciar
-                no diretório escolhido.
+                clone conflite com o original pelos mesmos arquivos. Deixe em branco para iniciar no
+                diretório escolhido.
               </p>
             </div>
 

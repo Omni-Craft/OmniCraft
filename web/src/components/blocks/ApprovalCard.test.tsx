@@ -1052,9 +1052,7 @@ describe("ApprovalCard — ExitPlanMode plan review", () => {
     // marker would appear instead of a parsed heading.
     expect(await screen.findByRole("heading", { name: "Migration plan" })).toBeDefined();
     expect(screen.getByRole("button", { name: /sim, e usar modo automático/i })).toBeDefined();
-    expect(
-      screen.getByRole("button", { name: /sim, aprovar edições manualmente/i }),
-    ).toBeDefined();
+    expect(screen.getByRole("button", { name: /sim, aprovar edições manualmente/i })).toBeDefined();
     expect(screen.getByRole("button", { name: /rejeitar com feedback/i })).toBeDefined();
     // The generic binary buttons and the raw preview must NOT render.
     expect(screen.queryByRole("button", { name: /^aprovar$/i })).toBeNull();

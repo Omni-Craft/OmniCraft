@@ -18,7 +18,11 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
-from omnicraft.hermes_native_bridge import BRIDGE_DIR_ENV_VAR, inject_interrupt, inject_user_message
+from omnicraft.hermes_native_bridge import (
+    BRIDGE_DIR_ENV_VAR,
+    inject_interrupt,
+    inject_user_message,
+)
 from omnicraft.inner.executor import (
     Executor,
     ExecutorConfig,

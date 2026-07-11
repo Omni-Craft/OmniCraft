@@ -430,7 +430,9 @@ describe("PermissionsModal", () => {
       // "z..." matches nothing in the stub searcher.
       fireEvent.change(input, { target: { value: "zzz" } });
 
-      await waitFor(() => expect(screen.getByText("Nenhum resultado encontrado")).toBeInTheDocument());
+      await waitFor(() =>
+        expect(screen.getByText("Nenhum resultado encontrado")).toBeInTheDocument(),
+      );
     });
   });
 });

@@ -640,8 +640,8 @@ function DefaultBaseBranchControl() {
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-sm font-medium">Branch base padrão</span>
         <span className="text-sm text-muted-foreground">
-          Preenchido automaticamente como base ao nomear um novo branch de worktree. Deixe em
-          branco para não preencher automaticamente.
+          Preenchido automaticamente como base ao nomear um novo branch de worktree. Deixe em branco
+          para não preencher automaticamente.
         </span>
       </div>
       <Input
@@ -792,8 +792,7 @@ function UiFontFamilyControl() {
       <div className="flex min-w-0 flex-1 flex-col">
         <span className="text-sm font-medium">Família da fonte</span>
         <span className="text-sm text-muted-foreground">
-          Use qualquer fonte instalada neste dispositivo. Deixe em branco para o padrão do
-          sistema.
+          Use qualquer fonte instalada neste dispositivo. Deixe em branco para o padrão do sistema.
         </span>
       </div>
       {/* Reset sits left of the input so the input is the rightmost element and
@@ -1258,9 +1257,7 @@ function AccountSection() {
           <DialogHeader>
             <DialogTitle>Alterar senha</DialogTitle>
             <DialogDescription>
-              {pwDone
-                ? "Sua senha foi alterada."
-                : "Digite sua senha atual e escolha uma nova."}
+              {pwDone ? "Sua senha foi alterada." : "Digite sua senha atual e escolha uma nova."}
             </DialogDescription>
           </DialogHeader>
 

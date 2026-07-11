@@ -26,9 +26,7 @@ export function PWAUpdateBanner() {
         "supports-[backdrop-filter]:bg-background/80",
       )}
     >
-      <span className="text-sm text-foreground">
-        Uma nova versão do OmniCraft está disponível.
-      </span>
+      <span className="text-sm text-foreground">Uma nova versão do OmniCraft está disponível.</span>
       <Button size="sm" onClick={reload}>
         Recarregar
       </Button>

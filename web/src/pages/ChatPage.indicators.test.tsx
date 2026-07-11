@@ -204,9 +204,7 @@ describe("BubbleView dispatch", () => {
     // WHY: the cancelled lifecycle branch surfaces an explicit Interrupted
     // note so a truncated turn doesn't read as a complete answer.
     render(<BubbleView bubble={assistantText("partial", "cancelled")} />);
-    expect(screen.getByTestId("assistant-interrupted-indicator")).toHaveTextContent(
-      "Interrompido",
-    );
+    expect(screen.getByTestId("assistant-interrupted-indicator")).toHaveTextContent("Interrompido");
   });
 
   it("renders the error text for a failed assistant turn", () => {
@@ -220,8 +218,6 @@ describe("BubbleView dispatch", () => {
     // WHY: the compaction_loading branch owns the busy slot during context
     // compaction — it must show its own indicator.
     render(<BubbleView bubble={{ kind: "compaction_loading", itemId: "cmp_1" }} />);
-    expect(screen.getByTestId("compacting-indicator")).toHaveTextContent(
-      "Compactando conversa…",
-    );
+    expect(screen.getByTestId("compacting-indicator")).toHaveTextContent("Compactando conversa…");
   });
 });

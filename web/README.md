@@ -85,14 +85,14 @@ The TypeScript reducer at `src/lib/blockStream.ts` is a hand-mirror of
 the Python reducer at
 `sdks/python-client/omnicraft_client/_stream.py`. Same for:
 
-| TS file                       | Mirrors                                       |
-| ----------------------------- | --------------------------------------------- |
+| TS file                       | Mirrors                                        |
+| ----------------------------- | ---------------------------------------------- |
 | `src/lib/blocks.ts`           | `omnicraft_client/_blocks.py`                  |
 | `src/lib/events.ts`           | `omnicraft_client/_events.py`                  |
 | `src/lib/types.ts`            | minimal subset of `omnicraft_client/_types.py` |
 | `src/lib/sse.ts`              | `omnicraft_client/_sse.py`                     |
 | `src/lib/blockStream.ts`      | `omnicraft_client/_stream.py`                  |
-| `src/lib/blockStream.test.ts` | `tests/frontends/sdk/test_stream.py`          |
+| `src/lib/blockStream.test.ts` | `tests/frontends/sdk/test_stream.py`           |
 
 There is **no cross-language CI gate** today. When `_stream.py`
 changes for a real bug (e.g. new harness quirk, dedup edge case), the

@@ -206,7 +206,9 @@ describe("MembersPage in plain header/single-user mode", () => {
   it("shows a not-available message and never calls listUsers", async () => {
     renderPage();
     expect(
-      await screen.findByText("O gerenciamento de membros não está disponível no modo de usuário único."),
+      await screen.findByText(
+        "O gerenciamento de membros não está disponível no modo de usuário único.",
+      ),
     ).toBeInTheDocument();
     expect(accountsApi.listUsers).not.toHaveBeenCalled();
   });
@@ -236,8 +238,6 @@ describe("MembersPage under OIDC (read-only)", () => {
     expect(screen.queryByRole("button", { name: /Convidar membro/ })).toBeNull();
     expect(within(bobRow).queryByRole("button", { name: /Redefinir/ })).toBeNull();
     expect(within(bobRow).queryByRole("button", { name: /Remover/ })).toBeNull();
-    expect(
-      screen.getByText(/provisionados automaticamente no primeiro login/),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/provisionados automaticamente no primeiro login/)).toBeInTheDocument();
   });
 });

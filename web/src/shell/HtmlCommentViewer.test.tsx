@@ -23,7 +23,9 @@ function renderViewer(content: string, truncated = false) {
 describe("HtmlCommentViewer", () => {
   it("renders the preview in a sandboxed iframe that still withholds allow-same-origin", () => {
     const { container } = renderViewer("<html><body><p>doc</p></body></html>");
-    const iframe = container.querySelector('iframe[title="Pré-visualização HTML"]') as HTMLIFrameElement;
+    const iframe = container.querySelector(
+      'iframe[title="Pré-visualização HTML"]',
+    ) as HTMLIFrameElement;
     expect(iframe).not.toBeNull();
     const sandbox = iframe.getAttribute("sandbox") ?? "";
     expect(sandbox).toContain("allow-scripts");
@@ -34,7 +36,9 @@ describe("HtmlCommentViewer", () => {
 
   it("injects the comment bridge (and base-target) into the iframe srcDoc", () => {
     const { container } = renderViewer("<html><head></head><body><p>doc</p></body></html>");
-    const iframe = container.querySelector('iframe[title="Pré-visualização HTML"]') as HTMLIFrameElement;
+    const iframe = container.querySelector(
+      'iframe[title="Pré-visualização HTML"]',
+    ) as HTMLIFrameElement;
     const srcDoc = iframe.getAttribute("srcdoc") ?? "";
     expect(srcDoc).toContain("<script>");
     expect(srcDoc).toContain("omni-html-comment");

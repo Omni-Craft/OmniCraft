@@ -1274,7 +1274,9 @@ class _EntrypointFakeLauncher(FakeSandboxLauncher):
         self.token_resolved_at_start = self._host_store.resolve_launch_token(token) is not None
         # Simulate the host's entrypoint dialing back over the tunnel.
         self._host_store.upsert_on_connect(host_id=host_id, name=host_name, owner=_OWNER)
-        return f"/home/omnicraft/workspace/{repo_name}" if repo_name else "/home/omnicraft/workspace"
+        return (
+            f"/home/omnicraft/workspace/{repo_name}" if repo_name else "/home/omnicraft/workspace"
+        )
 
 
 async def test_launch_entrypoint_provider_arms_token_before_launch_host(db_uri: str) -> None:

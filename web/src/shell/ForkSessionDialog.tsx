@@ -415,7 +415,9 @@ export function ForkSessionForm({
       navigate(`/c/${fork.id}`);
     } catch (e) {
       // forkSession failed — nothing created, so inputs stay editable for a resubmit.
-      setError(e instanceof Error ? e.message : "Não foi possível clonar a sessão. Tente novamente.");
+      setError(
+        e instanceof Error ? e.message : "Não foi possível clonar a sessão. Tente novamente.",
+      );
     } finally {
       setSubmitting(false);
     }

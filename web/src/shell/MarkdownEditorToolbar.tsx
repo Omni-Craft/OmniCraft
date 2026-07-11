@@ -335,7 +335,11 @@ export function ToolbarPlugin({
         tone: "offline" as const,
       }
     : saveError && isDirty
-      ? { label: "Tentar novamente", title: "Falha ao salvar — clique para tentar novamente", tone: "error" as const }
+      ? {
+          label: "Tentar novamente",
+          title: "Falha ao salvar — clique para tentar novamente",
+          tone: "error" as const,
+        }
       : isSaving
         ? { label: "Salvando…", title: "Salvando…", tone: "pending" as const }
         : isDirty

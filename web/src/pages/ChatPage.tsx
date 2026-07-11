@@ -4855,7 +4855,9 @@ export function Composer({
                     disabled={isReadOnly || planModeBusy}
                     aria-pressed={codexPlanMode}
                     aria-label={
-                      codexPlanMode ? "Sair do modo de planejamento" : "Entrar no modo de planejamento"
+                      codexPlanMode
+                        ? "Sair do modo de planejamento"
+                        : "Entrar no modo de planejamento"
                     }
                     data-testid="codex-plan-mode-toggle"
                     data-active={codexPlanMode ? "true" : undefined}
@@ -4870,7 +4872,9 @@ export function Composer({
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  {codexPlanMode ? "Sair do modo de planejamento" : "Entrar no modo de planejamento"}
+                  {codexPlanMode
+                    ? "Sair do modo de planejamento"
+                    : "Entrar no modo de planejamento"}
                 </TooltipContent>
               </Tooltip>
             )}

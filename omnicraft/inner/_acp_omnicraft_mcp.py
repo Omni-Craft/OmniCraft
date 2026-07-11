@@ -134,7 +134,8 @@ class OmniCraftAcpMcp:
             return self._acp_servers
         except Exception as exc:  # noqa: BLE001 — MCP is additive; never break a turn
             logger.warning(
-                "acp[%s] OmniCraft MCP bridge setup failed; agent runs without OmniCraft tools: %s",
+                "acp[%s] OmniCraft MCP bridge setup failed; "
+                "agent runs without OmniCraft tools: %s",
                 self._label,
                 exc,
             )

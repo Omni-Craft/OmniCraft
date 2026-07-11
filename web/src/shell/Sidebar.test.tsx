@@ -908,10 +908,13 @@ describe("Sidebar project sections", () => {
     renderSidebar();
 
     // Open the project folder's kebab → "Delete project".
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Ações do projeto para Customer X" }), {
-      button: 0,
-      ctrlKey: false,
-    });
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Ações do projeto para Customer X" }),
+      {
+        button: 0,
+        ctrlKey: false,
+      },
+    );
     fireEvent.click(await screen.findByTestId("delete-project"));
 
     // The confirmation makes clear it removes every session, then fires the
@@ -979,7 +982,10 @@ describe("Sidebar default section collapse", () => {
     mockConversations([conv("conv_pin", "Claude Code"), conv("conv_recent", "Claude Code")]);
     renderSidebar();
 
-    expect(screen.getByRole("button", { name: /Fixadas/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Fixadas/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(screen.getByRole("button", { name: /Sessões/ })).toHaveAttribute(
       "aria-expanded",
       "true",
@@ -1024,7 +1030,10 @@ describe("Sidebar auto-expand Pinned on pin", () => {
 
     // The Pinned section auto-expands so the freshly-pinned session is visible,
     // and the expansion is persisted (dropped from the collapsed list).
-    expect(screen.getByRole("button", { name: /Fixadas/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("button", { name: /Fixadas/ })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
     expect(JSON.parse(localStorage.getItem("omnicraft:collapsed-sidebar-sections")!)).not.toContain(
       "Pinned",
     );

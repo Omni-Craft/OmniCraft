@@ -1488,7 +1488,9 @@ def test_configure_harnesses_add_databricks_under_codex_scopes_to_codex(
         "omnicraft.onboarding.ucode_setup.configure_ucode_for_workspace",
         lambda url, *, agents=None: ucode_calls.append((url, agents)),
     )
-    monkeypatch.setattr("omnicraft.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True)
+    monkeypatch.setattr(
+        "omnicraft.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True
+    )
 
     # Databricks position within the Codex (openai) add menu, computed live.
     codex_opts = add_menu_options_for_family(OPENAI_FAMILY)
@@ -2200,7 +2202,9 @@ def test_configure_harnesses_add_databricks_under_pi_scopes_to_pi(
         "omnicraft.onboarding.ucode_setup.configure_ucode_for_workspace",
         lambda url, *, agents=None: ucode_calls.append((url, agents)),
     )
-    monkeypatch.setattr("omnicraft.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True)
+    monkeypatch.setattr(
+        "omnicraft.onboarding.ucode_setup.ucode_workspace_exists", lambda url: True
+    )
 
     # Databricks position within the Pi add menu, computed live.
     pi_opts = add_menu_options_for_family(PI_SURFACE)

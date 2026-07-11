@@ -185,7 +185,9 @@ describe("browserIpc — history navigation", () => {
   it("go-back issues goBack only when canGoBack is true", async () => {
     const wc = makeWebContents({ canBack: true });
     const { ipcMain, event } = setup({ webContents: wc });
-    const r = await ipcMain.invoke("omnicraft:browser-go-back", event, { conversationId: "conv_1" });
+    const r = await ipcMain.invoke("omnicraft:browser-go-back", event, {
+      conversationId: "conv_1",
+    });
     assert.equal(r.ok, true);
     assert.ok(wc.calls.includes("goBack"));
   });
@@ -193,7 +195,9 @@ describe("browserIpc — history navigation", () => {
   it("go-back is a no-op when canGoBack is false", async () => {
     const wc = makeWebContents({ canBack: false });
     const { ipcMain, event } = setup({ webContents: wc });
-    const r = await ipcMain.invoke("omnicraft:browser-go-back", event, { conversationId: "conv_1" });
+    const r = await ipcMain.invoke("omnicraft:browser-go-back", event, {
+      conversationId: "conv_1",
+    });
     assert.equal(r.ok, true);
     assert.ok(!wc.calls.includes("goBack"));
   });

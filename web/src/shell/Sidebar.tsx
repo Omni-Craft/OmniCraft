@@ -1457,7 +1457,9 @@ function ConversationList({
                             <Minimize2Icon className="size-3.5" />
                           </Button>
                         </TooltipTrigger>
-                        <TooltipContent side="bottom">Recolher para o estado anterior</TooltipContent>
+                        <TooltipContent side="bottom">
+                          Recolher para o estado anterior
+                        </TooltipContent>
                       </Tooltip>
                     );
                   }
@@ -2801,8 +2803,8 @@ function ConversationRow({
           <DialogHeader>
             <DialogTitle>Parar sessão?</DialogTitle>
             <DialogDescription>
-              Isso encerra a sessão em execução de <span className="font-medium">{label}</span>{" "}
-              e para seu runner. A conversa e seu histórico são mantidos.
+              Isso encerra a sessão em execução de <span className="font-medium">{label}</span> e
+              para seu runner. A conversa e seu histórico são mantidos.
             </DialogDescription>
           </DialogHeader>
           {stopSession.isError && (

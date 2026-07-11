@@ -141,9 +141,7 @@ describe("CodexGoalDialog", () => {
 
     fireEvent.change(screen.getByTestId("codex-goal-objective"), { target: { value: "" } });
     fireEvent.click(screen.getByTestId("codex-goal-save"));
-    expect(
-      await screen.findByText("O objetivo da meta não pode estar vazio."),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("O objetivo da meta não pode estar vazio.")).toBeInTheDocument();
 
     fireEvent.change(screen.getByTestId("codex-goal-objective"), {
       target: { value: "Do the work" },

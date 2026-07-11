@@ -96,7 +96,9 @@ export function AddAgentDialog({
       handleOpenChange(false);
       navigate(`/c/${session.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível adicionar o agente. Tente novamente.");
+      setError(
+        e instanceof Error ? e.message : "Não foi possível adicionar o agente. Tente novamente.",
+      );
     } finally {
       setSubmitting(false);
     }

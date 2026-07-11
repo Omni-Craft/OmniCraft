@@ -181,7 +181,11 @@ function FileScopeSwitch({
     "bg-[color-mix(in_srgb,var(--muted-foreground)_15%,var(--card))] text-foreground";
   const idlePill = "text-muted-foreground hover:text-foreground";
   return (
-    <div role="radiogroup" aria-label="Escopo dos arquivos" className="flex shrink-0 items-center gap-1">
+    <div
+      role="radiogroup"
+      aria-label="Escopo dos arquivos"
+      className="flex shrink-0 items-center gap-1"
+    >
       <button
         type="button"
         role="radio"
@@ -425,7 +429,9 @@ export function FilesPanel({
               </div>
               <button
                 type="button"
-                aria-label={showSearchFilters ? "Ocultar filtros de busca" : "Mostrar filtros de busca"}
+                aria-label={
+                  showSearchFilters ? "Ocultar filtros de busca" : "Mostrar filtros de busca"
+                }
                 aria-expanded={showSearchFilters}
                 title="Arquivos para incluir / excluir"
                 className={cn(

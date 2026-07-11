@@ -132,7 +132,9 @@ export function SwitchAgentDialog({
       await queryClient.invalidateQueries({ queryKey: ["conversations"] });
       handleOpenChange(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Não foi possível trocar o agente. Tente novamente.");
+      setError(
+        e instanceof Error ? e.message : "Não foi possível trocar o agente. Tente novamente.",
+      );
     } finally {
       setSubmitting(false);
     }

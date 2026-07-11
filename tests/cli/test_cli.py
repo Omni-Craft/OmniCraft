@@ -4548,7 +4548,9 @@ def test_adopt_ambient_credentials_announces_only_what_was_adopted(
     that were not actually adopted) fails here.
     """
     monkeypatch.setattr("omnicraft.cli._promote_global_auth_to_provider", Mock())
-    monkeypatch.setattr("omnicraft.cli._adopt_detected_providers", Mock(return_value=["anthropic"]))
+    monkeypatch.setattr(
+        "omnicraft.cli._adopt_detected_providers", Mock(return_value=["anthropic"])
+    )
     monkeypatch.setattr(
         "omnicraft.onboarding.ambient.detect_providers",
         lambda: [

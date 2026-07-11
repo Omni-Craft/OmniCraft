@@ -39,9 +39,7 @@ describe("Reasoning — auto-expand", () => {
 
   it("renders the settled 'Thought for...' label without the shimmer", () => {
     renderReasoning(false);
-    expect(screen.getByText("Pensou por alguns segundos").className).not.toContain(
-      "text-shimmer",
-    );
+    expect(screen.getByText("Pensou por alguns segundos").className).not.toContain("text-shimmer");
   });
 
   it("renders the trigger in the closed state when isStreaming=false on mount", () => {

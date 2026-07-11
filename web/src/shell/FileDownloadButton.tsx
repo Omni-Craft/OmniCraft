@@ -81,9 +81,7 @@ export function FileDownloadButton({ conversationId, path }: FileDownloadButtonP
           <DownloadIcon className="size-3.5" />
         </button>
       </TooltipTrigger>
-      <TooltipContent side="bottom">
-        {downloadError ? "Falha ao baixar" : "Baixar"}
-      </TooltipContent>
+      <TooltipContent side="bottom">{downloadError ? "Falha ao baixar" : "Baixar"}</TooltipContent>
     </Tooltip>
   );
 }

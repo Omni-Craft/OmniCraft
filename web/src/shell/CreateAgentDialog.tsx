@@ -399,7 +399,9 @@ function MCPServerRow({
             data-testid="create-agent-mcp-headers"
             value={entry.headers}
             onChange={(e) => onChange({ headers: e.target.value })}
-            placeholder={"Cabeçalhos HTTP (CHAVE=VALOR por linha)\nex.: Authorization=Bearer tok_..."}
+            placeholder={
+              "Cabeçalhos HTTP (CHAVE=VALOR por linha)\nex.: Authorization=Bearer tok_..."
+            }
             className="min-h-[60px] font-mono text-xs"
           />
         </>

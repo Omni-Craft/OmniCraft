@@ -152,7 +152,11 @@ const _ROUTABLE_HARNESSES = new Set([
 
 const CLAUDE_NATIVE_DEFAULT_PERMISSION_MODE = "default";
 const CLAUDE_NATIVE_PERMISSION_MODES: { value: string; label: string; description: string }[] = [
-  { value: "default", label: "Padrão", description: "Solicita confirmação antes de edições e comandos" },
+  {
+    value: "default",
+    label: "Padrão",
+    description: "Solicita confirmação antes de edições e comandos",
+  },
   {
     value: "auto",
     label: "Automático",
@@ -592,8 +596,8 @@ function harnessWarningMessage(
   if (reason === "binary-missing") {
     return (
       <>
-        {agentName} está sem o binário do Codex em {hostName} — rode <code>omnicraft setup</code> naquela
-        máquina.
+        {agentName} está sem o binário do Codex em {hostName} — rode <code>omnicraft setup</code>{" "}
+        naquela máquina.
       </>
     );
   }
@@ -1029,10 +1033,8 @@ function BypassSandboxOption({
         />
       </div>
       <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-        Executa o Codex sem confirmações de aprovação e sem sandbox de comandos. Para ativar,
-        digite{" "}
-        <span className="font-semibold">{CODEX_NATIVE_BYPASS_SANDBOX_CONFIRM_PHRASE}</span>{" "}
-        abaixo.
+        Executa o Codex sem confirmações de aprovação e sem sandbox de comandos. Para ativar, digite{" "}
+        <span className="font-semibold">{CODEX_NATIVE_BYPASS_SANDBOX_CONFIRM_PHRASE}</span> abaixo.
       </p>
       {!enabled && (
         <Input
@@ -1200,7 +1202,9 @@ function ModelEffortOptions({
         ))}
       </DropdownMenuRadioGroup>
       <DropdownMenuSeparator />
-      <div className="px-2 pt-1.5 pb-0.5 text-[11px] font-medium text-muted-foreground">Esforço</div>
+      <div className="px-2 pt-1.5 pb-0.5 text-[11px] font-medium text-muted-foreground">
+        Esforço
+      </div>
       <DropdownMenuRadioGroup value={effort} onValueChange={onEffortChange}>
         {CLAUDE_NATIVE_EFFORTS.map((e) => (
           <DropdownMenuRadioItem
@@ -1667,7 +1671,9 @@ function AgentHarnessPicker({
               >
                 <div className="flex min-w-0 flex-1 items-baseline gap-2.5">
                   <span className="truncate">{pendingAgent.name}</span>
-                  <span className="truncate text-[11px] text-muted-foreground/70">Personalizado</span>
+                  <span className="truncate text-[11px] text-muted-foreground/70">
+                    Personalizado
+                  </span>
                 </div>
               </DropdownMenuItem>
             )}
@@ -2772,7 +2778,9 @@ export function NewChatLandingScreen() {
       landingDraft = null;
       navigate(`/c/${data.id}`);
     } catch {
-      setCreateError("Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.");
+      setCreateError(
+        "Não foi possível conectar ao servidor. Verifique sua conexão e tente novamente.",
+      );
     } finally {
       setCreating(false);
     }
@@ -2960,7 +2968,9 @@ export function NewChatLandingScreen() {
               }}
               // Suppress the native placeholder when the overlay supplies its
               // own prompt text; aria-label preserves the accessible name.
-              placeholder={pillSkills.length > 0 ? "" : "Descreva uma tarefa para iniciar uma nova sessão…"}
+              placeholder={
+                pillSkills.length > 0 ? "" : "Descreva uma tarefa para iniciar uma nova sessão…"
+              }
               aria-label="Descreva uma tarefa para iniciar uma nova sessão"
               rows={1}
               autoFocus
@@ -3434,7 +3444,9 @@ export function NewChatLandingScreen() {
                         }
                       />
                     ) : (
-                      <p className="p-3 text-xs text-muted-foreground">Selecione uma máquina primeiro.</p>
+                      <p className="p-3 text-xs text-muted-foreground">
+                        Selecione uma máquina primeiro.
+                      </p>
                     )}
                   </PopoverContent>
                 </Popover>

@@ -49,7 +49,9 @@ export function PresenceAvatars() {
               </AvatarFallback>
             </Avatar>
           </TooltipTrigger>
-          <TooltipContent>{viewer.idle ? `${viewer.userId} (inativo)` : viewer.userId}</TooltipContent>
+          <TooltipContent>
+            {viewer.idle ? `${viewer.userId} (inativo)` : viewer.userId}
+          </TooltipContent>
         </Tooltip>
       ))}
       {overflow.length > 0 && (

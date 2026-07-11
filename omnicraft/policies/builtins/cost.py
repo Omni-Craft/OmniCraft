@@ -883,35 +883,36 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.cost.cost_budget",
         "kind": "factory",
-        "name": "Session Cost Budget",
-        "description": "Gates a session on cumulative LLM spend (USD): once a hard limit is "
-        "reached DENY (the whole turn at the request phase, or each tool call) while still on "
-        "an expensive model (prompting a /model downgrade), and ASK for approval at each soft "
-        "warning checkpoint (request + tool-call phases). Reads "
-        "event.context.usage.total_cost_usd and event.context.model.",
+        "name": "Orçamento de Custo da Sessão",
+        "description": "Controla uma sessão pelo gasto acumulado do LLM (USD): ao atingir um "
+        "limite rígido, DENY (o turno inteiro na fase de request, ou cada chamada de ferramenta) "
+        "enquanto ainda estiver em um modelo caro (sugerindo um downgrade via /model), e ASK por "
+        "aprovação em cada checkpoint de aviso flexível (fases de request + tool-call). Lê "
+        "event.context.usage.total_cost_usd e event.context.model.",
         "params_schema": {
             "type": "object",
             "properties": {
                 "max_cost_usd": {
                     "type": "number",
-                    "description": "Optional hard limit in USD; once cumulative session cost "
-                    "reaches it, tool calls are blocked while the session is on an expensive "
-                    "model. Either this or ask_thresholds_usd must be set.",
+                    "description": "Limite rígido opcional em USD; quando o custo acumulado da "
+                    "sessão o atinge, as chamadas de ferramenta são bloqueadas enquanto a sessão "
+                    "estiver em um modelo caro. Este ou ask_thresholds_usd deve ser definido.",
                 },
                 "ask_thresholds_usd": {
                     "type": "array",
                     "items": {"type": "number"},
-                    "description": "Optional soft warning checkpoints in USD; the session asks "
-                    "for approval the first time spend crosses each (every value must be < "
-                    "max_cost_usd when both are set).",
+                    "description": "Checkpoints de aviso flexíveis opcionais em USD; a sessão pede "
+                    "aprovação na primeira vez que o gasto cruza cada um (todo valor deve ser < "
+                    "max_cost_usd quando ambos são definidos).",
                 },
                 "expensive_models": {
                     "type": "array",
                     "items": {"type": "string", "x-enum-source": "models"},
-                    "description": "Optional case-insensitive substring tokens for the model "
-                    "tiers blocked once over budget. Omit (or pass []) for a true hard stop "
-                    "that blocks all models; pass a non-empty list for a downgrade gate that "
-                    "only blocks the named tiers.",
+                    "description": "Tokens de substring opcionais e insensíveis a maiúsculas/"
+                    "minúsculas para os níveis de modelo bloqueados quando acima do orçamento. "
+                    "Omita (ou passe []) para uma parada rígida real que bloqueia todos os "
+                    "modelos; passe uma lista não vazia para um gate de downgrade que bloqueia "
+                    "apenas os níveis nomeados.",
                 },
             },
         },
@@ -919,35 +920,37 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.cost.user_daily_cost_budget",
         "kind": "factory",
-        "name": "Per-User Daily Cost Budget",
-        "description": "Gates the session OWNER's cumulative LLM spend across all their "
-        "sessions for the current UTC day: once a hard daily limit is reached DENY (the whole "
-        "turn at the request phase, or each tool call) while still on an expensive model "
-        "(prompting a /model downgrade), and ASK for approval at each soft warning checkpoint "
-        "(request + tool-call phases, remembered per user+day). Reads "
-        "event.context.user_daily_cost and event.context.model.",
+        "name": "Orçamento de Custo Diário por Usuário",
+        "description": "Controla o gasto acumulado do LLM do PROPRIETÁRIO da sessão em todas as "
+        "suas sessões no dia UTC atual: ao atingir um limite diário rígido, DENY (o turno inteiro "
+        "na fase de request, ou cada chamada de ferramenta) enquanto ainda estiver em um modelo "
+        "caro (sugerindo um downgrade via /model), e ASK por aprovação em cada checkpoint de "
+        "aviso flexível (fases de request + tool-call, lembrado por usuário+dia). Lê "
+        "event.context.user_daily_cost e event.context.model.",
         "params_schema": {
             "type": "object",
             "properties": {
                 "max_cost_usd": {
                     "type": "number",
-                    "description": "Hard daily limit in USD; once the owner's spend for the "
-                    "UTC day reaches it, tool calls are blocked while on an expensive model.",
+                    "description": "Limite diário rígido em USD; quando o gasto do proprietário "
+                    "no dia UTC o atinge, as chamadas de ferramenta são bloqueadas enquanto "
+                    "estiver em um modelo caro.",
                 },
                 "ask_thresholds_usd": {
                     "type": "array",
                     "items": {"type": "number"},
-                    "description": "Optional soft daily warning checkpoints in USD; asks for "
-                    "approval the first time the day's spend crosses each (every value must "
-                    "be < max_cost_usd). Approval is remembered per user+day.",
+                    "description": "Checkpoints de aviso diários flexíveis opcionais em USD; pede "
+                    "aprovação na primeira vez que o gasto do dia cruza cada um (todo valor deve "
+                    "ser < max_cost_usd). A aprovação é lembrada por usuário+dia.",
                 },
                 "expensive_models": {
                     "type": "array",
                     "items": {"type": "string", "x-enum-source": "models"},
-                    "description": "Optional case-insensitive substring tokens for the model "
-                    "tiers blocked once over the daily budget. Omit (or pass []) for a true "
-                    "hard stop that blocks all models; pass a non-empty list for a downgrade "
-                    "gate that only blocks the named tiers.",
+                    "description": "Tokens de substring opcionais e insensíveis a maiúsculas/"
+                    "minúsculas para os níveis de modelo bloqueados quando acima do orçamento "
+                    "diário. Omita (ou passe []) para uma parada rígida real que bloqueia todos "
+                    "os modelos; passe uma lista não vazia para um gate de downgrade que bloqueia "
+                    "apenas os níveis nomeados.",
                 },
             },
             "required": ["max_cost_usd"],
@@ -956,35 +959,38 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.cost.subagent_cost_budget",
         "kind": "factory",
-        "name": "Subagent Cost Budget",
-        "description": "Gates a sub-agent on its own subtree LLM spend (USD): once a hard limit "
-        "is reached DENY (the whole turn at the request phase, or each tool call) while still on "
-        "an expensive model (prompting a /model downgrade), and ASK for approval at each soft "
-        "warning checkpoint (request + tool-call phases). Reads "
-        "event.context.subtree_usage.total_cost_usd and event.context.model. Intended to be "
-        "attached to a child session via sys_session_send's cost_budget argument.",
+        "name": "Orçamento de Custo do Subagente",
+        "description": "Controla um subagente pelo gasto de LLM (USD) da sua própria subárvore: "
+        "ao atingir um limite rígido, DENY (o turno inteiro na fase de request, ou cada chamada "
+        "de ferramenta) enquanto ainda estiver em um modelo caro (sugerindo um downgrade via "
+        "/model), e ASK por aprovação em cada checkpoint de aviso flexível (fases de request + "
+        "tool-call). Lê event.context.subtree_usage.total_cost_usd e event.context.model. "
+        "Destinado a ser anexado a uma sessão filha via o argumento cost_budget do "
+        "sys_session_send.",
         "params_schema": {
             "type": "object",
             "properties": {
                 "max_cost_usd": {
                     "type": "number",
-                    "description": "Hard limit in USD for the subtree; once cumulative subtree "
-                    "cost reaches it, tool calls are blocked while on an expensive model.",
+                    "description": "Limite rígido em USD para a subárvore; quando o custo "
+                    "acumulado da subárvore o atinge, as chamadas de ferramenta são bloqueadas "
+                    "enquanto estiver em um modelo caro.",
                 },
                 "ask_thresholds_usd": {
                     "type": "array",
                     "items": {"type": "number"},
-                    "description": "Optional soft warning checkpoints in USD; the subagent asks "
-                    "for approval the first time subtree spend crosses each (every value must "
-                    "be < max_cost_usd).",
+                    "description": "Checkpoints de aviso flexíveis opcionais em USD; o subagente "
+                    "pede aprovação na primeira vez que o gasto da subárvore cruza cada um (todo "
+                    "valor deve ser < max_cost_usd).",
                 },
                 "expensive_models": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Optional case-insensitive substring tokens for the model "
-                    "tiers blocked once over budget (default: Fable + Opus + GPT-5, excluding "
-                    "the cheap -mini/-nano variants). An empty list disables the hard limit, "
-                    "leaving only the soft thresholds.",
+                    "description": "Tokens de substring opcionais e insensíveis a maiúsculas/"
+                    "minúsculas para os níveis de modelo bloqueados quando acima do orçamento "
+                    "(padrão: Fable + Opus + GPT-5, excluindo as variantes baratas -mini/-nano). "
+                    "Uma lista vazia desabilita o limite rígido, deixando apenas os thresholds "
+                    "flexíveis.",
                 },
             },
             "required": [],

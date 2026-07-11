@@ -1128,49 +1128,54 @@ POLICY_REGISTRY: list[dict[str, Any]] = [  # type: ignore[explicit-any]
     {
         "handler": "omnicraft.policies.builtins.github.github_policy",
         "kind": "factory",
-        "name": "GitHub Repo & Branch Access",
+        "name": "Acesso a Repositório & Branch do GitHub",
         "description": (
-            "Controls GitHub access across MCP tools (official per-operation server and the "
-            "github_read_api_call / github_write_api_call HTTP-proxy wrapper) and git/gh shell "
-            "commands run via sys_os_shell. Restricts reads to read_repos (unless read_all), and "
-            "writes to write_repos plus optional write_branches. Shell commands whose target repo "
-            "or branch cannot be determined return ASK for human approval."
+            "Controla o acesso ao GitHub em ferramentas MCP (servidor oficial por operação e o "
+            "wrapper de HTTP-proxy github_read_api_call / github_write_api_call) e comandos de "
+            "shell git/gh executados via sys_os_shell. Restringe leituras a read_repos (a menos "
+            "que read_all), e escritas a write_repos mais write_branches opcional. Comandos de "
+            "shell cujo repositório ou branch de destino não pode ser determinado retornam ASK "
+            "para aprovação humana."
         ),
         "params_schema": {
             "type": "object",
             "properties": {
                 "read_all": {
                     "type": "boolean",
-                    "description": "Allow all reads. When false, restrict reads to read_repos.",
+                    "description": "Permite todas as leituras. Quando false, restringe leituras "
+                    "a read_repos.",
                     "default": True,
                 },
                 "read_repos": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Repos (owner/repo or URLs) readable when read_all is false.",
+                    "description": "Repos (owner/repo ou URLs) legíveis quando read_all for "
+                    "false.",
                 },
                 "write_repos": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Repos (owner/repo or GitHub URLs) the agent may write to.",
+                    "description": "Repos (owner/repo ou URLs do GitHub) nos quais o agente pode "
+                    "escrever.",
                 },
                 "write_branches": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Branches writable within an allowed repo. Empty = any branch.",
+                    "description": "Branches graváveis dentro de um repo permitido. Vazio = "
+                    "qualquer branch.",
                 },
                 "mcp_tool_prefixes": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "GitHub MCP server name-prefixes to strip when matching "
-                    "tools (default: mcp__github__, github__).",
+                    "description": "Prefixos de nome do servidor MCP do GitHub a remover ao "
+                    "corresponder ferramentas (padrão: mcp__github__, github__).",
                 },
                 "shell_tools": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Shell/terminal tools whose command arg is parsed for "
-                    "git/gh; git/gh run through tools not listed here are not "
-                    "inspected (default: sys_os_shell).",
+                    "description": "Ferramentas de shell/terminal cujo argumento de comando é "
+                    "analisado em busca de git/gh; git/gh executados por ferramentas não listadas "
+                    "aqui não são inspecionados (padrão: sys_os_shell).",
                 },
             },
         },

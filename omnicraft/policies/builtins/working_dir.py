@@ -425,46 +425,46 @@ POLICY_REGISTRY: list[dict[str, Any]] = [  # type: ignore[explicit-any]
     {
         "handler": "omnicraft.policies.builtins.working_dir.block_working_dir_changes",
         "kind": "factory",
-        "name": "Block Working Directory & Worktree Changes",
+        "name": "Bloquear Mudanças de Diretório de Trabalho & Worktree",
         "description": (
-            "Gates shell commands (sys_os_shell and Claude/Codex native Bash) "
-            "that switch the working directory (cd / chdir / pushd / popd, "
-            "git -C) or git worktrees (git worktree add / move / remove). "
-            "Optionally allow cd into specific directories via allowed_dirs. "
-            "Chained, wrapped (bash -c), and env-prefixed commands are parsed "
-            "so the gate cannot be trivially bypassed."
+            "Controla comandos de shell (sys_os_shell e Bash nativo do Claude/Codex) "
+            "que trocam o diretório de trabalho (cd / chdir / pushd / popd, "
+            "git -C) ou worktrees do git (git worktree add / move / remove). "
+            "Opcionalmente permite cd para diretórios específicos via allowed_dirs. "
+            "Comandos encadeados, encapsulados (bash -c) e prefixados com env são "
+            "analisados para que o gate não possa ser trivialmente contornado."
         ),
         "params_schema": {
             "type": "object",
             "properties": {
                 "block_cd": {
                     "type": "boolean",
-                    "description": "Gate cd/chdir/pushd/popd and git -C.",
+                    "description": "Controla cd/chdir/pushd/popd e git -C.",
                     "default": True,
                 },
                 "block_worktree": {
                     "type": "boolean",
-                    "description": "Gate git worktree add/move/remove.",
+                    "description": "Controla git worktree add/move/remove.",
                     "default": True,
                 },
                 "allowed_dirs": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Directories a cd / git -C may move into "
-                    "(the dir or a subdirectory). Empty = no change allowed.",
+                    "description": "Diretórios para os quais um cd / git -C pode mover "
+                    "(o diretório ou um subdiretório). Vazio = nenhuma mudança permitida.",
                 },
                 "action": {
                     "type": "string",
                     "enum": ["deny", "ask"],
-                    "description": "Whether a gated command is denied or sent "
-                    "for human approval (ask).",
+                    "description": "Se um comando controlado é negado ou enviado "
+                    "para aprovação humana (ask).",
                     "default": "deny",
                 },
                 "shell_tools": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Shell tools whose command arg is parsed "
-                    "(default: sys_os_shell, Bash).",
+                    "description": "Ferramentas de shell cujo argumento de comando é analisado "
+                    "(padrão: sys_os_shell, Bash).",
                 },
             },
         },

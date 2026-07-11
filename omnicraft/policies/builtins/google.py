@@ -1062,64 +1062,69 @@ POLICY_REGISTRY: list[dict[str, Any]] = [  # type: ignore[explicit-any]
     {
         "handler": "omnicraft.policies.builtins.google.gdrive_policy",
         "kind": "factory",
-        "name": "Google Drive / Docs / Sheets Access",
+        "name": "Acesso ao Google Drive / Docs / Sheets",
         "description": (
-            "Controls access to Google Drive files, Docs, Sheets, and Slides through "
-            "any Google MCP server. Restricts reads to an allowlist and restricts "
-            "writes/comments to files the agent created this session plus explicitly "
-            "allowed files. Optionally enforces Bell-LaPadula's 'no write-down' rule "
-            "via a confidential-file compartment: once the session reads a confidential "
-            "file, its writes are confined to that set so classified data can't leak "
-            "into a less-protected file."
+            "Controla o acesso a arquivos do Google Drive, Docs, Sheets e Slides através "
+            "de qualquer servidor MCP do Google. Restringe leituras a uma allowlist e "
+            "restringe escritas/comentários a arquivos que o agente criou nesta sessão "
+            "mais arquivos explicitamente permitidos. Opcionalmente aplica a regra 'no "
+            "write-down' de Bell-LaPadula via um compartimento de arquivos confidenciais: "
+            "depois que a sessão lê um arquivo confidencial, suas escritas ficam confinadas "
+            "a esse conjunto para que dados classificados não vazem para um arquivo menos "
+            "protegido."
         ),
         "params_schema": {
             "type": "object",
             "properties": {
                 "read_all": {
                     "type": "boolean",
-                    "description": "Allow all reads. When false, only read_files are readable.",
+                    "description": "Permite todas as leituras. Quando false, apenas read_files "
+                    "podem ser lidos.",
                     "default": True,
                 },
                 "read_files": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "File IDs or Google URLs readable when read_all is false.",
+                    "description": "IDs de arquivo ou URLs do Google legíveis quando read_all "
+                    "for false.",
                 },
                 "allow_create": {
                     "type": "boolean",
-                    "description": "Allow creating new files (docs, sheets, slides, Drive files).",
+                    "description": "Permite criar novos arquivos (docs, sheets, slides, arquivos "
+                    "do Drive).",
                     "default": False,
                 },
                 "write_files": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "File IDs or URLs writable regardless of creation.",
+                    "description": "IDs de arquivo ou URLs graváveis independentemente da "
+                    "criação.",
                 },
                 "comment_files": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "File IDs or URLs the agent may comment on.",
+                    "description": "IDs de arquivo ou URLs nos quais o agente pode comentar.",
                 },
                 "confidential_files": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "File IDs or Google URLs forming the confidential "
-                    "compartment. When set, Bell-LaPadula 'no write-down' engages: "
-                    "after the session reads one of these, writes are confined to the "
-                    "set. Empty (default) disables the rule.",
+                    "description": "IDs de arquivo ou URLs do Google que formam o compartimento "
+                    "confidencial. Quando definido, o 'no write-down' de Bell-LaPadula entra em "
+                    "ação: depois que a sessão lê um destes, as escritas ficam confinadas ao "
+                    "conjunto. Vazio (padrão) desabilita a regra.",
                 },
                 "write_down_action": {
                     "type": "string",
                     "enum": ["DENY", "ASK"],
-                    "description": "Verdict on a write-down violation. "
-                    "Ignored unless confidential_files is set.",
+                    "description": "Veredito em uma violação de write-down. "
+                    "Ignorado a menos que confidential_files esteja definido.",
                     "default": "DENY",
                 },
                 "tool_prefixes": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Server tool-name prefixes to strip "
-                    "(default: mcp__google__, google__).",
+                    "description": "Prefixos de nome de ferramenta do servidor a remover "
+                    "(padrão: mcp__google__, google__).",
                 },
             },
         },
@@ -1127,40 +1132,44 @@ POLICY_REGISTRY: list[dict[str, Any]] = [  # type: ignore[explicit-any]
     {
         "handler": "omnicraft.policies.builtins.google.gmail_policy",
         "kind": "factory",
-        "name": "Gmail Access",
+        "name": "Acesso ao Gmail",
         "description": (
-            "Controls Gmail access through any Google MCP server. Defaults to allowing "
-            "reads and drafts but blocking sending and message modification; draft edits "
-            "are restricted to drafts the agent created this session."
+            "Controla o acesso ao Gmail através de qualquer servidor MCP do Google. Por "
+            "padrão, permite leituras e rascunhos, mas bloqueia o envio e a modificação de "
+            "mensagens; as edições de rascunho ficam restritas aos rascunhos que o agente "
+            "criou nesta sessão."
         ),
         "params_schema": {
             "type": "object",
             "properties": {
                 "allow_read": {
                     "type": "boolean",
-                    "description": "Allow reading mail (search / list / get).",
+                    "description": "Permite ler e-mails (search / list / get).",
                     "default": True,
                 },
                 "allow_send": {
                     "type": "boolean",
-                    "description": "Allow sending mail. Off by default (draft-only).",
+                    "description": "Permite enviar e-mails. Desligado por padrão (apenas "
+                    "rascunho).",
                     "default": False,
                 },
                 "allow_drafts": {
                     "type": "boolean",
-                    "description": "Allow creating drafts and editing the agent's own drafts.",
+                    "description": "Permite criar rascunhos e editar os próprios rascunhos do "
+                    "agente.",
                     "default": True,
                 },
                 "allow_modify": {
                     "type": "boolean",
-                    "description": "Allow modifying messages / threads (labels, move, trash).",
+                    "description": "Permite modificar mensagens / threads (labels, mover, "
+                    "lixeira).",
                     "default": False,
                 },
                 "tool_prefixes": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Server tool-name prefixes to strip "
-                    "(default: mcp__google__, google__).",
+                    "description": "Prefixos de nome de ferramenta do servidor a remover "
+                    "(padrão: mcp__google__, google__).",
                 },
             },
         },
@@ -1168,35 +1177,35 @@ POLICY_REGISTRY: list[dict[str, Any]] = [  # type: ignore[explicit-any]
     {
         "handler": "omnicraft.policies.builtins.google.gcalendar_policy",
         "kind": "factory",
-        "name": "Google Calendar Access",
+        "name": "Acesso ao Google Calendar",
         "description": (
-            "Controls Google Calendar access through any Google MCP server. Defaults to "
-            "read-only — allows reading events but blocks creating, updating, and "
-            "deleting them."
+            "Controla o acesso ao Google Calendar através de qualquer servidor MCP do "
+            "Google. Por padrão, é somente leitura — permite ler eventos, mas bloqueia "
+            "criá-los, atualizá-los e excluí-los."
         ),
         "params_schema": {
             "type": "object",
             "properties": {
                 "allow_read": {
                     "type": "boolean",
-                    "description": "Allow reading calendars / events / free-busy.",
+                    "description": "Permite ler calendários / eventos / free-busy.",
                     "default": True,
                 },
                 "allow_create_events": {
                     "type": "boolean",
-                    "description": "Allow creating events / calendars.",
+                    "description": "Permite criar eventos / calendários.",
                     "default": False,
                 },
                 "allow_modify_events": {
                     "type": "boolean",
-                    "description": "Allow updating / deleting events.",
+                    "description": "Permite atualizar / excluir eventos.",
                     "default": False,
                 },
                 "tool_prefixes": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Server tool-name prefixes to strip "
-                    "(default: mcp__google__, google__).",
+                    "description": "Prefixos de nome de ferramenta do servidor a remover "
+                    "(padrão: mcp__google__, google__).",
                 },
             },
         },

@@ -467,12 +467,12 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.routing.deny_trivial_to_expensive_model",
         "kind": "factory",
-        "name": "Deny Trivial Tasks on Expensive Models",
+        "name": "Negar Tarefas Triviais em Modelos Caros",
         "description": (
-            "Classifies the user's message as TRIVIAL or COMPLEX using "
-            "the server-level LLM client with structured output. Denies "
-            "TRIVIAL tasks from using expensive models (e.g. Opus, o3). "
-            "Requires the server to have an llm: config block."
+            "Classifica a mensagem do usuário como TRIVIAL ou COMPLEX usando "
+            "o cliente LLM no nível do servidor com saída estruturada. Impede que "
+            "tarefas TRIVIAL usem modelos caros (por exemplo, Opus, o3). "
+            "Requer que o servidor tenha um bloco de config llm:."
         ),
         "params_schema": {
             "type": "object",
@@ -481,15 +481,16 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                     "type": "array",
                     "items": {"type": "string"},
                     "description": (
-                        "Model ids to gate, e.g. ['databricks-claude-opus-4-6', 'openai/o3']."
+                        "IDs de modelo a controlar, por exemplo "
+                        "['databricks-claude-opus-4-6', 'openai/o3']."
                     ),
                 },
                 "classification_prompt": {
                     "type": "string",
                     "description": (
-                        "System instructions for the classifier. Describes "
-                        "classification criteria (output format is enforced "
-                        "via structured output, not the prompt)."
+                        "Instruções de sistema para o classificador. Descreve "
+                        "os critérios de classificação (o formato da saída é imposto "
+                        "via saída estruturada, não pelo prompt)."
                     ),
                 },
             },
@@ -499,17 +500,17 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.routing.intent_based_authorization",
         "kind": "factory",
-        "name": "Intent Based Authorization",
+        "name": "Autorização Baseada em Intenção",
         "description": (
-            "Enforces intent-based permissioning: records the user's first message "
-            "as the authoritative session intent, then gates every tool call against "
-            "that intent using the server-level LLM client. Tool calls that cannot "
-            "plausibly serve the original task trigger an ASK prompt for human approval "
-            "before they run. "
-            "Classification results are cached in session_state to avoid redundant "
-            "LLM calls for identical tool invocations. "
-            "Requires an llm: config block on the server; abstains (fail-open) when "
-            "no LLM client is available. Zero required parameters."
+            "Aplica permissionamento baseado em intenção: registra a primeira mensagem "
+            "do usuário como a intenção autoritativa da sessão, e então controla cada "
+            "chamada de ferramenta contra essa intenção usando o cliente LLM no nível do "
+            "servidor. Chamadas de ferramenta que não podem plausivelmente servir à tarefa "
+            "original disparam um prompt ASK para aprovação humana antes de executarem. "
+            "Os resultados da classificação são armazenados em cache no session_state para "
+            "evitar chamadas redundantes ao LLM para invocações de ferramenta idênticas. "
+            "Requer um bloco de config llm: no servidor; abstém-se (fail-open) quando "
+            "nenhum cliente LLM está disponível. Zero parâmetros obrigatórios."
         ),
         "params_schema": {
             "type": "object",

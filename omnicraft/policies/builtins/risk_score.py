@@ -416,68 +416,68 @@ POLICY_REGISTRY: list[dict[str, Any]] = [  # type: ignore[explicit-any]
     {
         "handler": "omnicraft.policies.builtins.risk_score.risk_score_policy",
         "kind": "factory",
-        "name": "Session Risk Score",
+        "name": "Score de Risco da Sessão",
         "description": (
-            "Accrues a per-session risk score from risky tool calls and from "
-            "tool results carrying a sensitive data-classification label, then "
-            "escalates configured sensitive tools to ASK (or DENY) once the score "
-            "crosses a threshold. MCP-agnostic; score persists across turns via "
-            "session_state."
+            "Acumula um score de risco por sessão a partir de chamadas de ferramenta "
+            "arriscadas e de resultados de ferramenta que carregam um rótulo sensível de "
+            "classificação de dados, e então escala ferramentas sensíveis configuradas para "
+            "ASK (ou DENY) quando o score cruza um threshold. Agnóstico a MCP; o score "
+            "persiste entre turnos via session_state."
         ),
         "params_schema": {
             "type": "object",
             "properties": {
                 "threshold": {
                     "type": "integer",
-                    "description": "Score at/above which guarded_tools escalate.",
+                    "description": "Score a partir do qual guarded_tools escalam.",
                     "default": 50,
                 },
                 "tool_points": {
                     "type": "object",
                     "additionalProperties": {"type": "integer"},
-                    "description": "Tool name -> points added on each call "
-                    '(e.g. {"web_search": 10}).',
+                    "description": "Nome da ferramenta -> pontos adicionados em cada chamada "
+                    '(por exemplo, {"web_search": 10}).',
                 },
                 "sensitive_labels": {
                     "type": "object",
                     "additionalProperties": {"type": "integer"},
-                    "description": "Data-classification label -> points added when a "
-                    "tool result carries it (case-insensitive, e.g. "
-                    '{"Highly Confidential": 30}).',
+                    "description": "Rótulo de classificação de dados -> pontos adicionados quando "
+                    "um resultado de ferramenta o carrega (insensível a maiúsculas/minúsculas, "
+                    'por exemplo, {"Highly Confidential": 30}).',
                 },
                 "guarded_tools": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Tool names gated once the score reaches threshold "
-                    '(e.g. ["gmail_message_send"]).',
+                    "description": "Nomes de ferramenta controlados quando o score atinge o "
+                    'threshold (por exemplo, ["gmail_message_send"]).',
                 },
                 "escalate_action": {
                     "type": "string",
                     "enum": ["ASK", "DENY"],
-                    "description": "Verdict for a guarded tool over threshold.",
+                    "description": "Veredito para uma ferramenta guardada acima do threshold.",
                     "default": "ASK",
                 },
                 "initial_scores_by_actor": {
                     "type": "object",
                     "additionalProperties": {"type": "integer"},
-                    "description": "Actor run_as email -> starting offset "
-                    '(e.g. {"contractor@example.com": 40}).',
+                    "description": "E-mail run_as do ator -> offset inicial "
+                    '(por exemplo, {"contractor@example.com": 40}).',
                 },
                 "state_key": {
                     "type": "string",
-                    "description": "session_state key holding the running score.",
+                    "description": "Chave do session_state que mantém o score corrente.",
                     "default": DEFAULT_RISK_STATE_KEY,
                 },
                 "label_keys": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Result-payload keys inspected for a classification "
-                    "label (default: label_classification, classification, "
+                    "description": "Chaves do payload de resultado inspecionadas em busca de um "
+                    "rótulo de classificação (padrão: label_classification, classification, "
                     "sensitivity, sensitivity_label, dlp_label).",
                 },
                 "reason": {
                     "type": "string",
-                    "description": "Human-readable prefix on ASK / DENY escalations.",
+                    "description": "Prefixo legível por humanos nas escalações ASK / DENY.",
                 },
             },
         },

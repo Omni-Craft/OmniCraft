@@ -283,15 +283,15 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.context.detect_task_switch",
         "kind": "factory",
-        "name": "Detect Task Switch",
+        "name": "Detectar Troca de Tarefa",
         "description": (
-            "Uses the server-level LLM to classify each user message as a "
-            "continuation of the current task or the start of a new, unrelated "
-            "one. On a detected task switch, asks (or denies) with a recommendation "
-            "to start a fresh session. Implements the 'Keep Context Lean' strategy: "
-            "start fresh sessions when switching tasks rather than accumulating "
-            "stale context. Requires an llm: config block on the server; "
-            "abstains (fail-open) when no LLM client is available."
+            "Usa o LLM no nível do servidor para classificar cada mensagem do usuário como "
+            "uma continuação da tarefa atual ou o início de uma nova, sem relação. "
+            "Ao detectar uma troca de tarefa, pergunta (ou nega) com uma recomendação "
+            "de iniciar uma nova sessão. Implementa a estratégia 'Keep Context Lean': "
+            "iniciar novas sessões ao trocar de tarefa em vez de acumular "
+            "contexto obsoleto. Requer um bloco de config llm: no servidor; "
+            "abstém-se (fail-open) quando nenhum cliente LLM está disponível."
         ),
         "params_schema": {
             "type": "object",
@@ -300,17 +300,17 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                     "type": "integer",
                     "default": 2,
                     "description": (
-                        "Number of prior user messages to accumulate before "
-                        "the classifier starts firing. Defaults to 2."
+                        "Número de mensagens anteriores do usuário a acumular antes "
+                        "de o classificador começar a disparar. O padrão é 2."
                     ),
                 },
                 "history_window": {
                     "type": "integer",
                     "default": 4,
                     "description": (
-                        "Maximum number of recent user messages kept as prior "
-                        "context for the classifier. Older messages are dropped "
-                        "as the window slides. Defaults to 10."
+                        "Número máximo de mensagens recentes do usuário mantidas como "
+                        "contexto anterior para o classificador. Mensagens mais antigas são "
+                        "descartadas conforme a janela desliza. O padrão é 10."
                     ),
                 },
                 "action": {
@@ -318,17 +318,17 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                     "enum": ["ASK", "DENY"],
                     "default": "ASK",
                     "description": (
-                        "Response when a task switch is detected. "
-                        "ASK escalates to the user (default); "
-                        "DENY blocks the request outright."
+                        "Resposta quando uma troca de tarefa é detectada. "
+                        "ASK escala para o usuário (padrão); "
+                        "DENY bloqueia a requisição por completo."
                     ),
                 },
                 "classification_prompt": {
                     "type": "string",
                     "description": (
-                        "System prompt for the classifier. Must instruct the "
-                        'model to return {"verdict": "CONTINUATION"|"TASK_SWITCH"}; '
-                        "the output schema is enforced via structured output."
+                        "Prompt de sistema para o classificador. Deve instruir o "
+                        'modelo a retornar {"verdict": "CONTINUATION"|"TASK_SWITCH"}; '
+                        "o schema da saída é imposto via saída estruturada."
                     ),
                 },
             },

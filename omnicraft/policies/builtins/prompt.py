@@ -250,13 +250,13 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.prompt.prompt_policy",
         "kind": "factory",
-        "name": "LLM Prompt Classifier Policy",
+        "name": "Política de Classificador por Prompt LLM",
         "description": (
-            "LLM-backed classifier policy. The author supplies domain "
-            "intent in a prompt (e.g. 'Deny if the user mentions Canada'); "
-            "the framework generates the JSON-schema envelope, calls the "
-            "server-level LLM, and parses the verdict. Requires the server "
-            "to have an llm: config block."
+            "Política de classificador apoiada por LLM. O autor fornece a "
+            "intenção do domínio em um prompt (por exemplo, 'Negar se o usuário mencionar "
+            "o Canadá'); o framework gera o envelope JSON-schema, chama o "
+            "LLM no nível do servidor e analisa o veredito. Requer que o servidor "
+            "tenha um bloco de config llm:."
         ),
         "params_schema": {
             "type": "object",
@@ -264,16 +264,16 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                 "prompt": {
                     "type": "string",
                     "description": (
-                        "Author-supplied domain logic describing when to "
-                        "deny, ask, or allow. Example: "
-                        '"Deny if the user mentions Canada."'
+                        "Lógica de domínio fornecida pelo autor descrevendo quando "
+                        "negar, perguntar ou permitir. Exemplo: "
+                        '"Negar se o usuário mencionar o Canadá."'
                     ),
                 },
                 "reason": {
                     "type": "string",
                     "description": (
-                        "Optional fixed reason override for DENY/ASK. "
-                        "When omitted, uses the LLM's own reason."
+                        "Substituição opcional de razão fixa para DENY/ASK. "
+                        "Quando omitido, usa a própria razão do LLM."
                     ),
                 },
             },

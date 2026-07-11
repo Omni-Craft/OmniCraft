@@ -136,13 +136,13 @@ POLICY_REGISTRY: list[dict[str, Any]] = (
         {
             "handler": "omnicraft.policies.builtins.cel.cel_policy",
             "kind": "factory",
-            "name": "CEL Expression Policy",
+            "name": "Política de Expressão CEL",
             "description": (
-                "Evaluate a CEL (Common Expression Language) expression against "
-                "every policy event. The expression receives the full event as "
-                '`event` and must return a map with `result` ("DENY", "ASK", or '
-                '"ALLOW") and optional `reason` keys. '
-                "CEL is non-Turing-complete and side-effect-free."
+                "Avalia uma expressão CEL (Common Expression Language) contra "
+                "cada evento de política. A expressão recebe o evento completo como "
+                '`event` e deve retornar um map com as chaves `result` ("DENY", "ASK" ou '
+                '"ALLOW") e a chave opcional `reason`. '
+                "CEL não é Turing-completo e é livre de efeitos colaterais."
             ),
             "params_schema": {
                 "type": "object",
@@ -150,22 +150,23 @@ POLICY_REGISTRY: list[dict[str, Any]] = (
                     "expression": {
                         "type": "string",
                         "description": (
-                            "CEL expression. The `event` variable holds the PolicyEvent dict. "
-                            "Must return a map: "
+                            "Expressão CEL. A variável `event` contém o dict PolicyEvent. "
+                            "Deve retornar um map: "
                             '{"result": "DENY"|"ASK"|"ALLOW", "reason": "..."}. '
-                            "Event fields: "
+                            "Campos do evento: "
                             'event.type ("request"|"tool_call"|"tool_result"|'
                             '"response"|"llm_request"|"llm_response"|"output_logged"); '
-                            "event.target (tool name on tool_call/tool_result, null otherwise); "
-                            "event.data (phase-specific: string for request/response, "
-                            '{"name": str, "arguments": map} for tool_call, '
-                            '{"result": any} for tool_result, '
+                            "event.target (nome da ferramenta em tool_call/tool_result, "
+                            "null caso contrário); "
+                            "event.data (específico da fase: string para request/response, "
+                            '{"name": str, "arguments": map} para tool_call, '
+                            '{"result": any} para tool_result, '
                             '{"model": str, "messages_count": int, "tools_count": int,'
                             ' "system_prompt_preview": str, "last_user_message": str}'
-                            " for llm_request); "
-                            "event.context.actor.run_as (user email); "
-                            "event.context.usage.total_cost_usd (session spend). "
-                            "Example: "
+                            " para llm_request); "
+                            "event.context.actor.run_as (e-mail do usuário); "
+                            "event.context.usage.total_cost_usd (gasto da sessão). "
+                            "Exemplo: "
                             'event.type == "tool_call" && event.data.name == "sys_os_shell" '
                             '? {"result": "DENY", "reason": "Shell blocked."} '
                             ': {"result": "ALLOW"}'
@@ -174,7 +175,7 @@ POLICY_REGISTRY: list[dict[str, Any]] = (
                     "reason": {
                         "type": "string",
                         "description": (
-                            "Fallback reason for DENY/ASK when the map omits a reason key."
+                            "Razão de fallback para DENY/ASK quando o map omite a chave reason."
                         ),
                         "default": "Denied by policy.",
                     },

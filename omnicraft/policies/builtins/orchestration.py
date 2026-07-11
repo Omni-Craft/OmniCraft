@@ -624,39 +624,39 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.orchestration.blast_radius",
         "kind": "factory",
-        "name": "Block Dangerous Shell Commands",
-        "description": "Classifies shell commands (sys_os_shell, Claude/Codex native Bash, "
-        "and Pi native bash) as safe, risky (ASK), or catastrophic (DENY) to prevent "
-        "destructive operations like force-push or rm -rf /",
+        "name": "Bloquear Comandos de Shell Perigosos",
+        "description": "Classifica comandos de shell (sys_os_shell, Bash nativo do Claude/Codex "
+        "e bash nativo do Pi) como seguros, arriscados (ASK) ou catastróficos (DENY) para "
+        "prevenir operações destrutivas como force-push ou rm -rf /",
     },
     {
         "handler": "omnicraft.policies.builtins.orchestration.spawn_bounds",
         "kind": "factory",
-        "name": "Limit Sub-Agent Dispatches Per Turn",
-        "description": "Limits the number of sub-agent dispatches per turn "
-        "to prevent runaway fan-out",
+        "name": "Limitar Despachos de Subagente Por Turno",
+        "description": "Limita o número de despachos de subagente por turno "
+        "para prevenir fan-out descontrolado",
     },
     {
         "handler": "omnicraft.policies.builtins.orchestration.headless_subagent_purpose_guard",
         "kind": "factory",
-        "name": "Require Purpose on Sub-Agent Dispatches",
-        "description": "Requires every sub-agent dispatch to declare a purpose "
+        "name": "Exigir Propósito em Despachos de Subagente",
+        "description": "Exige que todo despacho de subagente declare um propósito "
         "(implement, review, explore, search)",
     },
     {
         "handler": "omnicraft.policies.builtins.orchestration.worktree_guard",
         "kind": "factory",
-        "name": "Restrict Writes to Git Worktree",
-        "description": "Blocks file writes (sys_os_write/edit, Claude/Codex native "
-        "Write/Edit, and Pi native write/edit) outside the worker's git worktree to "
-        "prevent cross-branch contamination",
+        "name": "Restringir Escritas ao Worktree do Git",
+        "description": "Bloqueia escritas de arquivo (sys_os_write/edit, Write/Edit nativos do "
+        "Claude/Codex e write/edit nativos do Pi) fora do worktree do git do worker para "
+        "prevenir contaminação entre branches",
     },
     {
         "handler": "omnicraft.policies.builtins.orchestration.read_only_os",
         "kind": "factory",
-        "name": "Report-Only (Deny File Writes)",
-        "description": "Denies every file-mutating tool (sys_os_write/edit, Claude/Codex "
-        "native Write/Edit/MultiEdit, and Pi native write/edit) so a report-only agent "
-        "can read and run shell but never change code",
+        "name": "Somente Relatório (Negar Escritas de Arquivo)",
+        "description": "Nega toda ferramenta que altera arquivos (sys_os_write/edit, "
+        "Write/Edit/MultiEdit nativos do Claude/Codex e write/edit nativos do Pi) para que um "
+        "agente somente de relatório possa ler e executar shell, mas nunca alterar código",
     },
 ]

@@ -557,15 +557,15 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.safety.max_tool_calls_per_session",
         "kind": "factory",
-        "name": "Limit Tool Calls Per Session",
-        "description": "Limits the total number of tool calls across the entire session "
-        "using session_state to persist the counter",
+        "name": "Limitar chamadas de ferramenta por sessão",
+        "description": "Limita o total de chamadas de ferramenta em toda a sessão, "
+        "usando session_state para manter o contador",
         "params_schema": {
             "type": "object",
             "properties": {
                 "limit": {
                     "type": "integer",
-                    "description": "Maximum tool calls allowed across the session",
+                    "description": "Máximo de chamadas de ferramenta permitidas na sessão",
                     "default": 100,
                 },
             },
@@ -575,28 +575,28 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.safety.ask_on_os_tools",
         "kind": "callable",
-        "name": "Require Approval for File & Shell Operations",
-        "description": "Asks for user approval before any file or shell tool call — "
-        "covers OmniCraft sys_os_* tools, Claude Code native tools "
-        "(Bash, Read, Write, Edit, Glob, Grep), Codex native tools, "
-        "opencode native tools (bash, edit, read, grep, glob), "
-        "and Hermes Agent tools (terminal, execute_code, read_file, write_file, search_files)",
+        "name": "Exigir aprovação para operações de arquivo e shell",
+        "description": "Pede aprovação do usuário antes de qualquer chamada de ferramenta "
+        "de arquivo ou shell — cobre as ferramentas sys_os_* do OmniCraft, ferramentas "
+        "nativas do Claude Code (Bash, Read, Write, Edit, Glob, Grep), ferramentas nativas "
+        "do Codex, ferramentas nativas do opencode (bash, edit, read, grep, glob) e "
+        "ferramentas do Hermes Agent (terminal, execute_code, read_file, write_file, search_files)",
         "params_schema": None,
     },
     {
         "handler": "omnicraft.policies.builtins.safety.block_skills",
         "kind": "factory",
-        "name": "Block Specific Skills",
-        "description": "Prevents the agent from loading specific skills. "
-        "Intercepts load_skill/read_skill_file (non-native harnesses) and the "
-        "native Skill tool (claude-native/codex-native via PreToolUse hook)",
+        "name": "Bloquear skills específicas",
+        "description": "Impede o agente de carregar skills específicas. "
+        "Intercepta load_skill/read_skill_file (harnesses não-nativos) e a "
+        "ferramenta Skill nativa (claude-native/codex-native via hook PreToolUse)",
         "params_schema": {
             "type": "object",
             "properties": {
                 "blocked": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Skill names to block (case-insensitive)",
+                    "description": "Nomes de skills a bloquear (sem diferenciar maiúsculas/minúsculas)",
                 },
             },
             "required": ["blocked"],
@@ -605,38 +605,38 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.safety.enforce_sandbox",
         "kind": "factory",
-        "name": "Enforce Sandbox on Agent Start",
-        "description": "Forces a specific sandbox configuration (e.g. linux_bwrap) "
-        "on every agent start. Intercepts the synthetic __agent_start tool call "
-        "and overrides the agent's sandbox config.",
+        "name": "Forçar sandbox no início do agente",
+        "description": "Força uma configuração de sandbox específica (ex.: linux_bwrap) "
+        "em todo início de agente. Intercepta a chamada sintética __agent_start "
+        "e sobrescreve a config de sandbox do agente.",
         "params_schema": {
             "type": "object",
             "properties": {
                 "sandbox_type": {
                     "type": "string",
-                    "description": "Sandbox backend to force (linux_bwrap, darwin_seatbelt, none)",
+                    "description": "Backend de sandbox a forçar (linux_bwrap, darwin_seatbelt, none)",
                     "default": "linux_bwrap",
                 },
                 "allow_network": {
                     "type": "boolean",
-                    "description": "Whether to allow network access",
+                    "description": "Se permite acesso à rede",
                     "default": True,
                 },
                 "write_paths": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Writable paths to enforce (null inherits agent's config)",
+                    "description": "Caminhos graváveis a impor (null herda a config do agente)",
                 },
                 "read_paths": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Read-only paths to enforce (null inherits agent's config)",
+                    "description": "Caminhos somente-leitura a impor (null herda a config do agente)",
                 },
                 "env_passthrough": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Env vars to allow through the sandbox "
-                    "(null inherits agent's config)",
+                    "description": "Variáveis de ambiente a liberar pelo sandbox "
+                    "(null herda a config do agente)",
                 },
             },
         },
@@ -644,9 +644,10 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
     {
         "handler": "omnicraft.policies.builtins.safety.deny_pii_in_llm_request",
         "kind": "factory",
-        "name": "Deny PII in LLM Requests",
-        "description": "Scans user messages and LLM request prompts for PII "
-        "(SSN, credit card, email, phone). Works with all harnesses.",
+        "name": "Bloquear PII em requisições ao LLM",
+        "description": "Escaneia mensagens do usuário e prompts de requisição ao LLM "
+        "em busca de PII (CPF/SSN, cartão de crédito, e-mail, telefone). "
+        "Funciona com todos os harnesses.",
         "params_schema": {
             "type": "object",
             "properties": {
@@ -657,13 +658,13 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                         "enum": ["ssn", "credit_card", "email", "phone"],
                     },
                     "uniqueItems": True,
-                    "description": "PII categories to scan for. Leave empty to enable all.",
+                    "description": "Categorias de PII a escanear. Deixe vazio para habilitar todas.",
                     "default": ["ssn", "credit_card", "email", "phone"],
                 },
                 "action": {
                     "type": "string",
                     "enum": ["DENY", "ASK"],
-                    "description": "Action when PII is detected",
+                    "description": "Ação quando PII é detectada",
                     "default": "DENY",
                 },
             },

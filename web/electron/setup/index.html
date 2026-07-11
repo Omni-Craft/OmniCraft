@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OmniCrafts — Connect</title>
+    <title>OmniCraft — Conectar</title>
     <style>
       /* Design tokens lifted from web/src/index.css (:root and .dark) so
          this bundled page matches the web UI it hands off to. */
@@ -21,7 +21,7 @@
       }
       @media (prefers-color-scheme: dark) {
         :root {
-          --background: #1e1927;
+          --background: #0c191d;
           --foreground: oklch(0.965 0.003 240);
           --muted-foreground: #92a4b3;
           --border: oklch(0.28 0.005 240);
@@ -55,10 +55,22 @@
         width: 100%;
         max-width: 24rem;
       }
-      .logo {
-        display: block;
+      .brand {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
         margin: 0 auto 12px;
-        height: 80px;
+      }
+      .logo-mark {
+        height: 64px;
+        width: 64px;
+      }
+      .logo-word {
+        font-size: 40px;
+        font-weight: 800;
+        letter-spacing: -0.5px;
+        color: var(--foreground);
       }
       p.sub {
         margin: 0 0 24px;
@@ -342,22 +354,23 @@
       </svg>
     </button>
     <div class="card">
-      <picture>
-        <source
-          srcset="../../platform-assets/logos/omnicrafts-logo-reverse.svg"
-          media="(prefers-color-scheme: dark)"
+      <div class="brand">
+        <img
+          class="logo-mark"
+          src="../../platform-assets/AppIcon.icon/Assets/SVG Image.svg"
+          alt=""
         />
-        <img class="logo" src="../../platform-assets/logos/omnicrafts-logo.svg" alt="OmniCrafts" />
-      </picture>
-      <p class="sub">Run an OmniCrafts server on this machine, or connect to an existing one.</p>
+        <span class="logo-word">OmniCraft</span>
+      </div>
+      <p class="sub">Execute um servidor OmniCraft nesta máquina, ou conecte-se a um existente.</p>
       <div id="local-section">
         <!-- Always enabled: when the CLI is missing this opens the settings
              modal (install / set path) instead of failing to start. -->
-        <button id="start-local">Start locally</button>
-        <div class="divider">or connect to a server</div>
+        <button id="start-local">Iniciar localmente</button>
+        <div class="divider">ou conecte-se a um servidor</div>
       </div>
 
-      <label for="url">Server URL</label>
+      <label for="url">URL do servidor</label>
       <input
         id="url"
         type="text"
@@ -365,11 +378,11 @@
         autocomplete="off"
         spellcheck="false"
       />
-      <button id="connect">Connect</button>
+      <button id="connect">Conectar</button>
       <div class="err" id="err"></div>
 
       <div class="recents" id="recents" hidden>
-        <p class="recents-title">Recent servers</p>
+        <p class="recents-title">Servidores recentes</p>
         <div id="recents-list"></div>
       </div>
     </div>
@@ -385,13 +398,13 @@
               href="https://omnicraft.ai/quickstart/install#install-omnicraft"
               target="_blank"
               rel="noreferrer"
-              >Install the OmniCraft CLI ↗</a
+              >Instalar o OmniCraft CLI ↗</a
             >
           </p>
-          <p>Already installed it? Re-detect, or set the path below.</p>
-          <button type="button" id="cli-redetect">Re-detect</button>
+          <p>Já instalou? Redetecte, ou defina o caminho abaixo.</p>
+          <button type="button" id="cli-redetect">Redetectar</button>
         </div>
-        <p id="cli-path-label">Path to the OmniCraft CLI</p>
+        <p id="cli-path-label">Caminho para o OmniCraft CLI</p>
         <div class="path-row">
           <input
             id="cli-path"
@@ -400,10 +413,10 @@
             autocomplete="off"
             spellcheck="false"
           />
-          <button type="button" id="cli-browse">Browse…</button>
+          <button type="button" id="cli-browse">Procurar…</button>
         </div>
         <p class="cli-note" id="cli-path-note"></p>
-        <button type="button" id="cli-modal-close" class="modal-close">Done</button>
+        <button type="button" id="cli-modal-close" class="modal-close">Concluído</button>
       </div>
     </div>
     <script src="../src/url.js"></script>
@@ -429,12 +442,12 @@
       if (loadError) {
         // textContent, never innerHTML: both values come from the query
         // string and must be rendered as inert text.
-        err.textContent = failedUrl ? `Could not load ${failedUrl}: ${loadError}` : loadError;
+        err.textContent = failedUrl ? `Não foi possível carregar ${failedUrl}: ${loadError}` : loadError;
       }
       if (isEphemeral) {
         document.querySelector("p.sub").textContent =
-          "Connect this window to a different server. The URL applies to " +
-          "this window only and is not saved.";
+          "Conecte esta janela a um servidor diferente. A URL vale apenas " +
+          "para esta janela e não é salva.";
       }
 
       // Pre-fill with the URL that just failed (retry is the common next
@@ -492,8 +505,9 @@
         if (isPlainHttpRemote(value) && warnedFor !== value) {
           warnedFor = value;
           err.textContent =
-            "Warning: unencrypted http:// to a remote host — anyone on the " +
-            "network path can act as this server. Click Connect again to proceed.";
+            "Aviso: http:// sem criptografia para um host remoto — qualquer um " +
+            "no caminho da rede pode se passar por este servidor. Clique em " +
+            "Conectar novamente para prosseguir.";
           return;
         }
         button.disabled = true;
@@ -550,9 +564,9 @@
         cliInstall.hidden = installed;
         cliStatus.textContent = installed
           ? status.version
-            ? `Found: ${status.version}`
-            : "OmniCraft CLI found."
-          : "OmniCraft CLI not found.";
+            ? `Encontrado: ${status.version}`
+            : "OmniCraft CLI encontrado."
+          : "OmniCraft CLI não encontrado.";
         cliPathInput.placeholder = status.path || "/path/to/omni";
         // Draw the eye to the (otherwise quiet) gear when the CLI is missing.
         cliGear.classList.toggle("attention", !installed);
@@ -566,7 +580,7 @@
         const p = (value || "").trim();
         if (p === "") return true;
         cliPathNote.className = "cli-note";
-        cliPathNote.textContent = "Checking…";
+        cliPathNote.textContent = "Verificando…";
         let result;
         try {
           result = await setup.setCliPath(p);
@@ -575,8 +589,8 @@
         }
         if (result && result.accepted) {
           cliPathNote.textContent = result.version
-            ? `Found: ${result.version}`
-            : "Found the OmniCraft CLI.";
+            ? `Encontrado: ${result.version}`
+            : "OmniCraft CLI encontrado.";
           // Clear the value so the field reverts to showing the (now-updated)
           // resolved path as its placeholder.
           cliPathInput.value = "";
@@ -584,7 +598,7 @@
           return true;
         }
         cliPathNote.className = "cli-note bad";
-        cliPathNote.textContent = "That path is not a runnable OmniCraft CLI.";
+        cliPathNote.textContent = "Esse caminho não é um OmniCraft CLI executável.";
         return false;
       }
 
@@ -625,7 +639,7 @@
         // Re-run auto-detection (getCliStatus re-resolves every call) — the
         // post-install path: install via the link, then click to pick it up.
         cliRedetect.addEventListener("click", async () => {
-          cliStatus.textContent = "Checking…";
+          cliStatus.textContent = "Verificando…";
           await refreshCliStatus();
         });
         startLocalBtn.addEventListener("click", async () => {
@@ -637,7 +651,7 @@
           err.textContent = "";
           const prev = startLocalBtn.textContent;
           startLocalBtn.disabled = true;
-          startLocalBtn.textContent = "Starting…";
+          startLocalBtn.textContent = "Iniciando…";
           try {
             const result = await setup.startLocalServer();
             if (result && result.ok && result.url) {
@@ -648,7 +662,7 @@
               await setup.setServerUrl(result.url);
               return;
             }
-            err.textContent = (result && result.error) || "Could not start the local server.";
+            err.textContent = (result && result.error) || "Não foi possível iniciar o servidor local.";
           } catch (e) {
             err.textContent = String(e && e.message ? e.message : e);
           }

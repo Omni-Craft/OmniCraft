@@ -35,18 +35,17 @@ def examples_dir() -> Path:
     return pkg / "resources" / "examples"
 
 
-def _count_subagents(entry: Path, tools: Any) -> int:
-    """Sub-agents: inline ``tools`` of type ``agent`` plus ``agents/<name>/`` dirs."""
-    inline = (
-        sum(1 for v in tools.values() if isinstance(v, dict) and v.get("type") == "agent")
-        if isinstance(tools, dict)
-        else 0
-    )
+def _subagent_names(entry: Path, tools: Any) -> list[str]:
+    """Sub-agent names: inline ``tools`` of type ``agent`` plus ``agents/<name>/`` dirs."""
+    names: list[str] = []
+    if isinstance(tools, dict):
+        names.extend(
+            k for k, v in tools.items() if isinstance(v, dict) and v.get("type") == "agent"
+        )
     agents_dir = entry / "agents"
-    on_disk = (
-        sum(1 for p in agents_dir.iterdir() if p.is_dir()) if agents_dir.is_dir() else 0
-    )
-    return inline + on_disk
+    if agents_dir.is_dir():
+        names.extend(sorted(p.name for p in agents_dir.iterdir() if p.is_dir()))
+    return names
 
 
 def list_gallery_agents(agent_store: Any) -> list[dict[str, Any]]:
@@ -81,10 +80,15 @@ def list_gallery_agents(agent_store: Any) -> list[dict[str, Any]]:
             if skills_dir.is_dir()
             else []
         )
+        subagent_names = _subagent_names(entry, cfg.get("tools"))
+        prompt = cfg.get("prompt")
+        prompt_preview = (
+            " ".join(str(prompt).split())[:280] if isinstance(prompt, str) and prompt else ""
+        )
         installed = False
         try:
             installed = agent_store.get_by_name(name) is not None
-        except Exception:
+        except Exception:  # noqa: BLE001 — best-effort flag, never block the listing
             installed = False
         items.append(
             {
@@ -92,8 +96,10 @@ def list_gallery_agents(agent_store: Any) -> list[dict[str, Any]]:
                 "name": name,
                 "description": (cfg.get("description") or "").strip(),
                 "harness": harness,
-                "subagents": _count_subagents(entry, cfg.get("tools")),
+                "subagents": len(subagent_names),
+                "subagent_names": subagent_names,
                 "skills": skills,
+                "prompt_preview": prompt_preview,
                 "installed": installed,
             }
         )

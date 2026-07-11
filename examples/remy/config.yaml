@@ -20,9 +20,9 @@
 spec_version: 1
 name: remy
 description: >-
-  A helpful assistant with long-term memory. Remy recalls what it already knows
-  before answering, retains durable facts you share, and can reflect over its
-  memory — powered by Hindsight.
+  Um assistente prestativo com memória de longo prazo. O Remy lembra o que já
+  sabe antes de responder, retém fatos duráveis que você compartilha, e
+  consegue refletir sobre a própria memória — powered by Hindsight.
 
 executor:
   type: omnicraft

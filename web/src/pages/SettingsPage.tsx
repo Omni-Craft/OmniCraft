@@ -179,15 +179,18 @@ export function SettingsPage() {
     );
   }
 
-  // These surfaces own their full-page layout (their own scroll container), so
-  // render them directly rather than nesting inside the shared PageScroll.
+  // Observability / management surfaces. Their content can exceed the viewport
+  // (e.g. the gallery grid), so they get the scroll container the shared
+  // sections use; each page provides its own centered max-width + padding.
   if (section === "costs" || section === "evals" || section === "gallery") {
     return (
-      <Suspense fallback={null}>
-        {section === "costs" && <CostPage />}
-        {section === "evals" && <EvalsPage />}
-        {section === "gallery" && <GalleryPage />}
-      </Suspense>
+      <PageScroll>
+        <Suspense fallback={null}>
+          {section === "costs" && <CostPage />}
+          {section === "evals" && <EvalsPage />}
+          {section === "gallery" && <GalleryPage />}
+        </Suspense>
+      </PageScroll>
     );
   }
 

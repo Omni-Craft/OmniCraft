@@ -18,10 +18,11 @@
 spec_version: 1
 name: sentinel
 description: >-
-  A security-review orchestrator. Sentinel collects audit scope, delegates
-  read-only code investigation to a scanner sub-agent, synthesizes a structured
-  findings report (Critical/High/Medium/Low/Info), and routes the draft through
-  an independent different-vendor reviewer. Reports only — never auto-fixes.
+  Um orquestrador de revisão de segurança. O Sentinel coleta o escopo da
+  auditoria, delega a investigação read-only do código a um sub-agente scanner,
+  sintetiza um relatório estruturado de achados (Crítico/Alto/Médio/Baixo/Info),
+  e roteia o rascunho por um revisor independente de outro fornecedor. Só
+  reporta — nunca corrige automaticamente.
 
 # Sentinel's "brain" runs on the Claude Agent SDK. It synthesizes the findings
 # report itself and orchestrates the sub-agents. No model is pinned, so the

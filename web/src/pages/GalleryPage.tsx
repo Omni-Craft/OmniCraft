@@ -9,8 +9,24 @@ interface GalleryAgent {
   description: string;
   harness: string | null;
   subagents: number;
+  subagent_names: string[];
   skills: string[];
+  prompt_preview: string;
   installed: boolean;
+}
+
+function Chips({ label, items }: { label: string; items: string[] }) {
+  if (items.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="text-xs opacity-40">{label}</span>
+      {items.map((it) => (
+        <span key={it} className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] opacity-80">
+          {it}
+        </span>
+      ))}
+    </div>
+  );
 }
 
 export function GalleryPage() {
@@ -34,9 +50,12 @@ export function GalleryPage() {
   const install = async (a: GalleryAgent) => {
     setInstalling(a.id);
     try {
-      const res = await authenticatedFetch(`/v1/gallery/agents/${encodeURIComponent(a.id)}/install`, {
-        method: "POST",
-      });
+      const res = await authenticatedFetch(
+        `/v1/gallery/agents/${encodeURIComponent(a.id)}/install`,
+        {
+          method: "POST",
+        },
+      );
       if (res.ok) await load();
     } finally {
       setInstalling(null);
@@ -48,8 +67,8 @@ export function GalleryPage() {
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Galeria de agentes</h1>
         <p className="text-sm opacity-60">
-          Agentes prontos que acompanham o OmniCraft. Instale um e ele aparece em{" "}
-          <b>Nova sessão</b>.
+          Agentes prontos que acompanham o OmniCraft. Instale um e ele aparece em <b>Nova sessão</b>
+          .
         </p>
       </header>
 
@@ -74,12 +93,10 @@ export function GalleryPage() {
                   )}
                 </div>
               </div>
-              <p className="min-h-[3rem] flex-1 text-sm leading-relaxed opacity-80">
-                {a.description || "—"}
-              </p>
-              <div className="flex flex-wrap items-center gap-2 text-xs opacity-50">
-                {a.subagents > 0 && <span>🤝 {a.subagents} sub-agentes</span>}
-                {a.skills.length > 0 && <span>🧩 {a.skills.length} skills</span>}
+              <p className="flex-1 text-sm leading-relaxed opacity-80">{a.description || "—"}</p>
+              <div className="flex flex-col gap-1.5">
+                <Chips label="🤝 sub-agentes" items={a.subagent_names} />
+                <Chips label="🧩 skills" items={a.skills} />
               </div>
               <div className="flex items-center gap-2">
                 {a.installed ? (

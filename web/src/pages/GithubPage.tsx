@@ -64,6 +64,7 @@ export function GithubPage() {
   });
   const [repo, setRepo] = useState(repoInput);
   const [kind, setKind] = useState<ItemKind>("issue");
+  const [state, setState] = useState<"open" | "closed" | "all">("open");
   const [status, setStatus] = useState<{ configured: boolean; login: string | null } | null>(null);
   const [items, setItems] = useState<GithubItem[] | "loading" | "error" | null>(null);
   const [detail, setDetail] = useState<GithubDetail | "loading" | "error" | null>(null);
@@ -77,7 +78,7 @@ export function GithubPage() {
       .catch(() => setStatus({ configured: false, login: null }));
   }, []);
 
-  const loadItems = useCallback(async (r: string, k: ItemKind) => {
+  const loadItems = useCallback(async (r: string, k: ItemKind, s: "open" | "closed" | "all") => {
     if (!r.trim()) return;
     setItems("loading");
     setListError(null);
@@ -85,7 +86,7 @@ export function GithubPage() {
     setSelected(null);
     try {
       const res = await authenticatedFetch(
-        `/v1/integrations/github/items?repo=${encodeURIComponent(r.trim())}&type=${k}&state=open`,
+        `/v1/integrations/github/items?repo=${encodeURIComponent(r.trim())}&type=${k}&state=${s}`,
       );
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
@@ -110,12 +111,17 @@ export function GithubPage() {
       /* ignore */
     }
     setRepo(r);
-    void loadItems(r, kind);
+    void loadItems(r, kind, state);
   };
 
   const switchKind = (k: ItemKind) => {
     setKind(k);
-    if (repo) void loadItems(repo, k);
+    if (repo) void loadItems(repo, k, state);
+  };
+
+  const switchState = (s: "open" | "closed" | "all") => {
+    setState(s);
+    if (repo) void loadItems(repo, kind, s);
   };
 
   const openItem = async (item: GithubItem) => {
@@ -200,6 +206,29 @@ export function GithubPage() {
             </button>
           ))}
         </div>
+        {/* State filter — the backend already supports open/closed/all; a repo
+            with nothing open otherwise looks broken. */}
+        <div className="flex gap-1 rounded-lg border border-white/10 p-0.5">
+          {(
+            [
+              ["open", "Abertas"],
+              ["closed", "Fechadas"],
+              ["all", "Todas"],
+            ] as const
+          ).map(([s, label]) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => switchState(s)}
+              className={`rounded-md px-2.5 py-1.5 text-sm transition ${
+                state === s ? "bg-white/10 font-medium" : "opacity-60 hover:opacity-100"
+              }`}
+              data-testid={`github-state-${s}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
@@ -212,7 +241,11 @@ export function GithubPage() {
           ) : items === "error" ? (
             <p className="p-6 text-sm text-red-400">{listError}</p>
           ) : items.length === 0 ? (
-            <p className="p-6 text-sm opacity-50">Nenhum item aberto.</p>
+            <p className="p-6 text-sm opacity-50">
+              {state === "open"
+                ? `Nenhuma ${kind === "issue" ? "issue" : "PR"} aberta em ${repo} — a integração está funcionando; o repositório simplesmente não tem itens abertos. Experimente "Fechadas" ou a outra aba.`
+                : "Nenhum item encontrado com este filtro."}
+            </p>
           ) : (
             <ul className="divide-y divide-white/5">
               {items.map((it) => (
@@ -286,7 +319,9 @@ export function GithubPage() {
                   <div className="mt-5 flex flex-col gap-3 border-t border-white/10 pt-4">
                     {(detail.comments_list ?? []).map((c, i) => (
                       <div key={i} className="rounded-lg bg-white/5 px-3 py-2">
-                        <div className="mb-1 text-xs font-medium opacity-60">@{c.author ?? "?"}</div>
+                        <div className="mb-1 text-xs font-medium opacity-60">
+                          @{c.author ?? "?"}
+                        </div>
                         <p className="whitespace-pre-wrap text-sm opacity-90">{c.body}</p>
                       </div>
                     ))}

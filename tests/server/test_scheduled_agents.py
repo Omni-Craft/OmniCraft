@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import time
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -14,6 +16,50 @@ from omnicraft.server import scheduled_agents as sched
 def _isolate_config_home(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
     """Point the JSON store at a throwaway dir so tests never touch ~/.omnicraft."""
     monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
+
+
+# --- cron + templating -----------------------------------------------------
+
+
+@pytest.mark.parametrize("expr", ["0 9 * * *", "0 9 * * 1-5", "*/15 * * * *", "0 9 * * 0"])
+def test_parse_cron_valid(expr: str) -> None:
+    assert len(sched.parse_cron(expr)) == 5
+
+
+@pytest.mark.parametrize("expr", ["0 9 * *", "61 9 * * *", "0 9 * * 8", "a b c d e"])
+def test_parse_cron_invalid(expr: str) -> None:
+    with pytest.raises(ValueError):
+        sched.parse_cron(expr)
+
+
+def test_cron_next_daily_and_weekday() -> None:
+    tz = "America/Sao_Paulo"
+    # 2026-07-11 is a Saturday; 07:00 BRT.
+    sat = int(datetime(2026, 7, 11, 10, 0, tzinfo=ZoneInfo("UTC")).timestamp())
+    daily = datetime.fromtimestamp(sched._cron_next("0 9 * * *", tz, sat), ZoneInfo(tz))
+    assert (daily.hour, daily.minute) == (9, 0)
+    weekday = datetime.fromtimestamp(sched._cron_next("0 9 * * 1-5", tz, sat), ZoneInfo(tz))
+    assert weekday.weekday() < 5 and (weekday.hour, weekday.minute) == (9, 0)
+
+
+def test_render_prompt() -> None:
+    p = "Issue {{issue.title}} por {{issue.user.login}}"
+    assert (
+        sched.render_prompt(p, {"issue": {"title": "X", "user": {"login": "ana"}}})
+        == "Issue X por ana"
+    )
+    assert sched.render_prompt("x={{a.b}}", {"a": {}}) == "x="  # missing → empty
+    assert sched.render_prompt("keep {{x}}", None) == "keep {{x}}"  # no payload → literal
+
+
+def test_create_cron_job_sets_next_run() -> None:
+    job = sched.create_job(
+        name="j", agent_name="a", prompt="p", workspace="/w", cron="0 9 * * *", tz="UTC"
+    )
+    assert job["cron"] == "0 9 * * *"
+    assert job["next_run_at"] is not None
+    assert sched.due_jobs(now=job["next_run_at"] - 1) == []  # not yet due
+    assert len(sched.due_jobs(now=job["next_run_at"] + 1)) == 1  # due after
 
 
 def test_create_lists_and_gets() -> None:
@@ -117,11 +163,18 @@ async def test_fire_missing_agent_records_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_fire_no_online_host_is_skipped() -> None:
-    job = sched.create_job(name="j", agent_name="a", prompt="p", workspace="/w")
+async def test_fire_no_online_host_is_skipped_and_retries_soon() -> None:
+    # A scheduled interval job skipped for no host should retry soon, not lose
+    # the whole interval.
+    job = sched.create_job(
+        name="j", agent_name="a", prompt="p", workspace="/w", interval_seconds=86400
+    )
     res = await sched.fire_job(_FakeApp([]), job, _FakeAgentStore(has=True), trigger="schedule")
     assert res["status"] == "skipped"
-    assert sched.get_job(job["id"])["history"][0]["trigger"] == "schedule"
+    after = sched.get_job(job["id"])
+    assert after["history"][0]["trigger"] == "schedule"
+    # next_run advanced by the short retry (~60s), not a full day.
+    assert after["next_run_at"] - int(time.time()) <= sched._RETRY_SECONDS + 5
 
 
 @pytest.mark.asyncio

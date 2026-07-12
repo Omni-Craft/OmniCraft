@@ -11,7 +11,7 @@
 // a fingerprint of the hashed JS/CSS outputs, so this file's bytes change on
 // every code/style deploy. That byte change is what the browser's update
 // algorithm (via workbox-window in the page) detects to fire the prompt.
-const BUILD_VERSION = "e95fb596";
+const BUILD_VERSION = "54f2f005";
 const CACHE_NAME = `omnicraft-pwa-${BUILD_VERSION}`;
 
 self.addEventListener("install", (event) => {

@@ -67,6 +67,7 @@ def create_scheduled_agents_router(
                 "workspace é obrigatório (caminho absoluto onde o agente roda)",
                 code=ErrorCode.INVALID_INPUT,
             )
+        _validate_cron(body.get("cron"))
         if agent_store.get_by_name(agent_name) is None:
             raise OmniCraftError(f"agente '{agent_name}' não encontrado", code=ErrorCode.NOT_FOUND)
         return scheduled_agents.create_job(
@@ -76,6 +77,9 @@ def create_scheduled_agents_router(
             workspace=body.get("workspace"),
             host_id=body.get("host_id"),
             interval_seconds=body.get("interval_seconds"),
+            cron=body.get("cron"),
+            tz=body.get("tz"),
+            no_overlap=bool(body.get("no_overlap", True)),
             enabled=bool(body.get("enabled", True)),
         )
 
@@ -88,6 +92,8 @@ def create_scheduled_agents_router(
                 raise OmniCraftError(
                     f"agente '{body['agent_name']}' não encontrado", code=ErrorCode.NOT_FOUND
                 )
+        if body.get("cron"):
+            _validate_cron(body.get("cron"))
         updated = scheduled_agents.update_job(job_id, body)
         if updated is None:
             raise OmniCraftError("job não encontrado", code=ErrorCode.NOT_FOUND)
@@ -106,7 +112,17 @@ def create_scheduled_agents_router(
         job = scheduled_agents.get_job(job_id)
         if job is None:
             raise OmniCraftError("job não encontrado", code=ErrorCode.NOT_FOUND)
-        return await scheduled_agents.fire_job(request.app, job, agent_store, trigger="manual")
+        # An optional {"payload": {...}} lets the UI test webhook templating.
+        payload = None
+        try:
+            b = await request.json()
+            if isinstance(b, dict) and isinstance(b.get("payload"), (dict, list)):
+                payload = b["payload"]
+        except Exception:  # noqa: BLE001 — body is optional here
+            payload = None
+        return await scheduled_agents.fire_job(
+            request.app, job, agent_store, trigger="manual", payload=payload
+        )
 
     @router.post("/webhooks/{token}")
     async def fire_webhook(request: Request, token: str) -> dict[str, Any]:
@@ -114,9 +130,30 @@ def create_scheduled_agents_router(
         job = scheduled_agents.get_job_by_token(token)
         if job is None:
             raise OmniCraftError("webhook desconhecido", code=ErrorCode.NOT_FOUND)
-        return await scheduled_agents.fire_job(request.app, job, agent_store, trigger="webhook")
+        # The POST body is interpolated into the prompt via {{...}} placeholders.
+        payload: Any = {}
+        try:
+            body = await request.json()
+            if isinstance(body, (dict, list)):
+                payload = body
+        except Exception:  # noqa: BLE001 — a bodyless webhook is fine
+            payload = {}
+        return await scheduled_agents.fire_job(
+            request.app, job, agent_store, trigger="webhook", payload=payload
+        )
 
     return router
+
+
+def _validate_cron(cron: Any) -> None:
+    if cron is None or (isinstance(cron, str) and not cron.strip()):
+        return
+    if not isinstance(cron, str):
+        raise OmniCraftError("cron inválido", code=ErrorCode.INVALID_INPUT)
+    try:
+        scheduled_agents.parse_cron(cron.strip())
+    except ValueError as exc:
+        raise OmniCraftError(f"cron inválido: {exc}", code=ErrorCode.INVALID_INPUT) from exc
 
 
 async def _json(request: Request) -> dict[str, Any]:

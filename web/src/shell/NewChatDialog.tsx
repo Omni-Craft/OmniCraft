@@ -10,7 +10,6 @@ import {
 import { takeComposeSeed } from "@/lib/composeSeed";
 import { useLocation, useNavigate, useSearchParams } from "@/lib/routing";
 import { CodeStatsDashboard } from "@/components/CodeStatsDashboard";
-import { HomeModeToggle } from "./craftworkNav";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   MonitorIcon,
@@ -1784,6 +1783,16 @@ export function NewChatLandingScreen() {
   // — the no-filesystem conversational agent, no host/workspace chips — while
   // the Code tab ("/code") is the normal filesystem coding composer.
   const chatMode = !useLocation().pathname.split("/").filter(Boolean).includes("code");
+  // Início-tab sub-mode, Cowork-style: the Chat/Craftwork toggle transforms the
+  // composer IN PLACE (never navigates). Chat = the no-filesystem conversation;
+  // Craftwork = an agentic task on a folder, with an optional schedule.
+  const [homeMode, setHomeMode] = useState<"chat" | "craftwork">("chat");
+  const pureChat = chatMode && homeMode === "chat";
+  const craftMode = chatMode && homeMode === "craftwork";
+  // Craftwork frequency (Cowork's "Manual ▾"): anything but manual creates a
+  // scheduled-agents job instead of an immediate session.
+  const [frequency, setFrequency] = useState<"manual" | "daily" | "weekdays" | "weekly">("manual");
+  const [schedulingJob, setSchedulingJob] = useState(false);
   const isComposingRef = useRef(false);
   // maxRows 9 = 180px of 20px lines, matching the composer's 200px
   // border-box max (180px content + 16px top / 4px bottom padding).
@@ -2128,12 +2137,12 @@ export function NewChatLandingScreen() {
   // A pick only wins while it exists in the list — a persisted id whose
   // agent has since been unregistered (or hidden) falls back to the default.
   // The pending custom agent sentinel also wins when set.
-  // Chat mode is pinned to the no-`os_env` "chat" agent (no filesystem access);
-  // Code mode uses the user's picked agent (or the default).
+  // Pure Chat is pinned to the no-`os_env` "chat" agent (no filesystem access);
+  // Craftwork and Code use the user's picked agent (or the default).
   const chatAgentId = agentList.find((a) => a.name === "chat")?.id ?? null;
-  // Chat mode NEVER falls back to a filesystem agent: when the "chat" agent
+  // Pure Chat NEVER falls back to a filesystem agent: when the "chat" agent
   // isn't installed the id stays null and submit is disabled instead.
-  const effectiveAgentId = chatMode
+  const effectiveAgentId = pureChat
     ? chatAgentId
     : pickedAgentId === PENDING_AGENT_ID
       ? PENDING_AGENT_ID
@@ -2499,7 +2508,8 @@ export function NewChatLandingScreen() {
     message.trim().length > 0 &&
     selectedAgent != null &&
     (sandboxSelected ? sandboxRepoValid : !!selectedHostId && workspaceValid) &&
-    !creating;
+    !creating &&
+    !schedulingJob;
 
   // Why submit is disabled, surfaced as the button's tooltip. Checked in the
   // order a user fills the form — location first, then message — so the
@@ -2507,7 +2517,7 @@ export function NewChatLandingScreen() {
   // actionable (submitting, or mid-create).
   const submitDisabledReason = canSubmit
     ? null
-    : chatMode && chatAgentId === null
+    : pureChat && chatAgentId === null
       ? "O agente de Chat não está instalado — instale o agente 'chat' na Galeria."
       : sandboxSelected && !sandboxRepoValid
         ? "Digite uma URL de repositório válida"
@@ -2627,6 +2637,47 @@ export function NewChatLandingScreen() {
     // and form-submit paths that call this directly can't create a session with
     // a blank message, host, agent, or workspace.
     if (!canSubmit) return;
+    // Craftwork with a recurring frequency (Cowork's "Agendado"): instead of an
+    // immediate session, file the task as a scheduled-agents job and land on
+    // the schedule page so the user sees it registered.
+    if (craftMode && frequency !== "manual") {
+      const cron =
+        frequency === "daily"
+          ? "0 9 * * *"
+          : frequency === "weekdays"
+            ? "0 9 * * 1-5"
+            : "0 9 * * 1";
+      setSchedulingJob(true);
+      setCreateError(null);
+      try {
+        const res = await authenticatedFetch("/v1/scheduled-agents", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: message.trim().slice(0, 60),
+            agent_name: selectedAgent?.name,
+            prompt: message,
+            workspace: workspaceTrimmed,
+            cron,
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+          }),
+        });
+        if (!res.ok) {
+          const j = (await res.json().catch(() => null)) as {
+            error?: { message?: string };
+          } | null;
+          setCreateError(j?.error?.message ?? `Falha ao agendar (HTTP ${res.status}).`);
+          return;
+        }
+        setMessage("");
+        navigate("/craftwork/scheduled");
+      } catch {
+        setCreateError("Falha de rede ao agendar a tarefa.");
+      } finally {
+        setSchedulingJob(false);
+      }
+      return;
+    }
     setCreating(true);
     setCreateError(null);
     try {
@@ -2692,9 +2743,9 @@ export function NewChatLandingScreen() {
                   // delete flow without creating anything), or neither.
                   // Chat sessions have no filesystem, so never create worktrees.
                   git:
-                    !chatMode && shouldCreateWorktree
+                    !pureChat && shouldCreateWorktree
                       ? { branch_name: trimmedBranch, base_branch: baseBranch.trim() || undefined }
-                      : !chatMode && startInExistingWorktree
+                      : !pureChat && startInExistingWorktree
                         ? { branch_name: trimmedBranch, existing_worktree: true }
                         : undefined,
                 }),
@@ -2714,7 +2765,7 @@ export function NewChatLandingScreen() {
             // Permission / approval / cursor mode → CLI flag pair, persisted as
             // terminal_launch_args. Omitted for the default and non-native agents.
             terminal_launch_args:
-              !chatMode &&
+              !pureChat &&
               agentSupportsPermissionMode &&
               permissionMode !== CLAUDE_NATIVE_DEFAULT_PERMISSION_MODE
                 ? ["--permission-mode", permissionMode]
@@ -2733,7 +2784,7 @@ export function NewChatLandingScreen() {
               agentSupportsPermissionMode && pickedEffort ? pickedEffort : undefined,
             // Smart routing toggle — server-side, available for any agent.
             cost_control_mode_override: costControlMode ?? undefined,
-            harness_override: chatMode ? undefined : (pickedHarness ?? undefined),
+            harness_override: pureChat ? undefined : (pickedHarness ?? undefined),
           }),
         });
         if (!res.ok) {
@@ -3000,9 +3051,11 @@ export function NewChatLandingScreen() {
               placeholder={
                 pillSkills.length > 0
                   ? ""
-                  : chatMode
-                    ? "Converse, planeje, escreva specs — sem acesso a arquivos"
-                    : "Descreva uma tarefa para iniciar uma nova sessão…"
+                  : craftMode
+                    ? "Digite / para habilidades"
+                    : chatMode
+                      ? "Converse, planeje, escreva specs — sem acesso a arquivos"
+                      : "Descreva uma tarefa para iniciar uma nova sessão…"
               }
               aria-label="Descreva uma tarefa ou faça uma pergunta"
               rows={1}
@@ -3120,10 +3173,29 @@ export function NewChatLandingScreen() {
                   <PaperclipIcon className="size-4" />
                   <span className="sr-only">Anexar arquivos</span>
                 </Button>
-                {/* Início-tab sub-switch: Chat (here) vs Craftwork (the hub). */}
+                {/* Início-tab sub-switch, Cowork-identical: Chat vs Craftwork
+                    transforms the composer IN PLACE — no navigation. */}
                 {chatMode && (
-                  <div className="mx-1">
-                    <HomeModeToggle />
+                  <div
+                    className="mx-1 flex items-center rounded-full bg-muted p-0.5"
+                    data-testid="home-mode-toggle"
+                  >
+                    {(["chat", "craftwork"] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => setHomeMode(m)}
+                        className={cn(
+                          "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                          homeMode === m
+                            ? "bg-card text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                        data-testid={`home-mode-${m}`}
+                      >
+                        {m === "chat" ? "Chat" : "Craftwork"}
+                      </button>
+                    ))}
                   </div>
                 )}
                 <ComposerMicButton
@@ -3137,9 +3209,9 @@ export function NewChatLandingScreen() {
                   submenu (model / effort / permission mode for Claude Code,
                   approval mode for Codex/OpenCode, exec mode for Cursor,
                   brain-harness override for bundle agents). */}
-                {/* Chat mode is pinned to the "chat" agent, so the agent /
-                    harness picker is hidden — the model still defaults. */}
-                {!chatMode && (
+                {/* Pure Chat is pinned to the "chat" agent, so the agent /
+                    harness picker is hidden; Craftwork and Code show it. */}
+                {!pureChat && (
                   <AgentHarnessPicker
                     agentEntries={agentEntries}
                     harnessEntries={harnessEntries}
@@ -3213,13 +3285,30 @@ export function NewChatLandingScreen() {
           <div
             className={cn(
               "relative z-0 -mt-9 flex w-full items-center rounded-b-2xl bg-tray/40 pt-8 pr-3 pb-2 pl-2",
-              // Chat mode has no filesystem — hide the host / workspace /
+              // Pure Chat has no filesystem — hide the host / workspace /
               // worktree tray. It stays mounted (still supplies a default host +
               // workspace for the runner; the chat agent has no file tools).
-              chatMode && "hidden",
+              // Craftwork shows it: the workspace IS Cowork's "Projeto ou pasta".
+              pureChat && "hidden",
             )}
           >
             <div className="flex flex-wrap items-center gap-1">
+              {/* Craftwork frequency — Cowork's "Manual ▾". Anything but manual
+                  files the task as a scheduled-agents job on submit. */}
+              {craftMode && (
+                <select
+                  value={frequency}
+                  onChange={(e) => setFrequency(e.target.value as typeof frequency)}
+                  className="h-6 rounded-full border-0 bg-transparent px-2 text-13 text-muted-foreground outline-none transition-colors hover:text-foreground"
+                  aria-label="Frequência"
+                  data-testid="craftwork-frequency"
+                >
+                  <option value="manual">✋ Manual</option>
+                  <option value="daily">🕘 Diário (9h)</option>
+                  <option value="weekdays">📅 Dias úteis (9h)</option>
+                  <option value="weekly">🗓️ Semanal (seg 9h)</option>
+                </select>
+              )}
               {/* Host chip */}
               <DropdownMenu
                 onOpenChange={(open) => {
@@ -3736,30 +3825,68 @@ export function NewChatLandingScreen() {
           )}
         </div>
 
-        {/* Chat mode: "Ideias para você" — text/reasoning prompt starters that
-            prefill the composer (never auto-run). Chat has no filesystem, so
-            these stay at the level of planning, specs and writing. */}
+        {/* "Ideias para você" — prompt starters that prefill the composer
+            (never auto-run). Chat gets text/reasoning ideas; Craftwork gets
+            agentic-task ideas (some also preselect a schedule, Cowork-style). */}
         {chatMode && message.length === 0 && (
           <div className="flex w-full flex-col gap-1" data-testid="chat-ideas">
             <p className="px-2 pb-1 text-sm font-medium text-muted-foreground">Ideias para você</p>
             <ul className="flex flex-col">
-              {[
-                { emoji: "🧭", text: "Vamos planejar uma nova feature do zero" },
-                { emoji: "📐", text: "Me ajude a escrever a spec de um módulo" },
-                { emoji: "🏛️", text: "Discuta a arquitetura de um sistema comigo" },
-                { emoji: "✍️", text: "Revise e melhore este texto que vou colar" },
-              ].map((idea) => (
+              {(craftMode
+                ? [
+                    {
+                      emoji: "🌅",
+                      text: "Me envie um briefing diário do repositório: commits de ontem, PRs abertos e pendências",
+                      freq: "daily" as const,
+                    },
+                    {
+                      emoji: "🧹",
+                      text: "Organize o repositório: liste branches antigas já mescladas e sugira o que apagar",
+                      freq: null,
+                    },
+                    {
+                      emoji: "🧪",
+                      text: "Rode a suíte de testes e me traga um resumo do que falhou com sugestões de correção",
+                      freq: null,
+                    },
+                    {
+                      emoji: "📦",
+                      text: "Verifique dependências desatualizadas e prepare um plano de atualização seguro",
+                      freq: "weekly" as const,
+                    },
+                  ]
+                : [
+                    { emoji: "🧭", text: "Vamos planejar uma nova feature do zero", freq: null },
+                    { emoji: "📐", text: "Me ajude a escrever a spec de um módulo", freq: null },
+                    {
+                      emoji: "🏛️",
+                      text: "Discuta a arquitetura de um sistema comigo",
+                      freq: null,
+                    },
+                    {
+                      emoji: "✍️",
+                      text: "Revise e melhore este texto que vou colar",
+                      freq: null,
+                    },
+                  ]
+              ).map((idea) => (
                 <li key={idea.text}>
                   <button
                     type="button"
                     onClick={() => {
                       setMessage(idea.text);
+                      if (idea.freq) setFrequency(idea.freq);
                       textareaRef.current?.focus();
                     }}
                     className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
                   >
                     <span className="text-lg leading-none">{idea.emoji}</span>
-                    {idea.text}
+                    <span className="min-w-0 flex-1 truncate">{idea.text}</span>
+                    {idea.freq && (
+                      <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
+                        {idea.freq === "daily" ? "diário" : "semanal"}
+                      </span>
+                    )}
                   </button>
                 </li>
               ))}

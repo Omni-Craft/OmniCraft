@@ -8,6 +8,7 @@ conversation's persisted ``session_usage``). Read-only.
 
 from __future__ import annotations
 
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -20,6 +21,10 @@ from omnicraft.stores.conversation_store import ConversationStore
 _LOCAL_USER = "local"
 _MAX_SESSIONS = 1000
 _TOP_SESSIONS = 12
+
+# Short in-process TTL cache for the costs payload (see the handler).
+_CACHE_TTL_S = 30
+_cache: dict[tuple[str, int], tuple[float, dict[str, Any]]] = {}
 
 
 def _f(value: Any) -> float:
@@ -100,6 +105,14 @@ def create_observability_router(
         """Aggregate the current user's LLM spend for the cost panel."""
         user_id = require_user(request, auth_provider) or _LOCAL_USER
 
+        # Short TTL cache — the panel refetches on window clicks and the
+        # aggregation walks up to _MAX_SESSIONS usage blobs plus one daily-cost
+        # query per day in the window.
+        cache_key = (user_id, days)
+        cached = _cache.get(cache_key)
+        if cached is not None and time.time() - cached[0] < _CACHE_TTL_S:
+            return cached[1]
+
         # Daily-cost trend from the O(1) rollup, oldest → newest.
         today = datetime.now(timezone.utc).date()
         daily: list[dict[str, Any]] = []
@@ -119,6 +132,11 @@ def create_observability_router(
         aggregated = aggregate_sessions(
             [(conv.id, conv.title or conv.id, conv.session_usage or {}) for conv in page.data]
         )
-        return {"today_usd": today_usd, "daily": daily, **aggregated}
+        payload = {"today_usd": today_usd, "daily": daily, **aggregated}
+        now = time.time()
+        for key in [k for k, (at, _) in _cache.items() if now - at >= _CACHE_TTL_S]:
+            _cache.pop(key, None)
+        _cache[cache_key] = (now, payload)
+        return payload
 
     return router

@@ -4,6 +4,8 @@ import { XIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { copyText } from "@/lib/clipboard";
+import { setComposeSeed } from "@/lib/composeSeed";
+import { useNavigate } from "@/lib/routing";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/chatStore";
 
@@ -81,6 +83,16 @@ function download(a: Artifact): void {
 
 function ArtifactCard({ artifact }: { artifact: Artifact }) {
   const [copied, setCopied] = useState(false);
+  const navigate = useNavigate();
+  // "Send to Code": seed the Code composer with this artifact as the task,
+  // closing the plan-in-Chat → execute-in-Code loop (same seed mechanism the
+  // GitHub page uses to start a session from an issue).
+  const sendToCode = () => {
+    setComposeSeed(
+      `Implemente o seguinte (planejado no Chat):\n\n\`\`\`${artifact.lang}\n${artifact.code}\n\`\`\``,
+    );
+    navigate("/code");
+  };
   return (
     <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card/40">
       <div className="flex items-center justify-between gap-2 border-border/60 border-b px-3 py-1.5">
@@ -103,6 +115,15 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
             className="rounded px-2 py-0.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
           >
             Baixar
+          </button>
+          <button
+            type="button"
+            onClick={sendToCode}
+            title="Abrir o composer do Code com este artifact como tarefa"
+            className="rounded bg-brand-accent/15 px-2 py-0.5 text-[11px] text-brand-accent transition-colors hover:bg-brand-accent/25"
+            data-testid="artifact-send-to-code"
+          >
+            → Code
           </button>
         </div>
       </div>

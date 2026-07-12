@@ -1373,19 +1373,29 @@ def create_app(
         )
 
         async def _scheduled_agents_loop() -> None:
-            """Fire interval-scheduled agent jobs whose next run has come due."""
+            """Fire interval-scheduled agent jobs whose next run has come due.
+
+            Due jobs fire concurrently (capped) so one slow host launch — a
+            fire can take up to its 45s HTTP timeout — doesn't delay every
+            other due job in the tick.
+            """
             from omnicraft.server import scheduled_agents as _sched
+
+            fire_sem = asyncio.Semaphore(4)
+
+            async def _fire(job: dict[str, Any]) -> None:
+                async with fire_sem:
+                    try:
+                        await _sched.fire_job(app, job, agent_store, trigger="schedule")
+                    except Exception as exc:  # noqa: BLE001 — one bad job must not kill the loop
+                        _logger.warning("scheduled-agents: job %s failed (%s)", job.get("id"), exc)
 
             while True:
                 await asyncio.sleep(30)
                 try:
-                    for job in _sched.due_jobs():
-                        try:
-                            await _sched.fire_job(app, job, agent_store, trigger="schedule")
-                        except Exception as exc:  # noqa: BLE001 — one bad job must not kill the loop
-                            _logger.warning(
-                                "scheduled-agents: job %s failed (%s)", job.get("id"), exc
-                            )
+                    due = _sched.due_jobs()
+                    if due:
+                        await asyncio.gather(*(_fire(job) for job in due))
                 except Exception as exc:  # noqa: BLE001 — keep the loop alive across store errors
                     _logger.warning("scheduled-agents: tick failed (%s)", exc)
 

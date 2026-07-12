@@ -25,6 +25,11 @@ from omnicraft.server.routes.observability import aggregate_sessions
 _LOCAL_USER = "local"
 _MAX_SESSIONS = 1000
 
+# Short in-process TTL cache: the dashboard refetches on tab/window clicks and
+# the aggregation scans up to _MAX_SESSIONS rows with JSON usage blobs each hit.
+_CACHE_TTL_S = 30
+_cache: dict[tuple[str, int, str | None], tuple[float, dict[str, Any]]] = {}
+
 
 def _day(ts: float, tz: tzinfo | None = None) -> str:
     return datetime.fromtimestamp(ts, tz).strftime("%Y-%m-%d")
@@ -82,6 +87,11 @@ def create_code_stats_router(
     ) -> dict[str, Any]:
         user_id = require_user(request, auth_provider) or _LOCAL_USER
 
+        cache_key = (user_id, days, tz)
+        cached = _cache.get(cache_key)
+        if cached is not None and time.time() - cached[0] < _CACHE_TTL_S:
+            return cached[1]
+
         # Bucket days/hours in the viewer's timezone when a valid one is given;
         # otherwise fall back to server-local.
         zone: tzinfo | None = None
@@ -125,7 +135,7 @@ def create_code_stats_router(
         by_model = agg.get("by_model", [])
         favorite = max(by_model, key=lambda m: m.get("total_tokens", 0), default=None)
 
-        return {
+        payload = {
             "total_sessions": len(sessions),
             "total_tokens": agg.get("total_tokens", 0),
             "total_usd": agg.get("total_usd", 0.0),
@@ -146,5 +156,11 @@ def create_code_stats_router(
             "window_days": days,
             "truncated": len(page.data) >= _MAX_SESSIONS,
         }
+        # Drop stale entries opportunistically so the map can't grow unbounded.
+        now = time.time()
+        for key in [k for k, (at, _) in _cache.items() if now - at >= _CACHE_TTL_S]:
+            _cache.pop(key, None)
+        _cache[cache_key] = (now, payload)
+        return payload
 
     return router

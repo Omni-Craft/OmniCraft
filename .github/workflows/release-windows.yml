@@ -41,7 +41,7 @@ jobs:
       # Unsigned: CSC_LINK / CSC_KEY_PASSWORD are intentionally unset.
       - name: Package the Windows installer (NSIS, unsigned)
         working-directory: web/electron
-        run: npx electron-builder --win nsis
+        run: npx electron-builder --win nsis --publish never
 
       - name: Collect artifacts
         shell: bash

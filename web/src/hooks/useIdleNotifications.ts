@@ -84,7 +84,9 @@ function useLazyPermissionRequest(): void {
     }
     if (getNotificationPermission() !== "default") return;
     const handler = () => {
-      void requestNotificationPermission().then((perm) => {
+      // Wrap in Promise.resolve so a stubbed permission call returning a
+      // non-promise can't throw an unhandled error inside this listener.
+      void Promise.resolve(requestNotificationPermission()).then((perm) => {
         if (perm === "granted") void subscribeWebPush();
       });
     };

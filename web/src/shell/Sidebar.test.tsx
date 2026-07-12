@@ -157,7 +157,7 @@ function mockConversations(convs: Conversation[]) {
   useConvMock.mockImplementation(() => result(convs));
 }
 
-function renderSidebar(open = true, initialEntry = "/", onOpenSearch?: () => void) {
+function renderSidebar(open = true, initialEntry = "/code", onOpenSearch?: () => void) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
@@ -719,7 +719,8 @@ describe("Sidebar project sections", () => {
     render(
       <QueryClientProvider client={qc}>
         <TooltipProvider>
-          <MemoryRouter initialEntries={["/"]}>
+          {/* Projects are a Code-surface feature, so render the code route. */}
+          <MemoryRouter initialEntries={["/code"]}>
             <Sidebar open onClose={onClose} />
           </MemoryRouter>
         </TooltipProvider>

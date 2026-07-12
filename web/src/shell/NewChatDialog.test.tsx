@@ -577,6 +577,12 @@ function mockAgents(agents: AvailableAgent[]) {
 // recent workspace so the working-directory field seeds to a known path.
 function setupLandingMocks() {
   authenticatedFetchMock.mockReset();
+  // Benign default so incidental callers (e.g. the onboarding probe) don't
+  // reject on an undefined return; create-flow tests override this.
+  authenticatedFetchMock.mockResolvedValue({
+    ok: true,
+    json: async () => ({ data: [] }),
+  } as unknown as Response);
   useHostsMock.mockReset();
   useAvailableAgentsMock.mockReset();
   useHostFilesystemMock.mockReset();
@@ -589,6 +595,9 @@ function setupLandingMocks() {
   // host_1's most-recent workspace seeds the field (so submit can enable
   // without manual picks). Tests that exercise the home fallback clear this.
   localStorage.setItem(RECENT_KEY, JSON.stringify({ host_1: ["/Users/corey/repo"] }));
+  // Suppress the first-run onboarding checklist so its mount-time probe
+  // doesn't add an incidental authenticatedFetch call to positional asserts.
+  localStorage.setItem("omnicraft.onboarding.dismissed", "1");
   useDirectorySessionsMock.mockReturnValue({
     data: [],
   } as unknown as ReturnType<typeof useDirectorySessions>);

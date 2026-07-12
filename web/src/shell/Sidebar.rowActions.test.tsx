@@ -102,7 +102,7 @@ function renderSidebar(activeId?: string) {
   return render(
     <QueryClientProvider client={qc}>
       <TooltipProvider>
-        <MemoryRouter initialEntries={[activeId ? `/c/${activeId}` : "/"]}>
+        <MemoryRouter initialEntries={[activeId ? `/c/${activeId}` : "/code"]}>
           {activeId ? (
             <Routes>
               <Route path="/c/:conversationId" element={sidebar} />

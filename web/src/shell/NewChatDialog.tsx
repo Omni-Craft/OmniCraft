@@ -2166,23 +2166,6 @@ export function NewChatLandingScreen() {
   const supportsApprovalMode = nativeAgentHasCapability(selectedAgent, "approvalMode");
   const supportsCursorMode = nativeAgentHasCapability(selectedAgent, "cursorMode");
 
-  // "/" skills autocomplete: active while the draft is a bare "/query" (no
-  // space/newline yet) outside pure Chat, listing the selected agent's bundled
-  // skills — the promise Craftwork's "Digite / para habilidades" makes.
-  const slashQuery =
-    !pureChat && message.startsWith("/") && !/[\s]/.test(message)
-      ? message.slice(1).toLowerCase()
-      : null;
-  const slashSkills = useMemo(
-    () =>
-      slashQuery == null
-        ? []
-        : (selectedAgent?.skills ?? [])
-            .filter((s) => s.name.toLowerCase().includes(slashQuery))
-            .slice(0, 8),
-    [slashQuery, selectedAgent],
-  );
-
   // First-run onboarding checklist: connect a machine → pick a folder → send
   // the first task. Hidden once dismissed or when everything is done.
   const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
@@ -3181,34 +3164,6 @@ export function NewChatLandingScreen() {
                   Descreva uma tarefa, ou experimente uma skill
                 </span>
                 <SkillPills skills={pillSkills} onPick={applySkillPill} />
-              </div>
-            )}
-            {/* Slash-command skills menu — typing "/" lists the selected
-                agent's bundled skills (the promise Craftwork's placeholder
-                makes). Picking one inserts "/name " to keep typing args. */}
-            {slashSkills.length > 0 && (
-              <div
-                className="mx-3 mb-1 flex max-h-48 flex-col overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
-                data-testid="slash-skills-menu"
-              >
-                {slashSkills.map((s) => (
-                  <button
-                    key={s.name}
-                    type="button"
-                    onClick={() => {
-                      setMessage(`/${s.name} `);
-                      textareaRef.current?.focus();
-                    }}
-                    className="flex flex-col gap-0.5 px-3 py-2 text-left transition-colors hover:bg-muted"
-                  >
-                    <span className="font-mono text-sm text-brand-accent">/{s.name}</span>
-                    {s.description && (
-                      <span className="line-clamp-1 text-xs text-muted-foreground">
-                        {s.description}
-                      </span>
-                    )}
-                  </button>
-                ))}
               </div>
             )}
             {/* Hidden file input for the attach button. */}

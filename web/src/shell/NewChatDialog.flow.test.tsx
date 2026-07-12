@@ -196,6 +196,10 @@ beforeEach(() => {
   // Seed host_1's recent so the working directory pre-fills deterministically
   // (the create body must carry SEEDED_WORKSPACE through).
   localStorage.setItem(RECENT_KEY, JSON.stringify({ host_1: [SEEDED_WORKSPACE] }));
+  // Suppress the first-run onboarding checklist so its mount-time probe
+  // doesn't add an incidental authenticatedFetch call to the create-flow
+  // count/positional assertions.
+  localStorage.setItem("omnicraft.onboarding.dismissed", "1");
   setHosts([host()]);
   setAgents([agent()]);
 });

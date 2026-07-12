@@ -1,7 +1,7 @@
 """MCP servers on TEMPLATE agents — the surface the session route can't reach.
 
 ``/v1/sessions/{id}/agent/mcp-servers`` edits only session-scoped agents, so
-gallery-installed templates (chat, capataz, the fábricas) had no MCP management
+gallery-installed templates (chat, fucho, and friends) had no MCP management
 at all. This router mirrors the same bundle-mutation CRUD addressed by agent id,
 plus a connection test that actually dials the server and reports its tools.
 

@@ -1664,6 +1664,17 @@ function MainAgentSurface({
                 <RunnerStartingIndicator variant="hero" />
               ) : (
                 <ConversationEmptyState>
+                  {/* Idle mascot: the fish swims back and forth (otto-swim)
+                      with a few bubbles rising behind it — decorative only. */}
+                  <div
+                    className="relative flex h-24 w-72 items-center justify-center overflow-hidden"
+                    aria-hidden="true"
+                  >
+                    <span className="otto-bubble left-[30%]" style={{ animationDelay: "0s" }} />
+                    <span className="otto-bubble left-[52%]" style={{ animationDelay: "1.7s" }} />
+                    <span className="otto-bubble left-[68%]" style={{ animationDelay: "3.1s" }} />
+                    <OttoIcon className="otto-swim h-14 w-auto" />
+                  </div>
                   <div className="space-y-1.5">
                     <h3 className="text-2xl font-medium tracking-[-0.02em]">O que vamos fazer?</h3>
                     <p className="text-muted-foreground text-base">

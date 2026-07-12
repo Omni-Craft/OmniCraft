@@ -1068,6 +1068,65 @@
   will-change: transform;
 }
 
+/* Swimming mascot — the empty-conversation idle. The fish crosses the stage,
+ * flips at each end (the art faces right, so scaleX(-1) turns it around) and
+ * bobs on the way, with a few bubbles drifting up behind it. Frozen by the
+ * global reduced-motion gate below. */
+@keyframes otto-swim {
+  0% {
+    transform: translateX(-110px) translateY(0) scaleX(1) rotate(-3deg);
+  }
+  22% {
+    transform: translateX(-30px) translateY(-10px) scaleX(1) rotate(3deg);
+  }
+  48% {
+    transform: translateX(110px) translateY(4px) scaleX(1) rotate(-2deg);
+  }
+  50% {
+    transform: translateX(110px) translateY(0) scaleX(-1) rotate(2deg);
+  }
+  72% {
+    transform: translateX(-10px) translateY(-10px) scaleX(-1) rotate(-3deg);
+  }
+  98% {
+    transform: translateX(-110px) translateY(4px) scaleX(-1) rotate(2deg);
+  }
+  100% {
+    transform: translateX(-110px) translateY(0) scaleX(1) rotate(-3deg);
+  }
+}
+
+.otto-swim {
+  transform-origin: center;
+  animation: otto-swim 16s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes otto-bubble {
+  0% {
+    transform: translateY(0) scale(0.6);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(-56px) scale(1);
+    opacity: 0;
+  }
+}
+
+.otto-bubble {
+  position: absolute;
+  bottom: 20%;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--brand-accent) 55%, transparent);
+  animation: otto-bubble 5s ease-in infinite;
+  will-change: transform, opacity;
+}
+
 @keyframes compaction-slide {
   0% {
     transform: translateX(-100%);

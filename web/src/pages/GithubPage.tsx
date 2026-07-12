@@ -144,7 +144,9 @@ export function GithubPage() {
 
   const startSession = (item: GithubDetail) => {
     setComposeSeed(buildSeed(repo, item));
-    navigate("/");
+    // Issues/PRs are coding work — land on the Code composer (filesystem),
+    // not the Chat tab that "/" now is.
+    navigate("/code");
   };
 
   const accent = { backgroundColor: "var(--brand-accent)" };

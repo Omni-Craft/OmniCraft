@@ -149,6 +149,9 @@ const EvalsPage = lazy(() => import("@/pages/EvalsPage").then((m) => ({ default:
 const GalleryPage = lazy(() =>
   import("@/pages/GalleryPage").then((m) => ({ default: m.GalleryPage })),
 );
+const ScheduledAgentsPage = lazy(() =>
+  import("@/pages/ScheduledAgentsPage").then((m) => ({ default: m.ScheduledAgentsPage })),
+);
 
 /**
  * Settings content panel. The section nav lives in the sidebar card
@@ -182,13 +185,19 @@ export function SettingsPage() {
   // Observability / management surfaces. Their content can exceed the viewport
   // (e.g. the gallery grid), so they get the scroll container the shared
   // sections use; each page provides its own centered max-width + padding.
-  if (section === "costs" || section === "evals" || section === "gallery") {
+  if (
+    section === "costs" ||
+    section === "evals" ||
+    section === "gallery" ||
+    section === "scheduled"
+  ) {
     return (
       <PageScroll>
         <Suspense fallback={null}>
           {section === "costs" && <CostPage />}
           {section === "evals" && <EvalsPage />}
           {section === "gallery" && <GalleryPage />}
+          {section === "scheduled" && <ScheduledAgentsPage />}
         </Suspense>
       </PageScroll>
     );

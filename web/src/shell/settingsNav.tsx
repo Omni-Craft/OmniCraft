@@ -12,6 +12,7 @@ import {
   ArrowLeftIcon,
   ChartColumnIcon,
   ClipboardCheckIcon,
+  ClockIcon,
   GitBranchIcon,
   KeyboardIcon,
   LayoutGridIcon,
@@ -38,6 +39,7 @@ export type SettingsSectionId =
   | "costs"
   | "evals"
   | "gallery"
+  | "scheduled"
   | "members"
   | "policies"
   | "archived"
@@ -51,6 +53,7 @@ const SECTION_IDS: readonly SettingsSectionId[] = [
   "costs",
   "evals",
   "gallery",
+  "scheduled",
   "members",
   "policies",
   "archived",
@@ -111,6 +114,7 @@ export function settingsNavGroups(
       { id: "costs", label: "Custos e observabilidade", icon: ChartColumnIcon },
       { id: "evals", label: "Avaliações de agentes", icon: ClipboardCheckIcon },
       { id: "gallery", label: "Galeria de agentes", icon: LayoutGridIcon },
+      { id: "scheduled", label: "Agentes agendados", icon: ClockIcon },
     ],
   });
   // Admin: server-wide management, admin-only. Nested here as sub-categories

@@ -60,15 +60,16 @@ from omnicraft.server.performance_metrics import (
 from omnicraft.server.routes.builtin_agents import create_builtin_agents_router
 from omnicraft.server.routes.comments import create_comments_router
 from omnicraft.server.routes.default_policies import create_default_policies_router
-from omnicraft.server.routes.harnesses import create_harnesses_router
 from omnicraft.server.routes.evals import create_evals_router
 from omnicraft.server.routes.gallery import create_gallery_router
+from omnicraft.server.routes.harnesses import create_harnesses_router
 from omnicraft.server.routes.integrations import create_integrations_router
 from omnicraft.server.routes.observability import create_observability_router
+from omnicraft.server.routes.policy_registry import create_policy_registry_router
 from omnicraft.server.routes.policy_simulate import create_policy_simulate_router
 from omnicraft.server.routes.push_routes import create_push_router
-from omnicraft.server.routes.policy_registry import create_policy_registry_router
 from omnicraft.server.routes.runner_tunnel import create_runner_tunnel_router
+from omnicraft.server.routes.scheduled_agents import create_scheduled_agents_router
 from omnicraft.server.routes.session_mcp_servers import create_session_mcp_servers_router
 from omnicraft.server.routes.session_policies import create_session_policies_router
 from omnicraft.server.routes.sessions import (
@@ -1306,11 +1307,9 @@ def create_app(
                 )
                 await asyncio.to_thread(_web_push.deliver_to_user, owner, payload)
 
-            try:
+            # Loop shutting down — nothing to deliver.
+            with suppress(RuntimeError):
                 asyncio.run_coroutine_threadsafe(_dispatch(), _push_loop)
-            except RuntimeError:
-                # Loop shutting down — nothing to deliver.
-                pass
 
         _push_pending.set_push_observer(_push_approval_observer)
 
@@ -1371,12 +1370,34 @@ def create_app(
                 otel_publisher=server_metrics_otel,
             )
         )
+
+        async def _scheduled_agents_loop() -> None:
+            """Fire interval-scheduled agent jobs whose next run has come due."""
+            from omnicraft.server import scheduled_agents as _sched
+
+            while True:
+                await asyncio.sleep(30)
+                try:
+                    for job in _sched.due_jobs():
+                        try:
+                            await _sched.fire_job(app, job, agent_store, trigger="schedule")
+                        except Exception as exc:  # noqa: BLE001 — one bad job must not kill the loop
+                            _logger.warning(
+                                "scheduled-agents: job %s failed (%s)", job.get("id"), exc
+                            )
+                except Exception as exc:  # noqa: BLE001 — keep the loop alive across store errors
+                    _logger.warning("scheduled-agents: tick failed (%s)", exc)
+
+        scheduled_agents_task = asyncio.create_task(_scheduled_agents_loop())
         try:
             yield
         finally:
             metrics_publish_task.cancel()
             with suppress(asyncio.CancelledError):
                 await metrics_publish_task
+            scheduled_agents_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await scheduled_agents_task
             # Stop in-flight background managed-sandbox launches so a
             # slow provision doesn't outlive the ASGI shutdown (the
             # sandbox itself, if already provisioned, is reaped by the
@@ -2025,6 +2046,11 @@ def create_app(
         ),
         prefix="/v1",
         tags=["gallery"],
+    )
+    app.include_router(
+        create_scheduled_agents_router(agent_store, auth_provider=auth_provider),
+        prefix="/v1",
+        tags=["scheduled_agents"],
     )
     app.include_router(
         create_terminal_attach_router(

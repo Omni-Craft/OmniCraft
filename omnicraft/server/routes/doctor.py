@@ -1,0 +1,155 @@
+"""Diagnóstico — one endpoint that checks the environment end to end.
+
+Half of every "não funciona" is environment: no host connected, a missing CLI,
+no GitHub token, the chat agent not installed, a scheduled job pointing at a
+deleted agent. ``GET /v1/doctor`` runs every check the server can perform and
+returns them with actionable hints, so the Settings page can render a
+ready-to-act checklist instead of the user debugging blind.
+"""
+
+from __future__ import annotations
+
+import os
+import shutil
+from typing import Any
+
+from fastapi import APIRouter, Request
+
+from omnicraft.server.auth import AuthProvider
+from omnicraft.server.routes._auth_helpers import require_user
+
+_LOCAL_USER = "local"
+
+# The coding-harness CLIs the orchestrators route work to.
+_WORKER_CLIS = ["claude", "codex", "opencode", "cursor-agent", "hermes", "pi"]
+
+
+def _check(
+    check_id: str, label: str, ok: bool, detail: str, hint: str | None = None
+) -> dict[str, Any]:
+    return {"id": check_id, "label": label, "ok": ok, "detail": detail, "hint": hint}
+
+
+def create_doctor_router(
+    agent_store: Any,
+    *,
+    auth_provider: AuthProvider | None = None,
+) -> APIRouter:
+    """Build the router for ``GET /v1/doctor``."""
+    router = APIRouter()
+
+    @router.get("/doctor")
+    async def doctor(request: Request) -> dict[str, Any]:
+        user_id = require_user(request, auth_provider) or _LOCAL_USER
+        checks: list[dict[str, Any]] = []
+
+        # 1. A host is connected (nothing runs without one).
+        registry = getattr(request.app.state, "host_registry", None)
+        online = list(registry.online_host_ids()) if registry is not None else []
+        checks.append(
+            _check(
+                "host",
+                "Máquina conectada",
+                len(online) > 0,
+                f"{len(online)} máquina(s) online" if online else "nenhuma máquina online",
+                None if online else "Abra o app desktop ou rode 'omnicraft host' na máquina.",
+            )
+        )
+
+        # 2. The no-filesystem chat agent backs the Início tab.
+        try:
+            chat_ok = agent_store.get_by_name("chat") is not None
+        except Exception:  # noqa: BLE001 — a store hiccup reads as "not installed"
+            chat_ok = False
+        checks.append(
+            _check(
+                "chat_agent",
+                "Agente de Chat instalado",
+                chat_ok,
+                "agente 'chat' registrado" if chat_ok else "agente 'chat' ausente",
+                None if chat_ok else "Instale o agente 'chat' na Galeria (Craftwork › Galeria).",
+            )
+        )
+
+        # 3. GitHub token for the integration page.
+        gh_token = bool(os.environ.get("GITHUB_TOKEN") or shutil.which("gh"))
+        checks.append(
+            _check(
+                "github",
+                "GitHub configurado",
+                gh_token,
+                "token/gh CLI disponível" if gh_token else "sem GITHUB_TOKEN e sem gh CLI",
+                None if gh_token else "Rode 'gh auth login' ou exporte GITHUB_TOKEN.",
+            )
+        )
+
+        # 4. Worker CLIs on PATH (meaningful when the server runs on the same
+        # machine as the host — the local desktop case).
+        found = [cli for cli in _WORKER_CLIS if shutil.which(cli)]
+        missing = [cli for cli in _WORKER_CLIS if cli not in found]
+        checks.append(
+            _check(
+                "workers",
+                "CLIs de agentes de código",
+                len(found) > 0,
+                f"disponíveis: {', '.join(found) or 'nenhum'}",
+                (
+                    f"Faltando: {', '.join(missing)} — instale os que quiser usar."
+                    if missing
+                    else None
+                ),
+            )
+        )
+
+        # 5. Scheduled jobs pointing at agents that no longer exist — they
+        # error on every fire until fixed.
+        from omnicraft.server import scheduled_agents as sched
+
+        broken: list[str] = []
+        for job in sched.list_jobs(owner=user_id):
+            try:
+                if agent_store.get_by_name(job.get("agent_name") or "") is None:
+                    broken.append(str(job.get("name")))
+            except Exception:  # noqa: BLE001 — treat lookup failure as broken
+                broken.append(str(job.get("name")))
+        checks.append(
+            _check(
+                "scheduled",
+                "Agendamentos íntegros",
+                not broken,
+                (
+                    "todos os jobs apontam para agentes instalados"
+                    if not broken
+                    else f"jobs com agente ausente: {', '.join(broken[:5])}"
+                ),
+                None
+                if not broken
+                else "Edite o job e escolha um agente instalado, ou reinstale o agente.",
+            )
+        )
+
+        # 6. Push subscriptions — the channel scheduled results/failures use.
+        try:
+            from omnicraft.server import push as _push
+
+            has_push = len(_push.get_subscriptions(user_id)) > 0
+        except Exception:  # noqa: BLE001 — push store optional
+            has_push = False
+        checks.append(
+            _check(
+                "push",
+                "Notificações push",
+                has_push,
+                "dispositivo inscrito" if has_push else "nenhum dispositivo inscrito",
+                (
+                    None
+                    if has_push
+                    else "Ative notificações no app para receber resultados de jobs agendados."
+                ),
+            )
+        )
+
+        ok_count = sum(1 for c in checks if c["ok"])
+        return {"checks": checks, "ok": ok_count, "total": len(checks)}
+
+    return router

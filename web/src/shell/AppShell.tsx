@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Outlet, useParams, useSearchParams } from "@/lib/routing";
+import { Outlet, useNavigate, useParams, useSearchParams } from "@/lib/routing";
+import { setComposeSeed } from "@/lib/composeSeed";
 import { useConversations } from "@/hooks/useConversations";
 import { useSessionAgent } from "@/hooks/useAgents";
 import { useApproveHotkey } from "@/hooks/useApproveHotkey";
@@ -514,6 +515,33 @@ export function AppShell() {
   // data presence) because an errored query leaves data undefined forever.
   const hasRailContent =
     !boundAgentLoading && !isChatSession && Object.values(railTabsAvailable).some(Boolean);
+
+  // "Discutir no Chat": carry a Code session's context (title + the agent's
+  // last answer) into the no-filesystem Chat composer — the reverse of the
+  // Artifacts panel's "→ Code" handoff.
+  const navigate = useNavigate();
+  const handleDiscussInChat = useCallback(() => {
+    const blocks = useChatStore.getState().blocks;
+    let last = "";
+    for (let i = blocks.length - 1; i >= 0; i--) {
+      const b = blocks[i];
+      if (b.type === "text_done" && b.fullText) {
+        last = b.fullText;
+        break;
+      }
+    }
+    const title = activeConv?.title?.trim() || "sessão de código";
+    setComposeSeed(
+      [
+        `Vamos discutir esta sessão de código ("${title}"):`,
+        "",
+        last ? `Último resultado do agente:\n\n${last.slice(0, 4000)}` : "(ainda sem resposta)",
+        "",
+        "O que eu quero avaliar: ",
+      ].join("\n"),
+    );
+    navigate("/");
+  }, [activeConv?.title, navigate]);
   // Keep the selected tab valid. When the current tab disappears — files
   // panel turns off, or the Shells tab hides (native wrapper / no shell
   // and no shell access) — fall back to the first still-visible tab in
@@ -1267,6 +1295,8 @@ export function AppShell() {
                   artifactsAvailable={boundAgent?.name === "chat"}
                   artifactsOpen={artifactsOpen}
                   onToggleArtifacts={() => setArtifactsOpen((o) => !o)}
+                  discussAvailable={!boundAgentLoading && !isChatSession}
+                  onDiscussInChat={handleDiscussInChat}
                   mobileMenu={{
                     fileViewerOpen,
                     panelOpen,

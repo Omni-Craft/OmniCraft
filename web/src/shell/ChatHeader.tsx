@@ -8,6 +8,7 @@ import {
   ListTodoIcon,
   PanelLeftIcon,
   PanelRightCloseIcon,
+  MessagesSquareIcon,
   PanelRightIcon,
   ShareIcon,
   SparklesIcon,
@@ -138,6 +139,10 @@ interface ChatHeaderProps {
   artifactsOpen?: boolean;
   /** Toggle the Artifacts panel. */
   onToggleArtifacts?: () => void;
+  /** Whether "Discutir no Chat" should render (Code sessions). */
+  discussAvailable?: boolean;
+  /** Carry this session's context into the Chat composer. */
+  onDiscussInChat?: () => void;
   /** Gating + handlers for the mobile session-menu FAB. */
   mobileMenu: MobileSessionMenuProps;
 }
@@ -181,6 +186,8 @@ export function ChatHeader({
   artifactsAvailable = false,
   artifactsOpen = false,
   onToggleArtifacts,
+  discussAvailable = false,
+  onDiscussInChat,
   mobileMenu,
 }: ChatHeaderProps) {
   return (
@@ -368,6 +375,24 @@ export function ChatHeader({
             Compartilhar
           </Button>
         ) : null}
+        {conversationId && discussAvailable && onDiscussInChat && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Discutir no Chat"
+                onClick={onDiscussInChat}
+                className="hidden md:inline-flex text-muted-foreground hover:text-foreground"
+                data-testid="discuss-in-chat"
+              >
+                <MessagesSquareIcon className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Discutir no Chat</TooltipContent>
+          </Tooltip>
+        )}
         {conversationId && artifactsAvailable && onToggleArtifacts && (
           <Tooltip>
             <TooltipTrigger asChild>

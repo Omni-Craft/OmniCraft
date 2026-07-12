@@ -61,6 +61,7 @@ from omnicraft.server.routes.builtin_agents import create_builtin_agents_router
 from omnicraft.server.routes.code_stats import create_code_stats_router
 from omnicraft.server.routes.comments import create_comments_router
 from omnicraft.server.routes.default_policies import create_default_policies_router
+from omnicraft.server.routes.doctor import create_doctor_router
 from omnicraft.server.routes.evals import create_evals_router
 from omnicraft.server.routes.gallery import create_gallery_router
 from omnicraft.server.routes.harnesses import create_harnesses_router
@@ -1372,6 +1373,10 @@ def create_app(
             )
         )
 
+        # In-flight "deliver the scheduled job's result" watchers, cancelled on
+        # shutdown so a 30-minute poll can't outlive the ASGI lifespan.
+        scheduled_delivery_tasks: set[asyncio.Task[None]] = set()
+
         async def _scheduled_agents_loop() -> None:
             """Fire interval-scheduled agent jobs whose next run has come due.
 
@@ -1382,6 +1387,73 @@ def create_app(
             from omnicraft.server import scheduled_agents as _sched
 
             fire_sem = asyncio.Semaphore(4)
+
+            def _last_assistant_text(items: list[dict[str, Any]]) -> str:
+                for it in reversed(items):
+                    if it.get("type") == "message" and it.get("role") == "assistant":
+                        parts = [
+                            c.get("text", "")
+                            for c in (it.get("content") or [])
+                            if isinstance(c, dict) and c.get("type") == "output_text"
+                        ]
+                        text = "\n".join(p for p in parts if p).strip()
+                        if text:
+                            return text
+                return ""
+
+            async def _deliver_result(job: dict[str, Any], session_id: str) -> None:
+                """Automation that reports back: wait for the fired session's
+                turn to finish, then push the agent's final answer to the job
+                owner (title + excerpt + a link into the session)."""
+                import httpx
+
+                transport = httpx.ASGITransport(app=app)
+                headers = {"Origin": "omnicraft://internal"}
+                loop = asyncio.get_running_loop()
+                deadline = loop.time() + 30 * 60
+                text = ""
+                try:
+                    async with httpx.AsyncClient(
+                        transport=transport, base_url="http://internal", timeout=30.0
+                    ) as client:
+                        # Give the runner time to boot before the first probe.
+                        await asyncio.sleep(20)
+                        while loop.time() < deadline:
+                            res = await client.get(f"/v1/sessions/{session_id}", headers=headers)
+                            if res.status_code >= 400:
+                                return
+                            info = res.json()
+                            if info.get("status") == "failed":
+                                return  # failure streaks are notified separately
+                            if info.get("active_response_id") is None:
+                                items_res = await client.get(
+                                    f"/v1/sessions/{session_id}/items?limit=100",
+                                    headers=headers,
+                                )
+                                if items_res.status_code < 400:
+                                    text = _last_assistant_text(items_res.json().get("data") or [])
+                                    if text:
+                                        break
+                            await asyncio.sleep(20)
+                        else:
+                            return
+                    await asyncio.to_thread(
+                        _web_push.deliver_to_user,
+                        job.get("owner", "local"),
+                        {
+                            "title": f"✅ {job.get('name', 'Tarefa agendada')}"[:80],
+                            "body": text[:220],
+                            "url": f"/c/{session_id}",
+                        },
+                    )
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:  # noqa: BLE001 — delivery is best-effort
+                    _logger.warning(
+                        "scheduled-agents: result delivery for %s failed (%s)",
+                        job.get("id"),
+                        exc,
+                    )
 
             def _notify_failing_job(job_id: str) -> None:
                 # Push-notify the owner when a scheduled job hits exactly 3
@@ -1415,6 +1487,13 @@ def create_app(
                         result = await _sched.fire_job(app, job, agent_store, trigger="schedule")
                         if result.get("status") == "error":
                             await asyncio.to_thread(_notify_failing_job, job["id"])
+                        elif result.get("status") == "started" and result.get("session_id"):
+                            # Watch the session and push the final answer back.
+                            task = asyncio.create_task(
+                                _deliver_result(job, str(result["session_id"]))
+                            )
+                            scheduled_delivery_tasks.add(task)
+                            task.add_done_callback(scheduled_delivery_tasks.discard)
                     except Exception as exc:  # noqa: BLE001 — one bad job must not kill the loop
                         _logger.warning("scheduled-agents: job %s failed (%s)", job.get("id"), exc)
 
@@ -1437,6 +1516,10 @@ def create_app(
             scheduled_agents_task.cancel()
             with suppress(asyncio.CancelledError):
                 await scheduled_agents_task
+            for task in list(scheduled_delivery_tasks):
+                task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await task
             # Stop in-flight background managed-sandbox launches so a
             # slow provision doesn't outlive the ASGI shutdown (the
             # sandbox itself, if already provisioned, is reaped by the
@@ -2073,6 +2156,11 @@ def create_app(
         create_code_stats_router(conversation_store, agent_store, auth_provider=auth_provider),
         prefix="/v1",
         tags=["code_stats"],
+    )
+    app.include_router(
+        create_doctor_router(agent_store, auth_provider=auth_provider),
+        prefix="/v1",
+        tags=["doctor"],
     )
     app.include_router(
         create_policy_simulate_router(conversation_store, auth_provider=auth_provider),

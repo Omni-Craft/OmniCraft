@@ -2165,6 +2165,49 @@ export function NewChatLandingScreen() {
   const supportsPermissionMode = nativeAgentHasCapability(selectedAgent, "permissionMode");
   const supportsApprovalMode = nativeAgentHasCapability(selectedAgent, "approvalMode");
   const supportsCursorMode = nativeAgentHasCapability(selectedAgent, "cursorMode");
+
+  // "/" skills autocomplete: active while the draft is a bare "/query" (no
+  // space/newline yet) outside pure Chat, listing the selected agent's bundled
+  // skills — the promise Craftwork's "Digite / para habilidades" makes.
+  const slashQuery =
+    !pureChat && message.startsWith("/") && !/[\s]/.test(message)
+      ? message.slice(1).toLowerCase()
+      : null;
+  const slashSkills = useMemo(
+    () =>
+      slashQuery == null
+        ? []
+        : (selectedAgent?.skills ?? [])
+            .filter((s) => s.name.toLowerCase().includes(slashQuery))
+            .slice(0, 8),
+    [slashQuery, selectedAgent],
+  );
+
+  // First-run onboarding checklist: connect a machine → pick a folder → send
+  // the first task. Hidden once dismissed or when everything is done.
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    try {
+      return localStorage.getItem("omnicraft.onboarding.dismissed") === "1";
+    } catch {
+      return true;
+    }
+  });
+  const [hasAnySession, setHasAnySession] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (onboardingDismissed) return;
+    void authenticatedFetch("/v1/sessions?limit=1")
+      .then((r) => (r.ok ? r.json() : { data: [] }))
+      .then((j: { data?: unknown[] }) => setHasAnySession((j.data ?? []).length > 0))
+      .catch(() => setHasAnySession(null));
+  }, [onboardingDismissed]);
+  const dismissOnboarding = () => {
+    setOnboardingDismissed(true);
+    try {
+      localStorage.setItem("omnicraft.onboarding.dismissed", "1");
+    } catch {
+      /* ignore */
+    }
+  };
   // Defense in depth for the DANGEROUS bypass toggle: never let an armed
   // bypass carry across an agent change. Switching the picker to another
   // agent — or away from Codex and back — must require the typed confirmation
@@ -2907,6 +2950,65 @@ export function NewChatLandingScreen() {
             O que vamos fazer?
           </h1>
         </div>
+        {/* First-run checklist — three steps to a working setup. Hidden once
+            dismissed or when every step is already done. */}
+        {!onboardingDismissed &&
+          hasAnySession !== null &&
+          !(onlineHosts.length > 0 && workspaceValid && hasAnySession) && (
+            <div
+              className="flex w-full flex-col gap-2 rounded-xl border border-border bg-card/40 p-4"
+              data-testid="onboarding-checklist"
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-sm">Primeiros passos</span>
+                <button
+                  type="button"
+                  onClick={dismissOnboarding}
+                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Dispensar
+                </button>
+              </div>
+              {(
+                [
+                  {
+                    done: onlineHosts.length > 0,
+                    label: "Conectar esta máquina",
+                    cta: connectingThisMachine ? "Conectando…" : "Conectar",
+                    action: () => void connectThisMachine(),
+                  },
+                  {
+                    done: workspaceValid,
+                    label: "Escolher a pasta de trabalho (chip abaixo do composer)",
+                    cta: null,
+                    action: null,
+                  },
+                  {
+                    done: hasAnySession,
+                    label: "Enviar a primeira tarefa",
+                    cta: null,
+                    action: null,
+                  },
+                ] as const
+              ).map((step, i) => (
+                <div key={step.label} className="flex items-center gap-2 text-sm">
+                  <span className="text-base leading-none">{step.done ? "✅" : "◻️"}</span>
+                  <span className={cn("flex-1", step.done && "text-muted-foreground line-through")}>
+                    {i + 1}. {step.label}
+                  </span>
+                  {!step.done && step.cta && step.action && (
+                    <button
+                      type="button"
+                      onClick={step.action}
+                      className="rounded-lg bg-brand-accent px-2.5 py-1 text-xs font-medium text-black"
+                    >
+                      {step.cta}
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         <div className="relative flex w-full flex-col gap-3">
           <form
             onSubmit={(e) => {
@@ -3079,6 +3181,34 @@ export function NewChatLandingScreen() {
                   Descreva uma tarefa, ou experimente uma skill
                 </span>
                 <SkillPills skills={pillSkills} onPick={applySkillPill} />
+              </div>
+            )}
+            {/* Slash-command skills menu — typing "/" lists the selected
+                agent's bundled skills (the promise Craftwork's placeholder
+                makes). Picking one inserts "/name " to keep typing args. */}
+            {slashSkills.length > 0 && (
+              <div
+                className="mx-3 mb-1 flex max-h-48 flex-col overflow-y-auto rounded-lg border border-border bg-card shadow-lg"
+                data-testid="slash-skills-menu"
+              >
+                {slashSkills.map((s) => (
+                  <button
+                    key={s.name}
+                    type="button"
+                    onClick={() => {
+                      setMessage(`/${s.name} `);
+                      textareaRef.current?.focus();
+                    }}
+                    className="flex flex-col gap-0.5 px-3 py-2 text-left transition-colors hover:bg-muted"
+                  >
+                    <span className="font-mono text-sm text-brand-accent">/{s.name}</span>
+                    {s.description && (
+                      <span className="line-clamp-1 text-xs text-muted-foreground">
+                        {s.description}
+                      </span>
+                    )}
+                  </button>
+                ))}
               </div>
             )}
             {/* Hidden file input for the attach button. */}

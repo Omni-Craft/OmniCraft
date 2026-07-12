@@ -152,6 +152,9 @@ const GalleryPage = lazy(() =>
 const ScheduledAgentsPage = lazy(() =>
   import("@/pages/ScheduledAgentsPage").then((m) => ({ default: m.ScheduledAgentsPage })),
 );
+const DoctorPage = lazy(() =>
+  import("@/pages/DoctorPage").then((m) => ({ default: m.DoctorPage })),
+);
 
 /**
  * Settings content panel. The section nav lives in the sidebar card
@@ -189,7 +192,8 @@ export function SettingsPage() {
     section === "costs" ||
     section === "evals" ||
     section === "gallery" ||
-    section === "scheduled"
+    section === "scheduled" ||
+    section === "doctor"
   ) {
     return (
       <PageScroll>
@@ -198,6 +202,7 @@ export function SettingsPage() {
           {section === "evals" && <EvalsPage />}
           {section === "gallery" && <GalleryPage />}
           {section === "scheduled" && <ScheduledAgentsPage />}
+          {section === "doctor" && <DoctorPage />}
         </Suspense>
       </PageScroll>
     );

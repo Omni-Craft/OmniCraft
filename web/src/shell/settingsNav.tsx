@@ -19,6 +19,7 @@ import {
   PaletteIcon,
   PanelRightOpenIcon,
   ShieldCheckIcon,
+  StethoscopeIcon,
   TerminalIcon,
   UserCogIcon,
   UsersIcon,
@@ -40,6 +41,7 @@ export type SettingsSectionId =
   | "evals"
   | "gallery"
   | "scheduled"
+  | "doctor"
   | "members"
   | "policies"
   | "archived"
@@ -54,6 +56,7 @@ const SECTION_IDS: readonly SettingsSectionId[] = [
   "evals",
   "gallery",
   "scheduled",
+  "doctor",
   "members",
   "policies",
   "archived",
@@ -115,6 +118,7 @@ export function settingsNavGroups(
       { id: "evals", label: "Avaliações de agentes", icon: ClipboardCheckIcon },
       { id: "gallery", label: "Galeria de agentes", icon: LayoutGridIcon },
       { id: "scheduled", label: "Agentes agendados", icon: ClockIcon },
+      { id: "doctor", label: "Diagnóstico", icon: StethoscopeIcon },
     ],
   });
   // Admin: server-wide management, admin-only. Nested here as sub-categories

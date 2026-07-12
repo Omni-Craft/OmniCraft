@@ -608,7 +608,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                     }}
                   >
                     <SquarePenIcon className="size-4 text-foreground" />
-                    Nova sessão
+                    {inCode ? "Nova sessão" : "Novo chat"}
                   </Link>
                 </Button>
                 {selectionMode ? (
@@ -1587,7 +1587,7 @@ function ConversationList({
                 active={activeDrag != null && (activeDrag.project != null || activeDrag.isPinned)}
               >
                 <ConversationSection
-                  title="Sessões"
+                  title={surface === "code" ? "Sessões" : "Chats"}
                   conversations={sections.sessions}
                   pinnedConversationIds={pinnedConversationIds}
                   collapsed={effectiveCollapsedSections.includes("Chats")}

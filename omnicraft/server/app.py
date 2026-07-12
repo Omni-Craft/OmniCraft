@@ -58,6 +58,7 @@ from omnicraft.server.performance_metrics import (
     set_request_user_agent_for_access_log,
 )
 from omnicraft.server.routes.builtin_agents import create_builtin_agents_router
+from omnicraft.server.routes.code_stats import create_code_stats_router
 from omnicraft.server.routes.comments import create_comments_router
 from omnicraft.server.routes.default_policies import create_default_policies_router
 from omnicraft.server.routes.evals import create_evals_router
@@ -2029,6 +2030,11 @@ def create_app(
         create_observability_router(conversation_store, auth_provider=auth_provider),
         prefix="/v1",
         tags=["observability"],
+    )
+    app.include_router(
+        create_code_stats_router(conversation_store, agent_store, auth_provider=auth_provider),
+        prefix="/v1",
+        tags=["code_stats"],
     )
     app.include_router(
         create_policy_simulate_router(conversation_store, auth_provider=auth_provider),

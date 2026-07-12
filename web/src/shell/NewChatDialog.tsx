@@ -9,6 +9,7 @@ import {
 } from "react";
 import { takeComposeSeed } from "@/lib/composeSeed";
 import { useLocation, useNavigate, useSearchParams } from "@/lib/routing";
+import { CodeStatsDashboard } from "@/components/CodeStatsDashboard";
 import { HomeModeToggle } from "./craftworkNav";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -2828,7 +2829,12 @@ export function NewChatLandingScreen() {
     // the hero reads better optically.
     <div
       ref={setLandingSurface}
-      className="flex flex-1 items-center justify-center"
+      className={cn(
+        "flex flex-1 justify-center",
+        // Chat centers the composer; Code top-aligns and scrolls to fit the
+        // stats dashboard above the composer.
+        chatMode ? "items-center" : "items-start overflow-y-auto",
+      )}
       data-testid="new-chat-landing"
     >
       {/* Padding lives inside the 840px cap, so the composer renders at
@@ -2842,6 +2848,8 @@ export function NewChatLandingScreen() {
             O que vamos fazer?
           </h1>
         </div>
+        {/* Code landing: a personal activity dashboard above the composer. */}
+        {!chatMode && <CodeStatsDashboard />}
         <div className="relative flex w-full flex-col gap-3">
           <form
             onSubmit={(e) => {

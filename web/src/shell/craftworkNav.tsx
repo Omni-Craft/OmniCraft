@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Link, useLocation } from "@/lib/routing";
 import { cn } from "@/lib/utils";
+import { useChatStore } from "@/store/chatStore";
 
 export type CraftworkSectionId = "home" | "gallery" | "scheduled" | "evals" | "costs";
 
@@ -50,10 +51,17 @@ export function useCraftworkRoute(): { inCraftwork: boolean; section: CraftworkS
   return { inCraftwork: true, section };
 }
 
-/** True when the route belongs to the "Code" surface (coding composer + a session). */
+/**
+ * True when the current surface is Code. The `/code` composer is always Code; a
+ * conversation (`/c/:id`) is Code UNLESS it's a Chat-agent session — so opening
+ * a Chat conversation keeps the Início tab instead of flipping to Code.
+ */
 export function useInCode(): boolean {
   const segs = useLocation().pathname.split("/").filter(Boolean);
-  return segs.includes("code") || segs.includes("c");
+  const boundAgentName = useChatStore((s) => s.boundAgentName);
+  if (segs.includes("code")) return true;
+  if (segs.includes("c")) return boundAgentName !== "chat";
+  return false;
 }
 
 /**

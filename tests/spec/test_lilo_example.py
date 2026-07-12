@@ -87,9 +87,7 @@ def test_lilo_claude_head_unchanged() -> None:
     spec = parse(_LILO_DIR)
     by_name = {sub.name: sub for sub in spec.sub_agents}
 
-    assert "claude" in by_name, (
-        f"Lilo should declare a 'claude' sub-agent; got {sorted(by_name)}."
-    )
+    assert "claude" in by_name, f"Lilo should declare a 'claude' sub-agent; got {sorted(by_name)}."
     assert by_name["claude"].executor.harness_kind == "claude-sdk", (
         "Lilo's Claude head should remain on the 'claude-sdk' harness."
     )

@@ -385,9 +385,7 @@ async def snapshot_worktree_on_host(
     """Send a ``host.snapshot_worktree`` frame and await the created snapshot."""
     request_id = secrets.token_hex(8)
     frame = encode_host_frame(
-        HostSnapshotWorktreeFrame(
-            request_id=request_id, worktree_path=worktree_path, label=label
-        )
+        HostSnapshotWorktreeFrame(request_id=request_id, worktree_path=worktree_path, label=label)
     )
     result = await _await_host_worktree_result(
         host_registry=host_registry,

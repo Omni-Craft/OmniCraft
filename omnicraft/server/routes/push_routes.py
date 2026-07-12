@@ -43,7 +43,9 @@ def create_push_router(*, auth_provider: AuthProvider | None = None) -> APIRoute
         try:
             body = await request.json()
         except Exception as exc:
-            raise OmniCraftError("invalid subscription body", code=ErrorCode.INVALID_INPUT) from exc
+            raise OmniCraftError(
+                "invalid subscription body", code=ErrorCode.INVALID_INPUT
+            ) from exc
         if not isinstance(body, dict) or not isinstance(body.get("endpoint"), str):
             raise OmniCraftError(
                 "subscription must include an 'endpoint'", code=ErrorCode.INVALID_INPUT
@@ -60,7 +62,7 @@ def create_push_router(*, auth_provider: AuthProvider | None = None) -> APIRoute
             body = await request.json()
             if isinstance(body, dict):
                 endpoint = body.get("endpoint")
-        except Exception:
+        except Exception:  # noqa: BLE001 - malformed body falls back to query params
             endpoint = request.query_params.get("endpoint")
         if not isinstance(endpoint, str) or not endpoint:
             raise OmniCraftError("endpoint is required", code=ErrorCode.INVALID_INPUT)

@@ -901,9 +901,9 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                 "ask_thresholds_usd": {
                     "type": "array",
                     "items": {"type": "number"},
-                    "description": "Checkpoints de aviso flexíveis opcionais em USD; a sessão pede "
-                    "aprovação na primeira vez que o gasto cruza cada um (todo valor deve ser < "
-                    "max_cost_usd quando ambos são definidos).",
+                    "description": "Checkpoints de aviso flexíveis opcionais em USD; a "
+                    "sessão pede aprovação na primeira vez que o gasto cruza cada um (todo "
+                    "valor deve ser < max_cost_usd quando ambos são definidos).",
                 },
                 "expensive_models": {
                     "type": "array",

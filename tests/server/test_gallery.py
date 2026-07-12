@@ -40,7 +40,7 @@ class _FakeArtifactStore:
 
 
 class _FakeAgentCache:
-    def replace(self, *a: Any, **k: Any) -> None:  # noqa: ANN401
+    def replace(self, *a: Any, **k: Any) -> None:
         pass
 
 

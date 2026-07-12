@@ -13,7 +13,14 @@ def test_aggregates_totals_by_model_and_top_sessions() -> None:
             {
                 "total_tokens": 1000,
                 "total_cost_usd": 5.0,
-                "by_model": {"opus": {"input_tokens": 600, "output_tokens": 400, "total_tokens": 1000, "total_cost_usd": 5.0}},
+                "by_model": {
+                    "opus": {
+                        "input_tokens": 600,
+                        "output_tokens": 400,
+                        "total_tokens": 1000,
+                        "total_cost_usd": 5.0,
+                    }
+                },
             },
         ),
         (
@@ -23,8 +30,18 @@ def test_aggregates_totals_by_model_and_top_sessions() -> None:
                 "total_tokens": 200,
                 "total_cost_usd": 1.0,
                 "by_model": {
-                    "opus": {"input_tokens": 50, "output_tokens": 50, "total_tokens": 100, "total_cost_usd": 0.6},
-                    "gpt": {"input_tokens": 50, "output_tokens": 50, "total_tokens": 100, "total_cost_usd": 0.4},
+                    "opus": {
+                        "input_tokens": 50,
+                        "output_tokens": 50,
+                        "total_tokens": 100,
+                        "total_cost_usd": 0.6,
+                    },
+                    "gpt": {
+                        "input_tokens": 50,
+                        "output_tokens": 50,
+                        "total_tokens": 100,
+                        "total_cost_usd": 0.4,
+                    },
                 },
             },
         ),

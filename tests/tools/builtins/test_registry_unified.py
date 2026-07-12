@@ -120,6 +120,10 @@ def test_builtin_names_size_matches_registry() -> None:
                 "download_file",
                 "search_conversations",
                 "export_agent",
+                # Local long-term memory tools (no external service;
+                # per-project JSON banks under ~/.omnicraft).
+                "memory_remember",
+                "memory_recall",
                 # Hindsight long-term memory tools (optional `hindsight`
                 # extra; factories probe for hindsight-client).
                 "hindsight_retain",

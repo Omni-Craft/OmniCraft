@@ -182,7 +182,7 @@ def send_web_push(subscription: dict[str, Any], payload: dict[str, Any]) -> bool
             return False
         _logger.warning("web push delivery failed: %s", exc)
         return None
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:  # noqa: BLE001  # pragma: no cover - defensive
         _logger.warning("web push unexpected error: %s", exc)
         return None
 

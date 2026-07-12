@@ -92,9 +92,7 @@ async def _github_get(path: str, params: dict[str, Any] | None = None) -> Any:
         async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
             resp = await client.get(f"{_GITHUB_API}{path}", headers=headers, params=params)
     except httpx.HTTPError as exc:
-        raise OmniCraftError(
-            f"could not reach GitHub: {exc}", code=ErrorCode.CONFLICT
-        ) from exc
+        raise OmniCraftError(f"could not reach GitHub: {exc}", code=ErrorCode.CONFLICT) from exc
     if resp.status_code == 404:
         raise OmniCraftError(
             "not found on GitHub — check the repository name and that your token can see it",
@@ -111,9 +109,7 @@ async def _github_get(path: str, params: dict[str, Any] | None = None) -> Any:
             code=ErrorCode.CONFLICT,
         )
     if resp.status_code >= 400:
-        raise OmniCraftError(
-            f"GitHub returned {resp.status_code}", code=ErrorCode.CONFLICT
-        )
+        raise OmniCraftError(f"GitHub returned {resp.status_code}", code=ErrorCode.CONFLICT)
     return resp.json()
 
 

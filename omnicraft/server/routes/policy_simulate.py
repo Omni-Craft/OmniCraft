@@ -10,6 +10,7 @@ so counter policies (e.g. max-tool-calls) behave exactly as they would live.
 
 from __future__ import annotations
 
+import contextlib
 import inspect
 import json
 from typing import Any
@@ -51,10 +52,8 @@ def _apply_state_updates(state: dict[str, Any], updates: Any) -> None:
         if action == "set":
             state[key] = value
         elif action == "increment":
-            try:
+            with contextlib.suppress(TypeError, ValueError):
                 state[key] = int(state.get(key, 0)) + int(value or 0)
-            except (TypeError, ValueError):
-                pass
         elif action == "delete":
             state.pop(key, None)
         elif action == "append":

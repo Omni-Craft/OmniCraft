@@ -33,8 +33,8 @@ from pathlib import Path
 import pytest
 
 from tests.e2e.test_fucho_e2e import (
-    _MIN_REPLY_CHARS,
     _FUCHO,
+    _MIN_REPLY_CHARS,
     _REPO,
     _SERVER_BOOT_TIMEOUT_SEC,
     _free_port,

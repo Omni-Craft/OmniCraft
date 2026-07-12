@@ -50,9 +50,9 @@ from omnicraft.host.frames import (
     HostRemoveWorktreeResultFrame,
     HostRestoreSnapshotFrame,
     HostRestoreSnapshotResultFrame,
+    HostRunnerExitedFrame,
     HostSnapshotWorktreeFrame,
     HostSnapshotWorktreeResultFrame,
-    HostRunnerExitedFrame,
     HostStatFrame,
     HostStatResultFrame,
     HostStopRunnerFrame,
@@ -1724,9 +1724,7 @@ class HostProcess:
         """Handle a ``host.list_snapshots`` request."""
         try:
             with self._host_subprocess_op():
-                snaps = await asyncio.to_thread(
-                    list_snapshots, worktree_path=frame.worktree_path
-                )
+                snaps = await asyncio.to_thread(list_snapshots, worktree_path=frame.worktree_path)
         except WorktreeError as exc:
             return HostListSnapshotsResultFrame(
                 request_id=frame.request_id, status="failed", error=exc.message

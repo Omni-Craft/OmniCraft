@@ -12,7 +12,11 @@ _MAX_CALLS = "omnicraft.policies.builtins.safety.max_tool_calls_per_session"
 
 @pytest.mark.asyncio
 async def test_ask_on_os_tools_asks_for_file_and_shell_tools() -> None:
-    calls = [("Bash", {"command": "ls"}), ("search.web", {"q": "x"}), ("Write", {"file_path": "/y"})]
+    calls = [
+        ("Bash", {"command": "ls"}),
+        ("search.web", {"q": "x"}),
+        ("Write", {"file_path": "/y"}),
+    ]
     out = await simulate_policy(_ASK_OS, None, calls)
     assert [r["result"] for r in out["results"]] == ["ASK", "ALLOW", "ASK"]
     assert out["summary"] == {"ALLOW": 1, "ASK": 2, "DENY": 0}

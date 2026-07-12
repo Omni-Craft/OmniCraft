@@ -580,7 +580,8 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
         "de arquivo ou shell — cobre as ferramentas sys_os_* do OmniCraft, ferramentas "
         "nativas do Claude Code (Bash, Read, Write, Edit, Glob, Grep), ferramentas nativas "
         "do Codex, ferramentas nativas do opencode (bash, edit, read, grep, glob) e "
-        "ferramentas do Hermes Agent (terminal, execute_code, read_file, write_file, search_files)",
+        "ferramentas do Hermes Agent (terminal, execute_code, read_file, write_file, "
+        "search_files)",
         "params_schema": None,
     },
     {
@@ -596,7 +597,8 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                 "blocked": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Nomes de skills a bloquear (sem diferenciar maiúsculas/minúsculas)",
+                    "description": "Nomes de skills a bloquear (sem diferenciar "
+                    "maiúsculas/minúsculas)",
                 },
             },
             "required": ["blocked"],
@@ -614,7 +616,8 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
             "properties": {
                 "sandbox_type": {
                     "type": "string",
-                    "description": "Backend de sandbox a forçar (linux_bwrap, darwin_seatbelt, none)",
+                    "description": "Backend de sandbox a forçar "
+                    "(linux_bwrap, darwin_seatbelt, none)",
                     "default": "linux_bwrap",
                 },
                 "allow_network": {
@@ -630,7 +633,8 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                 "read_paths": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": "Caminhos somente-leitura a impor (null herda a config do agente)",
+                    "description": "Caminhos somente-leitura a impor "
+                    "(null herda a config do agente)",
                 },
                 "env_passthrough": {
                     "type": "array",
@@ -658,7 +662,8 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
                         "enum": ["ssn", "credit_card", "email", "phone"],
                     },
                     "uniqueItems": True,
-                    "description": "Categorias de PII a escanear. Deixe vazio para habilitar todas.",
+                    "description": "Categorias de PII a escanear. "
+                    "Deixe vazio para habilitar todas.",
                     "default": ["ssn", "credit_card", "email", "phone"],
                 },
                 "action": {

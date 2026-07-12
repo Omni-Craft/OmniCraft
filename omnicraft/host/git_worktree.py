@@ -8,6 +8,7 @@ designs/SESSION_GIT_WORKTREE.md.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import re
 import secrets
@@ -520,23 +521,22 @@ def git_diff(*, worktree_path: str, base_ref: str) -> DiffResult:
         raise _git_error("git diff failed", tracked)
     parts = [tracked.stdout]
 
-    others = _run_git(
-        ["ls-files", "--others", "--exclude-standard"], cwd=worktree_path
-    )
+    others = _run_git(["ls-files", "--others", "--exclude-standard"], cwd=worktree_path)
     if others.returncode == 0:
         untracked = [line for line in others.stdout.splitlines() if line]
         for rel in untracked[:_MAX_UNTRACKED_FILES]:
             # --no-index compares two paths without touching the index; a
             # difference exits 1, which is expected, not an error.
-            new_file = _run_git(
-                ["diff", "--no-index", "--", "/dev/null", rel], cwd=worktree_path
-            )
+            new_file = _run_git(["diff", "--no-index", "--", "/dev/null", rel], cwd=worktree_path)
             if new_file.stdout:
                 parts.append(new_file.stdout)
 
     text = "".join(parts)
     if len(text.encode("utf-8", "replace")) > _MAX_DIFF_BYTES:
-        return DiffResult(diff=text.encode("utf-8", "replace")[:_MAX_DIFF_BYTES].decode("utf-8", "ignore"), truncated=True)
+        return DiffResult(
+            diff=text.encode("utf-8", "replace")[:_MAX_DIFF_BYTES].decode("utf-8", "ignore"),
+            truncated=True,
+        )
     return DiffResult(diff=text, truncated=False)
 
 
@@ -605,7 +605,9 @@ def merge_worktree(
     if current != base_branch:
         return MergeResult(
             outcome="base_not_checked_out",
-            detail=f"a cópia principal está em {current or 'HEAD destacado'}, não em {base_branch}",
+            detail=(
+                f"a cópia principal está em {current or 'HEAD destacado'}, não em {base_branch}"
+            ),
         )
     base_status = _run_git(["status", "--porcelain"], cwd=main_repo)
     if base_status.returncode != 0:
@@ -617,9 +619,7 @@ def merge_worktree(
         )
 
     # 3. Merge, aborting cleanly on conflict.
-    merge = _run_git(
-        ["merge", "--no-ff", "-m", commit_message, branch], cwd=main_repo
-    )
+    merge = _run_git(["merge", "--no-ff", "-m", commit_message, branch], cwd=main_repo)
     if merge.returncode == 0:
         return MergeResult(outcome="merged", detail=merge.stdout.strip() or None)
     _run_git(["merge", "--abort"], cwd=main_repo)
@@ -698,9 +698,7 @@ def snapshot_worktree(*, worktree_path: str, label: str = "") -> SnapshotInfo:
         commit_args = ["commit-tree", tree, "-m", f"snapshot: {label}" if label else "snapshot"]
         if has_head:
             commit_args += ["-p", head.stdout.strip()]
-        committed = _run_git(
-            commit_args, cwd=worktree_path, env={**env, **_SNAPSHOT_IDENTITY}
-        )
+        committed = _run_git(commit_args, cwd=worktree_path, env={**env, **_SNAPSHOT_IDENTITY})
         if committed.returncode != 0:
             raise _git_error("git commit-tree failed", committed)
         commit = committed.stdout.strip()
@@ -746,9 +744,7 @@ def list_snapshots(*, worktree_path: str) -> list[SnapshotInfo]:
             created = int(snap_id.split("-", 1)[0])
         except ValueError:
             created = 0
-        snapshots.append(
-            SnapshotInfo(id=snap_id, commit=commit, label=label, created_at=created)
-        )
+        snapshots.append(SnapshotInfo(id=snap_id, commit=commit, label=label, created_at=created))
     return snapshots
 
 
@@ -810,10 +806,8 @@ def restore_snapshot(
     current = {f for f in [*tracked, *untracked] if f}
     for rel in current - snap_files:
         target = Path(worktree_path) / rel
-        try:
+        with contextlib.suppress(FileNotFoundError, IsADirectoryError, PermissionError):
             target.unlink()
-        except (FileNotFoundError, IsADirectoryError, PermissionError):
-            pass
 
     # Write every snapshot file back into the worktree (scratch index again).
     with tempfile.TemporaryDirectory() as scratch:

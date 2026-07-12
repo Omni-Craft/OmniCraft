@@ -6308,6 +6308,592 @@
         ]
       }
     },
+    "/v1/agents/{agent_id}/mcp-servers": {
+      "get": {
+        "operationId": "list_servers_v1_agents__agent_id__mcp_servers_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Servers V1 Agents  Agent Id  Mcp Servers Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Servers",
+        "tags": [
+          "agent_mcp_servers"
+        ]
+      },
+      "post": {
+        "operationId": "create_server_v1_agents__agent_id__mcp_servers_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertMCPServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Server V1 Agents  Agent Id  Mcp Servers Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Server",
+        "tags": [
+          "agent_mcp_servers"
+        ]
+      }
+    },
+    "/v1/agents/{agent_id}/mcp-servers/{server_name}": {
+      "delete": {
+        "operationId": "delete_server_v1_agents__agent_id__mcp_servers__server_name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "server_name",
+            "required": true,
+            "schema": {
+              "title": "Server Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Server",
+        "tags": [
+          "agent_mcp_servers"
+        ]
+      },
+      "put": {
+        "operationId": "update_server_v1_agents__agent_id__mcp_servers__server_name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "server_name",
+            "required": true,
+            "schema": {
+              "title": "Server Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertMCPServerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Server V1 Agents  Agent Id  Mcp Servers  Server Name  Put",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Server",
+        "tags": [
+          "agent_mcp_servers"
+        ]
+      }
+    },
+    "/v1/agents/{agent_id}/mcp-servers/{server_name}/test": {
+      "post": {
+        "description": "Dial the server and report its tools \u2014 the 'does it work?' button.",
+        "operationId": "test_server_v1_agents__agent_id__mcp_servers__server_name__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "title": "Agent Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "server_name",
+            "required": true,
+            "schema": {
+              "title": "Server Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Test Server V1 Agents  Agent Id  Mcp Servers  Server Name  Test Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Test Server",
+        "tags": [
+          "agent_mcp_servers"
+        ]
+      }
+    },
+    "/v1/code-stats": {
+      "get": {
+        "operationId": "code_stats_v1_code_stats_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 365,
+              "maximum": 730,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "tz",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tz"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Code Stats V1 Code Stats Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Code Stats",
+        "tags": [
+          "code_stats"
+        ]
+      }
+    },
+    "/v1/doctor": {
+      "get": {
+        "operationId": "doctor_v1_doctor_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Doctor V1 Doctor Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Doctor",
+        "tags": [
+          "doctor"
+        ]
+      }
+    },
+    "/v1/evals/suites": {
+      "get": {
+        "operationId": "list_suites_v1_evals_suites_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Suites V1 Evals Suites Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Suites",
+        "tags": [
+          "evals"
+        ]
+      },
+      "post": {
+        "operationId": "create_suite_v1_evals_suites_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Suite V1 Evals Suites Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Create Suite",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/suites/{suite_id}": {
+      "delete": {
+        "operationId": "delete_suite_v1_evals_suites__suite_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "suite_id",
+            "required": true,
+            "schema": {
+              "title": "Suite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Delete Suite V1 Evals Suites  Suite Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Suite",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/evals/suites/{suite_id}/runs": {
+      "get": {
+        "operationId": "list_runs_v1_evals_suites__suite_id__runs_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "suite_id",
+            "required": true,
+            "schema": {
+              "title": "Suite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Runs V1 Evals Suites  Suite Id  Runs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "evals"
+        ]
+      },
+      "post": {
+        "operationId": "record_run_v1_evals_suites__suite_id__runs_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "suite_id",
+            "required": true,
+            "schema": {
+              "title": "Suite Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Record Run V1 Evals Suites  Suite Id  Runs Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Record Run",
+        "tags": [
+          "evals"
+        ]
+      }
+    },
+    "/v1/gallery/agents": {
+      "get": {
+        "description": "List the installable example agents with light metadata.",
+        "operationId": "list_agents_v1_gallery_agents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Agents V1 Gallery Agents Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Agents",
+        "tags": [
+          "gallery"
+        ]
+      }
+    },
+    "/v1/gallery/agents/{example_id}/install": {
+      "post": {
+        "description": "Register an example agent so it appears in the New Session picker.",
+        "operationId": "install_agent_v1_gallery_agents__example_id__install_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "example_id",
+            "required": true,
+            "schema": {
+              "title": "Example Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Install Agent V1 Gallery Agents  Example Id  Install Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Install Agent",
+        "tags": [
+          "gallery"
+        ]
+      }
+    },
     "/v1/harnesses": {
       "get": {
         "operationId": "list_harnesses_v1_harnesses_get",
@@ -6813,6 +7399,151 @@
         ]
       }
     },
+    "/v1/integrations/github/items": {
+      "get": {
+        "description": "List a repo's issues or pull requests (newest-updated first).",
+        "operationId": "github_items_v1_integrations_github_items_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "title": "Repo",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "default": "issue",
+              "pattern": "^(issue|pr)$",
+              "title": "Type",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "default": "open",
+              "pattern": "^(open|closed|all)$",
+              "title": "State",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Github Items V1 Integrations Github Items Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Github Items",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/v1/integrations/github/items/{number}": {
+      "get": {
+        "description": "One issue/PR with its body and first few comments (for the seed prompt).",
+        "operationId": "github_item_v1_integrations_github_items__number__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "number",
+            "required": true,
+            "schema": {
+              "title": "Number",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "repo",
+            "required": true,
+            "schema": {
+              "title": "Repo",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Github Item V1 Integrations Github Items  Number  Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Github Item",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
+    "/v1/integrations/github/status": {
+      "get": {
+        "description": "Whether a GitHub token is available and, if so, whose login it is.",
+        "operationId": "github_status_v1_integrations_github_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Github Status V1 Integrations Github Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Github Status",
+        "tags": [
+          "integrations"
+        ]
+      }
+    },
     "/v1/me": {
       "get": {
         "description": "Return the current user's identity.\n\nReads the user from the auth provider (same logic that\nsession routes use). The frontend calls this on load to\ndiscover who it is.\n\nAlso returns `is_admin` \u2014 the mode-agnostic admin signal\n(the shared `users.is_admin` column, set by the admin-list\npromotion at login). The SPA gates admin chrome on it in\nEVERY mode, including OIDC/SSO where the accounts-only\n`/auth/me` endpoint does not exist.\n\nWhen OIDC is active and the user is unauthenticated,\nreturns 401 with a `login_url` so the frontend knows\nwhere to redirect.\n\n**Returns:** `{\"user_id\": \"alice@example.com\", \"is_admin\": true}`, `{\"user_id\": null, \"is_admin\": false}` if unauthenticated in header mode, or 401 with `login_url` in OIDC mode.",
@@ -6830,6 +7561,54 @@
         "summary": "Me",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/v1/observability/costs": {
+      "get": {
+        "description": "Aggregate the current user's LLM spend for the cost panel.",
+        "operationId": "costs_v1_observability_costs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "days",
+            "required": false,
+            "schema": {
+              "default": 30,
+              "maximum": 90,
+              "minimum": 1,
+              "title": "Days",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Costs V1 Observability Costs Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Costs",
+        "tags": [
+          "observability"
         ]
       }
     },
@@ -6896,6 +7675,30 @@
         "summary": "Create Policy",
         "tags": [
           "default_policies"
+        ]
+      }
+    },
+    "/v1/policies/simulate": {
+      "post": {
+        "description": "Dry-run a policy against a past session's recorded tool calls.",
+        "operationId": "simulate_v1_policies_simulate_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Simulate V1 Policies Simulate Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Simulate",
+        "tags": [
+          "policies"
         ]
       }
     },
@@ -7067,6 +7870,82 @@
         ]
       }
     },
+    "/v1/push/subscriptions": {
+      "delete": {
+        "description": "Remove a subscription (by endpoint) for the current user.",
+        "operationId": "unsubscribe_v1_push_subscriptions_delete",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Unsubscribe V1 Push Subscriptions Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Unsubscribe",
+        "tags": [
+          "push"
+        ]
+      },
+      "post": {
+        "description": "Store this browser's push subscription for the current user.",
+        "operationId": "subscribe_v1_push_subscriptions_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Subscribe V1 Push Subscriptions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Subscribe",
+        "tags": [
+          "push"
+        ]
+      }
+    },
+    "/v1/push/vapid-public-key": {
+      "get": {
+        "description": "The VAPID public key the browser subscribes with.",
+        "operationId": "vapid_public_key_v1_push_vapid_public_key_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Vapid Public Key V1 Push Vapid Public Key Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Vapid Public Key",
+        "tags": [
+          "push"
+        ]
+      }
+    },
     "/v1/runners": {
       "get": {
         "description": "Return currently online runners owned by the requesting user.\n\nWhen auth is active, only runners whose tunnel was\nestablished by the same user are returned. Without auth,\nall online runners are listed (single-user / dev mode).\n\n**Returns:** A `{\"data\": [...]}` list with runner ids and advertised harnesses.",
@@ -7204,6 +8083,182 @@
         "summary": "Mint Runner Owner Token",
         "tags": [
           "runners"
+        ]
+      }
+    },
+    "/v1/scheduled-agents": {
+      "get": {
+        "operationId": "list_jobs_v1_scheduled_agents_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response List Jobs V1 Scheduled Agents Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Jobs",
+        "tags": [
+          "scheduled_agents"
+        ]
+      },
+      "post": {
+        "operationId": "create_job_v1_scheduled_agents_post",
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Job V1 Scheduled Agents Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Create Job",
+        "tags": [
+          "scheduled_agents"
+        ]
+      }
+    },
+    "/v1/scheduled-agents/{job_id}": {
+      "delete": {
+        "operationId": "delete_job_v1_scheduled_agents__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
+                  "title": "Response Delete Job V1 Scheduled Agents  Job Id  Delete",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Job",
+        "tags": [
+          "scheduled_agents"
+        ]
+      },
+      "patch": {
+        "operationId": "update_job_v1_scheduled_agents__job_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Job V1 Scheduled Agents  Job Id  Patch",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Job",
+        "tags": [
+          "scheduled_agents"
+        ]
+      }
+    },
+    "/v1/scheduled-agents/{job_id}/run": {
+      "post": {
+        "operationId": "run_now_v1_scheduled_agents__job_id__run_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Now V1 Scheduled Agents  Job Id  Run Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Now",
+        "tags": [
+          "scheduled_agents"
         ]
       }
     },
@@ -7371,6 +8426,22 @@
                 }
               ],
               "title": "Project"
+            }
+          },
+          {
+            "in": "query",
+            "name": "arena_group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Arena Group"
             }
           }
         ],
@@ -7959,6 +9030,261 @@
         "summary": "Update Mcp Server",
         "tags": [
           "session_mcp_servers"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/arena/diff": {
+      "get": {
+        "description": "Return a racer session's change set vs the arena base branch.\n\nRead-only. Diffs the session's git worktree against the arena base\n(the `omnicraft.arena.base` label, or `HEAD` when absent) on the\nhost that owns it. Powers the arena comparison view's per-racer diff.\n\n**Returns:** `{\"diff\": str, \"truncated\": bool, \"base_ref\": str}`.\n\n**Raises**\n\n- `OmniCraftError` \u2014 404 if the session is missing, 400 if it has no worktree, 409 if its host is offline.",
+        "operationId": "get_arena_diff_v1_sessions__session_id__arena_diff_get",
+        "parameters": [
+          {
+            "description": "Racer session id, e.g. `\"conv_abc123\"`.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Arena Diff",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/arena/merge": {
+      "post": {
+        "description": "Promote a racer's branch into the arena base branch (pick the winner).\n\nCommits the racer's work and merges its branch into\n`omnicraft.arena.base` on the host, conservatively \u2014 the host\nrefuses a dirty/other-branch base and aborts on conflict, so the\n`outcome` may be `\"conflict\"` / `\"base_dirty\"` /\n`\"base_not_checked_out\"` without any change to the repo.\n\n**Returns:** `{\"outcome\": str, \"detail\": str | None}`.\n\n**Raises**\n\n- `OmniCraftError` \u2014 404 if missing, 400 if it has no worktree / branch / known base, 409 if its host is offline.",
+        "operationId": "post_arena_merge_v1_sessions__session_id__arena_merge_post",
+        "parameters": [
+          {
+            "description": "Winning racer session id, e.g. `\"conv_abc123\"`.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Arena Merge",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/checkpoints": {
+      "get": {
+        "description": "List a session worktree's saved checkpoints (newest first).",
+        "operationId": "list_checkpoints_v1_sessions__session_id__checkpoints_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Checkpoints",
+        "tags": [
+          "sessions"
+        ]
+      },
+      "post": {
+        "description": "Capture the current worktree state as a checkpoint (optional label).",
+        "operationId": "create_checkpoint_v1_sessions__session_id__checkpoints_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Checkpoint",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/checkpoints/restore": {
+      "post": {
+        "description": "Reset the session worktree to a saved checkpoint (undoable).",
+        "operationId": "restore_checkpoint_v1_sessions__session_id__checkpoints_restore_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Restore Checkpoint",
+        "tags": [
+          "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/checkpoints/{snapshot_id}": {
+      "delete": {
+        "description": "Delete a saved checkpoint from the session worktree.",
+        "operationId": "delete_checkpoint_v1_sessions__session_id__checkpoints__snapshot_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "snapshot_id",
+            "required": true,
+            "schema": {
+              "title": "Snapshot Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Checkpoint",
+        "tags": [
+          "sessions"
         ]
       }
     },
@@ -10824,6 +12150,50 @@
         "summary": "Fork Session",
         "tags": [
           "sessions"
+        ]
+      }
+    },
+    "/v1/webhooks/{token}": {
+      "post": {
+        "operationId": "fire_webhook_v1_webhooks__token__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "token",
+            "required": true,
+            "schema": {
+              "title": "Token",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Fire Webhook V1 Webhooks  Token  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Fire Webhook",
+        "tags": [
+          "scheduled_agents"
         ]
       }
     }

@@ -69,10 +69,27 @@ jobs:
         working-directory: web/electron/dist/mac-arm64
         run: ditto -c -k --keepParent OmniCraft.app OmniCraft-macos-arm64.zip
 
+      # Wrap the SIGNED .app in a compressed disk image with a drag-to-Applications
+      # shortcut. hdiutil copies the bundle byte-for-byte, so the ad-hoc signature
+      # survives (electron-builder's own dmg step would re-pack and strip it).
+      - name: Build .dmg from the signed app
+        working-directory: web/electron/dist/mac-arm64
+        run: |
+          rm -rf dmgroot
+          mkdir -p dmgroot
+          cp -R OmniCraft.app dmgroot/
+          ln -s /Applications dmgroot/Applications
+          hdiutil create -volname "OmniCraft" \
+            -srcfolder dmgroot -ov -format UDZO \
+            OmniCraft-macos-arm64.dmg
+          rm -rf dmgroot
+          ls -la OmniCraft-macos-arm64.dmg
+
       - name: Collect artifacts
         run: |
           mkdir -p out
           cp web/electron/dist/mac-arm64/OmniCraft-macos-arm64.zip out/
+          cp web/electron/dist/mac-arm64/OmniCraft-macos-arm64.dmg out/
           ls -la out
 
       - name: Upload build artifacts
@@ -82,14 +99,12 @@ jobs:
           path: out/*
           if-no-files-found: error
 
-      - name: Attach to Release (tag builds only)
-        if: startsWith(github.ref, 'refs/tags/v')
+      # Runs on tag pushes (github.ref_name = the tag) and on manual dispatch
+      # (the `tag` input names an existing release). Body is left untouched so
+      # the curated release notes are never clobbered.
+      - name: Attach to Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
           files: out/*
-          fail_on_unmatched_files: false
-          body: |
-            Build **não assinado** (ad-hoc) do OmniCraft.app para macOS (Apple Silicon).
-
-            Após baixar: `xattr -cr OmniCraft.app` ou clique-direito → Abrir na
-            primeira vez (o app não é notarizado).
+          fail_on_unmatched_files: error

@@ -1,0 +1,68 @@
+# Builds the Windows desktop app on a GitHub-hosted Windows runner and attaches
+# the NSIS installer to a Release — so packaging never depends on a local
+# machine (a Windows installer cannot be built on macOS without Wine).
+#
+# The installer is UNSIGNED (this fork has no Authenticode certificate), so
+# SmartScreen shows a "Windows protected your PC" warning on first run —
+# click "More info" → "Run anyway". It is a normal, functional installer.
+name: Release Windows app
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach artifacts to (e.g. v0.5.0)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-win:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install Electron build dependencies
+        working-directory: web/electron
+        run: npm ci --no-audit --no-fund || npm install --no-audit --no-fund
+
+      # Native NSIS build on a real Windows runner — no Wine, no cross-compile.
+      # Unsigned: CSC_LINK / CSC_KEY_PASSWORD are intentionally unset.
+      - name: Package the Windows installer (NSIS, unsigned)
+        working-directory: web/electron
+        run: npx electron-builder --win nsis
+
+      - name: Collect artifacts
+        shell: bash
+        run: |
+          mkdir -p out
+          cp web/electron/dist/OmniCraft-Setup-*.exe out/
+          ls -la out
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: omnicraft-windows-x64
+          path: out/*
+          if-no-files-found: error
+
+      # Runs on tag pushes (github.ref_name = the tag) and on manual dispatch
+      # (the `tag` input names an existing release). Body is left untouched so
+      # the curated release notes are never clobbered.
+      - name: Attach to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          files: out/*
+          fail_on_unmatched_files: error

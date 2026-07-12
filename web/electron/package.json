@@ -108,9 +108,18 @@
     },
     "win": {
       "icon": "icons/icon.ico",
+      "artifactName": "OmniCraft-Setup-${version}.${ext}",
       "target": [
         "nsis"
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "OmniCraft"
     }
   },
   "dependencies": {

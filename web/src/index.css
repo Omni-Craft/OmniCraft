@@ -1103,6 +1103,38 @@
   will-change: transform;
 }
 
+/* Compact swim — the ambient corner mascot inside a conversation. Same
+ * nose-first choreography as otto-swim, shorter travel for a small stage. */
+@keyframes otto-swim-sm {
+  0% {
+    transform: translateX(-55px) translateY(0) scaleX(-1) rotate(-3deg);
+  }
+  22% {
+    transform: translateX(-15px) translateY(-5px) scaleX(-1) rotate(3deg);
+  }
+  48% {
+    transform: translateX(55px) translateY(2px) scaleX(-1) rotate(-2deg);
+  }
+  50% {
+    transform: translateX(55px) translateY(0) scaleX(1) rotate(2deg);
+  }
+  72% {
+    transform: translateX(-5px) translateY(-5px) scaleX(1) rotate(-3deg);
+  }
+  98% {
+    transform: translateX(-55px) translateY(2px) scaleX(1) rotate(2deg);
+  }
+  100% {
+    transform: translateX(-55px) translateY(0) scaleX(-1) rotate(-3deg);
+  }
+}
+
+.otto-swim-sm {
+  transform-origin: center;
+  animation: otto-swim-sm 13s ease-in-out infinite;
+  will-change: transform;
+}
+
 @keyframes otto-bubble {
   0% {
     transform: translateY(0) scale(0.6);

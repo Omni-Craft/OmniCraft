@@ -1755,6 +1755,16 @@ function MainAgentSurface({
           scroller={scroller}
           hasMoreHistory={hasMoreHistory}
         />
+        {/* Ambient mascot — a small fish swims across the bottom-right corner.
+            A sibling of Conversation (like JumpToTopButton) so it pins to the
+            viewport wrapper, not the scrollable content. Decorative only:
+            pointer-events-none, subtle, frozen by the reduced-motion gate. */}
+        <div
+          className="pointer-events-none absolute right-3 bottom-2 z-10 hidden h-10 w-40 items-center justify-center overflow-hidden opacity-60 md:flex"
+          aria-hidden="true"
+        >
+          <OttoIcon className="otto-swim-sm h-7 w-auto" />
+        </div>
       </div>
       {/* Floating reply button — scoped to the conversation container. */}
       <SelectionPopup

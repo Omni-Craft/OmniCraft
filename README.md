@@ -51,7 +51,7 @@ do app desktop nativo.
 
 ## 🗂️ As três superfícies
 
-O OmniCraft organiza o trabalho com agentes no mesmo modelo do Claude Desktop
+O OmniCraft organiza o trabalho com agentes.
 — e vai além:
 
 | | **💬 Chat** | **🛠️ Craftwork** | **`</>` Code** |

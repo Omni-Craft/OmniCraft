@@ -48,7 +48,10 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
   return (
     <div className="flex flex-col gap-1 rounded-xl border border-white/10 bg-black/20 px-4 py-3">
       <span className="text-xs opacity-50">{label}</span>
-      <span className="text-2xl font-semibold tabular-nums" style={tone ? { color: tone } : undefined}>
+      <span
+        className="text-2xl font-semibold tabular-nums"
+        style={tone ? { color: tone } : undefined}
+      >
         {value}
       </span>
     </div>
@@ -154,7 +157,10 @@ export function CostPage() {
           <div className="h-2 overflow-hidden rounded-full bg-white/10">
             <div
               className="h-full rounded-full transition-all"
-              style={{ width: `${budgetPct}%`, backgroundColor: overBudget ? "#e5484d" : "#0fb5bd" }}
+              style={{
+                width: `${budgetPct}%`,
+                backgroundColor: overBudget ? "#e5484d" : "#0fb5bd",
+              }}
             />
           </div>
         )}
@@ -197,7 +203,10 @@ export function CostPage() {
                 <div className="h-4 flex-1 overflow-hidden rounded bg-white/5">
                   <div
                     className="h-full rounded"
-                    style={{ width: `${(m.usd / maxModel) * 100}%`, backgroundColor: modelColor(i) }}
+                    style={{
+                      width: `${(m.usd / maxModel) * 100}%`,
+                      backgroundColor: modelColor(i),
+                    }}
                   />
                 </div>
                 <span className="w-16 shrink-0 text-right text-sm tabular-nums">{usd(m.usd)}</span>

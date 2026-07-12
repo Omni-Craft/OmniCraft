@@ -179,7 +179,9 @@ export function CheckpointsButton({ sessionId }: { sessionId: string }) {
         </div>
 
         {note && (
-          <p className="border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">{note}</p>
+          <p className="border-b border-border/60 px-3 py-2 text-xs text-muted-foreground">
+            {note}
+          </p>
         )}
 
         <div className="max-h-72 overflow-auto">

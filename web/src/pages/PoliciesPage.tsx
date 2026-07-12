@@ -546,7 +546,9 @@ function SimulatePolicyDialog({ policy, onClose }: { policy: DefaultPolicy; onCl
             </div>
             <div className="max-h-72 overflow-auto rounded-md border border-border">
               {data.results.length === 0 ? (
-                <p className="p-3 text-sm text-muted-foreground">Essa sessão não teve tool calls.</p>
+                <p className="p-3 text-sm text-muted-foreground">
+                  Essa sessão não teve tool calls.
+                </p>
               ) : (
                 <ul className="divide-y divide-border/60">
                   {data.results.map((r, i) => (

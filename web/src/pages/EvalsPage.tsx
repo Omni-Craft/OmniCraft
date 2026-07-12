@@ -280,7 +280,10 @@ function SuiteDetail({ suiteId, onBack }: { suiteId: string; onBack: () => void 
         workspace: workspace.trim(),
         labels: nativeWrapperLabelsForAgent(agent) ?? undefined,
         initial_items: [
-          { type: "message", data: { role: "user", content: [{ type: "input_text", text: prompt }] } },
+          {
+            type: "message",
+            data: { role: "user", content: [{ type: "input_text", text: prompt }] },
+          },
         ],
       }),
     });
@@ -422,7 +425,10 @@ function SuiteDetail({ suiteId, onBack }: { suiteId: string; onBack: () => void 
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-medium opacity-80">Tarefas</h2>
         {suite.tasks.map((t) => (
-          <div key={t.id} className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm">
+          <div
+            key={t.id}
+            className="rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm"
+          >
             <p className="opacity-90">{t.prompt}</p>
             <p className="mt-0.5 text-xs opacity-50">
               aprovar se a saída {CHECK_LABEL[t.check.type]}{" "}
@@ -441,8 +447,8 @@ function SuiteDetail({ suiteId, onBack }: { suiteId: string; onBack: () => void 
           <div className="flex flex-col gap-3">
             {regressed.size > 0 && (
               <p className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">
-                ⚠️ {regressed.size} tarefa(s) regrediram na última execução (passavam antes, falharam
-                agora).
+                ⚠️ {regressed.size} tarefa(s) regrediram na última execução (passavam antes,
+                falharam agora).
               </p>
             )}
             {runs.map((r, ri) => (

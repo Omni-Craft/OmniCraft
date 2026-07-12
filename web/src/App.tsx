@@ -32,7 +32,6 @@ const SettingsPage = lazy(() =>
 const CraftworkPage = lazy(() =>
   import("@/pages/CraftworkPage").then((m) => ({ default: m.CraftworkPage })),
 );
-const CodePage = lazy(() => import("@/pages/CodePage").then((m) => ({ default: m.CodePage })));
 
 interface AppProps {
   /**
@@ -136,9 +135,11 @@ function App({ basename }: AppProps = {}) {
               /craftwork is the hub. */}
           <Route path={`${prefix}/craftwork`} element={<CraftworkPage />} />
           <Route path={`${prefix}/craftwork/:section`} element={<CraftworkPage />} />
-          {/* Code — the sessions surface (the "Code" half of the Início/Code
-              switcher). Lists your coding sessions; opening one is /c/:id. */}
-          <Route path={`${prefix}/code`} element={<CodePage />} />
+          {/* Code — the filesystem coding composer (the "Code" half of the
+              Início/Code switcher). Same ChatPage landing as "/", but the
+              composer reads the route: "/code" is the coding mode (host /
+              workspace / worktree chips), while "/" is Chat (no filesystem). */}
+          <Route path={`${prefix}/code`} element={<ChatPage />} />
           {/* Settings renders into the chat outlet so the conversations
               sidebar stays put — entering settings only swaps the card's
               content (the section nav) and the main area. The active section

@@ -50,8 +50,8 @@ export function useCraftworkRoute(): { inCraftwork: boolean; section: CraftworkS
   return { inCraftwork: true, section };
 }
 
-/** True when the route belongs to the "Code" surface (sessions list + a session). */
-function useInCode(): boolean {
+/** True when the route belongs to the "Code" surface (coding composer + a session). */
+export function useInCode(): boolean {
   const segs = useLocation().pathname.split("/").filter(Boolean);
   return segs.includes("code") || segs.includes("c");
 }

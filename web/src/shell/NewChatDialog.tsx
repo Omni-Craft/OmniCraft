@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { takeComposeSeed } from "@/lib/composeSeed";
-import { useNavigate, useSearchParams } from "@/lib/routing";
+import { useLocation, useNavigate, useSearchParams } from "@/lib/routing";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   MonitorIcon,
@@ -1778,9 +1778,10 @@ export function NewChatLandingScreen() {
     () => takeComposeSeed() ?? landingDraft?.message ?? "",
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  // Composer mode — Chat (a normal session) vs Craftwork (the agentic workspace
-  // mode; transforms the composer in place, Cowork-style, with prompt ideas).
-  const [mode, setMode] = useState<"chat" | "craftwork">("chat");
+  // Composer mode follows the top-of-sidebar tab: the Início tab ("/") is Chat
+  // — the no-filesystem conversational agent, no host/workspace chips — while
+  // the Code tab ("/code") is the normal filesystem coding composer.
+  const chatMode = !useLocation().pathname.split("/").filter(Boolean).includes("code");
   const isComposingRef = useRef(false);
   // maxRows 9 = 180px of 20px lines, matching the composer's 200px
   // border-box max (180px content + 16px top / 4px bottom padding).
@@ -2125,11 +2126,16 @@ export function NewChatLandingScreen() {
   // A pick only wins while it exists in the list — a persisted id whose
   // agent has since been unregistered (or hidden) falls back to the default.
   // The pending custom agent sentinel also wins when set.
+  // Chat mode is pinned to the no-`os_env` "chat" agent (no filesystem access);
+  // Code mode uses the user's picked agent (or the default).
+  const chatAgentId = agentList.find((a) => a.name === "chat")?.id ?? null;
   const effectiveAgentId =
-    pickedAgentId === PENDING_AGENT_ID
-      ? PENDING_AGENT_ID
-      : ((agentList.some((a) => a.id === pickedAgentId) ? pickedAgentId : agentList[0]?.id) ??
-        null);
+    chatMode && chatAgentId
+      ? chatAgentId
+      : pickedAgentId === PENDING_AGENT_ID
+        ? PENDING_AGENT_ID
+        : ((agentList.some((a) => a.id === pickedAgentId) ? pickedAgentId : agentList[0]?.id) ??
+          null);
   const selectedAgent = useMemo(
     () =>
       effectiveAgentId === PENDING_AGENT_ID && pendingAgent
@@ -2979,11 +2985,11 @@ export function NewChatLandingScreen() {
               placeholder={
                 pillSkills.length > 0
                   ? ""
-                  : mode === "craftwork"
-                    ? "Digite / para habilidades"
+                  : chatMode
+                    ? "Converse, planeje, escreva specs — sem acesso a arquivos"
                     : "Descreva uma tarefa para iniciar uma nova sessão…"
               }
-              aria-label="Descreva uma tarefa para iniciar uma nova sessão"
+              aria-label="Descreva uma tarefa ou faça uma pergunta"
               rows={1}
               autoFocus
               data-testid="new-chat-landing-input"
@@ -3099,30 +3105,6 @@ export function NewChatLandingScreen() {
                   <PaperclipIcon className="size-4" />
                   <span className="sr-only">Anexar arquivos</span>
                 </Button>
-                {/* Chat / Craftwork mode toggle — Cowork's in-composer switch.
-                    Craftwork transforms the composer in place (placeholder +
-                    "Ideias para você" below). */}
-                <div
-                  className="mx-1 flex items-center rounded-full bg-muted p-0.5"
-                  data-testid="new-chat-mode-toggle"
-                >
-                  {(["chat", "craftwork"] as const).map((m) => (
-                    <button
-                      key={m}
-                      type="button"
-                      onClick={() => setMode(m)}
-                      className={cn(
-                        "h-7 rounded-full px-3 text-xs font-medium transition-colors",
-                        mode === m
-                          ? "bg-card text-foreground shadow-sm"
-                          : "text-muted-foreground hover:text-foreground",
-                      )}
-                      data-testid={`new-chat-mode-${m}`}
-                    >
-                      {m === "chat" ? "Chat" : "Craftwork"}
-                    </button>
-                  ))}
-                </div>
                 <ComposerMicButton
                   disabled={creating}
                   onTranscript={(text) => setMessage((prev) => (prev ? `${prev} ${text}` : text))}
@@ -3134,34 +3116,38 @@ export function NewChatLandingScreen() {
                   submenu (model / effort / permission mode for Claude Code,
                   approval mode for Codex/OpenCode, exec mode for Cursor,
                   brain-harness override for bundle agents). */}
-                <AgentHarnessPicker
-                  agentEntries={agentEntries}
-                  harnessEntries={harnessEntries}
-                  brainHarnessLabels={brainHarnessLabels}
-                  effectiveAgentId={effectiveAgentId}
-                  agentLabel={agentLabel}
-                  hasAgents={agentList.length > 0}
-                  host={harnessWarningHost}
-                  onSelectAgent={handleSelectAgent}
-                  pendingAgent={pendingAgent}
-                  pendingAgentId={PENDING_AGENT_ID}
-                  onSelectPending={handleSelectPending}
-                  onCreateCustomAgent={() => setCreateAgentOpen(true)}
-                  permissionMode={permissionMode}
-                  approvalMode={approvalMode}
-                  cursorExecMode={cursorExecMode}
-                  bypassSandbox={bypassSandbox}
-                  pickedModel={pickedModel}
-                  pickedEffort={pickedEffort}
-                  pickedHarness={pickedHarness}
-                  setPermissionMode={setPermissionMode}
-                  setApprovalMode={setApprovalMode}
-                  setCursorExecMode={setCursorExecMode}
-                  setBypassSandbox={setBypassSandbox}
-                  setPickedModel={setPickedModel}
-                  setPickedEffort={setPickedEffort}
-                  setPickedHarness={handleSetPickedHarness}
-                />
+                {/* Chat mode is pinned to the "chat" agent, so the agent /
+                    harness picker is hidden — the model still defaults. */}
+                {!chatMode && (
+                  <AgentHarnessPicker
+                    agentEntries={agentEntries}
+                    harnessEntries={harnessEntries}
+                    brainHarnessLabels={brainHarnessLabels}
+                    effectiveAgentId={effectiveAgentId}
+                    agentLabel={agentLabel}
+                    hasAgents={agentList.length > 0}
+                    host={harnessWarningHost}
+                    onSelectAgent={handleSelectAgent}
+                    pendingAgent={pendingAgent}
+                    pendingAgentId={PENDING_AGENT_ID}
+                    onSelectPending={handleSelectPending}
+                    onCreateCustomAgent={() => setCreateAgentOpen(true)}
+                    permissionMode={permissionMode}
+                    approvalMode={approvalMode}
+                    cursorExecMode={cursorExecMode}
+                    bypassSandbox={bypassSandbox}
+                    pickedModel={pickedModel}
+                    pickedEffort={pickedEffort}
+                    pickedHarness={pickedHarness}
+                    setPermissionMode={setPermissionMode}
+                    setApprovalMode={setApprovalMode}
+                    setCursorExecMode={setCursorExecMode}
+                    setBypassSandbox={setBypassSandbox}
+                    setPickedModel={setPickedModel}
+                    setPickedEffort={setPickedEffort}
+                    setPickedHarness={handleSetPickedHarness}
+                  />
+                )}
                 {smartRoutingEnabled &&
                   selectedAgent &&
                   _ROUTABLE_HARNESSES.has(selectedAgent.harness ?? "") && (
@@ -3203,7 +3189,15 @@ export function NewChatLandingScreen() {
               chip row can wrap on narrow screens — with a fixed h-16 the
               chips overflowed the viewport on phones, widening the whole
               page (#sidebar-wider-than-screen on the landing page). */}
-          <div className="relative z-0 -mt-9 flex w-full items-center rounded-b-2xl bg-tray/40 pt-8 pr-3 pb-2 pl-2">
+          <div
+            className={cn(
+              "relative z-0 -mt-9 flex w-full items-center rounded-b-2xl bg-tray/40 pt-8 pr-3 pb-2 pl-2",
+              // Chat mode has no filesystem — hide the host / workspace /
+              // worktree tray. It stays mounted (still supplies a default host +
+              // workspace for the runner; the chat agent has no file tools).
+              chatMode && "hidden",
+            )}
+          >
             <div className="flex flex-wrap items-center gap-1">
               {/* Host chip */}
               <DropdownMenu
@@ -3721,17 +3715,18 @@ export function NewChatLandingScreen() {
           )}
         </div>
 
-        {/* Craftwork mode: "Ideias para você" — prompt starters that prefill the
-            composer (never auto-run), mirroring Cowork's suggestion list. */}
-        {mode === "craftwork" && message.length === 0 && (
-          <div className="flex w-full flex-col gap-1" data-testid="craftwork-ideas">
+        {/* Chat mode: "Ideias para você" — text/reasoning prompt starters that
+            prefill the composer (never auto-run). Chat has no filesystem, so
+            these stay at the level of planning, specs and writing. */}
+        {chatMode && message.length === 0 && (
+          <div className="flex w-full flex-col gap-1" data-testid="chat-ideas">
             <p className="px-2 pb-1 text-sm font-medium text-muted-foreground">Ideias para você</p>
             <ul className="flex flex-col">
               {[
-                { emoji: "🌅", text: "Me dê um resumo das mudanças de hoje" },
-                { emoji: "🧪", text: "Rode os testes e corrija o que falhar" },
-                { emoji: "📝", text: "Escreva as release notes do último range de commits" },
-                { emoji: "🔍", text: "Revise o diff atual e aponte problemas" },
+                { emoji: "🧭", text: "Vamos planejar uma nova feature do zero" },
+                { emoji: "📐", text: "Me ajude a escrever a spec de um módulo" },
+                { emoji: "🏛️", text: "Discuta a arquitetura de um sistema comigo" },
+                { emoji: "✍️", text: "Revise e melhore este texto que vou colar" },
               ].map((idea) => (
                 <li key={idea.text}>
                   <button

@@ -134,7 +134,12 @@ import { absoluteTime, relativeTime } from "@/lib/relativeTime";
 import { MOD_KEY } from "@/components/KeyboardShortcutsDialog";
 import { isCurrentServerLocal } from "@/lib/serverOrigin";
 import { SettingsSidebarBody, useSettingsRoute, useTrackSettingsReturn } from "./settingsNav";
-import { CraftworkSidebarBody, SidebarModeSwitcher, useCraftworkRoute } from "./craftworkNav";
+import {
+  CraftworkSidebarBody,
+  SidebarModeSwitcher,
+  useCraftworkRoute,
+  useInCode,
+} from "./craftworkNav";
 import {
   type ActiveChatOverride,
   COLLAPSED_SIDEBAR_SECTIONS_STORAGE_KEY,
@@ -365,6 +370,10 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   // On /craftwork the card swaps the conversation list for the Craftwork
   // section nav, the same way settings does.
   const { inCraftwork } = useCraftworkRoute();
+  // "Nova sessão" and the brand link follow the active tab: Code (filesystem)
+  // vs Início (Chat, no filesystem).
+  const inCode = useInCode();
+  const newSessionPath = inCode ? "/code" : "/";
   // Remember the pre-settings location so "Back to OmniCraft" returns to the
   // conversation the user was viewing, not the home page. Tracked here since
   // the sidebar stays mounted across the transition into settings.
@@ -592,7 +601,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
               lands under "My sessions" — so snap the tab back there on click
               (the button stays visible on both tabs). */}
                   <Link
-                    to="/"
+                    to={newSessionPath}
                     onClick={(e) => {
                       setActiveTab("mine");
                       onNavClick(e);

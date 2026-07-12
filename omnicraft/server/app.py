@@ -1383,10 +1383,38 @@ def create_app(
 
             fire_sem = asyncio.Semaphore(4)
 
+            def _notify_failing_job(job_id: str) -> None:
+                # Push-notify the owner when a scheduled job hits exactly 3
+                # consecutive errors — once per failure streak, not per tick.
+                fresh = _sched.get_job(job_id)
+                if fresh is None:
+                    return
+                streak = 0
+                for entry in fresh.get("history", []):
+                    if entry.get("status") == "error":
+                        streak += 1
+                    else:
+                        break
+                if streak != 3:
+                    return
+                _web_push.deliver_to_user(
+                    fresh.get("owner", "local"),
+                    {
+                        "title": "Agente agendado falhando",
+                        "body": (
+                            f"O job '{fresh.get('name')}' falhou 3 vezes seguidas: "
+                            f"{(fresh.get('history') or [{}])[0].get('detail', '')[:120]}"
+                        ),
+                        "url": "/craftwork/scheduled",
+                    },
+                )
+
             async def _fire(job: dict[str, Any]) -> None:
                 async with fire_sem:
                     try:
-                        await _sched.fire_job(app, job, agent_store, trigger="schedule")
+                        result = await _sched.fire_job(app, job, agent_store, trigger="schedule")
+                        if result.get("status") == "error":
+                            await asyncio.to_thread(_notify_failing_job, job["id"])
                     except Exception as exc:  # noqa: BLE001 — one bad job must not kill the loop
                         _logger.warning("scheduled-agents: job %s failed (%s)", job.get("id"), exc)
 

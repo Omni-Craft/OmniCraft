@@ -233,15 +233,20 @@ def _compute_next(job: dict[str, Any], base_ts: int) -> int | None:
 # --- CRUD ------------------------------------------------------------------
 
 
-def list_jobs() -> list[dict[str, Any]]:
+def _owned_by(job: dict[str, Any], owner: str | None) -> bool:
+    """Owner filter — jobs written before owner scoping default to "local"."""
+    return owner is None or job.get("owner", "local") == owner
+
+
+def list_jobs(owner: str | None = None) -> list[dict[str, Any]]:
     with _lock:
-        return list(_load()["jobs"])
+        return [dict(j) for j in _load()["jobs"] if _owned_by(j, owner)]
 
 
-def get_job(job_id: str) -> dict[str, Any] | None:
+def get_job(job_id: str, owner: str | None = None) -> dict[str, Any] | None:
     with _lock:
         for job in _load()["jobs"]:
-            if job.get("id") == job_id:
+            if job.get("id") == job_id and _owned_by(job, owner):
                 return dict(job)
     return None
 
@@ -271,10 +276,12 @@ def create_job(
     tz: str | None = None,
     no_overlap: bool = True,
     enabled: bool = True,
+    owner: str = "local",
 ) -> dict[str, Any]:
     now = _now()
     job = {
         "id": secrets.token_hex(8),
+        "owner": owner,
         "name": name.strip() or agent_name,
         "agent_name": agent_name,
         "prompt": prompt,
@@ -314,11 +321,13 @@ _UPDATABLE = {
 }
 
 
-def update_job(job_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
+def update_job(
+    job_id: str, patch: dict[str, Any], owner: str | None = None
+) -> dict[str, Any] | None:
     with _lock:
         data = _load()
         for job in data["jobs"]:
-            if job.get("id") != job_id:
+            if job.get("id") != job_id or not _owned_by(job, owner):
                 continue
             for key in _UPDATABLE:
                 if key in patch:
@@ -339,11 +348,13 @@ def update_job(job_id: str, patch: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def delete_job(job_id: str) -> bool:
+def delete_job(job_id: str, owner: str | None = None) -> bool:
     with _lock:
         data = _load()
         before = len(data["jobs"])
-        data["jobs"] = [j for j in data["jobs"] if j.get("id") != job_id]
+        data["jobs"] = [
+            j for j in data["jobs"] if not (j.get("id") == job_id and _owned_by(j, owner))
+        ]
         if len(data["jobs"]) == before:
             return False
         _save(data)

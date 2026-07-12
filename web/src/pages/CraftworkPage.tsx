@@ -103,7 +103,7 @@ function Hub() {
             <Link
               key={t.to}
               to={t.to}
-              className="group flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-4 transition hover:border-white/25 hover:bg-black/30"
+              className="group flex flex-col gap-2 rounded-xl border border-border bg-card/40 p-4 transition hover:border-foreground/30 hover:bg-card/60"
             >
               <span className="text-2xl">{t.emoji}</span>
               <span className="font-semibold">{t.title}</span>
@@ -136,7 +136,7 @@ function Hub() {
             {installed.map((a) => (
               <div
                 key={a.id}
-                className="flex flex-col gap-2 rounded-xl border border-white/10 bg-black/20 p-4"
+                className="flex flex-col gap-2 rounded-xl border border-border bg-card/40 p-4"
               >
                 <span className="font-semibold capitalize">{a.name}</span>
                 <span className="line-clamp-3 flex-1 text-sm opacity-60">

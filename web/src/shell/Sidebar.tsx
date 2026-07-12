@@ -348,6 +348,19 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   const unseenComments = useCommentInbox(loadedRows).items.length;
   const inboxCount = pendingApprovals + unseenComments;
 
+  // Per-surface unread flags for the Início/Code switcher — an unread chat
+  // while the user is on Code (and vice-versa) would otherwise be invisible.
+  const surfaceUnread = useMemo(() => {
+    let home = false;
+    let code = false;
+    for (const c of loadedRows) {
+      if (!c.viewer_unread || c.archived) continue;
+      if (c.agent_name === "chat") home = true;
+      else code = true;
+    }
+    return { home, code };
+  }, [loadedRows]);
+
   // Click handler for conversation-row Links in the sidebar. The Link
   // handles navigation natively, so cmd/ctrl/middle-click opens new
   // tabs. We still want to close on mobile after a plain primary click,
@@ -472,7 +485,11 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
         <>
           {/* Chat / Craftwork top switcher — the two primary destinations,
               always visible above the mode's body (Claude Desktop pattern). */}
-          <SidebarModeSwitcher onNavClick={onNavClick} />
+          <SidebarModeSwitcher
+            onNavClick={onNavClick}
+            unreadHome={surfaceUnread.home}
+            unreadCode={surfaceUnread.code}
+          />
           {inCraftwork ? (
             <CraftworkSidebarBody onNavClick={onNavClick} onClose={onClose} />
           ) : (

@@ -44,6 +44,24 @@ const UNITS: { label: string; seconds: number }[] = [
   { label: "dias", seconds: 86400 },
 ];
 
+// One-click schedule templates (Cowork-style starting points).
+const TEMPLATES: { emoji: string; name: string; prompt: string; cron: string }[] = [
+  {
+    emoji: "☕",
+    name: "Resumo diário",
+    prompt:
+      "Me dê um resumo das mudanças de ontem neste repositório (commits, PRs, pendências) e o que merece atenção hoje.",
+    cron: "0 9 * * 1-5",
+  },
+  {
+    emoji: "📋",
+    name: "Revisão semanal",
+    prompt:
+      "Revise a semana neste repositório: o que foi entregue, PRs abertos, pendências e riscos. Termine com sugestões de prioridades para a próxima semana.",
+    cron: "0 9 * * 1",
+  },
+];
+
 const CRON_PRESETS: { label: string; cron: string }[] = [
   { label: "Todo dia 9h", cron: "0 9 * * *" },
   { label: "Dias úteis 9h", cron: "0 9 * * 1-5" },
@@ -69,7 +87,7 @@ function fmtTime(ts: number | null | undefined): string {
 
 function statusColor(status: string): string {
   const s = status.toLowerCase();
-  if (s.includes("fail") || s.includes("error")) return "text-red-400";
+  if (s.includes("fail") || s.includes("error")) return "text-destructive";
   if (s.includes("run") || s.includes("active")) return "text-amber-400";
   return "text-emerald-400";
 }
@@ -338,8 +356,8 @@ export function ScheduledAgentsPage() {
   const copy = (text: string) => void navigator.clipboard?.writeText(text);
 
   const inputCls =
-    "w-full rounded-lg border border-white/15 bg-black/20 px-3 py-2 text-sm outline-none focus:border-white/30";
-  const chip = "rounded bg-white/10 px-1.5 py-0.5 text-[11px] opacity-70";
+    "w-full rounded-lg border border-border bg-card/40 px-3 py-2 text-sm outline-none focus:border-ring";
+  const chip = "rounded bg-muted px-1.5 py-0.5 text-[11px] opacity-70";
 
   const agentOptions = useMemo(
     () => (agents.length ? agents : form.agent_name ? [form.agent_name] : []),
@@ -367,14 +385,40 @@ export function ScheduledAgentsPage() {
       {/* Create / edit form */}
       <section
         ref={formRef}
-        className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4"
+        className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4"
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void submit();
         }}
       >
-        <h2 className="text-sm font-semibold opacity-80">
-          {editingId ? "Editar agendamento" : "Novo agendamento"}
-        </h2>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold opacity-80">
+            {editingId ? "Editar agendamento" : "Novo agendamento"}
+          </h2>
+          {/* Templates — one-click starting points (Cowork-style). */}
+          {!editingId && (
+            <div className="flex gap-1.5">
+              {TEMPLATES.map((t) => (
+                <button
+                  key={t.name}
+                  type="button"
+                  onClick={() =>
+                    setForm((f) => ({
+                      ...f,
+                      name: t.name,
+                      prompt: t.prompt,
+                      mode: "cron",
+                      cron: t.cron,
+                    }))
+                  }
+                  className="rounded-lg border border-border px-2.5 py-1 text-xs transition hover:border-foreground/30"
+                  data-testid={`schedule-template-${t.name}`}
+                >
+                  {t.emoji} {t.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="flex flex-col gap-1 text-xs opacity-70">
             Nome
@@ -454,8 +498,8 @@ export function ScheduledAgentsPage() {
                   onClick={() => setForm({ ...form, mode: m })}
                   className={`rounded-lg border px-3 py-1.5 text-sm transition ${
                     form.mode === m
-                      ? "border-white/40 bg-white/10"
-                      : "border-white/15 hover:border-white/30"
+                      ? "border-foreground/40 bg-muted"
+                      : "border-border hover:border-foreground/30"
                   }`}
                 >
                   {label}
@@ -494,7 +538,7 @@ export function ScheduledAgentsPage() {
                     key={p.cron}
                     type="button"
                     onClick={() => setForm({ ...form, cron: p.cron })}
-                    className="rounded border border-white/15 px-2 py-1 text-[11px] transition hover:border-white/30"
+                    className="rounded border border-border px-2 py-1 text-[11px] transition hover:border-foreground/30"
                   >
                     {p.label}
                   </button>
@@ -532,7 +576,7 @@ export function ScheduledAgentsPage() {
           </label>
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-destructive">{error}</p>}
         <div className="flex items-center gap-2">
           <button
             type="button"
@@ -547,7 +591,7 @@ export function ScheduledAgentsPage() {
             <button
               type="button"
               onClick={resetForm}
-              className="rounded-lg border border-white/15 px-3 py-1.5 text-sm transition hover:border-white/30"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-foreground/30"
             >
               Cancelar
             </button>
@@ -568,7 +612,7 @@ export function ScheduledAgentsPage() {
             return (
               <div
                 key={j.id}
-                className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4"
+                className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -601,13 +645,13 @@ export function ScheduledAgentsPage() {
 
                 {/* Webhook URL */}
                 <div className="flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded bg-black/40 px-2 py-1 text-[11px] opacity-70">
+                  <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-[11px] opacity-70">
                     {webhookUrl(j.webhook_token)}
                   </code>
                   <button
                     type="button"
                     onClick={() => copy(webhookUrl(j.webhook_token))}
-                    className="rounded border border-white/15 px-2 py-1 text-[11px] transition hover:border-white/30"
+                    className="rounded border border-border px-2 py-1 text-[11px] transition hover:border-foreground/30"
                   >
                     Copiar
                   </button>
@@ -664,7 +708,7 @@ export function ScheduledAgentsPage() {
                             return n;
                           })
                         }
-                        className="rounded-lg border border-white/15 px-3 py-1.5 text-sm transition hover:border-white/30"
+                        className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-foreground/30"
                       >
                         Fechar
                       </button>
@@ -684,21 +728,21 @@ export function ScheduledAgentsPage() {
                   <button
                     type="button"
                     onClick={() => setTestOpen((t) => (j.id in t ? t : { ...t, [j.id]: "" }))}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 text-sm transition hover:border-white/30"
+                    className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-foreground/30"
                   >
                     Testar webhook
                   </button>
                   <button
                     type="button"
                     onClick={() => beginEdit(j)}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 text-sm transition hover:border-white/30"
+                    className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-foreground/30"
                   >
                     Editar
                   </button>
                   <button
                     type="button"
                     onClick={() => void remove(j)}
-                    className="rounded-lg border border-white/15 px-3 py-1.5 text-sm text-red-400 transition hover:border-red-400/50"
+                    className="rounded-lg border border-border px-3 py-1.5 text-sm text-destructive transition hover:border-destructive/50"
                   >
                     Excluir
                   </button>

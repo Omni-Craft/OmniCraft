@@ -85,17 +85,31 @@ export function useInCode(): boolean {
  */
 export function SidebarModeSwitcher({
   onNavClick,
+  unreadHome = false,
+  unreadCode = false,
 }: {
   onNavClick: (e: React.MouseEvent<HTMLAnchorElement>) => void;
+  /** An unread Chat session exists — shown as a dot when Início isn't active. */
+  unreadHome?: boolean;
+  /** An unread coding session exists — shown as a dot when Code isn't active. */
+  unreadCode?: boolean;
 }) {
   const inCode = useInCode();
   const item = (active: boolean) =>
     cn(
-      "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+      "relative flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
       active
         ? "bg-background text-foreground shadow-sm"
         : "text-muted-foreground hover:text-foreground",
     );
+  // Unread on the OTHER surface would otherwise be invisible — a small brand
+  // dot on the inactive pill points the user there.
+  const dot = (
+    <span
+      className="absolute top-1 right-1.5 size-1.5 rounded-full bg-brand-accent"
+      data-testid="surface-unread-dot"
+    />
+  );
   return (
     <div className="px-3 pt-3">
       <div className="flex gap-1 rounded-lg bg-muted/60 p-1">
@@ -107,6 +121,7 @@ export function SidebarModeSwitcher({
         >
           <HomeIcon className="size-4" />
           Início
+          {inCode && unreadHome && dot}
         </Link>
         <Link
           to="/code"
@@ -117,6 +132,7 @@ export function SidebarModeSwitcher({
         >
           <Code2Icon className="size-4" />
           Code
+          {!inCode && unreadCode && dot}
         </Link>
       </div>
     </div>

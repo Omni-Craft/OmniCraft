@@ -20,6 +20,8 @@ from omnicraft.server import scheduled_agents
 from omnicraft.server.auth import AuthProvider
 from omnicraft.server.routes._auth_helpers import require_user
 
+_LOCAL_USER = "local"
+
 
 def _installed_agent_names(agent_store: Any) -> list[str]:
     # agent_store.list() returns a PagedList (its rows are under .data) and
@@ -47,15 +49,15 @@ def create_scheduled_agents_router(
 
     @router.get("/scheduled-agents")
     async def list_jobs(request: Request) -> dict[str, Any]:
-        require_user(request, auth_provider)
+        owner = require_user(request, auth_provider) or _LOCAL_USER
         return {
-            "data": scheduled_agents.list_jobs(),
+            "data": scheduled_agents.list_jobs(owner=owner),
             "agents": _installed_agent_names(agent_store),
         }
 
     @router.post("/scheduled-agents", status_code=201)
     async def create_job(request: Request) -> dict[str, Any]:
-        require_user(request, auth_provider)
+        owner = require_user(request, auth_provider) or _LOCAL_USER
         body = await _json(request)
         agent_name = body.get("agent_name")
         prompt = body.get("prompt")
@@ -85,11 +87,12 @@ def create_scheduled_agents_router(
             tz=body.get("tz"),
             no_overlap=bool(body.get("no_overlap", True)),
             enabled=bool(body.get("enabled", True)),
+            owner=owner,
         )
 
     @router.patch("/scheduled-agents/{job_id}")
     async def update_job(request: Request, job_id: str) -> dict[str, Any]:
-        require_user(request, auth_provider)
+        owner = require_user(request, auth_provider) or _LOCAL_USER
         body = await _json(request)
         if "agent_name" in body:
             agent_name = body["agent_name"]
@@ -107,28 +110,28 @@ def create_scheduled_agents_router(
         if body.get("cron"):
             _validate_cron(body.get("cron"))
         _validate_schedule(body)
-        current = scheduled_agents.get_job(job_id)
+        current = scheduled_agents.get_job(job_id, owner=owner)
         if current is None:
             raise OmniCraftError("job não encontrado", code=ErrorCode.NOT_FOUND)
         # Validate the prospective (merged) schedule, not just the patch.
         merged = {**current, **body}
         _validate_cron_has_next(merged.get("cron"), merged.get("tz"), merged.get("enabled"))
-        updated = scheduled_agents.update_job(job_id, body)
+        updated = scheduled_agents.update_job(job_id, body, owner=owner)
         if updated is None:
             raise OmniCraftError("job não encontrado", code=ErrorCode.NOT_FOUND)
         return updated
 
     @router.delete("/scheduled-agents/{job_id}")
     async def delete_job(request: Request, job_id: str) -> dict[str, bool]:
-        require_user(request, auth_provider)
-        if not scheduled_agents.delete_job(job_id):
+        owner = require_user(request, auth_provider) or _LOCAL_USER
+        if not scheduled_agents.delete_job(job_id, owner=owner):
             raise OmniCraftError("job não encontrado", code=ErrorCode.NOT_FOUND)
         return {"deleted": True}
 
     @router.post("/scheduled-agents/{job_id}/run")
     async def run_now(request: Request, job_id: str) -> dict[str, Any]:
-        require_user(request, auth_provider)
-        job = scheduled_agents.get_job(job_id)
+        owner = require_user(request, auth_provider) or _LOCAL_USER
+        job = scheduled_agents.get_job(job_id, owner=owner)
         if job is None:
             raise OmniCraftError("job não encontrado", code=ErrorCode.NOT_FOUND)
         # An optional {"payload": {...}} lets the UI test webhook templating.

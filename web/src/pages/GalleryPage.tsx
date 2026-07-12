@@ -21,7 +21,7 @@ function Chips({ label, items }: { label: string; items: string[] }) {
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-xs opacity-40">{label}</span>
       {items.map((it) => (
-        <span key={it} className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] opacity-80">
+        <span key={it} className="rounded bg-muted px-1.5 py-0.5 text-[11px] opacity-80">
           {it}
         </span>
       ))}
@@ -81,13 +81,13 @@ export function GalleryPage() {
           {agents.map((a) => (
             <div
               key={a.id}
-              className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4"
+              className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <h2 className="text-base font-semibold capitalize">{a.name}</h2>
                   {a.harness && (
-                    <span className="mt-0.5 inline-block rounded bg-white/10 px-1.5 py-0.5 text-[11px] opacity-70">
+                    <span className="mt-0.5 inline-block rounded bg-muted px-1.5 py-0.5 text-[11px] opacity-70">
                       {a.harness}
                     </span>
                   )}
@@ -110,7 +110,7 @@ export function GalleryPage() {
                     <button
                       type="button"
                       onClick={() => navigate("/code")}
-                      className="rounded-lg border border-white/15 px-3 py-1.5 text-sm transition hover:border-white/30"
+                      className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-foreground/30"
                     >
                       Nova sessão →
                     </button>

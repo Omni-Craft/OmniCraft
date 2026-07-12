@@ -7,14 +7,13 @@
 // stay in sync without shared state.
 
 import {
-  BlocksIcon,
   ChartColumnIcon,
   ClipboardCheckIcon,
   ClockIcon,
+  Code2Icon,
   GitPullRequestIcon,
   HomeIcon,
   LayoutGridIcon,
-  MessagesSquareIcon,
   PanelRightOpenIcon,
   SettingsIcon,
   SwordsIcon,
@@ -51,16 +50,24 @@ export function useCraftworkRoute(): { inCraftwork: boolean; section: CraftworkS
   return { inCraftwork: true, section };
 }
 
+/** True when the route belongs to the "Code" surface (sessions list + a session). */
+function useInCode(): boolean {
+  const segs = useLocation().pathname.split("/").filter(Boolean);
+  return segs.includes("code") || segs.includes("c");
+}
+
 /**
- * Top-of-sidebar Chat / Craftwork switcher — the two primary destinations,
- * styled as a segmented pill (Claude Desktop's Home / Code pattern).
+ * Top-of-sidebar Início / Code switcher — the two primary destinations, styled
+ * as a segmented pill (Claude Desktop's Home / Code pattern). Início is the
+ * new-session home (where the composer's Chat / Craftwork toggle lives); Code is
+ * your coding sessions.
  */
 export function SidebarModeSwitcher({
   onNavClick,
 }: {
   onNavClick: (e: React.MouseEvent<HTMLAnchorElement>) => void;
 }) {
-  const { inCraftwork } = useCraftworkRoute();
+  const inCode = useInCode();
   const item = (active: boolean) =>
     cn(
       "flex flex-1 items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
@@ -71,24 +78,19 @@ export function SidebarModeSwitcher({
   return (
     <div className="px-3 pt-3">
       <div className="flex gap-1 rounded-lg bg-muted/60 p-1">
-        <Link
-          to="/"
-          onClick={onNavClick}
-          className={item(!inCraftwork)}
-          aria-current={!inCraftwork}
-        >
-          <MessagesSquareIcon className="size-4" />
-          Chat
+        <Link to="/" onClick={onNavClick} className={item(!inCode)} aria-current={!inCode}>
+          <HomeIcon className="size-4" />
+          Início
         </Link>
         <Link
-          to="/craftwork"
+          to="/code"
           onClick={onNavClick}
-          className={item(inCraftwork)}
-          aria-current={inCraftwork}
-          data-testid="craftwork-switch"
+          className={item(inCode)}
+          aria-current={inCode}
+          data-testid="code-switch"
         >
-          <BlocksIcon className="size-4" />
-          Craftwork
+          <Code2Icon className="size-4" />
+          Code
         </Link>
       </div>
     </div>

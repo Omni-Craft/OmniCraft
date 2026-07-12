@@ -1778,6 +1778,9 @@ export function NewChatLandingScreen() {
     () => takeComposeSeed() ?? landingDraft?.message ?? "",
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Composer mode — Chat (a normal session) vs Craftwork (the agentic workspace
+  // mode; transforms the composer in place, Cowork-style, with prompt ideas).
+  const [mode, setMode] = useState<"chat" | "craftwork">("chat");
   const isComposingRef = useRef(false);
   // maxRows 9 = 180px of 20px lines, matching the composer's 200px
   // border-box max (180px content + 16px top / 4px bottom padding).
@@ -2974,7 +2977,11 @@ export function NewChatLandingScreen() {
               // Suppress the native placeholder when the overlay supplies its
               // own prompt text; aria-label preserves the accessible name.
               placeholder={
-                pillSkills.length > 0 ? "" : "Descreva uma tarefa para iniciar uma nova sessão…"
+                pillSkills.length > 0
+                  ? ""
+                  : mode === "craftwork"
+                    ? "Digite / para habilidades"
+                    : "Descreva uma tarefa para iniciar uma nova sessão…"
               }
               aria-label="Descreva uma tarefa para iniciar uma nova sessão"
               rows={1}
@@ -3092,6 +3099,30 @@ export function NewChatLandingScreen() {
                   <PaperclipIcon className="size-4" />
                   <span className="sr-only">Anexar arquivos</span>
                 </Button>
+                {/* Chat / Craftwork mode toggle — Cowork's in-composer switch.
+                    Craftwork transforms the composer in place (placeholder +
+                    "Ideias para você" below). */}
+                <div
+                  className="mx-1 flex items-center rounded-full bg-muted p-0.5"
+                  data-testid="new-chat-mode-toggle"
+                >
+                  {(["chat", "craftwork"] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => setMode(m)}
+                      className={cn(
+                        "h-7 rounded-full px-3 text-xs font-medium transition-colors",
+                        mode === m
+                          ? "bg-card text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground",
+                      )}
+                      data-testid={`new-chat-mode-${m}`}
+                    >
+                      {m === "chat" ? "Chat" : "Craftwork"}
+                    </button>
+                  ))}
+                </div>
                 <ComposerMicButton
                   disabled={creating}
                   onTranscript={(text) => setMessage((prev) => (prev ? `${prev} ${text}` : text))}
@@ -3689,6 +3720,36 @@ export function NewChatLandingScreen() {
             </p>
           )}
         </div>
+
+        {/* Craftwork mode: "Ideias para você" — prompt starters that prefill the
+            composer (never auto-run), mirroring Cowork's suggestion list. */}
+        {mode === "craftwork" && message.length === 0 && (
+          <div className="flex w-full flex-col gap-1" data-testid="craftwork-ideas">
+            <p className="px-2 pb-1 text-sm font-medium text-muted-foreground">Ideias para você</p>
+            <ul className="flex flex-col">
+              {[
+                { emoji: "🌅", text: "Me dê um resumo das mudanças de hoje" },
+                { emoji: "🧪", text: "Rode os testes e corrija o que falhar" },
+                { emoji: "📝", text: "Escreva as release notes do último range de commits" },
+                { emoji: "🔍", text: "Revise o diff atual e aponte problemas" },
+              ].map((idea) => (
+                <li key={idea.text}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setMessage(idea.text);
+                      textareaRef.current?.focus();
+                    }}
+                    className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left text-sm text-foreground transition-colors hover:bg-muted"
+                  >
+                    <span className="text-lg leading-none">{idea.emoji}</span>
+                    {idea.text}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {/* Connect-host instructions, reachable from the host dropdown even when

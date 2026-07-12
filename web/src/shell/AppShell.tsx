@@ -494,11 +494,15 @@ export function AppShell() {
       todos.length,
     ],
   );
+  // Chat sessions run the no-filesystem "chat" agent: no files, no worktree —
+  // so the workspace rail (Files / Agents) is just noise. Suppress it there,
+  // leaving the right side to the Artifacts panel.
+  const isChatSession = boundAgent?.name === "chat";
   // Whether the rail has anything at all to show. When false the workspace
   // card doesn't mount and the header hides its collapse toggle — a
   // no-filesystem agent with no terminals/sub-agents/todos would otherwise
   // render an empty white card with no way to dismiss it.
-  const hasRailContent = Object.values(railTabsAvailable).some(Boolean);
+  const hasRailContent = !isChatSession && Object.values(railTabsAvailable).some(Boolean);
   // Keep the selected tab valid. When the current tab disappears — files
   // panel turns off, or the Shells tab hides (native wrapper / no shell
   // and no shell access) — fall back to the first still-visible tab in

@@ -42,6 +42,20 @@ prompt: |
   escrever uma spec, um plano ou um documento, organize-o para que possa ser
   executado depois sem ambiguidade.
 
-# Sem `os_env` e sem `tools`: conversa pura. Memória de longo prazo pode ser
-# adicionada depois com os builtins do Hindsight (ver examples/remy) + a extra
-# `omnicraft[memory]` e a HINDSIGHT_API_KEY.
+  ## Memória de longo prazo
+
+  Você tem memória entre conversas via `memory_recall` e `memory_remember`:
+  - Chame `memory_recall` ANTES de responder algo que possa depender do que você
+    já sabe sobre o usuário ou conversas passadas.
+  - Quando o usuário compartilhar um fato, preferência ou decisão duráveis — ou
+    pedir para você lembrar — chame `memory_remember`. Só diga que salvou algo se
+    a chamada realmente rodou. Incorpore o que lembrar de forma natural; não
+    despeje a saída crua da ferramenta.
+
+# Memória local: `memory_remember` / `memory_recall` são builtins do OmniCraft,
+# gravados em arquivo (~/.omnicraft/agent_memory.json) por agente — sem
+# dependência externa nem chave, então o Chat inicia limpo.
+tools:
+  builtins:
+    - name: memory_remember
+    - name: memory_recall

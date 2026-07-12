@@ -10,6 +10,7 @@ import {
   PanelRightCloseIcon,
   PanelRightIcon,
   ShareIcon,
+  SparklesIcon,
   TerminalIcon,
 } from "lucide-react";
 import { Link } from "@/lib/routing";
@@ -131,6 +132,12 @@ interface ChatHeaderProps {
   rightPanelOpen: boolean;
   /** Toggle the right workspace panel. */
   onToggleRightPanel: () => void;
+  /** Whether the Artifacts toggle should render (Chat sessions). */
+  artifactsAvailable?: boolean;
+  /** Whether the Artifacts panel is open. */
+  artifactsOpen?: boolean;
+  /** Toggle the Artifacts panel. */
+  onToggleArtifacts?: () => void;
   /** Gating + handlers for the mobile session-menu FAB. */
   mobileMenu: MobileSessionMenuProps;
 }
@@ -171,6 +178,9 @@ export function ChatHeader({
   hasRailContent,
   rightPanelOpen,
   onToggleRightPanel,
+  artifactsAvailable = false,
+  artifactsOpen = false,
+  onToggleArtifacts,
   mobileMenu,
 }: ChatHeaderProps) {
   return (
@@ -358,6 +368,27 @@ export function ChatHeader({
             Compartilhar
           </Button>
         ) : null}
+        {conversationId && artifactsAvailable && onToggleArtifacts && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                aria-label="Artifacts"
+                onClick={onToggleArtifacts}
+                className={cn(
+                  "hidden md:inline-flex text-muted-foreground hover:text-foreground",
+                  artifactsOpen && "text-foreground",
+                )}
+                data-testid="artifacts-toggle"
+              >
+                <SparklesIcon className="size-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Artifacts</TooltipContent>
+          </Tooltip>
+        )}
         {conversationId && hasRailContent && (
           <Tooltip>
             <TooltipTrigger asChild>

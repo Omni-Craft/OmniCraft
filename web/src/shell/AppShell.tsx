@@ -43,6 +43,7 @@ import {
 } from "@/hooks/useChildSessions";
 import { useDebugMode } from "@/hooks/useDebugMode";
 import { useBrowserAgentRelay } from "@/hooks/useBrowserAgentRelay";
+import { ArtifactsPanel } from "@/components/ArtifactsPanel";
 import {
   AGENT_TERMINAL_IDS,
   inventoryTerminals,
@@ -237,6 +238,9 @@ export function AppShell() {
     conversationId ? (readSessionWorkspaceState(conversationId).open ?? true) : false,
   );
   const [shareOpen, setShareOpen] = useState(false);
+  // Artifacts slide-over — collects the assistant's code/doc blocks. Shown on
+  // Chat sessions (the no-filesystem "chat" agent).
+  const [artifactsOpen, setArtifactsOpen] = useState(false);
   const [forkOpen, setForkOpen] = useState(false);
   // Truncation point for a "fork from here" opened from a message's
   // actions (ChatPage, via ForkDialogContext). `null` = full clone —
@@ -1245,6 +1249,9 @@ export function AppShell() {
                   hasRailContent={hasRailContent}
                   rightPanelOpen={rightPanelOpen}
                   onToggleRightPanel={toggleRightPanel}
+                  artifactsAvailable={boundAgent?.name === "chat"}
+                  artifactsOpen={artifactsOpen}
+                  onToggleArtifacts={() => setArtifactsOpen((o) => !o)}
                   mobileMenu={{
                     fileViewerOpen,
                     panelOpen,
@@ -1364,6 +1371,9 @@ export function AppShell() {
                   sort={filesPanelSort}
                   onSortChange={handleFilesSortChange}
                 />
+              )}
+              {conversationId && (
+                <ArtifactsPanel open={artifactsOpen} onClose={() => setArtifactsOpen(false)} />
               )}
               {/* Mobile-only full-screen drawers for the rail tabs that have no
           desktop push panel of their own. `MobilePanelDrawer` is `md:hidden`,

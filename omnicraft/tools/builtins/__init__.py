@@ -144,6 +144,20 @@ def _create_list_files(config: dict[str, str]) -> Tool:
     return ListFilesTool()
 
 
+def _create_memory_remember(config: dict[str, str]) -> Tool:
+    """Lazy factory for MemoryRememberTool (local, no config)."""
+    from omnicraft.tools.builtins.memory import MemoryRememberTool
+
+    return MemoryRememberTool()
+
+
+def _create_memory_recall(config: dict[str, str]) -> Tool:
+    """Lazy factory for MemoryRecallTool (local, no config)."""
+    from omnicraft.tools.builtins.memory import MemoryRecallTool
+
+    return MemoryRecallTool()
+
+
 def _create_download_file(config: dict[str, str]) -> Tool:
     """
     Lazy factory for DownloadFileTool.
@@ -250,6 +264,10 @@ _BUILTIN_REGISTRY: dict[str, _BuiltinFactory | None] = {
     "download_file": _create_download_file,
     "search_conversations": _create_search_conversations,
     "export_agent": _create_export_agent,
+    # Local long-term memory — file-backed, no dependency, no key (unlike
+    # Hindsight). Keyed by agent id so runs of the same agent share a bank.
+    "memory_remember": _create_memory_remember,
+    "memory_recall": _create_memory_recall,
     # Hindsight long-term memory (optional ``memory`` extra). Each factory
     # probes for ``hindsight-client`` and fails with an install hint if absent.
     "hindsight_retain": _create_hindsight_retain,

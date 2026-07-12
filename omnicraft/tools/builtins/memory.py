@@ -45,8 +45,24 @@ def _save(data: dict[str, list[dict[str, Any]]]) -> None:
         json.dump(data, fh)
 
 
+_PROJECT_LABEL = "omni_project"
+
+
 def _bank_key(ctx: ToolContext) -> str:
-    return ctx.agent_id or ctx.conversation_id or "default"
+    """Memory bank key: per-agent, further scoped by project when the session
+    is filed under one (so each project keeps its own memory)."""
+    base = ctx.agent_id or ctx.conversation_id or "default"
+    project = None
+    if ctx.conversation_id:
+        try:
+            from omnicraft.runtime import get_conversation_store
+
+            conv = get_conversation_store().get_conversation(ctx.conversation_id)
+            if conv is not None and conv.labels:
+                project = conv.labels.get(_PROJECT_LABEL)
+        except Exception:
+            project = None
+    return f"{base}::{project}" if project else base
 
 
 def remember(ctx: ToolContext, text: str) -> dict[str, Any]:
@@ -141,7 +157,7 @@ class MemoryRecallTool(Tool):
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "Optional keywords to filter; omit to list recent ones.",
+                            "description": "Optional keywords to filter; omit for recent.",
                         },
                         "limit": {
                             "type": "integer",

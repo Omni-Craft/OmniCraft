@@ -53,3 +53,34 @@ def test_schemas_are_valid() -> None:
         schema = tool.get_schema()
         assert schema["type"] == "function"
         assert schema["function"]["name"] == tool.name()
+
+
+class _FakeConv:
+    def __init__(self, project: str | None) -> None:
+        self.labels = {"omni_project": project} if project else {}
+
+
+class _FakeStore:
+    def __init__(self, project: str | None) -> None:
+        self._project = project
+
+    def get_conversation(self, _cid: str) -> _FakeConv:
+        return _FakeConv(self._project)
+
+
+def test_memory_is_scoped_per_project(monkeypatch: pytest.MonkeyPatch) -> None:
+    import omnicraft.runtime as runtime
+
+    rem, rec = MemoryRememberTool(), MemoryRecallTool()
+    # Same agent + conversation, but filed under project A.
+    monkeypatch.setattr(runtime, "get_conversation_store", lambda: _FakeStore("proj-a"))
+    rem.invoke('{"text": "fato do projeto A"}', _ctx("ag_chat"))
+    # Now the same agent under project B sees a different bank.
+    monkeypatch.setattr(runtime, "get_conversation_store", lambda: _FakeStore("proj-b"))
+    assert rec.invoke("{}", _ctx("ag_chat")) == "Nenhuma memória encontrada."
+    rem.invoke('{"text": "fato do projeto B"}', _ctx("ag_chat"))
+    assert "projeto B" in rec.invoke("{}", _ctx("ag_chat"))
+    # Back to project A: still isolated.
+    monkeypatch.setattr(runtime, "get_conversation_store", lambda: _FakeStore("proj-a"))
+    out = rec.invoke("{}", _ctx("ag_chat"))
+    assert "projeto A" in out and "projeto B" not in out

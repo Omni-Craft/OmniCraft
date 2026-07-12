@@ -9,6 +9,7 @@ import {
 } from "react";
 import { takeComposeSeed } from "@/lib/composeSeed";
 import { useLocation, useNavigate, useSearchParams } from "@/lib/routing";
+import { HomeModeToggle } from "./craftworkNav";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   MonitorIcon,
@@ -3105,6 +3106,12 @@ export function NewChatLandingScreen() {
                   <PaperclipIcon className="size-4" />
                   <span className="sr-only">Anexar arquivos</span>
                 </Button>
+                {/* Início-tab sub-switch: Chat (here) vs Craftwork (the hub). */}
+                {chatMode && (
+                  <div className="mx-1">
+                    <HomeModeToggle />
+                  </div>
+                )}
                 <ComposerMicButton
                   disabled={creating}
                   onTranscript={(text) => setMessage((prev) => (prev ? `${prev} ${text}` : text))}

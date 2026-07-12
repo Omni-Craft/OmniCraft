@@ -97,6 +97,36 @@ export function SidebarModeSwitcher({
   );
 }
 
+/**
+ * The Início-tab sub-switch: Chat (the no-filesystem conversation composer at
+ * "/") vs Craftwork (the agentic workspace hub at "/craftwork"). Both live under
+ * the Início top tab. Rendered inside the Chat composer and atop the Craftwork
+ * hub so you can flip between them.
+ */
+export function HomeModeToggle() {
+  const { inCraftwork } = useCraftworkRoute();
+  const item = (active: boolean) =>
+    cn(
+      "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+      active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+    );
+  return (
+    <div className="flex items-center rounded-full bg-muted p-0.5" data-testid="home-mode-toggle">
+      <Link to="/" className={item(!inCraftwork)} aria-current={!inCraftwork}>
+        Chat
+      </Link>
+      <Link
+        to="/craftwork"
+        className={item(inCraftwork)}
+        aria-current={inCraftwork}
+        data-testid="home-mode-craftwork"
+      >
+        Craftwork
+      </Link>
+    </div>
+  );
+}
+
 interface NavItem {
   id: CraftworkSectionId;
   label: string;
@@ -104,7 +134,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { id: "home", label: "Início", icon: HomeIcon },
+  { id: "home", label: "Visão geral", icon: HomeIcon },
   { id: "gallery", label: "Galeria de agentes", icon: LayoutGridIcon },
   { id: "scheduled", label: "Agentes agendados", icon: ClockIcon },
   { id: "evals", label: "Avaliações", icon: ClipboardCheckIcon },

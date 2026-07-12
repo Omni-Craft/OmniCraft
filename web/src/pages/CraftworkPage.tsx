@@ -3,7 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { PageScroll } from "@/components/PageScroll";
 import { authenticatedFetch } from "@/lib/identity";
 import { Link, useNavigate } from "@/lib/routing";
-import { useCraftworkRoute } from "@/shell/craftworkNav";
+import { HomeModeToggle, useCraftworkRoute } from "@/shell/craftworkNav";
 
 const CostPage = lazy(() => import("@/pages/CostPage").then((m) => ({ default: m.CostPage })));
 const EvalsPage = lazy(() => import("@/pages/EvalsPage").then((m) => ({ default: m.EvalsPage })));
@@ -84,6 +84,7 @@ function Hub() {
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 px-6 py-10">
       <header className="flex flex-col gap-2">
+        <HomeModeToggle />
         <div className="flex items-center gap-2">
           <span className="text-2xl">🛠️</span>
           <h1 className="text-2xl font-semibold tracking-tight">Craftwork</h1>

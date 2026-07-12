@@ -706,6 +706,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   onToggleSelected={toggleSelected}
                   getVisibleIdsRef={getVisibleIdsRef}
                   getVisibleConversationsRef={getVisibleConversationsRef}
+                  surface={inCode ? "code" : "home"}
                 />
               </nav>
 
@@ -954,6 +955,9 @@ interface ConversationListProps {
   onToggleSelected: (conversationId: string, shiftKey?: boolean) => void;
   getVisibleIdsRef: RefObject<() => string[]>;
   getVisibleConversationsRef: RefObject<() => Conversation[]>;
+  // Which tab's history to show: "home" = Chat sessions (agent "chat"),
+  // "code" = coding sessions + projects.
+  surface: "home" | "code";
 }
 
 // permission_level null (no ACL row / legacy) or >= 4 both mean owner.
@@ -975,6 +979,7 @@ function ConversationList({
   onToggleSelected,
   getVisibleIdsRef,
   getVisibleConversationsRef,
+  surface,
 }: ConversationListProps) {
   // All loaded conversations from the single paginated list (for pinned
   // backfill, normalization, and the flat session list).
@@ -1011,7 +1016,11 @@ function ConversationList({
   // me"); a pinned-then-archived session shows under Archived, not Pinned.
   const pinnedSet = useMemo(() => new Set(pinnedConversationIds), [pinnedConversationIds]);
   const sections = useMemo(() => {
-    const allWithBackfill = [...allConversations, ...pinnedBackfill];
+    // Split history by tab: the Início (Chat) surface shows only sessions of
+    // the no-filesystem "chat" agent; the Code surface shows everything else.
+    const allWithBackfill = [...allConversations, ...pinnedBackfill].filter((c) =>
+      surface === "home" ? c.agent_name === "chat" : c.agent_name !== "chat",
+    );
     const notArchived = allWithBackfill.filter((c) => c.archived !== true);
     // Each tab shows a disjoint slice — "mine" is the sessions the viewer owns,
     // "shared" is the ones others shared with them. The Pinned / Projects /
@@ -1041,7 +1050,7 @@ function ConversationList({
     // folder showing "No chats".
     const filedIds = new Set<string>();
     const projectGroups: { name: string; conversations: Conversation[] }[] =
-      activeTab === "shared"
+      activeTab === "shared" || surface === "home"
         ? []
         : projectNames.map((name) => {
             const inProject = tabScoped.filter(
@@ -1074,6 +1083,7 @@ function ConversationList({
     activeOverride,
     projectNames,
     activeTab,
+    surface,
   ]);
 
   // Collapsed section titles — persisted like pins so the preference

@@ -84,7 +84,7 @@ tela, idêntico ao Cowork): escolha a pasta, o agente, e uma **frequência** —
 agendador** com um clique, no seu fuso horário.
 
 <p align="center">
-  <img src="docs/images/craftwork-hub.png" alt="O hub do Craftwork: cards de ferramentas (galeria, agendados, arena, MCP, avaliações, custos, GitHub) e os agentes instalados" width="860" />
+  <img src="docs/images/craftwork-composer.png" alt="O composer da aba Início transformado em modo Craftwork: toggle Chat/Craftwork, bandeja com frequência, host, pasta e agente, e ideias com etiquetas diário/semanal" width="860" />
 </p>
 
 ### `</>` Code — execute com contexto

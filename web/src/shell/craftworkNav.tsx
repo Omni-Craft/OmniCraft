@@ -51,6 +51,11 @@ export function useCraftworkRoute(): { inCraftwork: boolean; section: CraftworkS
   return { inCraftwork: true, section };
 }
 
+// Sticky last answer for /c/:id routes: while a deep-linked conversation is
+// still binding its agent (boundAgentName === null) we reuse the previous
+// answer instead of guessing, avoiding a Code↔Início tab flash during load.
+let lastConversationInCode = true;
+
 /**
  * True when the current surface is Code. The `/code` composer is always Code; a
  * conversation (`/c/:id`) is Code UNLESS it's a Chat-agent session — so opening
@@ -59,8 +64,16 @@ export function useCraftworkRoute(): { inCraftwork: boolean; section: CraftworkS
 export function useInCode(): boolean {
   const segs = useLocation().pathname.split("/").filter(Boolean);
   const boundAgentName = useChatStore((s) => s.boundAgentName);
-  if (segs.includes("code")) return true;
-  if (segs.includes("c")) return boundAgentName !== "chat";
+  if (segs.includes("code")) {
+    lastConversationInCode = true;
+    return true;
+  }
+  if (segs.includes("c")) {
+    if (boundAgentName === null) return lastConversationInCode;
+    const inCode = boundAgentName !== "chat";
+    lastConversationInCode = inCode;
+    return inCode;
+  }
   return false;
 }
 
@@ -86,7 +99,12 @@ export function SidebarModeSwitcher({
   return (
     <div className="px-3 pt-3">
       <div className="flex gap-1 rounded-lg bg-muted/60 p-1">
-        <Link to="/" onClick={onNavClick} className={item(!inCode)} aria-current={!inCode}>
+        <Link
+          to="/"
+          onClick={onNavClick}
+          className={item(!inCode)}
+          aria-current={!inCode ? "page" : undefined}
+        >
           <HomeIcon className="size-4" />
           Início
         </Link>
@@ -94,7 +112,7 @@ export function SidebarModeSwitcher({
           to="/code"
           onClick={onNavClick}
           className={item(inCode)}
-          aria-current={inCode}
+          aria-current={inCode ? "page" : undefined}
           data-testid="code-switch"
         >
           <Code2Icon className="size-4" />
@@ -120,13 +138,13 @@ export function HomeModeToggle() {
     );
   return (
     <div className="flex items-center rounded-full bg-muted p-0.5" data-testid="home-mode-toggle">
-      <Link to="/" className={item(!inCraftwork)} aria-current={!inCraftwork}>
+      <Link to="/" className={item(!inCraftwork)} aria-current={!inCraftwork ? "page" : undefined}>
         Chat
       </Link>
       <Link
         to="/craftwork"
         className={item(inCraftwork)}
-        aria-current={inCraftwork}
+        aria-current={inCraftwork ? "page" : undefined}
         data-testid="home-mode-craftwork"
       >
         Craftwork

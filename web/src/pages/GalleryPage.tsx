@@ -109,7 +109,7 @@ export function GalleryPage() {
                     </span>
                     <button
                       type="button"
-                      onClick={() => navigate("/")}
+                      onClick={() => navigate("/code")}
                       className="rounded-lg border border-white/15 px-3 py-1.5 text-sm transition hover:border-white/30"
                     >
                       Nova sessão →

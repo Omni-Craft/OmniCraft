@@ -22,7 +22,8 @@ name: remy
 description: >-
   Um assistente prestativo com memória de longo prazo. O Remy lembra o que já
   sabe antes de responder, retém fatos duráveis que você compartilha, e
-  consegue refletir sobre a própria memória — powered by Hindsight.
+  consegue refletir sobre a própria memória — powered by Hindsight. Requer
+  HINDSIGHT_API_KEY e a extra 'omnicraft[memory]' antes da primeira conversa.
 
 executor:
   type: omnicraft

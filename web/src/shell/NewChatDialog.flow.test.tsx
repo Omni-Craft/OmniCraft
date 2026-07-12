@@ -37,10 +37,17 @@ const SEEDED_WORKSPACE = "/Users/corey/universe/src/foo";
 // flow's navigate() lands on our spy regardless of router/provider setup.
 vi.mock("@/lib/routing", () => ({
   useNavigate: () => navigateMock,
+  // Code mode ("/code") — these flows exercise the full session-create
+  // composer (agent picker, worktrees), which chat mode ("/") hides.
+  useLocation: () => ({ pathname: "/code", search: "", hash: "", state: null, key: "test" }),
   // The landing screen reads `?project=` to pre-fill the project chip; this
   // flow suite never sets one, so an empty params object is enough.
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }));
+
+// Stubbed: at /code the landing screen mounts the stats dashboard, whose
+// fetch would pollute the positional authenticatedFetch call assertions.
+vi.mock("@/components/CodeStatsDashboard", () => ({ CodeStatsDashboard: () => null }));
 
 // The screen hands the first message to ChatPage through the chatStore
 // (keyed by conversation id), not router state — assert on that call.

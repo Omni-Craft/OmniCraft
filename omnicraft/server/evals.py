@@ -15,6 +15,7 @@ import json
 import os
 import re
 import secrets
+import tempfile
 import threading
 import time
 from typing import Any
@@ -50,8 +51,14 @@ def _load() -> dict[str, Any]:
 
 
 def _save(data: dict[str, Any]) -> None:
-    with open(_path(), "w", encoding="utf-8") as fh:
+    # Write-then-rename so a crash mid-write never corrupts the store.
+    path = _path()
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=os.path.dirname(path), suffix=".tmp", delete=False
+    ) as fh:
         json.dump(data, fh)
+        tmp = fh.name
+    os.replace(tmp, path)
 
 
 def _now() -> int:
@@ -79,8 +86,12 @@ def grade(output: str, check: dict[str, Any]) -> bool:
     if ctype == "not_contains":
         return value.lower() not in text.lower()
     if ctype == "regex":
+        # Cheap ReDoS guard: an oversized pattern fails, an oversized output is
+        # truncated, so a pathological regex can't stall the server.
+        if len(value) > 512:
+            return False
         try:
-            return re.search(value, text, re.IGNORECASE | re.DOTALL) is not None
+            return re.search(value, text[:200_000], re.IGNORECASE | re.DOTALL) is not None
         except re.error:
             return False
     return True
@@ -156,9 +167,7 @@ def record_run(
     suite = get_suite(suite_id)
     if suite is None:
         return None
-    outputs_by_task = {
-        o.get("task_id"): o for o in task_outputs if isinstance(o, dict)
-    }
+    outputs_by_task = {o.get("task_id"): o for o in task_outputs if isinstance(o, dict)}
     results: list[dict[str, Any]] = []
     passed = 0
     for task in suite.get("tasks", []):

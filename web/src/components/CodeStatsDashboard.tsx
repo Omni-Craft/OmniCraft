@@ -49,7 +49,9 @@ function dayKey(d: Date): string {
 
 /** Build week-columns (7 rows) ending today, oldest week first. */
 function buildWeeks(daily: Record<string, number>, days: number): number[][] {
-  const span = Math.min(Math.max(days, 7), 182);
+  // Cap at 364 so the "Todos" (365d) window shows the whole year of stats;
+  // the 10px cells scroll horizontally in their overflow-x-auto container.
+  const span = Math.min(Math.max(days, 7), 364);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   // Start on the Sunday on/before the window start so columns align to weeks.
@@ -78,15 +80,32 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+// Per-window session cache so flipping between windows doesn't refetch.
+const statsCache = new Map<number, Stats>();
+
 export function CodeStatsDashboard() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [tab, setTab] = useState<"overview" | "models">("overview");
   const [windowDays, setWindowDays] = useState(365);
 
   const load = useCallback(async (days: number) => {
+    const cached = statsCache.get(days);
+    if (cached) {
+      setStats(cached);
+      return;
+    }
     try {
-      const res = await authenticatedFetch(`/v1/code-stats?days=${days}`);
-      if (res.ok) setStats((await res.json()) as Stats);
+      // Send the browser's IANA zone so the server buckets days/hours in the
+      // user's local time instead of the server's.
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      const res = await authenticatedFetch(
+        `/v1/code-stats?days=${days}&tz=${encodeURIComponent(tz)}`,
+      );
+      if (res.ok) {
+        const data = (await res.json()) as Stats;
+        statsCache.set(days, data);
+        setStats(data);
+      }
     } catch {
       /* ignore */
     }

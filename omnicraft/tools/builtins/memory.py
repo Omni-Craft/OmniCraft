@@ -8,11 +8,14 @@ dependency and no key, so it boots clean — unlike the Hindsight builtins.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import secrets
+import tempfile
 import threading
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -41,8 +44,26 @@ def _load() -> dict[str, list[dict[str, Any]]]:
 
 
 def _save(data: dict[str, list[dict[str, Any]]]) -> None:
-    with _path().open("w", encoding="utf-8") as fh:
+    # Write-then-rename so a crash mid-write never corrupts the store.
+    path = _path()
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=path.parent, suffix=".tmp", delete=False
+    ) as fh:
         json.dump(data, fh)
+        tmp = fh.name
+    os.replace(tmp, path)
+
+
+@contextmanager
+def _file_lock():
+    """OS-level lock so concurrent server/runner processes don't lose writes."""
+    lock_path = Path(f"{_path()}.lock")
+    with lock_path.open("a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
 
 
 _PROJECT_LABEL = "omni_project"
@@ -67,7 +88,7 @@ def _bank_key(ctx: ToolContext) -> str:
 
 def remember(ctx: ToolContext, text: str) -> dict[str, Any]:
     entry = {"id": secrets.token_hex(6), "at": int(time.time()), "text": text.strip()}
-    with _lock:
+    with _lock, _file_lock():
         data = _load()
         bank = data.setdefault(_bank_key(ctx), [])
         bank.append(entry)
@@ -77,7 +98,7 @@ def remember(ctx: ToolContext, text: str) -> dict[str, Any]:
 
 
 def recall(ctx: ToolContext, query: str | None, limit: int) -> list[dict[str, Any]]:
-    with _lock:
+    with _lock, _file_lock():
         bank = list(_load().get(_bank_key(ctx), []))
     if query:
         q = query.lower()

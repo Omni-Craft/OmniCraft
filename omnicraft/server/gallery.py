@@ -154,9 +154,13 @@ def install_gallery_agent(
     if existing is not None:
         new_loc = f"{existing.id}/{bundle_hash}"
         if existing.bundle_location != new_loc:
+            # Order matters: artifact first, then cache swap, then the store
+            # pointer — so a failure never leaves the store pointing at a
+            # bundle the cache never loaded. expand_env=False mirrors load()
+            # above: registration keeps placeholders; the runner expands them.
             artifact_store.put(new_loc, bundle_bytes)
+            agent_cache.replace(existing.id, new_loc, bundle_bytes, expand_env=False)
             agent_store.update(existing.id, bundle_location=new_loc)
-            agent_cache.replace(existing.id, new_loc, bundle_bytes, expand_env=True)
         return {"agent_id": existing.id, "name": spec.name}
 
     agent_id = generate_agent_id()

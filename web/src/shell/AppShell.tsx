@@ -241,6 +241,11 @@ export function AppShell() {
   // Artifacts slide-over — collects the assistant's code/doc blocks. Shown on
   // Chat sessions (the no-filesystem "chat" agent).
   const [artifactsOpen, setArtifactsOpen] = useState(false);
+  // Close the Artifacts panel when switching sessions so it doesn't persist
+  // into a non-chat session.
+  useEffect(() => {
+    setArtifactsOpen(false);
+  }, [conversationId]);
   const [forkOpen, setForkOpen] = useState(false);
   // Truncation point for a "fork from here" opened from a message's
   // actions (ChatPage, via ForkDialogContext). `null` = full clone —
@@ -313,7 +318,9 @@ export function AppShell() {
   );
   // Full agent object (mcp_servers + policies) for the header info icon.
   // react-query-cached, so this shares the fetch ChatPage's picker makes.
-  const { data: boundAgent } = useSessionAgent(conversationId ?? null);
+  const { data: boundAgent, isLoading: boundAgentLoading } = useSessionAgent(
+    conversationId ?? null,
+  );
   const permissionLevel = derivePermissionLevel(
     activeSession,
     sessionLoading,
@@ -502,7 +509,11 @@ export function AppShell() {
   // card doesn't mount and the header hides its collapse toggle — a
   // no-filesystem agent with no terminals/sub-agents/todos would otherwise
   // render an empty white card with no way to dismiss it.
-  const hasRailContent = !isChatSession && Object.values(railTabsAvailable).some(Boolean);
+  // While the agent query is still loading the surface is unknown — suppress
+  // the rail so it doesn't flash on chat sessions. Gated on isLoading (not on
+  // data presence) because an errored query leaves data undefined forever.
+  const hasRailContent =
+    !boundAgentLoading && !isChatSession && Object.values(railTabsAvailable).some(Boolean);
   // Keep the selected tab valid. When the current tab disappears — files
   // panel turns off, or the Shells tab hides (native wrapper / no shell
   // and no shell access) — fall back to the first still-visible tab in

@@ -93,6 +93,17 @@ def test_update_recomputes_schedule_and_disable_clears_it() -> None:
     assert len(due) == 1 and due[0]["id"] == job["id"]
 
 
+def test_due_jobs_skips_next_run_at_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A scheduled job whose next occurrence can't be computed must never be
+    # "due" — otherwise the scheduler would fire it on every poll.
+    monkeypatch.setattr(sched, "_compute_next", lambda job, base_ts: None)
+    job = sched.create_job(
+        name="j", agent_name="a", prompt="p", workspace="/w", interval_seconds=3600
+    )
+    assert job["next_run_at"] is None
+    assert sched.due_jobs(now=2**33) == []
+
+
 def test_webhook_only_job_is_never_schedule_due() -> None:
     # No interval → webhook/manual only; the scheduler must ignore it.
     sched.create_job(name="hook", agent_name="a", prompt="p", workspace="/w")
@@ -175,6 +186,24 @@ async def test_fire_no_online_host_is_skipped_and_retries_soon() -> None:
     assert after["history"][0]["trigger"] == "schedule"
     # next_run advanced by the short retry (~60s), not a full day.
     assert after["next_run_at"] - int(time.time()) <= sched._RETRY_SECONDS + 5
+
+
+@pytest.mark.asyncio
+async def test_webhook_fire_respects_no_overlap(monkeypatch: pytest.MonkeyPatch) -> None:
+    # A webhook fire while the previous run is still active must skip (only
+    # manual "run now" is exempt), before any session is created.
+    job = sched.create_job(name="j", agent_name="a", prompt="p", workspace="/w")
+    sched.record_run(job["id"], {"trigger": "webhook", "status": "started", "session_id": "c1"})
+    job = sched.get_job(job["id"])
+
+    async def _always_active(client: Any, session_id: str) -> bool:
+        return True
+
+    monkeypatch.setattr(sched, "_session_active", _always_active)
+    res = await sched.fire_job(_FakeApp(["h1"]), job, _FakeAgentStore(has=True), trigger="webhook")
+    assert res["status"] == "skipped"
+    assert "ativa" in res["detail"]
+    assert sched.get_job(job["id"])["history"][0]["status"] == "skipped"
 
 
 @pytest.mark.asyncio

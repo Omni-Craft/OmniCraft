@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import time
 from collections import Counter
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from itertools import pairwise
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Query, Request
 
@@ -25,8 +26,8 @@ _LOCAL_USER = "local"
 _MAX_SESSIONS = 1000
 
 
-def _day(ts: float) -> str:
-    return datetime.fromtimestamp(ts).strftime("%Y-%m-%d")
+def _day(ts: float, tz: tzinfo | None = None) -> str:
+    return datetime.fromtimestamp(ts, tz).strftime("%Y-%m-%d")
 
 
 def _streaks(days: set[str]) -> tuple[int, int]:
@@ -77,8 +78,18 @@ def create_code_stats_router(
     async def code_stats(
         request: Request,
         days: int = Query(default=365, ge=1, le=730),
+        tz: str | None = Query(default=None),
     ) -> dict[str, Any]:
         user_id = require_user(request, auth_provider) or _LOCAL_USER
+
+        # Bucket days/hours in the viewer's timezone when a valid one is given;
+        # otherwise fall back to server-local.
+        zone: tzinfo | None = None
+        if tz:
+            try:
+                zone = ZoneInfo(tz)
+            except Exception:  # noqa: BLE001 — invalid tz falls back to server-local
+                zone = None
 
         try:
             chat_agent = agent_store.get_by_name("chat")
@@ -107,8 +118,8 @@ def create_code_stats_router(
             ts = s.created_at
             if not ts:
                 continue
-            day_counts[_day(ts)] += 1
-            hour_counts[datetime.fromtimestamp(ts).hour] += 1
+            day_counts[_day(ts, zone)] += 1
+            hour_counts[datetime.fromtimestamp(ts, zone).hour] += 1
 
         current_streak, longest_streak = _streaks(set(day_counts))
         by_model = agg.get("by_model", [])
@@ -133,6 +144,7 @@ def create_code_stats_router(
             ],
             "daily": dict(day_counts),
             "window_days": days,
+            "truncated": len(page.data) >= _MAX_SESSIONS,
         }
 
     return router

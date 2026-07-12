@@ -9,7 +9,9 @@ lifespan scheduler loop drives the interval trigger.
 
 from __future__ import annotations
 
+import time
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Request
 
@@ -68,6 +70,8 @@ def create_scheduled_agents_router(
                 code=ErrorCode.INVALID_INPUT,
             )
         _validate_cron(body.get("cron"))
+        _validate_schedule(body)
+        _validate_cron_has_next(body.get("cron"), body.get("tz"), bool(body.get("enabled", True)))
         if agent_store.get_by_name(agent_name) is None:
             raise OmniCraftError(f"agente '{agent_name}' não encontrado", code=ErrorCode.NOT_FOUND)
         return scheduled_agents.create_job(
@@ -87,13 +91,28 @@ def create_scheduled_agents_router(
     async def update_job(request: Request, job_id: str) -> dict[str, Any]:
         require_user(request, auth_provider)
         body = await _json(request)
-        if body.get("agent_name"):
-            if agent_store.get_by_name(body["agent_name"]) is None:
+        if "agent_name" in body:
+            agent_name = body["agent_name"]
+            if not isinstance(agent_name, str) or not agent_name.strip():
+                raise OmniCraftError("agent_name inválido", code=ErrorCode.INVALID_INPUT)
+            if agent_store.get_by_name(agent_name) is None:
                 raise OmniCraftError(
-                    f"agente '{body['agent_name']}' não encontrado", code=ErrorCode.NOT_FOUND
+                    f"agente '{agent_name}' não encontrado", code=ErrorCode.NOT_FOUND
                 )
+        for flag in ("enabled", "no_overlap"):
+            if flag in body:
+                if not isinstance(body[flag], bool):
+                    raise OmniCraftError(f"{flag} deve ser booleano", code=ErrorCode.INVALID_INPUT)
+                body[flag] = bool(body[flag])
         if body.get("cron"):
             _validate_cron(body.get("cron"))
+        _validate_schedule(body)
+        current = scheduled_agents.get_job(job_id)
+        if current is None:
+            raise OmniCraftError("job não encontrado", code=ErrorCode.NOT_FOUND)
+        # Validate the prospective (merged) schedule, not just the patch.
+        merged = {**current, **body}
+        _validate_cron_has_next(merged.get("cron"), merged.get("tz"), merged.get("enabled"))
         updated = scheduled_agents.update_job(job_id, body)
         if updated is None:
             raise OmniCraftError("job não encontrado", code=ErrorCode.NOT_FOUND)
@@ -138,11 +157,69 @@ def create_scheduled_agents_router(
                 payload = body
         except Exception:  # noqa: BLE001 — a bodyless webhook is fine
             payload = {}
-        return await scheduled_agents.fire_job(
+        result = await scheduled_agents.fire_job(
             request.app, job, agent_store, trigger="webhook", payload=payload
         )
+        # Opaque response: this endpoint is unauthenticated, so never leak the
+        # session id or failure detail. The full record lives in job history.
+        if result.get("status") in ("started", "skipped"):
+            return {"status": "accepted"}
+        return {"status": "error"}
 
     return router
+
+
+def _validate_schedule(body: dict[str, Any]) -> None:
+    """Reject malformed schedule fields with a 400 instead of a 500/misfire."""
+    if "interval_seconds" in body and body["interval_seconds"] is not None:
+        raw = body["interval_seconds"]
+        if isinstance(raw, bool):
+            raise OmniCraftError("interval_seconds inválido", code=ErrorCode.INVALID_INPUT)
+        if isinstance(raw, float):
+            if not raw.is_integer():
+                raise OmniCraftError("interval_seconds inválido", code=ErrorCode.INVALID_INPUT)
+            raw = int(raw)
+        elif isinstance(raw, str):
+            try:
+                raw = int(raw)
+            except ValueError:
+                raise OmniCraftError(
+                    "interval_seconds inválido", code=ErrorCode.INVALID_INPUT
+                ) from None
+        elif not isinstance(raw, int):
+            raise OmniCraftError("interval_seconds inválido", code=ErrorCode.INVALID_INPUT)
+        if not (60 <= raw <= 31_536_000):
+            raise OmniCraftError(
+                "interval_seconds deve estar entre 60 e 31536000",
+                code=ErrorCode.INVALID_INPUT,
+            )
+    tz = body.get("tz")
+    if tz is not None:
+        if not isinstance(tz, str):
+            raise OmniCraftError("fuso horário inválido", code=ErrorCode.INVALID_INPUT)
+        if tz.strip():
+            try:
+                ZoneInfo(tz.strip())
+            except Exception:  # noqa: BLE001 — any lookup failure is "invalid tz"
+                raise OmniCraftError(
+                    "fuso horário inválido", code=ErrorCode.INVALID_INPUT
+                ) from None
+    name = body.get("name")
+    if isinstance(name, str) and len(name) > 200:
+        raise OmniCraftError("name muito longo (máx. 200)", code=ErrorCode.INVALID_INPUT)
+    prompt = body.get("prompt")
+    if isinstance(prompt, str) and len(prompt) > 32_000:
+        raise OmniCraftError("prompt muito longo (máx. 32000)", code=ErrorCode.INVALID_INPUT)
+
+
+def _validate_cron_has_next(cron: Any, tz: Any, enabled: Any) -> None:
+    """Reject an enabled cron with no computable next occurrence (e.g. 0 0 31 2 *)."""
+    cron = cron.strip() if isinstance(cron, str) else None
+    if not enabled or not cron:
+        return
+    tz_name = tz.strip() if isinstance(tz, str) and tz.strip() else None
+    if scheduled_agents._cron_next(cron, tz_name, int(time.time())) is None:
+        raise OmniCraftError("cron sem próxima ocorrência", code=ErrorCode.INVALID_INPUT)
 
 
 def _validate_cron(cron: Any) -> None:

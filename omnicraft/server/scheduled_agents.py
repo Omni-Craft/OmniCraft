@@ -27,6 +27,7 @@ import json
 import os
 import re
 import secrets
+import tempfile
 import threading
 import time
 from datetime import datetime
@@ -129,7 +130,7 @@ def _cron_next(expr: str, tz_name: str | None, after_ts: int) -> int | None:
     """Next epoch second (minute-aligned) matching ``expr`` in ``tz`` after ``after_ts``.
 
     Iterates real epoch minutes and matches wall-clock fields, so DST is handled
-    correctly. Bounded to ~366 days.
+    correctly. Bounded to ~4 years so rare dates (e.g. Feb 29) still resolve.
     """
     try:
         fields = parse_cron(expr)
@@ -137,7 +138,8 @@ def _cron_next(expr: str, tz_name: str | None, after_ts: int) -> int | None:
         return None
     tz = _tz(tz_name)
     base = (after_ts // 60 + 1) * 60
-    for i in range(366 * 24 * 60):
+    # ~4 years + 2 days of minutes: covers a leap-day cron from any start point.
+    for i in range((4 * 366 + 2) * 24 * 60):
         ts = base + i * 60
         if _cron_matches(fields, datetime.fromtimestamp(ts, tz)):
             return ts
@@ -202,8 +204,14 @@ def _load() -> dict[str, Any]:
 
 
 def _save(data: dict[str, Any]) -> None:
-    with open(_path(), "w", encoding="utf-8") as fh:
+    # Write-then-rename so a crash mid-write never corrupts the store.
+    path = _path()
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=os.path.dirname(path), suffix=".tmp", delete=False
+    ) as fh:
         json.dump(data, fh)
+        tmp = fh.name
+    os.replace(tmp, path)
 
 
 def _now() -> int:
@@ -243,7 +251,10 @@ def get_job_by_token(token: str) -> dict[str, Any] | None:
         return None
     with _lock:
         for job in _load()["jobs"]:
-            if job.get("webhook_token") == token:
+            stored = job.get("webhook_token")
+            # Constant-time compare so the public webhook path doesn't leak
+            # token prefixes via timing.
+            if isinstance(stored, str) and secrets.compare_digest(stored, token):
                 return dict(job)
     return None
 
@@ -366,6 +377,7 @@ def record_run(
                 if retry_seconds is not None:
                     job["next_run_at"] = now + retry_seconds
                 else:
+                    # May be None (no next occurrence); due_jobs skips None.
                     job["next_run_at"] = _compute_next(job, now)
             history = job.setdefault("history", [])
             history.insert(0, entry)
@@ -383,7 +395,9 @@ def due_jobs(now: int | None = None) -> list[dict[str, Any]]:
             if not job.get("enabled") or not (job.get("interval_seconds") or job.get("cron")):
                 continue
             nxt = job.get("next_run_at")
-            if nxt is None or nxt <= ts:
+            # next_run_at=None means "no computed occurrence" — never due, or the
+            # scheduler would fire it on every poll.
+            if nxt is not None and nxt <= ts:
                 out.append(dict(job))
     return out
 
@@ -465,8 +479,13 @@ async def fire_job(
         async with httpx.AsyncClient(
             transport=transport, base_url="http://internal", timeout=45.0
         ) as client:
-            # Skip a scheduled fire while the previous run is still going.
-            if scheduled and job.get("no_overlap", True) and job.get("last_session_id"):
+            # Skip a scheduled/webhook fire while the previous run is still
+            # going. Manual "run now" stays exempt so the user can force a run.
+            if (
+                trigger in ("schedule", "webhook")
+                and job.get("no_overlap", True)
+                and job.get("last_session_id")
+            ):
                 if await _session_active(client, job["last_session_id"]):
                     return _record(
                         "skipped", "execução anterior ainda ativa", retry=_RETRY_SECONDS

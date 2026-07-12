@@ -2131,13 +2131,14 @@ export function NewChatLandingScreen() {
   // Chat mode is pinned to the no-`os_env` "chat" agent (no filesystem access);
   // Code mode uses the user's picked agent (or the default).
   const chatAgentId = agentList.find((a) => a.name === "chat")?.id ?? null;
-  const effectiveAgentId =
-    chatMode && chatAgentId
-      ? chatAgentId
-      : pickedAgentId === PENDING_AGENT_ID
-        ? PENDING_AGENT_ID
-        : ((agentList.some((a) => a.id === pickedAgentId) ? pickedAgentId : agentList[0]?.id) ??
-          null);
+  // Chat mode NEVER falls back to a filesystem agent: when the "chat" agent
+  // isn't installed the id stays null and submit is disabled instead.
+  const effectiveAgentId = chatMode
+    ? chatAgentId
+    : pickedAgentId === PENDING_AGENT_ID
+      ? PENDING_AGENT_ID
+      : ((agentList.some((a) => a.id === pickedAgentId) ? pickedAgentId : agentList[0]?.id) ??
+        null);
   const selectedAgent = useMemo(
     () =>
       effectiveAgentId === PENDING_AGENT_ID && pendingAgent
@@ -2506,13 +2507,15 @@ export function NewChatLandingScreen() {
   // actionable (submitting, or mid-create).
   const submitDisabledReason = canSubmit
     ? null
-    : sandboxSelected && !sandboxRepoValid
-      ? "Digite uma URL de repositório válida"
-      : !sandboxSelected && (!selectedHostId || !workspaceValid)
-        ? "Escolha uma máquina e um diretório de trabalho"
-        : message.trim().length === 0
-          ? "Digite uma mensagem para começar"
-          : null;
+    : chatMode && chatAgentId === null
+      ? "O agente de Chat não está instalado — instale o agente 'chat' na Galeria."
+      : sandboxSelected && !sandboxRepoValid
+        ? "Digite uma URL de repositório válida"
+        : !sandboxSelected && (!selectedHostId || !workspaceValid)
+          ? "Escolha uma máquina e um diretório de trabalho"
+          : message.trim().length === 0
+            ? "Digite uma mensagem para começar"
+            : null;
 
   // Chip display labels.
   const workspaceLabel = workspaceTrimmed
@@ -2687,11 +2690,13 @@ export function NewChatLandingScreen() {
                   // Create a new worktree, or bind an existing one
                   // (`existing_worktree` records the branch for the sidebar +
                   // delete flow without creating anything), or neither.
-                  git: shouldCreateWorktree
-                    ? { branch_name: trimmedBranch, base_branch: baseBranch.trim() || undefined }
-                    : startInExistingWorktree
-                      ? { branch_name: trimmedBranch, existing_worktree: true }
-                      : undefined,
+                  // Chat sessions have no filesystem, so never create worktrees.
+                  git:
+                    !chatMode && shouldCreateWorktree
+                      ? { branch_name: trimmedBranch, base_branch: baseBranch.trim() || undefined }
+                      : !chatMode && startInExistingWorktree
+                        ? { branch_name: trimmedBranch, existing_worktree: true }
+                        : undefined,
                 }),
             // Native terminal agents open terminal-first: `omnicraft.ui:
             // terminal` tells the UI to render the terminal wrapper, and
@@ -2709,6 +2714,7 @@ export function NewChatLandingScreen() {
             // Permission / approval / cursor mode → CLI flag pair, persisted as
             // terminal_launch_args. Omitted for the default and non-native agents.
             terminal_launch_args:
+              !chatMode &&
               agentSupportsPermissionMode &&
               permissionMode !== CLAUDE_NATIVE_DEFAULT_PERMISSION_MODE
                 ? ["--permission-mode", permissionMode]
@@ -2727,7 +2733,7 @@ export function NewChatLandingScreen() {
               agentSupportsPermissionMode && pickedEffort ? pickedEffort : undefined,
             // Smart routing toggle — server-side, available for any agent.
             cost_control_mode_override: costControlMode ?? undefined,
-            harness_override: pickedHarness ?? undefined,
+            harness_override: chatMode ? undefined : (pickedHarness ?? undefined),
           }),
         });
         if (!res.ok) {

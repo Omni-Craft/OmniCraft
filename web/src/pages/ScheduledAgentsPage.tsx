@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { authenticatedFetch } from "@/lib/identity";
 import { useNavigate } from "@/lib/routing";
@@ -124,6 +124,7 @@ export function ScheduledAgentsPage() {
   const [sessionStatus, setSessionStatus] = useState<
     Record<string, { status: string; active: boolean }>
   >({});
+  const formRef = useRef<HTMLElement>(null);
 
   const fetchStatuses = useCallback(async (list: Job[]) => {
     const ids = list.map((j) => j.last_session_id).filter((x): x is string => !!x);
@@ -227,6 +228,8 @@ export function ScheduledAgentsPage() {
       }
       resetForm();
       await load();
+    } catch {
+      setError("Falha de rede — tente novamente.");
     } finally {
       setBusy(false);
     }
@@ -254,21 +257,39 @@ export function ScheduledAgentsPage() {
     });
     setEditingId(j.id);
     setError(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
   const toggle = async (j: Job) => {
-    await authenticatedFetch(`/v1/scheduled-agents/${j.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ enabled: !j.enabled }),
-    });
+    try {
+      const res = await authenticatedFetch(`/v1/scheduled-agents/${j.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !j.enabled }),
+      });
+      if (!res.ok) {
+        setError(`Não foi possível ${j.enabled ? "desativar" : "ativar"} "${j.name}".`);
+        return;
+      }
+    } catch {
+      setError("Falha de rede — tente novamente.");
+      return;
+    }
     await load();
   };
 
   const remove = async (j: Job) => {
     if (!window.confirm(`Excluir o agendamento "${j.name}"?`)) return;
-    await authenticatedFetch(`/v1/scheduled-agents/${j.id}`, { method: "DELETE" });
+    try {
+      const res = await authenticatedFetch(`/v1/scheduled-agents/${j.id}`, { method: "DELETE" });
+      if (!res.ok) {
+        setError(`Não foi possível excluir "${j.name}".`);
+        return;
+      }
+    } catch {
+      setError("Falha de rede — tente novamente.");
+      return;
+    }
     await load();
   };
 
@@ -289,7 +310,9 @@ export function ScheduledAgentsPage() {
         [j.id]:
           body?.status === "started"
             ? "✓ Sessão iniciada"
-            : `${body?.status}: ${body?.detail ?? ""}`,
+            : body?.status
+              ? `${body.status}: ${body.detail ?? ""}`
+              : `Falha (HTTP ${res.status})`,
       }));
       await load();
     } catch {
@@ -343,6 +366,7 @@ export function ScheduledAgentsPage() {
 
       {/* Create / edit form */}
       <section
+        ref={formRef}
         className="flex flex-col gap-3 rounded-xl border border-white/10 bg-black/20 p-4"
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void submit();

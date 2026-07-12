@@ -150,7 +150,7 @@ function Hub() {
                 )}
                 <button
                   type="button"
-                  onClick={() => navigate("/")}
+                  onClick={() => navigate("/code")}
                   className="mt-1 self-start rounded-lg px-3 py-1.5 text-sm font-medium text-black"
                   style={{ backgroundColor: "var(--brand-accent)" }}
                 >

@@ -34,8 +34,42 @@ function useArtifacts(): Artifact[] {
   }, [blocks]);
 }
 
+// Language → download-file extension. Fallback: a short alphanumeric lang is
+// used as-is (already extension-like, e.g. "py"); anything else becomes "txt".
+const LANG_EXTENSIONS: Record<string, string> = {
+  python: "py",
+  typescript: "ts",
+  javascript: "js",
+  tsx: "tsx",
+  jsx: "jsx",
+  "c++": "cpp",
+  csharp: "cs",
+  markdown: "md",
+  text: "txt",
+  texto: "txt",
+  bash: "sh",
+  shell: "sh",
+  yaml: "yaml",
+  json: "json",
+  html: "html",
+  css: "css",
+  sql: "sql",
+  go: "go",
+  rust: "rs",
+  ruby: "rb",
+  java: "java",
+  kotlin: "kt",
+  swift: "swift",
+};
+
+function extensionForLang(lang: string): string {
+  const key = lang.toLowerCase();
+  if (LANG_EXTENSIONS[key]) return LANG_EXTENSIONS[key];
+  return /^[a-z0-9]{1,4}$/i.test(lang) ? lang : "txt";
+}
+
 function download(a: Artifact): void {
-  const ext = a.lang && a.lang !== "texto" ? a.lang.split(/[.+]/)[0] : "txt";
+  const ext = extensionForLang(a.lang);
   const blob = new Blob([a.code], { type: "text/plain" });
   const url = URL.createObjectURL(blob);
   const el = document.createElement("a");
@@ -79,22 +113,13 @@ function ArtifactCard({ artifact }: { artifact: Artifact }) {
   );
 }
 
-/**
- * A self-contained right slide-over that collects the fenced code/doc blocks the
- * assistant produced in the active conversation. Reads the chat store directly,
- * so it needs no data props — only open/close.
- */
-export function ArtifactsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Header + artifact list. Mounted only while the panel is open, so the
+ * fence-parsing useArtifacts memo doesn't run on every streaming delta while
+ * the panel is closed. */
+function ArtifactsBody({ onClose }: { onClose: () => void }) {
   const artifacts = useArtifacts();
   return (
-    <div
-      className={cn(
-        "flex shrink-0 flex-col overflow-hidden border-border border-l bg-sidebar transition-[width] duration-200",
-        open ? "w-[min(420px,80vw)]" : "w-0 border-l-0",
-      )}
-      aria-hidden={!open}
-      inert={!open}
-    >
+    <>
       <div className="flex items-center justify-between px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <span className="font-semibold text-sm">Artifacts</span>
@@ -122,6 +147,27 @@ export function ArtifactsPanel({ open, onClose }: { open: boolean; onClose: () =
           artifacts.map((a) => <ArtifactCard key={a.id} artifact={a} />)
         )}
       </div>
+    </>
+  );
+}
+
+/**
+ * A self-contained right slide-over that collects the fenced code/doc blocks the
+ * assistant produced in the active conversation. Reads the chat store directly,
+ * so it needs no data props — only open/close. The outer div stays mounted for
+ * the width transition; the content only mounts while open (no focusable
+ * content when closed, so no React 18 `inert` workaround is needed).
+ */
+export function ArtifactsPanel({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <div
+      className={cn(
+        "flex shrink-0 flex-col overflow-hidden border-border border-l bg-sidebar transition-[width] duration-200",
+        open ? "w-[min(420px,80vw)]" : "w-0 border-l-0",
+      )}
+      aria-hidden={!open}
+    >
+      {open && <ArtifactsBody onClose={onClose} />}
     </div>
   );
 }

@@ -42,6 +42,9 @@ vi.mock("@/lib/identity", async (importOriginal) => ({
   authenticatedFetch: vi.fn(),
 }));
 vi.mock("@/hooks/useHosts", () => ({ useHosts: vi.fn() }));
+// Stubbed: at /code the landing screen mounts the stats dashboard, whose
+// fetch would pollute the positional authenticatedFetch call assertions.
+vi.mock("@/components/CodeStatsDashboard", () => ({ CodeStatsDashboard: () => null }));
 vi.mock("@/hooks/useAvailableAgents", () => ({ useAvailableAgents: vi.fn() }));
 vi.mock("@/hooks/useHostFilesystem", () => ({
   useHostFilesystem: vi.fn(),
@@ -620,7 +623,7 @@ function setupLandingMocks() {
   ]);
 }
 
-function renderLanding(infoOverrides: Partial<ServerInfo> = {}, route = "/") {
+function renderLanding(infoOverrides: Partial<ServerInfo> = {}, route = "/code") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -1016,7 +1019,7 @@ describe("NewChatLandingScreen", () => {
   it("caps each footer chip label with truncate so a long label can't wrap the row", async () => {
     // Land with `?project=` so the (otherwise-hidden) project chip renders and
     // its truncate cap can be asserted alongside the other chips.
-    renderLanding({}, "/?project=docs");
+    renderLanding({}, "/code?project=docs");
     await waitFor(() =>
       expect(screen.getByTestId("new-chat-landing-workspace-chip").textContent).toContain("repo"),
     );
@@ -1472,7 +1475,7 @@ describe("NewChatLandingScreen", () => {
     const invalidateSpy = vi.spyOn(QueryClient.prototype, "invalidateQueries");
     // The chip only renders when a project is pre-selected (e.g. via the
     // sidebar's per-project pencil), so land with `?project=`.
-    renderLanding({}, "/?project=docs");
+    renderLanding({}, "/code?project=docs");
 
     await waitFor(() =>
       expect(screen.getByTestId("new-chat-landing-project-chip").textContent).toContain("docs"),
@@ -1509,7 +1512,7 @@ describe("NewChatLandingScreen", () => {
     // When shown, the picker still lets the user clear the selection; doing so
     // empties `selectedProject` and the chip disappears (consistent with the
     // "only show when selected" rule).
-    renderLanding({}, "/?project=docs");
+    renderLanding({}, "/code?project=docs");
 
     await waitFor(() =>
       expect(screen.getByTestId("new-chat-landing-project-chip").textContent).toContain("docs"),
@@ -1528,7 +1531,7 @@ describe("NewChatLandingScreen", () => {
       ok: true,
       json: async () => ({ id: "conv_new" }),
     } as unknown as Response);
-    renderLanding({}, "/?project=Sprint%2042");
+    renderLanding({}, "/code?project=Sprint%2042");
 
     await waitFor(() =>
       expect(screen.getByTestId("new-chat-landing-project-chip").textContent).toContain(

@@ -10,6 +10,7 @@ import {
   ChartColumnIcon,
   ClipboardCheckIcon,
   ClockIcon,
+  PlugIcon,
   Code2Icon,
   GitPullRequestIcon,
   HomeIcon,
@@ -25,12 +26,13 @@ import { Link, useLocation } from "@/lib/routing";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/chatStore";
 
-export type CraftworkSectionId = "home" | "gallery" | "scheduled" | "evals" | "costs";
+export type CraftworkSectionId = "home" | "gallery" | "scheduled" | "mcps" | "evals" | "costs";
 
 const SECTION_IDS: readonly CraftworkSectionId[] = [
   "home",
   "gallery",
   "scheduled",
+  "mcps",
   "evals",
   "costs",
 ];
@@ -179,6 +181,7 @@ const NAV: NavItem[] = [
   { id: "home", label: "Visão geral", icon: HomeIcon },
   { id: "gallery", label: "Galeria de agentes", icon: LayoutGridIcon },
   { id: "scheduled", label: "Agentes agendados", icon: ClockIcon },
+  { id: "mcps", label: "Servidores MCP", icon: PlugIcon },
   { id: "evals", label: "Avaliações", icon: ClipboardCheckIcon },
   { id: "costs", label: "Custos", icon: ChartColumnIcon },
 ];

@@ -57,6 +57,7 @@ from omnicraft.server.performance_metrics import (
     set_request_session_id_for_access_log,
     set_request_user_agent_for_access_log,
 )
+from omnicraft.server.routes.agent_mcp_servers import create_agent_mcp_servers_router
 from omnicraft.server.routes.builtin_agents import create_builtin_agents_router
 from omnicraft.server.routes.code_stats import create_code_stats_router
 from omnicraft.server.routes.comments import create_comments_router
@@ -2161,6 +2162,13 @@ def create_app(
         create_doctor_router(agent_store, auth_provider=auth_provider),
         prefix="/v1",
         tags=["doctor"],
+    )
+    app.include_router(
+        create_agent_mcp_servers_router(
+            agent_store, artifact_store, agent_cache, auth_provider=auth_provider
+        ),
+        prefix="/v1",
+        tags=["agent_mcp_servers"],
     )
     app.include_router(
         create_policy_simulate_router(conversation_store, auth_provider=auth_provider),

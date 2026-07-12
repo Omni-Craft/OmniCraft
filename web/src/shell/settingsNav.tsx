@@ -18,6 +18,7 @@ import {
   LayoutGridIcon,
   PaletteIcon,
   PanelRightOpenIcon,
+  PlugIcon,
   ShieldCheckIcon,
   StethoscopeIcon,
   TerminalIcon,
@@ -41,6 +42,7 @@ export type SettingsSectionId =
   | "evals"
   | "gallery"
   | "scheduled"
+  | "mcps"
   | "doctor"
   | "members"
   | "policies"
@@ -56,6 +58,7 @@ const SECTION_IDS: readonly SettingsSectionId[] = [
   "evals",
   "gallery",
   "scheduled",
+  "mcps",
   "doctor",
   "members",
   "policies",
@@ -118,6 +121,7 @@ export function settingsNavGroups(
       { id: "evals", label: "Avaliações de agentes", icon: ClipboardCheckIcon },
       { id: "gallery", label: "Galeria de agentes", icon: LayoutGridIcon },
       { id: "scheduled", label: "Agentes agendados", icon: ClockIcon },
+      { id: "mcps", label: "Servidores MCP", icon: PlugIcon },
       { id: "doctor", label: "Diagnóstico", icon: StethoscopeIcon },
     ],
   });

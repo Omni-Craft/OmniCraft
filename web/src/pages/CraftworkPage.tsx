@@ -13,6 +13,7 @@ const GalleryPage = lazy(() =>
 const ScheduledAgentsPage = lazy(() =>
   import("@/pages/ScheduledAgentsPage").then((m) => ({ default: m.ScheduledAgentsPage })),
 );
+const McpPage = lazy(() => import("@/pages/McpPage").then((m) => ({ default: m.McpPage })));
 
 interface GalleryAgent {
   id: string;
@@ -41,6 +42,12 @@ const TOOLS: { to: string; emoji: string; title: string; desc: string }[] = [
     emoji: "⚔️",
     title: "Arena",
     desc: "Compare o mesmo prompt em vários harnesses.",
+  },
+  {
+    to: "/craftwork/mcps",
+    emoji: "🔌",
+    title: "Servidores MCP",
+    desc: "Conecte ferramentas externas aos agentes.",
   },
   {
     to: "/craftwork/evals",
@@ -178,6 +185,7 @@ export function CraftworkPage() {
         {section === "home" && <Hub />}
         {section === "gallery" && <GalleryPage />}
         {section === "scheduled" && <ScheduledAgentsPage />}
+        {section === "mcps" && <McpPage />}
         {section === "evals" && <EvalsPage />}
         {section === "costs" && <CostPage />}
       </Suspense>

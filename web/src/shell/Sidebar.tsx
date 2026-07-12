@@ -134,6 +134,7 @@ import { absoluteTime, relativeTime } from "@/lib/relativeTime";
 import { MOD_KEY } from "@/components/KeyboardShortcutsDialog";
 import { isCurrentServerLocal } from "@/lib/serverOrigin";
 import { SettingsSidebarBody, useSettingsRoute, useTrackSettingsReturn } from "./settingsNav";
+import { CraftworkSidebarBody, SidebarModeSwitcher, useCraftworkRoute } from "./craftworkNav";
 import {
   type ActiveChatOverride,
   COLLAPSED_SIDEBAR_SECTIONS_STORAGE_KEY,
@@ -361,6 +362,9 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   // for the settings section nav (see settingsNav.tsx) — entering settings
   // shouldn't replace the whole sidebar.
   const { inSettings } = useSettingsRoute();
+  // On /craftwork the card swaps the conversation list for the Craftwork
+  // section nav, the same way settings does.
+  const { inCraftwork } = useCraftworkRoute();
   // Remember the pre-settings location so "Back to OmniCraft" returns to the
   // conversation the user was viewing, not the home page. Tracked here since
   // the sidebar stays mounted across the transition into settings.
@@ -457,239 +461,246 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
         <SettingsSidebarBody onNavClick={onNavClick} onClose={onClose} />
       ) : (
         <>
-          <div className="flex items-center justify-between px-4 pt-3">
-            {/* Brand mark doubles as the "home" affordance: clicking it
+          {/* Chat / Craftwork top switcher — the two primary destinations,
+              always visible above the mode's body (Claude Desktop pattern). */}
+          <SidebarModeSwitcher onNavClick={onNavClick} />
+          {inCraftwork ? (
+            <CraftworkSidebarBody onNavClick={onNavClick} onClose={onClose} />
+          ) : (
+            <>
+              <div className="flex items-center justify-between px-4 pt-3">
+                {/* Brand mark doubles as the "home" affordance: clicking it
             returns to `/`, the new-session composer. Without this there
             is no way back to the landing composer once you're inside a
             session. Reuses onNavClick so a plain primary click closes
             the sidebar on mobile (where it's a full-screen overlay) but
             modifier/middle clicks still open `/` in a new tab. */}
-            <Link
-              to="/"
-              onClick={onNavClick}
-              className="rounded-sm text-[15px] font-semibold tracking-tight text-foreground transition-colors hover:text-foreground/70"
-            >
-              OmniCraft
-            </Link>
-            <div className="flex items-center gap-1">
-              {/* Inbox lives at the top next to the collapse toggle. Rendered
+                <Link
+                  to="/"
+                  onClick={onNavClick}
+                  className="rounded-sm text-[15px] font-semibold tracking-tight text-foreground transition-colors hover:text-foreground/70"
+                >
+                  OmniCraft
+                </Link>
+                <div className="flex items-center gap-1">
+                  {/* Inbox lives at the top next to the collapse toggle. Rendered
               as a Link so cmd/middle-click opens it in a new tab; onNavClick
               still closes the sidebar on a plain mobile tap. */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Caixa de entrada"
-                    className={cn("relative rounded-full", isInboxPage && "bg-muted")}
-                    data-testid="inbox-button"
-                  >
-                    <Link to="/inbox" onClick={onNavClick}>
-                      <InboxIcon className="size-4" />
-                      {inboxCount > 0 && (
-                        <span
-                          aria-label={
-                            inboxCount === 1
-                              ? "1 item aguardando na caixa de entrada"
-                              : `${inboxCount} itens aguardando na caixa de entrada`
-                          }
-                          className="-top-0.5 -right-0.5 absolute inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning/15 px-1 text-[10px] font-medium text-warning tabular-nums"
-                        >
-                          {inboxCount}
-                        </span>
-                      )}
-                    </Link>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Caixa de entrada</TooltipContent>
-              </Tooltip>
-              {/* Arena: race one prompt across several harnesses and compare. */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Arena de agentes"
-                    className="rounded-full"
-                    data-testid="arena-button"
-                  >
-                    <Link to="/arena" onClick={onNavClick}>
-                      <SwordsIcon className="size-4" />
-                    </Link>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Arena de agentes</TooltipContent>
-              </Tooltip>
-              {/* GitHub: browse issues/PRs and start a session from one. */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    asChild
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Integração GitHub"
-                    className="rounded-full"
-                    data-testid="github-button"
-                  >
-                    <Link to="/github" onClick={onNavClick}>
-                      <GitPullRequestIcon className="size-4" />
-                    </Link>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Integração GitHub</TooltipContent>
-              </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Fechar barra lateral"
-                    onClick={onClose}
-                    className="rounded-full"
-                  >
-                    {/* panel-right-open while the sidebar IS open — this button
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Caixa de entrada"
+                        className={cn("relative rounded-full", isInboxPage && "bg-muted")}
+                        data-testid="inbox-button"
+                      >
+                        <Link to="/inbox" onClick={onNavClick}>
+                          <InboxIcon className="size-4" />
+                          {inboxCount > 0 && (
+                            <span
+                              aria-label={
+                                inboxCount === 1
+                                  ? "1 item aguardando na caixa de entrada"
+                                  : `${inboxCount} itens aguardando na caixa de entrada`
+                              }
+                              className="-top-0.5 -right-0.5 absolute inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-warning/15 px-1 text-[10px] font-medium text-warning tabular-nums"
+                            >
+                              {inboxCount}
+                            </span>
+                          )}
+                        </Link>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Caixa de entrada</TooltipContent>
+                  </Tooltip>
+                  {/* Arena: race one prompt across several harnesses and compare. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Arena de agentes"
+                        className="rounded-full"
+                        data-testid="arena-button"
+                      >
+                        <Link to="/arena" onClick={onNavClick}>
+                          <SwordsIcon className="size-4" />
+                        </Link>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Arena de agentes</TooltipContent>
+                  </Tooltip>
+                  {/* GitHub: browse issues/PRs and start a session from one. */}
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        asChild
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Integração GitHub"
+                        className="rounded-full"
+                        data-testid="github-button"
+                      >
+                        <Link to="/github" onClick={onNavClick}>
+                          <GitPullRequestIcon className="size-4" />
+                        </Link>
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Integração GitHub</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Fechar barra lateral"
+                        onClick={onClose}
+                        className="rounded-full"
+                      >
+                        {/* panel-right-open while the sidebar IS open — this button
                     only renders in the open state (ChatHeader's PanelLeftIcon
                     covers the collapsed state). */}
-                    <PanelRightOpenIcon className="size-4" />
-                  </Button>
-                </TooltipTrigger>
-                {/* Bottom placement keeps the tooltip clear of the macOS
+                        <PanelRightOpenIcon className="size-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    {/* Bottom placement keeps the tooltip clear of the macOS
                 Electron shell's traffic lights at the window's top edge. */}
-                <TooltipContent side="bottom">Recolher barra lateral</TooltipContent>
-              </Tooltip>
-            </div>
-          </div>
+                    <TooltipContent side="bottom">Recolher barra lateral</TooltipContent>
+                  </Tooltip>
+                </div>
+              </div>
 
-          <div className="px-3 py-3">
-            {/* "New session" routes to the home composer ("/"), which now owns
+              <div className="px-3 py-3">
+                {/* "New session" routes to the home composer ("/"), which now owns
             session creation end-to-end (host/workspace/worktree chips +
             send). Rendered as a Link so cmd/middle-click opens it in a new
             tab; onNavClick still closes the sidebar on a plain mobile tap. */}
-            <Button
-              asChild
-              className={cn(
-                "w-full justify-start gap-2 text-sm",
-                isNewChatPage && "bg-muted font-semibold",
-              )}
-              variant="ghost"
-              data-testid="new-chat-button"
-            >
-              {/* New session always creates a session the viewer owns, which
+                <Button
+                  asChild
+                  className={cn(
+                    "w-full justify-start gap-2 text-sm",
+                    isNewChatPage && "bg-muted font-semibold",
+                  )}
+                  variant="ghost"
+                  data-testid="new-chat-button"
+                >
+                  {/* New session always creates a session the viewer owns, which
               lands under "My sessions" — so snap the tab back there on click
               (the button stays visible on both tabs). */}
-              <Link
-                to="/"
-                onClick={(e) => {
-                  setActiveTab("mine");
-                  onNavClick(e);
-                }}
-              >
-                <SquarePenIcon className="size-4 text-foreground" />
-                Nova sessão
-              </Link>
-            </Button>
-            {selectionMode ? (
-              <BulkActionBar
-                selectedIds={selectedIds}
-                allConversations={getVisibleConversationsRef.current()}
-                onSelectAll={() => selectAll(getVisibleConversationsRef.current())}
-                onDeselectAll={deselectAll}
-                onClear={deselectAll}
-                onExit={exitSelectionMode}
-              />
-            ) : (
-              <div className="relative mt-3 flex items-center gap-1.5">
-                {/* "Search" opens the command palette (⌘K), which searches both
+                  <Link
+                    to="/"
+                    onClick={(e) => {
+                      setActiveTab("mine");
+                      onNavClick(e);
+                    }}
+                  >
+                    <SquarePenIcon className="size-4 text-foreground" />
+                    Nova sessão
+                  </Link>
+                </Button>
+                {selectionMode ? (
+                  <BulkActionBar
+                    selectedIds={selectedIds}
+                    allConversations={getVisibleConversationsRef.current()}
+                    onSelectAll={() => selectAll(getVisibleConversationsRef.current())}
+                    onDeselectAll={deselectAll}
+                    onClear={deselectAll}
+                    onExit={exitSelectionMode}
+                  />
+                ) : (
+                  <div className="relative mt-3 flex items-center gap-1.5">
+                    {/* "Search" opens the command palette (⌘K), which searches both
                     session titles and chat content. It replaces the old inline
                     filter box — the palette is the single search surface now.
                     The `group` scope reveals the ⌘K badge on hover/focus. */}
-                <button
-                  type="button"
-                  onClick={() => onOpenSearch?.()}
-                  aria-label="Buscar"
-                  data-testid="sidebar-search-button"
-                  className="group relative flex min-h-8 flex-1 items-center rounded-full border border-input pr-2 pl-8 text-left text-sm text-muted-foreground transition hover:bg-muted focus-visible:outline-1"
-                >
-                  <SearchIcon className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 size-3.5" />
-                  <span className="flex-1 truncate">Buscar</span>
-                  {/* ⌘K hint — hidden until the button is hovered / focused,
-                      mirroring the sidebar's other hover-revealed affordances. */}
-                  <kbd className="ml-2 hidden shrink-0 items-center rounded-md border border-border bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium text-muted-foreground transition-opacity group-hover:inline-flex group-focus-visible:inline-flex">
-                    {MOD_KEY}K
-                  </kbd>
-                </button>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
+                    <button
                       type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="Selecionar sessões"
-                      data-testid="toggle-selection-mode"
-                      className="shrink-0 rounded-full"
-                      onClick={() => setSelectionMode(true)}
+                      onClick={() => onOpenSearch?.()}
+                      aria-label="Buscar"
+                      data-testid="sidebar-search-button"
+                      className="group relative flex min-h-8 flex-1 items-center rounded-full border border-input pr-2 pl-8 text-left text-sm text-muted-foreground transition hover:bg-muted focus-visible:outline-1"
                     >
-                      <ListChecksIcon className="size-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="bottom">Selecionar sessões</TooltipContent>
-                </Tooltip>
+                      <SearchIcon className="-translate-y-1/2 pointer-events-none absolute top-1/2 left-2.5 size-3.5" />
+                      <span className="flex-1 truncate">Buscar</span>
+                      {/* ⌘K hint — hidden until the button is hovered / focused,
+                      mirroring the sidebar's other hover-revealed affordances. */}
+                      <kbd className="ml-2 hidden shrink-0 items-center rounded-md border border-border bg-muted px-1.5 py-0.5 font-sans text-[10px] font-medium text-muted-foreground transition-opacity group-hover:inline-flex group-focus-visible:inline-flex">
+                        {MOD_KEY}K
+                      </kbd>
+                    </button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          aria-label="Selecionar sessões"
+                          data-testid="toggle-selection-mode"
+                          className="shrink-0 rounded-full"
+                          onClick={() => setSelectionMode(true)}
+                        >
+                          <ListChecksIcon className="size-3.5" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="bottom">Selecionar sessões</TooltipContent>
+                    </Tooltip>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
 
-          {/* Session-scope tabs: split the viewer's own sessions ("My
+              {/* Session-scope tabs: split the viewer's own sessions ("My
           sessions") from ones shared with them ("Shared with me"). Sits above
           the scrolling list (non-scrolling) so it stays put while the list
           scrolls. Hidden during selection mode, where the bulk-action bar owns
           this strip. */}
-          {multiUser && !selectionMode && (
-            <div className="px-3 pb-2">
-              <Tabs
-                value={activeTab}
-                onValueChange={(v) => setActiveTab(v as SidebarTab)}
-                className="w-full"
-              >
-                <TabsList className="w-full">
-                  <TabsTrigger value="mine" data-testid="sidebar-tab-mine">
-                    Minhas sessões
-                  </TabsTrigger>
-                  <TabsTrigger value="shared" data-testid="sidebar-tab-shared">
-                    Compartilhadas comigo
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
-          )}
+              {multiUser && !selectionMode && (
+                <div className="px-3 pb-2">
+                  <Tabs
+                    value={activeTab}
+                    onValueChange={(v) => setActiveTab(v as SidebarTab)}
+                    className="w-full"
+                  >
+                    <TabsList className="w-full">
+                      <TabsTrigger value="mine" data-testid="sidebar-tab-mine">
+                        Minhas sessões
+                      </TabsTrigger>
+                      <TabsTrigger value="shared" data-testid="sidebar-tab-shared">
+                        Compartilhadas comigo
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </div>
+              )}
 
-          {/* Mobile: extra bottom padding so the last session scrolls clear of
+              {/* Mobile: extra bottom padding so the last session scrolls clear of
           the floating Settings icon (which is absolutely positioned, out of
           flow, over the bottom-left corner). */}
-          <nav
-            ref={scrollContainerRef}
-            className="relative flex-1 overflow-y-auto px-3 pb-3 max-md:pb-16 [scrollbar-gutter:stable]"
-          >
-            <ConversationList
-              conversationsQuery={conversationsQuery}
-              scrollContainerRef={scrollContainerRef}
-              onRowClick={onNavClick}
-              searchQuery=""
-              activeTab={multiUser ? activeTab : "mine"}
-              pinnedConversationIds={pinnedConversationIds}
-              onPinnedConversationIdsChange={setPinnedConversationIds}
-              onTogglePinned={togglePinnedConversation}
-              selectionMode={selectionMode}
-              selectedIds={selectedIds}
-              onToggleSelected={toggleSelected}
-              getVisibleIdsRef={getVisibleIdsRef}
-              getVisibleConversationsRef={getVisibleConversationsRef}
-            />
-          </nav>
+              <nav
+                ref={scrollContainerRef}
+                className="relative flex-1 overflow-y-auto px-3 pb-3 max-md:pb-16 [scrollbar-gutter:stable]"
+              >
+                <ConversationList
+                  conversationsQuery={conversationsQuery}
+                  scrollContainerRef={scrollContainerRef}
+                  onRowClick={onNavClick}
+                  searchQuery=""
+                  activeTab={multiUser ? activeTab : "mine"}
+                  pinnedConversationIds={pinnedConversationIds}
+                  onPinnedConversationIdsChange={setPinnedConversationIds}
+                  onTogglePinned={togglePinnedConversation}
+                  selectionMode={selectionMode}
+                  selectedIds={selectedIds}
+                  onToggleSelected={toggleSelected}
+                  getVisibleIdsRef={getVisibleIdsRef}
+                  getVisibleConversationsRef={getVisibleConversationsRef}
+                />
+              </nav>
 
-          {/* Settings entry. Always present (every deploy): the full settings
+              {/* Settings entry. Always present (every deploy): the full settings
           surface — appearance, keyboard shortcuts, archived chats, and the
           account/sign-out controls when accounts auth is on — lives behind
           this on the /settings page.
@@ -699,34 +710,36 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
           Mobile: pulled OUT of flow (absolute, bottom-left) so it floats over
           the conversation list as a compact icon instead of stealing a row's
           height from the scroll area. */}
-          <div className="md:shrink-0 md:px-3 md:pb-3 max-md:absolute max-md:bottom-3 max-md:left-3 max-md:z-10">
-            <Button
-              asChild
-              variant="ghost"
-              className={cn(
-                "gap-2 text-sm",
-                // Desktop: full-width row with label, matching New session /
-                // Inbox. Mobile: a small round icon-only button with its own
-                // surface (border + solid bg + shadow) so it reads as a
-                // floating control over the scrolling list beneath it.
-                "md:w-full md:justify-start",
-                "max-md:size-9 max-md:justify-center max-md:rounded-full max-md:border max-md:border-border max-md:bg-card-solid max-md:p-0 max-md:shadow-sm",
-              )}
-              data-testid="settings-button"
-            >
-              {/* No onNavClick here: on mobile the sidebar is a full-screen
+              <div className="md:shrink-0 md:px-3 md:pb-3 max-md:absolute max-md:bottom-3 max-md:left-3 max-md:z-10">
+                <Button
+                  asChild
+                  variant="ghost"
+                  className={cn(
+                    "gap-2 text-sm",
+                    // Desktop: full-width row with label, matching New session /
+                    // Inbox. Mobile: a small round icon-only button with its own
+                    // surface (border + solid bg + shadow) so it reads as a
+                    // floating control over the scrolling list beneath it.
+                    "md:w-full md:justify-start",
+                    "max-md:size-9 max-md:justify-center max-md:rounded-full max-md:border max-md:border-border max-md:bg-card-solid max-md:p-0 max-md:shadow-sm",
+                  )}
+                  data-testid="settings-button"
+                >
+                  {/* No onNavClick here: on mobile the sidebar is a full-screen
               overlay, and entering settings swaps it to the section list
               (SettingsSidebarBody). Closing the overlay would skip that list
               and drop straight onto the default section's content — instead we
               keep it open so mobile lands on the section list, then tapping a
               section (which DOES use onNavClick) closes it to show content. */}
-              <Link to="/settings" aria-label="Configurações">
-                <SettingsIcon className="size-4 text-muted-foreground" />
-                {/* Label is desktop-only; the icon stands alone on mobile. */}
-                <span className="max-md:hidden">Configurações</span>
-              </Link>
-            </Button>
-          </div>
+                  <Link to="/settings" aria-label="Configurações">
+                    <SettingsIcon className="size-4 text-muted-foreground" />
+                    {/* Label is desktop-only; the icon stands alone on mobile. */}
+                    <span className="max-md:hidden">Configurações</span>
+                  </Link>
+                </Button>
+              </div>
+            </>
+          )}
         </>
       )}
     </aside>

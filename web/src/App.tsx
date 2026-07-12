@@ -23,9 +23,14 @@ const ApprovePage = lazy(() =>
 );
 const InboxPage = lazy(() => import("@/pages/InboxPage").then((m) => ({ default: m.InboxPage })));
 const ArenaPage = lazy(() => import("@/pages/ArenaPage").then((m) => ({ default: m.ArenaPage })));
-const GithubPage = lazy(() => import("@/pages/GithubPage").then((m) => ({ default: m.GithubPage })));
+const GithubPage = lazy(() =>
+  import("@/pages/GithubPage").then((m) => ({ default: m.GithubPage })),
+);
 const SettingsPage = lazy(() =>
   import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
+);
+const CraftworkPage = lazy(() =>
+  import("@/pages/CraftworkPage").then((m) => ({ default: m.CraftworkPage })),
 );
 
 interface AppProps {
@@ -124,6 +129,12 @@ function App({ basename }: AppProps = {}) {
           <Route path={`${prefix}/arena`} element={<ArenaPage />} />
           <Route path={`${prefix}/arena/:arenaId`} element={<ArenaPage />} />
           <Route path={`${prefix}/github`} element={<GithubPage />} />
+          {/* Craftwork — a Cowork-style workspace hub. Renders into the chat
+              outlet like Settings; the sidebar swaps to its section nav. The
+              active section is in the URL (/craftwork/<section>); bare
+              /craftwork is the hub. */}
+          <Route path={`${prefix}/craftwork`} element={<CraftworkPage />} />
+          <Route path={`${prefix}/craftwork/:section`} element={<CraftworkPage />} />
           {/* Settings renders into the chat outlet so the conversations
               sidebar stays put — entering settings only swaps the card's
               content (the section nav) and the main area. The active section

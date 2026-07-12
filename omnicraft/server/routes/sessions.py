@@ -12609,6 +12609,16 @@ def _create_session_from_bundle(
         enforce_handler_allowlist=not local_single_user_enabled(),
     )
     assert spec.name is not None
+    # The Início/Code surface split and the Chat composer pin on the name
+    # "chat" meaning the no-filesystem conversation agent. A custom bundle
+    # named "chat" WITH filesystem access would silently subvert that
+    # guarantee, so the name is reserved for no-os_env specs.
+    if spec.name == "chat" and spec.os_env is not None:
+        raise OmniCraftError(
+            "o nome 'chat' é reservado para o agente de conversa sem "
+            "acesso ao filesystem — renomeie o agente ou remova o os_env",
+            code=ErrorCode.INVALID_INPUT,
+        )
 
     agent_id = generate_agent_id()
     agent_bundle_location = bundle_location(agent_id, bundle_bytes)
@@ -14755,7 +14765,7 @@ def create_sessions_router(
 
         try:
             body = await request.json()
-        except Exception:
+        except Exception:  # noqa: BLE001 — body is optional; malformed JSON = no label
             body = {}
         label = str(body.get("label", "")) if isinstance(body, dict) else ""
         conv, host_conn, host_registry = await _checkpoint_worktree_context(
@@ -14785,7 +14795,7 @@ def create_sessions_router(
 
         try:
             body = await request.json()
-        except Exception:
+        except Exception:  # noqa: BLE001 — malformed JSON falls through to the required check
             body = {}
         snapshot_id = body.get("snapshot_id") if isinstance(body, dict) else None
         if not snapshot_id or not isinstance(snapshot_id, str):
@@ -20870,6 +20880,15 @@ def create_sessions_router(
             raise OmniCraftError(
                 f"spec name '{spec.name}' does not match agent "
                 f"name '{agent.name}'; name is immutable",
+                code=ErrorCode.INVALID_INPUT,
+            )
+
+        # "chat" is reserved for the no-filesystem conversation agent (see
+        # _create_session_from_bundle) — an update must not add an os_env.
+        if spec.name == "chat" and spec.os_env is not None:
+            raise OmniCraftError(
+                "o nome 'chat' é reservado para o agente de conversa sem "
+                "acesso ao filesystem — renomeie o agente ou remova o os_env",
                 code=ErrorCode.INVALID_INPUT,
             )
 

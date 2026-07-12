@@ -131,18 +131,31 @@ def _cron_next(expr: str, tz_name: str | None, after_ts: int) -> int | None:
 
     Iterates real epoch minutes and matches wall-clock fields, so DST is handled
     correctly. Bounded to ~4 years so rare dates (e.g. Feb 29) still resolve.
+
+    DST fall-back dedupe (Vixie-like): when clocks roll back, the same wall
+    time occurs twice ~1h apart. For crons with a *fixed* hour (a daily
+    "30 1 * * *") the repeated wall time must not fire again, so candidates
+    whose wall clock equals ``after_ts``'s wall clock are skipped. Wildcard-hour
+    crons (every-minute/hourly) intentionally keep firing through the repeat.
     """
     try:
         fields = parse_cron(expr)
     except ValueError:
         return None
     tz = _tz(tz_name)
+    hour_fixed = fields[1] != "*"
+    after_wall = datetime.fromtimestamp(after_ts, tz).replace(second=0, microsecond=0, tzinfo=None)
     base = (after_ts // 60 + 1) * 60
     # ~4 years + 2 days of minutes: covers a leap-day cron from any start point.
     for i in range((4 * 366 + 2) * 24 * 60):
         ts = base + i * 60
-        if _cron_matches(fields, datetime.fromtimestamp(ts, tz)):
-            return ts
+        wall = datetime.fromtimestamp(ts, tz)
+        if not _cron_matches(fields, wall):
+            continue
+        if hour_fixed and wall.replace(second=0, microsecond=0, tzinfo=None) == after_wall:
+            # Fall-back repeat of the wall time we just fired at — skip it.
+            continue
+        return ts
     return None
 
 

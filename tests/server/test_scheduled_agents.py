@@ -32,6 +32,26 @@ def test_parse_cron_invalid(expr: str) -> None:
         sched.parse_cron(expr)
 
 
+def test_cron_next_dst_fall_back_no_double_fire() -> None:
+    # 2026-11-01 America/New_York: clocks roll back at 02:00 EDT → 01:00 EST,
+    # so the 01:30 wall time occurs twice. A daily "30 1 * * *" that just fired
+    # at 01:30 EDT must NOT fire again at 01:30 EST — next is the following day.
+    tz = "America/New_York"
+    fired = int(datetime(2026, 11, 1, 5, 30, tzinfo=ZoneInfo("UTC")).timestamp())  # 01:30 EDT
+    nxt = sched._cron_next("30 1 * * *", tz, fired)
+    nxt_wall = datetime.fromtimestamp(nxt, ZoneInfo(tz))
+    assert (nxt_wall.day, nxt_wall.hour, nxt_wall.minute) == (2, 1, 30)
+
+
+def test_cron_next_dst_fall_back_hourly_still_fires() -> None:
+    # Wildcard-hour crons keep firing through the repeated hour (Vixie-like):
+    # hourly "30 * * * *" fired at 01:30 EDT fires again at 01:30 EST (+1h).
+    tz = "America/New_York"
+    fired = int(datetime(2026, 11, 1, 5, 30, tzinfo=ZoneInfo("UTC")).timestamp())  # 01:30 EDT
+    nxt = sched._cron_next("30 * * * *", tz, fired)
+    assert nxt - fired == 3600  # the EST repeat, one real hour later
+
+
 def test_cron_next_daily_and_weekday() -> None:
     tz = "America/Sao_Paulo"
     # 2026-07-11 is a Saturday; 07:00 BRT.

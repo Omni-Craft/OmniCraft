@@ -1069,30 +1069,31 @@
 }
 
 /* Swimming mascot — the empty-conversation idle. The fish crosses the stage,
- * flips at each end (the art faces right, so scaleX(-1) turns it around) and
- * bobs on the way, with a few bubbles drifting up behind it. Frozen by the
+ * flips at each end and bobs on the way, with a few bubbles drifting up behind
+ * it. The art faces LEFT, so the rightward leg runs mirrored (scaleX(-1)) and
+ * the leftward leg unflipped — nose first in both directions. Frozen by the
  * global reduced-motion gate below. */
 @keyframes otto-swim {
   0% {
-    transform: translateX(-110px) translateY(0) scaleX(1) rotate(-3deg);
+    transform: translateX(-110px) translateY(0) scaleX(-1) rotate(-3deg);
   }
   22% {
-    transform: translateX(-30px) translateY(-10px) scaleX(1) rotate(3deg);
+    transform: translateX(-30px) translateY(-10px) scaleX(-1) rotate(3deg);
   }
   48% {
-    transform: translateX(110px) translateY(4px) scaleX(1) rotate(-2deg);
+    transform: translateX(110px) translateY(4px) scaleX(-1) rotate(-2deg);
   }
   50% {
-    transform: translateX(110px) translateY(0) scaleX(-1) rotate(2deg);
+    transform: translateX(110px) translateY(0) scaleX(1) rotate(2deg);
   }
   72% {
-    transform: translateX(-10px) translateY(-10px) scaleX(-1) rotate(-3deg);
+    transform: translateX(-10px) translateY(-10px) scaleX(1) rotate(-3deg);
   }
   98% {
-    transform: translateX(-110px) translateY(4px) scaleX(-1) rotate(2deg);
+    transform: translateX(-110px) translateY(4px) scaleX(1) rotate(2deg);
   }
   100% {
-    transform: translateX(-110px) translateY(0) scaleX(1) rotate(-3deg);
+    transform: translateX(-110px) translateY(0) scaleX(-1) rotate(-3deg);
   }
 }
 

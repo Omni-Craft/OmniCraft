@@ -48,7 +48,7 @@ def test_server_status_not_running(monkeypatch: pytest.MonkeyPatch) -> None:
     result = CliRunner().invoke(cli, ["server", "status"])
 
     assert result.exit_code == 0, result.output
-    assert "not running" in result.output
+    assert "não está rodando" in result.output
 
 
 def test_server_status_running_reports_details(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -69,8 +69,8 @@ def test_server_status_running_reports_details(monkeypatch: pytest.MonkeyPatch) 
     assert result.exit_code == 0, result.output
     assert "http://127.0.0.1:8123" in result.output
     assert "pid 4321" in result.output
-    assert "live sessions: 0" in result.output  # empty fetch → 0 live sessions
-    assert "host daemon attached: yes" in result.output
+    assert "sessões ativas: 0" in result.output  # empty fetch → 0 live sessions
+    assert "daemon host anexado: sim" in result.output
 
 
 def test_server_status_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -126,7 +126,7 @@ def test_server_status_text_reports_log_path(monkeypatch: pytest.MonkeyPatch) ->
     result = CliRunner().invoke(cli, ["server", "status"])
 
     assert result.exit_code == 0, result.output
-    assert "running at http://127.0.0.1:8123" in result.output
+    assert "rodando em http://127.0.0.1:8123" in result.output
     assert "log: ~/.omnicraft/logs/server/local-server-ab12.log" in result.output
 
 
@@ -146,8 +146,8 @@ def test_server_status_session_count_failure_is_graceful(monkeypatch: pytest.Mon
     result = CliRunner().invoke(cli, ["server", "status"])
 
     assert result.exit_code == 0, result.output
-    assert "running at http://127.0.0.1:8123" in result.output
-    assert "live sessions:" not in result.output  # count omitted on fetch failure
+    assert "rodando em http://127.0.0.1:8123" in result.output
+    assert "sessões ativas:" not in result.output  # count omitted on fetch failure
 
 
 # ── server start ───────────────────────────────────────────────────
@@ -167,7 +167,7 @@ def test_server_start_spawns(monkeypatch: pytest.MonkeyPatch) -> None:
     result = CliRunner().invoke(cli, ["server", "start"])
 
     assert result.exit_code == 0, result.output
-    assert "Started background server at http://127.0.0.1:8123" in result.output
+    assert "Servidor em segundo plano iniciado em http://127.0.0.1:8123" in result.output
     # The exact captured-log file is surfaced so the detached server isn't a
     # black box — collapsed to ``~`` for readability.
     assert "log: ~/.omnicraft/logs/server/local-server-ab12.log" in result.output
@@ -187,7 +187,7 @@ def test_server_start_reuses(monkeypatch: pytest.MonkeyPatch) -> None:
     result = CliRunner().invoke(cli, ["server", "start"])
 
     assert result.exit_code == 0, result.output
-    assert "already running at http://127.0.0.1:8123" in result.output
+    assert "já rodando em http://127.0.0.1:8123" in result.output
     # Even a reused server (one this invocation didn't spawn) names its log,
     # read back from the sidecar.
     assert "log: ~/.omnicraft/logs/server/local-server-cd34.log" in result.output
@@ -236,7 +236,7 @@ def test_server_stop_stops_server_and_local_daemon(monkeypatch: pytest.MonkeyPat
     result = CliRunner().invoke(cli, ["server", "stop"])
 
     assert result.exit_code == 0, result.output
-    assert "Stopped the background server." in result.output
+    assert "Servidor em segundo plano parado." in result.output
     assert terminated == [local_record]  # the local daemon was terminated
     stop_server.assert_called_once_with()  # and the server stopped
 
@@ -252,7 +252,7 @@ def test_server_stop_no_server_running(monkeypatch: pytest.MonkeyPatch) -> None:
     result = CliRunner().invoke(cli, ["server", "stop"])
 
     assert result.exit_code == 0, result.output
-    assert "No background server is running." in result.output
+    assert "Nenhum servidor em segundo plano está rodando." in result.output
     stop_server.assert_called_once_with()  # idempotent: still clears any stale pidfile
 
 
@@ -280,7 +280,7 @@ def test_stop_terminates_all_daemons_and_server(monkeypatch: pytest.MonkeyPatch)
     assert result.exit_code == 0, result.output
     assert terminated == records  # both daemons terminated
     stop_server.assert_called_once_with()
-    assert "Stopped 2 daemon(s) and the background server." in result.output
+    assert "Parado(s): 2 daemon(s) e o servidor em segundo plano." in result.output
 
 
 def test_stop_nothing_running(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -293,7 +293,7 @@ def test_stop_nothing_running(monkeypatch: pytest.MonkeyPatch) -> None:
     result = CliRunner().invoke(cli, ["stop"])
 
     assert result.exit_code == 0, result.output
-    assert "Nothing to stop." in result.output
+    assert "Nada para parar." in result.output
 
 
 def test_stop_surfaces_failures_and_suggests_force(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -313,7 +313,7 @@ def test_stop_surfaces_failures_and_suggests_force(monkeypatch: pytest.MonkeyPat
     result = CliRunner().invoke(cli, ["stop"])
 
     assert result.exit_code != 0  # the stubborn daemon surfaces as a failure
-    assert "retry with --force" in result.output
+    assert "tente de novo com --force" in result.output
 
 
 def test_stop_clears_stale_legacy_host_pid(
@@ -338,7 +338,7 @@ def test_stop_clears_stale_legacy_host_pid(
     assert not host_pid.exists()  # the legacy pidfile is cleared
 
     second = CliRunner().invoke(cli, ["stop"])
-    assert "Nothing to stop." in second.output  # phantom does not reappear
+    assert "Nada para parar." in second.output  # phantom does not reappear
 
 
 def test_stop_reports_untracked_orphan_server(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -356,7 +356,7 @@ def test_stop_reports_untracked_orphan_server(monkeypatch: pytest.MonkeyPatch) -
     result = CliRunner().invoke(cli, ["stop"])
 
     assert result.exit_code == 0, result.output
-    assert "untracked server on :6767 (pid 93359)" in result.output
+    assert "um servidor não rastreado em :6767 (pid 93359)" in result.output
     assert "Nothing to stop." not in result.output
 
 
@@ -378,4 +378,4 @@ def test_server_stop_finds_untracked_orphan_when_pidfile_lost(
     result = CliRunner().invoke(cli, ["server", "stop"])
 
     assert result.exit_code == 0, result.output
-    assert "Stopped the background server." in result.output
+    assert "Servidor em segundo plano parado." in result.output

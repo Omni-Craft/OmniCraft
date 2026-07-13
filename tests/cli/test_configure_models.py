@@ -1460,7 +1460,7 @@ def test_configure_harnesses_add_databricks_fails_loud_when_ucode_records_no_sta
 
     # The branch raised ClickException → non-zero exit with an explanatory message.
     assert result.exit_code != 0
-    assert "recorded no state" in result.output
+    assert "não registrou estado" in result.output
     # Nothing was persisted — no half-configured databricks provider.
     cfg = _config_yaml(isolated_config)
     assert "databricks" not in cfg.get("providers", {})
@@ -1522,7 +1522,7 @@ def test_uninstalled_harness_shows_x_and_not_installed(isolated_config, monkeypa
     assert result.exit_code == 0, result.output
     out = result.output
     assert "✗" in out
-    assert "Not installed" in out
+    assert "Não instalado" in out
 
 
 def test_overview_marks_unconfigured_with_x_and_configured_without_checkmark(
@@ -1565,7 +1565,7 @@ def test_overview_marks_unconfigured_with_x_and_configured_without_checkmark(
     assert "✓ Chave de API Anthropic" in out
     # Installed-but-unconfigured Codex: the row's status is a ✗ "Not configured".
     assert "Codex" in out
-    assert "✗ Not configured" in out
+    assert "✗ Não configurado" in out
 
 
 def _capture_setup_overview(
@@ -1593,7 +1593,7 @@ def _capture_setup_overview(
         clear_on_exit: bool = False,
         **_kwargs: object,
     ) -> int:
-        assert title == "Configure harnesses"
+        assert title == "Configurar harnesses"
         assert selectable is not None
         assert descriptions is not None
         captured.update(
@@ -1661,8 +1661,8 @@ def test_overview_lists_all_harnesses_in_priority_order(isolated_config, monkeyp
         "Copilot",
         "Kiro",
         "Kimi Code",
-        "Custom ACP agent",
-        "Quit",
+        "Agente ACP customizado",
+        "Sair",
     ]
     assert _overview_row_names(options, selectable) == expected
     assert compact is True
@@ -1709,9 +1709,9 @@ def test_overview_lists_configured_acp_agents_as_rows(isolated_config, monkeypat
     names = _overview_row_names(options, selectable)
     assert "Gemini CLI" in names
     assert "My Goose" in names
-    assert "Add custom ACP agent" in names
+    assert "Adicionar agente ACP customizado" in names
     # Once agents exist, the single opaque "Custom ACP agent" row is gone.
-    assert "Custom ACP agent" not in names
+    assert "Agente ACP customizado" not in names
 
 
 def test_overview_rows_are_single_line(isolated_config, monkeypatch) -> None:
@@ -1746,7 +1746,7 @@ def test_overview_lists_kiro_row(isolated_config, monkeypatch) -> None:
     options, selectable, descriptions, _, _max_visible = _capture_setup_overview(monkeypatch)
     names = _overview_row_names(options, selectable)
     kiro = names.index("Kiro")
-    assert "Not installed" in Text.from_markup(options[kiro]).plain
+    assert "Não instalado" in Text.from_markup(options[kiro]).plain
     assert "cli.kiro.dev/install" in Text.from_markup(descriptions[kiro]).plain
 
     monkeypatch.setattr(
@@ -1755,7 +1755,7 @@ def test_overview_lists_kiro_row(isolated_config, monkeypatch) -> None:
     options, selectable, descriptions, _, _max_visible = _capture_setup_overview(monkeypatch)
     names = _overview_row_names(options, selectable)
     kiro = names.index("Kiro")
-    assert "Not configured" in Text.from_markup(options[kiro]).plain
+    assert "Não configurado" in Text.from_markup(options[kiro]).plain
     assert "kiro-cli login" in Text.from_markup(descriptions[kiro]).plain
 
 
@@ -1789,7 +1789,7 @@ def test_overview_hermes_row_reflects_configured_model(isolated_config, monkeypa
     options, selectable, descriptions, _, _max_visible = _capture_setup_overview(monkeypatch)
     names = _overview_row_names(options, selectable)
     hermes = names.index("Hermes")
-    assert "[yellow]✗ Not configured[/]" in options[hermes]
+    assert "[yellow]✗ Não configurado[/]" in options[hermes]
     assert "hermes model" in Text.from_markup(descriptions[hermes]).plain
 
     # Configured: a concrete provider + model picked → green ✓ with the model.
@@ -1846,9 +1846,13 @@ def test_overview_truncates_long_status_for_narrow_terminal(isolated_config, mon
         compact=compact,
         max_visible=max_visible,
     )
+    from rich.text import Text
+
+    opencode_option = options[_overview_row_names(options, selectable).index("OpenCode")]
+    # The verbose status is capped with an ellipsis before rendering.
+    assert "…" in Text.from_markup(opencode_option).plain
     plain = re.sub(r"\x1b\[[0-9;]*m", "", rendered)
     opencode_line = next(line for line in plain.splitlines() if "OpenCode" in line)
-    assert "…" in opencode_line
     assert cell_len(opencode_line) <= 40
 
 
@@ -1906,7 +1910,7 @@ def test_overview_status_color_distinguishes_missing_from_unconfigured(
         monkeypatch
     )
     codex = options[_overview_row_names(options, selectable).index("Codex")]
-    assert "[yellow]✗ Not configured[/]" in codex
+    assert "[yellow]✗ Não configurado[/]" in codex
 
     # CLI absent → red ✗ (nothing to use yet).
     monkeypatch.setattr(
@@ -1916,7 +1920,7 @@ def test_overview_status_color_distinguishes_missing_from_unconfigured(
         monkeypatch
     )
     codex = options[_overview_row_names(options, selectable).index("Codex")]
-    assert "[red]✗ Not installed[/]" in codex
+    assert "[red]✗ Não instalado[/]" in codex
 
 
 @pytest.mark.parametrize("name", ["Kiro", "Kimi Code"])
@@ -1940,8 +1944,8 @@ def test_installed_native_cli_auth_unknown_rows_are_not_configured(
         monkeypatch
     )
     row_index = _overview_row_names(options, selectable).index(name)
-    assert "[yellow]✗ Not configured[/]" in options[row_index]
-    assert "[green]✓ Installed[/]" not in options[row_index]
+    assert "[yellow]✗ Não configurado[/]" in options[row_index]
+    assert "[green]✓ Instalado[/]" not in options[row_index]
     assert descriptions[row_index]
 
 
@@ -1986,19 +1990,19 @@ def test_overview_descriptions_map_to_their_rows(isolated_config, monkeypatch) -
         name: Text.from_markup(desc).plain
         for name, desc in zip(_overview_row_names(options, selectable), descriptions, strict=True)
     }
-    assert desc_by_name["Claude"] == "Open to add a credential."
-    assert desc_by_name["Codex"] == "Open to add a credential."
-    assert desc_by_name["Cursor"] == "Open to add the Cursor API key."
-    assert desc_by_name["OpenCode"] == "Open to sign in (opencode auth login)."
-    assert desc_by_name["Hermes"] == "Open to configure with `hermes model`."
-    assert desc_by_name["Pi"] == "Open to add a credential."
-    assert desc_by_name["Antigravity"] == "Open to add the Gemini API key."
-    assert desc_by_name["Qwen Code"] == "Open to set up auth (/auth or env vars)."
-    assert desc_by_name["Goose"] == "Open to run `goose configure`."
-    assert desc_by_name["Copilot"] == "Open to add the GitHub token."
-    assert desc_by_name["Kiro"] == "Sign in with `kiro-cli login`."
-    assert desc_by_name["Kimi Code"] == "Sign in with `kimi login`."
-    assert desc_by_name["Quit"] == ""
+    assert desc_by_name["Claude"] == "Abra para adicionar uma credencial."
+    assert desc_by_name["Codex"] == "Abra para adicionar uma credencial."
+    assert desc_by_name["Cursor"] == "Abra para adicionar a chave de API do Cursor."
+    assert desc_by_name["OpenCode"] == "Abra para fazer login (opencode auth login)."
+    assert desc_by_name["Hermes"] == "Abra para configurar com `hermes model`."
+    assert desc_by_name["Pi"] == "Abra para adicionar uma credencial."
+    assert desc_by_name["Antigravity"] == "Abra para adicionar a chave de API do Gemini."
+    assert desc_by_name["Qwen Code"] == "Abra para configurar a auth (/auth ou env vars)."
+    assert desc_by_name["Goose"] == "Abra para rodar `goose configure`."
+    assert desc_by_name["Copilot"] == "Abra para adicionar o token do GitHub."
+    assert desc_by_name["Kiro"] == "Faça login com `kiro-cli login`."
+    assert desc_by_name["Kimi Code"] == "Faça login com `kimi login`."
+    assert desc_by_name["Sair"] == ""
 
 
 def test_drill_into_uninstalled_installs_then_proceeds(isolated_config, monkeypatch) -> None:
@@ -2586,7 +2590,7 @@ def test_cursor_drillin_offers_install_when_sdk_missing(
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
     assert result.exit_code == 0, result.output
     out = result.output
-    assert "isn't installed" in out
+    assert "não está instalado" in out
     assert "omnicraft[cursor]" in out
 
 
@@ -2900,7 +2904,7 @@ def test_antigravity_drillin_offers_install_when_sdk_missing(
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
     assert result.exit_code == 0, result.output
     out = result.output
-    assert "isn't installed" in out
+    assert "não está instalado" in out
     assert "omnicraft[antigravity]" in out
 
 
@@ -3007,7 +3011,7 @@ def test_configure_harnesses_add_other_key_no_remaining_providers_aborts_cleanly
     # Pre-fix this exited non-zero with a ValueError; the guard makes it graceful.
     assert result.exit_code == 0, result.output
     assert result.exception is None, result.exception
-    assert "No other API-key providers" in result.output
+    assert "Nenhum outro provedor de chave de API" in result.output
 
 
 def test_build_bedrock_provider_entry_shape() -> None:

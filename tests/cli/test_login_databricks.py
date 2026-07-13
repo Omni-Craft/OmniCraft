@@ -490,7 +490,7 @@ def test_login_header_mode_sets_default_server(
     result = CliRunner().invoke(cli_group, ["login", "http://proxy.internal:6767"])
 
     assert result.exit_code == 0, result.output
-    assert "header-auth mode" in result.output
+    assert "modo de auth por header" in result.output
     assert cli_mod._load_global_config().get("server") == "http://proxy.internal:6767"
 
 
@@ -821,7 +821,7 @@ def test_workspace_url_hints_when_authed_probe_also_misses(
     out = capsys.readouterr().out
     # The message must say credentials were already tried — pointing
     # the user at `auth login` alone would send them in a circle.
-    assert "even with the cached workspace credentials" in out
+    assert "mesmo com as credenciais de workspace em cache" in out
 
 
 def test_workspace_url_skips_authed_probe_without_databricks_extra(

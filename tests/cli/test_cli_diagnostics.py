@@ -378,13 +378,13 @@ def test_main_logs_click_exceptions(
         f"ClickException should preserve Click's exit code, got {exc_info.value.code!r}"
     )
     terminal = capsys.readouterr()
-    assert "Error: Unsupported harness 'not-a-real-harness'" in terminal.err, (
+    assert "Error: Harness 'not-a-real-harness' não suportado" in terminal.err, (
         f"Click's normal user-facing error output changed: {terminal.err!r}"
     )
     path = cli_diagnostics.current_cli_log_path()
     assert path is not None, "main() should set up the active CLI diagnostics log."
     log_text = path.read_text(encoding="utf-8")
-    assert "Click CLI error: Unsupported harness 'not-a-real-harness'" in log_text, (
+    assert "Click CLI error: Harness 'not-a-real-harness' não suportado" in log_text, (
         f"ClickException was not captured in the diagnostics log: {log_text!r}"
     )
     assert "Traceback" in log_text, (

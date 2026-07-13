@@ -71,7 +71,7 @@ def test_set_default_model_persists_choice(
     )
     monkeypatch.setattr("omnicraft.onboarding.interactive.select", lambda *a, **k: 0)
     status = _set_opencode_default_model(current=None)
-    assert status == "✓ default model: anthropic/claude-sonnet-4-5"
+    assert status == "✓ modelo padrão: anthropic/claude-sonnet-4-5"
     assert _load_global_config()["opencode_model"] == "anthropic/claude-sonnet-4-5"
 
 
@@ -83,7 +83,7 @@ def test_set_default_model_clear_unsets(
     # options == ["a/b", "Clear default ..."]; index 1 is the clear row.
     monkeypatch.setattr("omnicraft.onboarding.interactive.select", lambda *a, **k: 1)
     status = _set_opencode_default_model(current="x/y")
-    assert status == "✓ default model cleared"
+    assert status == "✓ modelo padrão limpo"
     assert "opencode_model" not in _load_global_config()
 
 

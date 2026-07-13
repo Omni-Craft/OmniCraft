@@ -71,7 +71,7 @@ def test_upgrade_up_to_date(monkeypatch: pytest.MonkeyPatch, _wheel_install: Non
     result = CliRunner().invoke(cli, ["upgrade"])
 
     assert result.exit_code == 0, result.output
-    assert "up to date" in result.output
+    assert "está atualizado" in result.output
     assert "0.1.0" in result.output
 
 
@@ -128,7 +128,7 @@ def test_upgrade_runs_installer_and_drains_first(
     # Drain happened before the stop, before the install ran.
     assert events == ["drained", "stop(force=False)"]
     assert ran == [f"uv tool install --reinstall {_REPO_GIT_URL}"]
-    assert "Upgraded to v0.2.0" in result.output
+    assert "Atualizado para v0.2.0" in result.output
 
 
 def test_upgrade_force_skips_drain_and_force_stops(
@@ -168,7 +168,7 @@ def test_upgrade_install_failure_surfaces(
     result = CliRunner().invoke(cli, ["upgrade"])
 
     assert result.exit_code != 0
-    assert "exited with status 3" in result.output
+    assert "saiu com status 3" in result.output
 
 
 def test_upgrade_index_unreachable(monkeypatch: pytest.MonkeyPatch, _wheel_install: None) -> None:
@@ -178,7 +178,7 @@ def test_upgrade_index_unreachable(monkeypatch: pytest.MonkeyPatch, _wheel_insta
     result = CliRunner().invoke(cli, ["upgrade"])
 
     assert result.exit_code != 0
-    assert "package index" in result.output
+    assert "índice de pacotes" in result.output
 
 
 def test_upgrade_rejects_dev_clone(monkeypatch: pytest.MonkeyPatch, _wheel_install: None) -> None:
@@ -242,7 +242,7 @@ def test_upgrade_without_pre_ignores_release_candidate(
     result = CliRunner().invoke(cli, ["upgrade", "--check"])
 
     assert result.exit_code == 0, result.output
-    assert "up to date" in result.output
+    assert "está atualizado" in result.output
 
 
 def test_count_running_sessions_ignores_idle_connected(
@@ -348,7 +348,7 @@ def test_update_up_to_date(monkeypatch: pytest.MonkeyPatch, _wheel_install: None
     result = CliRunner().invoke(cli, ["update"])
 
     assert result.exit_code == 0, result.output
-    assert "up to date" in result.output
+    assert "está atualizado" in result.output
     assert "0.1.0" in result.output
 
 
@@ -400,8 +400,8 @@ def test_upgrade_noop_install_reports_failure_not_success(
     result = CliRunner().invoke(cli, ["upgrade"])
 
     assert result.exit_code != 0, result.output
-    assert "still v0.1.0" in result.output
-    assert "✓ Upgraded" not in result.output
+    assert "ainda é v0.1.0" in result.output
+    assert "✓ Atualizado" not in result.output
 
 
 def test_upgrade_unconfirmed_version_is_honest(
@@ -417,8 +417,8 @@ def test_upgrade_unconfirmed_version_is_honest(
     result = CliRunner().invoke(cli, ["upgrade"])
 
     assert result.exit_code == 0, result.output
-    assert "couldn't confirm" in result.output
-    assert "✓ Upgraded" not in result.output
+    assert "não foi possível confirmar" in result.output
+    assert "✓ Atualizado" not in result.output
 
 
 def test_upgrade_git_install_up_to_date(
@@ -441,7 +441,7 @@ def test_upgrade_git_install_up_to_date(
     result = CliRunner().invoke(cli, ["upgrade"])
 
     assert result.exit_code == 0, result.output
-    assert "up to date" in result.output
+    assert "está atualizado" in result.output
 
 
 def test_upgrade_git_check_behind_exits_nonzero(
@@ -459,7 +459,7 @@ def test_upgrade_git_check_behind_exits_nonzero(
     result = CliRunner().invoke(cli, ["upgrade", "--check"])
 
     assert result.exit_code == 1, result.output
-    assert "newer commit is available" in result.output
+    assert "Um commit mais novo está disponível" in result.output
 
 
 def test_upgrade_git_install_repulls_and_verifies_commit(
@@ -483,7 +483,7 @@ def test_upgrade_git_install_repulls_and_verifies_commit(
 
     assert result.exit_code == 0, result.output
     assert ran == ["uv tool install --reinstall git+https://github.com/omnicraft-ai/omnicraft.git"]
-    assert "Updated to git bbbbbbbbb" in result.output
+    assert "Atualizado para git bbbbbbbbb" in result.output
 
 
 def test_upgrade_git_install_noop_does_not_claim_update(
@@ -501,8 +501,8 @@ def test_upgrade_git_install_noop_does_not_claim_update(
     result = CliRunner().invoke(cli, ["upgrade"])
 
     assert result.exit_code == 0, result.output
-    assert "nothing changed" in result.output
-    assert "✓ Updated" not in result.output
+    assert "nada mudou" in result.output
+    assert "✓ Atualizado" not in result.output
 
 
 def test_upgrade_git_confirmed_behind_but_repull_noop_fails(
@@ -522,5 +522,5 @@ def test_upgrade_git_confirmed_behind_but_repull_noop_fails(
     result = CliRunner().invoke(cli, ["upgrade"])
 
     assert result.exit_code != 0, result.output
-    assert "still at aaaaaaaaa" in result.output
-    assert "✓ Updated" not in result.output
+    assert "ainda está em aaaaaaaaa" in result.output
+    assert "✓ Atualizado" not in result.output

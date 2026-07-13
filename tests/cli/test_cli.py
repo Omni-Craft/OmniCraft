@@ -123,7 +123,7 @@ def test_python_module_entrypoint_uses_unified_click_cli() -> None:
 
     assert "Usage: python -m omnicraft [OPTIONS] COMMAND [ARGS]..." in result.stdout
     assert "Commands:" in result.stdout
-    assert "run" in result.stdout and "Attach the REPL to a LIVE session" in result.stdout
+    assert "run" in result.stdout and "Anexa o REPL a uma sessão ATIVA" in result.stdout
     assert "OmniCraft quick chat" not in result.stdout
 
 
@@ -372,7 +372,7 @@ def test_claude_command_session_and_resume_mutually_exclusive(
 
     # ``UsageError`` translates to a non-zero exit at the Click layer.
     assert result.exit_code != 0
-    assert "mutually exclusive" in result.output
+    assert "mutuamente exclusivos" in result.output
 
 
 def test_claude_command_profile_startup_threads_profiler(
@@ -537,7 +537,7 @@ def test_codex_command_session_and_resume_mutually_exclusive(
     )
 
     assert result.exit_code != 0
-    assert "mutually exclusive" in result.output
+    assert "mutuamente exclusivos" in result.output
 
 
 def test_kiro_command_is_registered_in_click_help() -> None:
@@ -625,7 +625,7 @@ def test_kiro_command_session_and_resume_mutually_exclusive(
     result = CliRunner().invoke(cli, ["kiro", "--session", "conv_a", "--resume", "conv_b"])
 
     assert result.exit_code != 0
-    assert "mutually exclusive" in result.output
+    assert "mutuamente exclusivos" in result.output
 
 
 def test_kiro_command_rejects_kiro_resume_passthrough_flags(
@@ -640,7 +640,7 @@ def test_kiro_command_rejects_kiro_resume_passthrough_flags(
     result = CliRunner().invoke(cli, ["kiro", "--", "--resume-id", "kiro-session"])
 
     assert result.exit_code != 0
-    assert "Kiro resume flags are reserved" in result.output
+    assert "As flags de resume do Kiro são reservadas" in result.output
 
 
 # ── bundled-agent shorthands (omnicraft fucho / omnicraft lilo) ──────────
@@ -791,7 +791,7 @@ def test_bundled_agent_launches_with_first_available_credential(
     provider = saved["providers"]["anthropic_key"]
     assert provider.get("default") is True
     # The silent config mutation is announced (mirrors setup / /model).
-    assert "saving it as the default" in result.output
+    assert "salvando como o padrão" in result.output
     # And the launch proceeded (the brain credential resolved).
     dispatch.assert_called_once()
     assert dispatch.call_args.kwargs["target"] == _bundled_example_path(shorthand)
@@ -1126,7 +1126,7 @@ def test_start_cli_runner_process_reports_captured_log_path(
             log_dir=log_dir,
         )
 
-    assert "Runner process exited early with code 17" in excinfo.value.message
+    assert "O processo do runner saiu cedo com o código 17" in excinfo.value.message
     assert "Runner log:" in excinfo.value.message
     assert str(tmp_path / "logs" / "runner") in excinfo.value.message
     assert "runner-" in excinfo.value.message
@@ -1393,7 +1393,7 @@ def test_server_with_explicit_port_does_not_check_canonical_server(
     assert result.exit_code == 0, result.output
     assert "already running" not in result.output
     assert captured["uvicorn_kwargs"]["port"] == 44770
-    assert "Starting omnicraft server on 127.0.0.1:44770" in result.output
+    assert "Iniciando servidor omnicraft em 127.0.0.1:44770" in result.output
 
 
 def test_server_command_explicit_occupied_port_fails() -> None:
@@ -1426,8 +1426,8 @@ def test_server_command_explicit_occupied_port_fails() -> None:
         )
 
     assert result.exit_code != 0
-    assert f"Cannot start server on 127.0.0.1:{port}" in result.output
-    assert "port is unavailable" in result.output
+    assert f"Não é possível iniciar o servidor em 127.0.0.1:{port}" in result.output
+    assert "porta indisponível" in result.output
     assert "using" not in result.output
     assert "Starting omnicraft server" not in result.output
 
@@ -1494,7 +1494,7 @@ def test_server_command_explicit_port_uses_bind_probe_not_connect_probe(
 
     assert result.exit_code == 0, result.output
     assert captured["uvicorn_kwargs"]["port"] == port
-    assert f"Starting omnicraft server on 127.0.0.1:{port}" in result.output
+    assert f"Iniciando servidor omnicraft em 127.0.0.1:{port}" in result.output
     assert "port is unavailable" not in result.output
 
 
@@ -2427,7 +2427,7 @@ def test_run_without_agent_drops_into_configure_when_unconfigured(
     # Exits cleanly (no error, no daemon launch) having dropped into configure.
     assert result.exit_code == 0, result.output
     configure.assert_called_once_with()
-    assert "Found no harnesses configured." in result.output
+    assert "Nenhum harness configurado encontrado." in result.output
     # The removed hard-error guidance must not reappear (regression guard).
     assert "Provide an AGENT path" not in result.output
 
@@ -2557,7 +2557,7 @@ def test_run_without_agent_unsupported_harness_fails_before_dispatch(
     result = CliRunner().invoke(cli, ["run", "--harness", "unknown"])
 
     assert result.exit_code != 0
-    assert "Unsupported harness 'unknown'" in result.output
+    assert "Harness 'unknown' não suportado" in result.output
     run_chat.assert_not_called()
 
 
@@ -2574,7 +2574,7 @@ def test_run_with_agent_unsupported_harness_fails_before_dispatch(
     )
 
     assert result.exit_code != 0
-    assert "Unsupported harness 'unknown'" in result.output
+    assert "Harness 'unknown' não suportado" in result.output
     run_chat.assert_not_called()
 
 
@@ -2621,7 +2621,7 @@ def test_attach_without_server_errors_loud(monkeypatch: pytest.MonkeyPatch) -> N
     result = CliRunner().invoke(cli, ["attach", "conv_abc"])
 
     assert result.exit_code != 0
-    assert "No server to attach to" in result.output
+    assert "Nenhum servidor para anexar" in result.output
 
 
 def test_attach_without_conversation_errors_loud(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2631,7 +2631,7 @@ def test_attach_without_conversation_errors_loud(monkeypatch: pytest.MonkeyPatch
     result = CliRunner().invoke(cli, ["attach", "--server", "http://localhost:8000"])
 
     assert result.exit_code != 0
-    assert "Nothing to attach to" in result.output
+    assert "Nada para anexar" in result.output
 
 
 def test_run_with_agent_still_dispatches_existing_path(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -2807,7 +2807,7 @@ def test_attach_nonlive_conversation_errors_loud_without_connecting(
     result = CliRunner().invoke(cli, ["attach", "conv_x", "--server", "http://localhost:8000"])
 
     assert result.exit_code != 0
-    assert "No live session" in result.output
+    assert "Nenhuma sessão ativa" in result.output
     run_attach.assert_not_called()
 
 
@@ -2892,7 +2892,7 @@ def test_dispatch_rejects_positional_server_url(monkeypatch: pytest.MonkeyPatch)
     run_chat = Mock()
     monkeypatch.setattr("omnicraft.chat.run_chat", run_chat)
 
-    with pytest.raises(ClickException, match="Server URLs are no longer accepted"):
+    with pytest.raises(ClickException, match="URLs de servidor não são mais aceitas"):
         _dispatch_run(
             target="http://localhost:8000",
             tools=None,
@@ -3273,7 +3273,7 @@ def test_config_list_empty(
 
     assert result.exit_code == 0, result.output
     # Must mention how to set defaults, not crash or print nothing
-    assert "none set" in result.output
+    assert "nenhum definido" in result.output
 
 
 @pytest.mark.parametrize(
@@ -3378,7 +3378,7 @@ def test_config_set_global_reports_effective_config_home(
     )
 
     assert result.exit_code == 0, result.output
-    assert f"Set 1 key(s) in {tmp_path / 'config.yaml'}" in result.output
+    assert f"Definida(s) 1 chave(s) em {tmp_path / 'config.yaml'}" in result.output
     cfg = yaml.safe_load((tmp_path / "config.yaml").read_text(encoding="utf-8"))
     assert cfg["auto_open_conversation"] is True
 
@@ -3402,7 +3402,7 @@ def test_config_set_rejects_invalid_auto_open_conversation(
 
     assert result.exit_code != 0
     assert "auto_open_conversation" in result.output
-    assert "must be a boolean" in result.output
+    assert "deve ser um booleano" in result.output
 
 
 def test_config_list_shows_saved_values(
@@ -3538,7 +3538,7 @@ def test_config_set_profile_rejected_as_unknown_key(
     # Exit alone isn't enough — the error must name the rejected key so the
     # user knows profile-based server auth config is gone.
     assert "profile" in result.output
-    assert "Unknown config key" in result.output
+    assert "desconhecida" in result.output
     # Nothing may be written: a rejected set must not leave a partial file.
     assert not (tmp_path / "config.yaml").exists()
 
@@ -4020,7 +4020,7 @@ def test_bare_omnicraft_rejects_positional_server_url(
 
     assert exc_info.value.code == 2
     terminal = capsys.readouterr()
-    assert "server URLs must be passed with --server" in terminal.err
+    assert "URLs de servidor devem ser passadas com --server" in terminal.err
     assert "omnicraft run --server http://localhost:8000" in terminal.err
 
 
@@ -4145,7 +4145,7 @@ def test_setup_keeps_full_landing_on_tall_terminals(monkeypatch: pytest.MonkeyPa
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"])
 
     assert result.exit_code == 0, result.output
-    print_landing.assert_called_once_with(tagline="all your agents, one cli")
+    print_landing.assert_called_once_with(tagline="todos os seus agentes, um só cli")
     print_brandmark.assert_not_called()
     configure_flow.assert_called_once_with()
 
@@ -4192,7 +4192,7 @@ def test_node_dependency_problem_missing(monkeypatch: pytest.MonkeyPatch) -> Non
     problem = _node_dependency_problem()
 
     assert problem is not None
-    assert "node not found" in problem
+    assert "node não encontrado" in problem
     assert "Pi" in problem  # the harnesses that need it are named
 
 
@@ -4221,7 +4221,7 @@ def test_node_dependency_problem_too_old(monkeypatch: pytest.MonkeyPatch) -> Non
     problem = _node_dependency_problem()
 
     assert problem is not None
-    assert "too old" in problem
+    assert "muito antigo" in problem
     # The concrete detected version and the required floor must both appear —
     # that's what makes the compact warning recognizable and actionable.
     assert "v20.12.2" in problem
@@ -4297,9 +4297,9 @@ def test_warn_missing_harness_dependencies_lists_all_gaps(
 
     _warn_missing_harness_dependencies()
 
-    err = capsys.readouterr().err
-    assert "Node.js is too old" in err
-    assert "tmux not found" in err
+    err = " ".join(capsys.readouterr().err.split())
+    assert "Node.js muito antigo" in err
+    assert "tmux não encontrado" in err
 
 
 def test_click_subcommands_allowlist_covers_registered_commands() -> None:
@@ -4518,11 +4518,11 @@ def test_announce_auto_configured_credentials_names_creds_compactly(
     # Normalize whitespace: Rich wraps the line at the console width, so collapse
     # any inserted newlines/runs of spaces before matching the inline sequence.
     normalized = " ".join(capsys.readouterr().out.split())
-    assert "Found existing credentials on your machine" in normalized
+    assert "Encontrei credenciais existentes na sua máquina" in normalized
     # The three credentials render inline, comma-joined, in adoption order —
     # the env key by vendor, the CLI logins brand-qualified (not a bare,
     # ambiguous "Subscription").
-    assert "Chave de API Anthropic, Claude Subscription, ChatGPT Subscription" in normalized
+    assert "Chave de API Anthropic, Assinatura Claude, Assinatura ChatGPT" in normalized
 
 
 def test_announce_auto_configured_credentials_empty_is_silent(
@@ -4723,7 +4723,7 @@ def test_dispatch_native_terminal_harness_rejects_unsupported_flags(
     # (not "use the subcommand" — the subcommand doesn't accept these either).
     with pytest.raises(ClickException, match=re.escape(expected_flag)) as excinfo:
         _dispatch_native_terminal_harness(**_native_dispatch_kwargs(**override))
-    assert "remove them" in str(excinfo.value)
+    assert "remova-as" in str(excinfo.value)
 
 
 def test_dispatch_native_terminal_harness_continue_resumes_latest(
@@ -4778,7 +4778,7 @@ def test_dispatch_native_terminal_harness_continue_with_no_prior_fails_loud(
 
     monkeypatch.setattr("omnicraft.cursor_native.run_cursor_native", _must_not_launch)
 
-    with pytest.raises(ClickException, match="No prior conversation"):
+    with pytest.raises(ClickException, match="Nenhuma conversa anterior"):
         _dispatch_native_terminal_harness(**_native_dispatch_kwargs(resume_latest=True))
 
 
@@ -4811,7 +4811,7 @@ def test_run_agent_with_native_terminal_harness_is_rejected() -> None:
     The native TUI ignores the AGENT spec, and routing it through the REPL would
     double-record every message — so the combination has no coherent meaning.
     """
-    with pytest.raises(ClickException, match="ignores an AGENT spec"):
+    with pytest.raises(ClickException, match="ignora um spec de AGENT"):
         _dispatch_run(
             target="examples/hello_world.yaml",
             tools=None,

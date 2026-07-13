@@ -164,9 +164,10 @@ def _migrate_legacy_state_dir() -> None:
             legacy_pid = None
         if legacy_pid is not None and _pid_alive(legacy_pid):
             click.echo(
-                f"Note: found pre-rename state at {legacy_src} but a host daemon "
-                "is still running from it; skipping migration. Run `omnicraft stop` "
-                "and re-run to migrate, or move it manually to ~/.omnicraft.",
+                f"Nota: encontrado estado pré-renomeação em {legacy_src}, mas um "
+                "daemon host ainda está rodando a partir dele; migração pulada. Rode "
+                "`omnicraft stop` e rode de novo para migrar, ou mova manualmente "
+                "para ~/.omnicraft.",
                 err=True,
             )
             return
@@ -175,12 +176,12 @@ def _migrate_legacy_state_dir() -> None:
         shutil.move(str(legacy_src), str(_STATE_DIR))
     except OSError as exc:
         click.echo(
-            f"Note: could not migrate {legacy_src} to ~/.omnicraft ({exc}); "
-            f"starting with fresh state. Your old data is untouched at {legacy_src}.",
+            f"Nota: não foi possível migrar {legacy_src} para ~/.omnicraft ({exc}); "
+            f"iniciando com estado novo. Seus dados antigos estão intactos em {legacy_src}.",
             err=True,
         )
         return
-    click.echo(f"Migrated per-user state from {legacy_src} to ~/.omnicraft.", err=True)
+    click.echo(f"Estado por usuário migrado de {legacy_src} para ~/.omnicraft.", err=True)
 
 
 # Project-level config relative to cwd, analogous to .git/config.
@@ -527,7 +528,7 @@ def _resolve_first_run_plan() -> _FirstRunPlan | None:
 
     plan = _pick_first_run_harness()
     if plan is None:
-        ui.warn("Found no harnesses configured.")
+        ui.warn("Nenhum harness configurado encontrado.")
         _run_configure_harnesses_interactive()
         plan = _pick_first_run_harness()
     return plan
@@ -568,9 +569,9 @@ def _resolve_default_agent_target(
         return default_agent
     if default_harness is not None:
         click.echo(
-            f"omnicraft: default agent '{default_agent}' uses harness "
-            f"{default_harness!r}, but you specified --harness {requested!r}; "
-            f"launching a minimal built-in {requested!r} agent instead.",
+            f"omnicraft: o agente padrão '{default_agent}' usa o harness "
+            f"{default_harness!r}, mas você especificou --harness {requested!r}; "
+            f"iniciando um agente {requested!r} interno mínimo no lugar.",
             err=True,
         )
     return None
@@ -595,7 +596,7 @@ def _parse_config_bool(key: str, value: _ConfigValue) -> bool:
         if normalized in _CONFIG_FALSE_VALUES:
             return False
     raise click.ClickException(
-        f"Config key {key!r} must be a boolean (true/false, yes/no, on/off, or 1/0)."
+        f"A chave de config {key!r} deve ser um booleano (true/false, yes/no, on/off ou 1/0)."
     )
 
 
@@ -902,19 +903,19 @@ def _maybe_prompt_first_admin(account_store: Any, auth_provider: Any, *, auto_op
     if auto_open and base_url is not None and _is_loopback_base_url(base_url):
         return
 
-    click.echo("\n  First-run setup — create the admin account for this server.")
-    username = click.prompt("  Username", default=resolve_admin_username()).strip().lower()
+    click.echo("\n  Configuração inicial — crie a conta de admin para este servidor.")
+    username = click.prompt("  Usuário", default=resolve_admin_username()).strip().lower()
     while True:
-        password = click.prompt("  Password", hide_input=True, confirmation_prompt=True)
+        password = click.prompt("  Senha", hide_input=True, confirmation_prompt=True)
         if len(password) >= _MIN_PASSWORD_LENGTH:
             break
-        click.echo(f"  Password must be at least {_MIN_PASSWORD_LENGTH} characters.", err=True)
+        click.echo(f"  A senha deve ter pelo menos {_MIN_PASSWORD_LENGTH} caracteres.", err=True)
 
     try:
         account_store.create_user_with_password(username, hash_password(password), is_admin=True)
     except ValueError:
         # Raced another claimer (e.g. someone hit the web form first).
-        click.echo("  An admin was just created elsewhere — skipping.", err=True)
+        click.echo("  Um admin acabou de ser criado em outro lugar — pulando.", err=True)
         return
 
     # Mint the loopback CLI token so `omnicraft run` is signed in.
@@ -931,7 +932,7 @@ def _maybe_prompt_first_admin(account_store: Any, auth_provider: Any, *, auto_op
             cookie_secret=cfg.cookie_secret,
             session_ttl_hours=cfg.session_ttl_hours,
         )
-    click.echo(f"  ✓ Admin '{username}' created. Sign in at the server URL.\n")
+    click.echo(f"  ✓ Admin '{username}' criado. Faça login na URL do servidor.\n")
 
 
 def _create_artifact_store(location: str) -> Any:  # type: ignore[explicit-any]  # returns ArtifactStore protocol (optional deps)
@@ -1019,7 +1020,7 @@ def _preregister_agent(  # type: ignore[explicit-any]  # agent_store / artifact_
         spec = load(bundle_dir)
 
     if spec.name is None:
-        click.echo(f"  warning: {agent_source} has no name, skipping")
+        click.echo(f"  aviso: {agent_source} não tem nome, pulando")
         return None
 
     # Idempotent registration. Mirrors
@@ -1053,7 +1054,7 @@ def _preregister_agent(  # type: ignore[explicit-any]  # agent_store / artifact_
             # ``--agent`` registers operator-authored template agents,
             # so ${VAR} may expand against the server env here.
             agent_cache.replace(existing.id, new_loc, bundle_bytes, expand_env=True)
-        click.echo(f"  agent: {spec.name} (from {agent_source})")
+        click.echo(f"  agente: {spec.name} (de {agent_source})")
         return cast(str, existing.id)
 
     agent_id = generate_agent_id()
@@ -1065,7 +1066,7 @@ def _preregister_agent(  # type: ignore[explicit-any]  # agent_store / artifact_
         bundle_location=loc,
         description=spec.description,
     )
-    click.echo(f"  agent: {spec.name} (from {agent_source})")
+    click.echo(f"  agente: {spec.name} (de {agent_source})")
     return agent_id
 
 
@@ -1143,10 +1144,10 @@ class _OmniCraftCLI(click.Group):
         if ui.show_banner():
             from omnicraft.version import VERSION
 
-            epilogue = [("Get started", "omnicraft setup")]
+            epilogue = [("Comece agora", "omnicraft setup")]
             if VERSION:
-                epilogue.insert(0, ("Version", VERSION))
-            ui.print_landing(tagline="all your agents, one cli", epilogue=epilogue)
+                epilogue.insert(0, ("Versão", VERSION))
+            ui.print_landing(tagline="todos os seus agentes, um só cli", epilogue=epilogue)
         super().format_help(ctx, formatter)
 
 
@@ -1157,10 +1158,10 @@ class _OmniCraftCLI(click.Group):
     callback=_print_version_callback,
     expose_value=False,
     is_eager=True,
-    help="Show the version and exit.",
+    help="Mostra a versão e sai.",
 )
 def cli() -> None:
-    """OmniCraft CLI."""
+    """CLI do OmniCraft."""
 
 
 # Names of every subcommand the click group owns. Used by
@@ -1286,7 +1287,7 @@ def main() -> None:
 
     if argv and _is_server_url(argv[0]):
         click.echo(
-            "Error: server URLs must be passed with --server. "
+            "Erro: URLs de servidor devem ser passadas com --server. "
             f"Use `omnicraft run --server {argv[0]}`.",
             err=True,
         )
@@ -1294,8 +1295,8 @@ def main() -> None:
 
     if _is_removed_ad_hoc_invocation(argv):
         click.echo(
-            "Error: top-level ad-hoc chat was removed. Use "
-            "`omnicraft run <agent.yaml>` or "
+            "Erro: o chat ad-hoc de nível superior foi removido. Use "
+            "`omnicraft run <agent.yaml>` ou "
             "`omnicraft run --harness <harness>`.",
             err=True,
         )
@@ -1346,7 +1347,7 @@ def main() -> None:
     except click.Abort as exc:
         # Ctrl+C / user cancel — no hint, the user knows what they did.
         log_cli_exception(exc, prefix="Aborted CLI")
-        click.echo("Aborted!", err=True)
+        click.echo("Abortado!", err=True)
         raise SystemExit(1) from exc
     except Exception as exc:
         log_cli_error_hint(exc)
@@ -1926,7 +1927,7 @@ def _terminate_host_unit(record: _HostDaemonRecord, *, reason: str) -> None:
         ``"config changed (auth)"`` or ``"host tunnel is offline"``.
     :returns: None.
     """
-    click.echo(f"Restarting host daemon for {record.target!r} ({reason}).", err=True)
+    click.echo(f"Reiniciando daemon host para {record.target!r} ({reason}).", err=True)
     # Best-effort: a daemon that refuses to die shouldn't hard-fail the
     # run — the fresh daemon's record overwrites this one regardless.
     with contextlib.suppress(click.ClickException):
@@ -2166,10 +2167,10 @@ def _claim_foreground_daemon_record(
     conflict = _live_daemon_conflict(record)
     if conflict is not None:
         raise click.ClickException(
-            "A host daemon is already running for this server "
+            "Um daemon host já está rodando para este servidor "
             f"(pid={conflict.pid}, target={conflict.target}). "
-            "Run `omnicraft host status` to inspect it or "
-            "`omnicraft host stop --server ...` to stop it first."
+            "Rode `omnicraft host status` para inspecioná-lo ou "
+            "`omnicraft host stop --server ...` para pará-lo primeiro."
         )
     previous = _find_daemon_record(record.target)
     if previous is not None and not _pid_alive(previous.pid):
@@ -2390,10 +2391,10 @@ def _ensure_databricks_server_auth(server: str, *, non_interactive: bool = False
     login_cmd = f"omnicraft login {server}"
     if non_interactive or not sys.stdin.isatty():
         raise click.ClickException(
-            f"Not signed in to {server} (Databricks-fronted; /v1/me answered "
-            f"HTTP {probe.status_code}). Run `{login_cmd}` and retry."
+            f"Não autenticado em {server} (fronteado por Databricks; /v1/me respondeu "
+            f"HTTP {probe.status_code}). Rode `{login_cmd}` e tente de novo."
         )
-    click.echo(f"Not signed in to {server} — running `{login_cmd}` first.")
+    click.echo(f"Não autenticado em {server} — rodando `{login_cmd}` primeiro.")
     # Recover the ``?o=`` selector from a prior login record so a re-login
     # still targets the right workspace.
     from omnicraft.cli_auth import load_databricks_org_id
@@ -2480,16 +2481,19 @@ def _exit_for_auth_mode_change(base_url: str) -> None:
         )
 
     click.echo("", err=True)
-    click.echo("  ✓ Auth mode changed — the local server was restarted to match.", err=True)
+    click.echo(
+        "  ✓ Modo de auth alterado — o servidor local foi reiniciado para acompanhar.",
+        err=True,
+    )
     if needs_admin_setup:
         click.echo(
-            f"  Create your one-time admin account at  {base_url.rstrip('/')}  "
-            "(it may have opened automatically),",
+            f"  Crie sua conta de admin única em  {base_url.rstrip('/')}  "
+            "(pode ter aberto automaticamente),",
             err=True,
         )
-        click.echo("  then re-run `omnicraft run` to start.", err=True)
+        click.echo("  depois rode `omnicraft run` de novo para começar.", err=True)
     else:
-        click.echo("  Re-run `omnicraft run` to start.", err=True)
+        click.echo("  Rode `omnicraft run` de novo para começar.", err=True)
     click.echo("", err=True)
     raise SystemExit(0)
 
@@ -2517,14 +2521,14 @@ def _discover_local_server_url(
             return url
         if not _host_daemon_alive():
             raise click.ClickException(
-                "The local daemon exited before its OmniCraft server became ready. "
-                "See logs under ~/.omnicraft/logs/host-daemon/ and "
+                "O daemon local saiu antes do servidor OmniCraft ficar pronto. "
+                "Veja os logs em ~/.omnicraft/logs/host-daemon/ e "
                 "~/.omnicraft/logs/server/."
             )
         time.sleep(0.2)
     raise click.ClickException(
-        f"Timed out after {timeout:.0f}s waiting for the local OmniCraft server to "
-        "start. See ~/.omnicraft/logs/server/ for details."
+        f"Tempo esgotado após {timeout:.0f}s esperando o servidor OmniCraft local "
+        "iniciar. Veja ~/.omnicraft/logs/server/ para detalhes."
     )
 
 
@@ -2618,11 +2622,11 @@ def _start_cli_runner_process(
 
     binding_token = tunnel_token.strip() if tunnel_token is not None else None
     if tunnel_token is not None and not binding_token:
-        raise click.ClickException("Runner tunnel binding token must not be empty")
+        raise click.ClickException("O token de vínculo do túnel do runner não pode ser vazio")
     binding_token = binding_token or secrets.token_urlsafe(32)
     resolved_runner_id = runner_id.strip() if runner_id is not None else None
     if runner_id is not None and not resolved_runner_id:
-        raise click.ClickException("Runner id must not be empty")
+        raise click.ClickException("O id do runner não pode ser vazio")
     if resolved_runner_id is None:
         # The runner sends the binding token in the tunnel header;
         # the server derives expected_runner_id from it via
@@ -2673,7 +2677,7 @@ def _start_cli_runner_process(
         from omnicraft._runner_startup import format_runner_log_tail
 
         raise click.ClickException(
-            f"Runner process exited early with code {runner_proc.returncode}."
+            f"O processo do runner saiu cedo com o código {runner_proc.returncode}."
             f"{format_runner_log_tail(log_path)}"
         )
     return _CliRunnerProcess(
@@ -2751,7 +2755,8 @@ def _assert_server_port_bindable(host: str, port: int) -> None:
         except OSError as exc:
             reason = exc.strerror or str(exc)
             raise click.ClickException(
-                f"Cannot start server on {host}:{port}: port is unavailable ({reason})."
+                f"Não é possível iniciar o servidor em {host}:{port}: "
+                f"porta indisponível ({reason})."
             ) from exc
 
 
@@ -2760,7 +2765,7 @@ def _assert_server_port_bindable(host: str, port: int) -> None:
     "--host",
     default="127.0.0.1",
     show_default=True,
-    help="Host to bind to.",
+    help="Host para vincular.",
 )
 @click.option(
     "--port",
@@ -2768,18 +2773,18 @@ def _assert_server_port_bindable(host: str, port: int) -> None:
     default=_DEFAULT_LOCAL_PORT,
     show_default=True,
     type=int,
-    help="Port to listen on.",
+    help="Porta para escutar.",
 )
 @click.option(
     "--database-uri",
     default=None,
-    help="Database URI for stores.  [default: sqlite at <data-dir>/chat.db, "
-    "machine-global so `server` and `run` share one admin]",
+    help="URI do banco de dados para os stores.  [padrão: sqlite em <data-dir>/chat.db, "
+    "global na máquina, então `server` e `run` compartilham um admin]",
 )
 @click.option(
     "--artifact-location",
     default=None,
-    help="Path for artifact storage.  [default: <data-dir>/artifacts]",
+    help="Caminho para armazenamento de artifacts.  [padrão: <data-dir>/artifacts]",
 )
 @click.option(
     "--config",
@@ -2787,13 +2792,13 @@ def _assert_server_port_bindable(host: str, port: int) -> None:
     "config_path",
     type=click.Path(exists=True),
     default=None,
-    help="Path to YAML config file.",
+    help="Caminho para o arquivo de config YAML.",
 )
 @click.option(
     "--execution-timeout",
     default=None,
     type=int,
-    help="Max wall-clock seconds per agent execution.  [default: 7200]",
+    help="Máximo de segundos de relógio por execução de agente.  [padrão: 7200]",
 )
 @click.option(
     "--agent",
@@ -2801,9 +2806,9 @@ def _assert_server_port_bindable(host: str, port: int) -> None:
     multiple=True,
     type=click.Path(exists=True),
     help=(
-        "Pre-register an agent from a directory at startup. "
-        "Can be repeated. If the agent name already exists, "
-        "the bundle is replaced."
+        "Pré-registra um agente a partir de um diretório na inicialização. "
+        "Pode ser repetido. Se o nome do agente já existir, "
+        "o bundle é substituído."
     ),
 )
 @click.option(
@@ -2811,19 +2816,19 @@ def _assert_server_port_bindable(host: str, port: int) -> None:
     "auto_open",
     default=True,
     help=(
-        "On first boot of accounts auth, open the magic-redeem URL in the "
-        "user's browser so the web UI signs in without password entry. "
-        "Default: --open. Pass --no-open for headless / SSH / Docker."
+        "No primeiro boot da auth de contas, abre a URL de magic-redeem no "
+        "navegador do usuário para o web UI logar sem digitar senha. "
+        "Padrão: --open. Passe --no-open para headless / SSH / Docker."
     ),
 )
 @click.option(
     "--admin-password",
     default=None,
     help=(
-        "Set the first-run accounts admin password non-interactively "
-        "(alternative to OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD). Only "
-        "takes effect on the very first boot of a machine's accounts DB; "
-        "ignored with a warning if an admin already exists."
+        "Define a senha de admin de contas do primeiro boot de forma não interativa "
+        "(alternativa a OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD). Só "
+        "tem efeito no primeiro boot do banco de contas da máquina; "
+        "ignorado com um aviso se um admin já existir."
     ),
 )
 @click.pass_context
@@ -2839,35 +2844,35 @@ def server(
     auto_open: bool,
     admin_password: str | None,
 ) -> None:
-    """Start the OmniCraft server in the foreground, or manage the background server.
+    """Inicia o servidor OmniCraft em primeiro plano, ou gerencia o servidor em segundo plano.
 
-    Bare ``omnicraft server`` runs the server in the FOREGROUND (Ctrl-C to
-    stop) — for deploys / Docker. Subcommands manage the detached background
-    server that ``run`` / ``claude`` / ``codex`` use: ``start`` (ensure it's
-    up), ``stop`` (stop it and the local host daemon), ``status`` (is it up?).
+    O ``omnicraft server`` puro roda o servidor em PRIMEIRO PLANO (Ctrl-C para
+    parar) — para deploys / Docker. Os subcomandos gerenciam o servidor em segundo
+    plano destacado que ``run`` / ``claude`` / ``codex`` usam: ``start`` (garante que
+    está no ar), ``stop`` (para ele e o daemon host local), ``status`` (está no ar?).
 
-    :param host: Interface to bind, e.g. ``"127.0.0.1"``.
-    :param ctx: Click invocation context used to tell whether
-        ``--port`` came from the command line or from the default.
-    :param port: TCP port to listen on, e.g. ``6767``.
-    :param database_uri: Optional database URI, e.g.
+    :param host: Interface para vincular, ex. ``"127.0.0.1"``.
+    :param ctx: Contexto de invocação do Click usado para saber se
+        ``--port`` veio da linha de comando ou do padrão.
+    :param port: Porta TCP para escutar, ex. ``6767``.
+    :param database_uri: URI opcional do banco de dados, ex.
         ``"sqlite:///omnicraft.db"``.
-    :param artifact_location: Optional artifact location, e.g.
+    :param artifact_location: Local opcional de artifacts, ex.
         ``"./artifacts"``.
-    :param config_path: Optional YAML config file path.
-    :param execution_timeout: Optional max agent execution seconds,
-        e.g. ``7200``.
-    :param agent_dirs: Agent directories or YAML files passed with
+    :param config_path: Caminho opcional do arquivo de config YAML.
+    :param execution_timeout: Máximo opcional de segundos de execução do agente,
+        ex. ``7200``.
+    :param agent_dirs: Diretórios de agente ou arquivos YAML passados com
         ``--agent``.
-    :param auto_open: Whether to open the magic-redeem URL in the
-        user's browser on first boot of accounts mode. Translated
-        into the ``OMNICRAFT_ACCOUNTS_AUTO_OPEN`` env var so the
-        lifespan startup hook (which actually fires the open after
-        uvicorn binds) reads it without a kwarg threading change.
-    :param admin_password: Optional first-run accounts admin password
-        from ``--admin-password``, e.g. ``"hunter2"``. Folded into the
-        ``OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD`` env var that
-        bootstrap reads; ``None`` leaves the env var untouched.
+    :param auto_open: Se deve abrir a URL de magic-redeem no
+        navegador do usuário no primeiro boot do modo de contas. Traduzido
+        para a env var ``OMNICRAFT_ACCOUNTS_AUTO_OPEN`` para que o
+        hook de startup do lifespan (que de fato dispara a abertura depois
+        do uvicorn vincular) a leia sem alterar o threading de kwargs.
+    :param admin_password: Senha opcional de admin de contas do primeiro boot
+        vinda de ``--admin-password``, ex. ``"hunter2"``. Dobrada para a
+        env var ``OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD`` que o
+        bootstrap lê; ``None`` deixa a env var intacta.
     :returns: None.
     """
     if ctx.invoked_subcommand is not None:
@@ -2955,15 +2960,15 @@ def server(
         _existing = local_server_url_if_healthy()
         if _existing is not None:
             click.echo(
-                f"A local server is already running at {_existing} — reusing it.\n"
-                "Stop it first if you want to start a fresh one "
-                "(or pass --server <url> to target a different server)."
+                f"Um servidor local já está rodando em {_existing} — reutilizando.\n"
+                "Pare-o primeiro se quiser iniciar um novo "
+                "(ou passe --server <url> para mirar em um servidor diferente)."
             )
             return
         _picked = pick_local_port(port)
         if _picked != port:
             click.echo(
-                f"  ⚠ port {port} is busy — using {_picked} instead.",
+                f"  ⚠ porta {port} está ocupada — usando {_picked} no lugar.",
                 err=True,
             )
         port = _picked
@@ -3167,8 +3172,8 @@ def server(
         sandbox_config=sandbox_config,
     )
 
-    click.echo(f"Starting omnicraft server on {host}:{port}")
-    click.echo(f"  database:  {db_uri}")
+    click.echo(f"Iniciando servidor omnicraft em {host}:{port}")
+    click.echo(f"  banco de dados:  {db_uri}")
     click.echo(f"  artifacts: {art_loc}")
     # A foreground server streams uvicorn logs to this terminal, but the
     # always-on diagnostics (omnicraft.* loggers, captured warnings) also land
@@ -3199,9 +3204,9 @@ def server(
 
     if not (_WEB_UI_DIST / "index.html").is_file():
         click.echo(
-            "  ⚠ web UI not built — serving API only. "
-            "Run `cd web && npm install && npm run build`, "
-            "then restart (or install a release wheel/image).",
+            "  ⚠ web UI não foi buildado — servindo apenas a API. "
+            "Rode `cd web && npm install && npm run build`, "
+            "depois reinicie (ou instale um wheel/imagem de release).",
             err=True,
         )
 
@@ -3318,20 +3323,20 @@ def _stop_local_server_and_daemon(*, force: bool) -> bool:
 
 @server.command("start")
 def server_start() -> None:
-    """Ensure the managed background OmniCraft server is running.
+    """Garante que o servidor OmniCraft gerenciado em segundo plano está rodando.
 
-    Reuses a healthy background server if one is already up (started here or
-    by a prior ``run`` / ``host``); otherwise spawns a detached one on a
-    free loopback port and prints its URL. The background counterpart to the
-    foreground bare ``omnicraft server``.
+    Reutiliza um servidor em segundo plano saudável se já houver um no ar (iniciado
+    aqui ou por um ``run`` / ``host`` anterior); caso contrário, cria um destacado em
+    uma porta loopback livre e imprime sua URL. A contraparte em segundo plano do
+    ``omnicraft server`` puro em primeiro plano.
 
     :returns: None.
     """
     startup = ensure_local_omnicraft_server()
     verb = (
-        "Started background server at"
+        "Servidor em segundo plano iniciado em"
         if startup.spawned
-        else "Background server already running at"
+        else "Servidor em segundo plano já rodando em"
     )
     click.echo(f"{verb} {startup.url}")
     # Surface the exact log file so a detached server isn't a black box —
@@ -3347,36 +3352,36 @@ def server_start() -> None:
 @click.option(
     "--force",
     is_flag=True,
-    help="SIGKILL the local host daemon if it does not exit on SIGTERM.",
+    help="SIGKILL no daemon host local se ele não sair no SIGTERM.",
 )
 def server_stop(force: bool) -> None:
-    """Stop the background OmniCraft server and the local host daemon.
+    """Para o servidor OmniCraft em segundo plano e o daemon host local.
 
-    Stops the local host daemon first, then the detached server recorded
-    in ``~/.omnicraft/local_server.pid`` — its web UI and sessions become
-    unreachable. To stop hosting but KEEP the server up, use
-    ``omnicraft host stop``; to stop everything, use ``omnicraft stop``.
+    Para primeiro o daemon host local, depois o servidor destacado registrado
+    em ``~/.omnicraft/local_server.pid`` — seu web UI e sessões ficam
+    inacessíveis. Para parar o hosting mas MANTER o servidor no ar, use
+    ``omnicraft host stop``; para parar tudo, use ``omnicraft stop``.
 
-    :param force: SIGKILL the local host daemon after the grace period if it
-        does not exit on SIGTERM.
+    :param force: SIGKILL no daemon host local após o período de tolerância se ele
+        não sair no SIGTERM.
     :returns: None.
     """
     if _stop_local_server_and_daemon(force=force):
-        click.echo("Stopped the background server.")
+        click.echo("Servidor em segundo plano parado.")
     else:
-        click.echo("No background server is running.")
+        click.echo("Nenhum servidor em segundo plano está rodando.")
 
 
 @server.command("status")
-@click.option("--json", "json_output", is_flag=True, help="Emit JSON.")
+@click.option("--json", "json_output", is_flag=True, help="Emite JSON.")
 def server_status(json_output: bool) -> None:
-    """Show whether the background OmniCraft server is running.
+    """Mostra se o servidor OmniCraft em segundo plano está rodando.
 
-    Reports the recorded pid/port, URL, live-session count, and whether a
-    local host daemon is attached. Reads ``~/.omnicraft/local_server.pid``
-    and probes ``/health``.
+    Reporta o pid/porta registrados, a URL, a contagem de sessões ativas e se um
+    daemon host local está anexado. Lê ``~/.omnicraft/local_server.pid``
+    e sonda ``/health``.
 
-    :param json_output: Emit machine-readable JSON instead of text.
+    :param json_output: Emite JSON legível por máquina em vez de texto.
     :returns: None.
     """
     info = local_server_status()
@@ -3405,32 +3410,34 @@ def server_status(json_output: bool) -> None:
         )
         return
     if not info.running:
-        click.echo("Background server: not running.")
+        click.echo("Servidor em segundo plano: não está rodando.")
         return
-    click.echo(f"Background server: running at {info.url} (pid {info.pid}, port {info.port})")
+    click.echo(
+        f"Servidor em segundo plano: rodando em {info.url} (pid {info.pid}, porta {info.port})"
+    )
     if info.log_path is not None:
         click.echo(f"  log: {_display_path(info.log_path)}")
     if sessions is not None:
-        click.echo(f"  live sessions: {sessions}")
-    click.echo(f"  host daemon attached: {'yes' if daemon_attached else 'no'}")
+        click.echo(f"  sessões ativas: {sessions}")
+    click.echo(f"  daemon host anexado: {'sim' if daemon_attached else 'não'}")
 
 
 @cli.command("stop")
 @click.option(
     "--force",
     is_flag=True,
-    help="Continue past failures and SIGKILL daemons that do not exit on SIGTERM.",
+    help="Continua após falhas e SIGKILL nos daemons que não saem no SIGTERM.",
 )
 def stop(force: bool) -> None:
-    """Stop everything OmniCraft is running on this machine.
+    """Para tudo que o OmniCraft está rodando nesta máquina.
 
-    The off switch: stops every host daemon (local and remote-targeted)
-    and the detached background server. Runners are reaped when their daemon
-    exits. To stop only hosting while keeping the local server (web UI /
-    history) up, use ``omnicraft host stop`` instead.
+    O botão de desligar: para todos os daemons host (locais e mirados em remoto)
+    e o servidor em segundo plano destacado. Os runners são recolhidos quando seu
+    daemon sai. Para parar apenas o hosting mantendo o servidor local (web UI /
+    histórico) no ar, use ``omnicraft host stop`` em vez disso.
 
-    :param force: Continue past individual failures and SIGKILL daemons that
-        do not exit on SIGTERM.
+    :param force: Continua após falhas individuais e SIGKILL nos daemons que
+        não saem no SIGTERM.
     :returns: None.
     """
     stopped = 0
@@ -3456,15 +3463,15 @@ def stop(force: bool) -> None:
     if stopped:
         parts.append(f"{stopped} daemon(s)")
     if server_was_running:
-        parts.append("the background server")
+        parts.append("o servidor em segundo plano")
     if orphan_pid is not None:
-        parts.append(f"an untracked server on :{_DEFAULT_LOCAL_PORT} (pid {orphan_pid})")
+        parts.append(f"um servidor não rastreado em :{_DEFAULT_LOCAL_PORT} (pid {orphan_pid})")
     if parts:
-        click.echo("Stopped " + " and ".join(parts) + ".")
+        click.echo("Parado(s): " + " e ".join(parts) + ".")
     else:
-        click.echo("Nothing to stop.")
+        click.echo("Nada para parar.")
     if failures:
-        raise click.ClickException("; ".join(failures) + " — retry with --force.")
+        raise click.ClickException("; ".join(failures) + " — tente de novo com --force.")
 
 
 def _count_running_sessions(base_url: str) -> int:
@@ -3509,8 +3516,8 @@ def _wait_for_local_sessions_to_drain() -> None:
     if count == 0:
         return
     click.echo(
-        f"Waiting for {count} running session(s) to finish — press Ctrl-C to "
-        "abort, or re-run with --force to stop them now."
+        f"Esperando {count} sessão(ões) em execução terminar — pressione Ctrl-C para "
+        "abortar, ou rode de novo com --force para pará-las agora."
     )
     last = count
     while True:
@@ -3522,7 +3529,7 @@ def _wait_for_local_sessions_to_drain() -> None:
         if count == 0:
             return
         if count != last:
-            click.echo(f"  {count} session(s) still running…")
+            click.echo(f"  {count} sessão(ões) ainda em execução…")
             last = count
 
 
@@ -3540,7 +3547,7 @@ def _drain_and_stop_local_server(*, force: bool) -> None:
     if not force:
         _wait_for_local_sessions_to_drain()
     if _stop_local_server_and_daemon(force=force):
-        click.echo("Stopped the background server before upgrading.")
+        click.echo("Servidor em segundo plano parado antes da atualização.")
 
 
 def _upgrade_vcs_install(
@@ -3576,17 +3583,17 @@ def _upgrade_vcs_install(
     known_behind = bool(remote_sha and current_sha and remote_sha != current_sha)
 
     if remote_sha and current_sha and remote_sha == current_sha:
-        click.echo(f"omnicraft is up to date (git {cur_short}, tracking {info.vcs_url}).")
+        click.echo(f"omnicraft está atualizado (git {cur_short}, seguindo {info.vcs_url}).")
         return
     if known_behind:
         click.echo(
-            f"A newer commit is available: {cur_short} → {remote_short} "
-            f"(git install tracking {info.vcs_url})."
+            f"Um commit mais novo está disponível: {cur_short} → {remote_short} "
+            f"(instalação git seguindo {info.vcs_url})."
         )
     else:
         click.echo(
-            f"This is a git install ({info.vcs_url} @ {cur_short}). The latest "
-            "commit couldn't be determined; re-pulling the tracked ref."
+            f"Esta é uma instalação git ({info.vcs_url} @ {cur_short}). O commit mais "
+            "recente não pôde ser determinado; re-puxando o ref seguido."
         )
 
     if check_only:
@@ -3602,13 +3609,14 @@ def _upgrade_vcs_install(
         # ``--pre`` only steers a PyPI resolve; a git install gets exactly the
         # commit its ref points at, so say so rather than implying it had effect.
         click.echo(
-            "Note: --pre has no effect on a git install; the tracked ref decides the commit."
+            "Nota: --pre não tem efeito em uma instalação git; o ref seguido decide o commit."
         )
 
     suggestion = _build_upgrade_suggestion(info, allow_prerelease=pre)
     if not suggestion.runnable:
         raise click.ClickException(
-            f"No automatic upgrade command is known for this install. {suggestion.command}."
+            f"Nenhum comando de atualização automática é conhecido para esta instalação. "
+            f"{suggestion.command}."
         )
 
     _drain_and_stop_local_server(force=force)
@@ -3617,7 +3625,8 @@ def _upgrade_vcs_install(
     code = _run_upgrade_command(suggestion.command, console)
     if code != 0:
         raise click.ClickException(
-            f"Upgrade command exited with status {code}; your previous install is intact."
+            f"O comando de atualização saiu com status {code}; "
+            "sua instalação anterior está intacta."
         )
 
     # Verify by commit, not exit code: a re-pull of a ref that hasn't moved (or
@@ -3625,8 +3634,8 @@ def _upgrade_vcs_install(
     _, new_sha = _probe_installed_distribution()
     if new_sha and current_sha and new_sha != current_sha:
         click.echo(
-            f"✓ Updated to git {new_sha[:9]}. Re-run your command — the local "
-            "server will start on the new version."
+            f"✓ Atualizado para git {new_sha[:9]}. Rode seu comando de novo — o "
+            "servidor local vai iniciar na nova versão."
         )
         return
     if known_behind and new_sha and new_sha == current_sha:
@@ -3634,20 +3643,18 @@ def _upgrade_vcs_install(
         # install on the same commit — a silent no-op that would otherwise
         # recreate the "still behind" loop. Fail loudly, mirroring the PyPI guard.
         raise click.ClickException(
-            f"The re-pull ran but the install is still at {cur_short} (the ref is at "
-            f"{remote_short}). The ref may be pinned or the reinstall reused a cached "
-            f"commit; try `uv tool install --reinstall {info.vcs_url}`."
+            f"O re-pull rodou mas a instalação ainda está em {cur_short} (o ref está em "
+            f"{remote_short}). O ref pode estar fixado ou a reinstalação reutilizou um "
+            f"commit em cache; tente `uv tool install --reinstall {info.vcs_url}`."
         )
     if new_sha and current_sha and new_sha == current_sha:
         # Remote was indeterminate, so we never claimed it was behind — a
         # no-change re-pull is fine here.
-        click.echo(
-            f"Already on the latest commit of the tracked ref ({cur_short}); nothing changed."
-        )
+        click.echo(f"Já no commit mais recente do ref seguido ({cur_short}); nada mudou.")
         return
     # Couldn't read the new commit — the re-pull ran, but don't assert a
     # result we can't confirm.
-    click.echo("Re-pulled the git ref. Run `omni upgrade --check` to confirm.")
+    click.echo("Ref git re-puxado. Rode `omni upgrade --check` para confirmar.")
 
 
 @cli.command("upgrade")
@@ -3655,41 +3662,41 @@ def _upgrade_vcs_install(
     "--check",
     "check_only",
     is_flag=True,
-    help="Report whether a newer release is available, without upgrading. "
-    "Exits non-zero when a newer release exists.",
+    help="Reporta se uma release mais nova está disponível, sem atualizar. "
+    "Sai com código não-zero quando existe uma release mais nova.",
 )
 @click.option(
     "--force",
     is_flag=True,
-    help="Stop in-flight sessions immediately instead of waiting for them to drain.",
+    help="Para sessões em andamento imediatamente em vez de esperar drenarem.",
 )
 @click.option(
     "--pre",
     "pre",
     is_flag=True,
-    help="Consider pre-releases (e.g. release candidates), and pass the "
-    "installer's allow-pre-releases flag. Useful for validating a TestPyPI rc.",
+    help="Considera pré-releases (ex. release candidates) e passa a "
+    "flag allow-pre-releases do instalador. Útil para validar um rc do TestPyPI.",
 )
 def upgrade(check_only: bool, force: bool, pre: bool) -> None:
-    """Upgrade the omnicraft CLI to the latest release on PyPI.
+    """Atualiza o CLI omnicraft para a release mais recente no PyPI.
 
-    Detects how omnicraft was installed (uv / pip / pipx / poetry), checks
-    the configured index for a newer release and — unless ``--check`` —
-    drains and stops the local background server and host daemon, then runs
-    the matching upgrade command. The next ``omni`` invocation starts a
-    fresh server on the new code automatically (via the version-aware
-    config signature), so no explicit restart is needed.
+    Detecta como o omnicraft foi instalado (uv / pip / pipx / poetry), verifica
+    no índice configurado uma release mais nova e — a menos que ``--check`` —
+    drena e para o servidor local em segundo plano e o daemon host, depois roda
+    o comando de atualização correspondente. A próxima invocação de ``omni`` inicia
+    um servidor novo no código atualizado automaticamente (via a assinatura de
+    config ciente da versão), então nenhum restart explícito é necessário.
 
-    In-flight agent sessions are waited on by default; pass ``--force`` to
-    stop them immediately. Pass ``--pre`` to consider pre-releases (rc /
-    beta) — handy for validating a TestPyPI candidate against your
-    configured index. Source checkouts / editable installs are not upgraded
-    here — update those with ``git pull``.
+    As sessões de agente em andamento são aguardadas por padrão; passe ``--force``
+    para pará-las imediatamente. Passe ``--pre`` para considerar pré-releases (rc /
+    beta) — útil para validar um candidato do TestPyPI contra seu índice
+    configurado. Checkouts de código / instalações editáveis não são atualizados
+    aqui — atualize-os com ``git pull``.
 
-    :param check_only: Only report availability; do not upgrade. Exits
-        with status 1 when a newer release exists.
-    :param force: Stop in-flight sessions immediately rather than draining.
-    :param pre: Consider pre-releases and allow the installer to fetch them.
+    :param check_only: Apenas reporta disponibilidade; não atualiza. Sai
+        com status 1 quando existe uma release mais nova.
+    :param force: Para sessões em andamento imediatamente em vez de drenar.
+    :param pre: Considera pré-releases e permite ao instalador buscá-las.
     :returns: None.
     """
     import importlib.metadata
@@ -3709,17 +3716,17 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     # swap in place; the correct update path is git, not a reinstall.
     if _find_repo_root() is not None:
         raise click.ClickException(
-            "This is a source checkout — update it with `git pull` (and reinstall "
-            "dependencies), not `omni upgrade`."
+            "Este é um checkout de código — atualize-o com `git pull` (e reinstale "
+            "as dependências), não `omni upgrade`."
         )
     info = _read_installed_wheel_info()
     if info is None:
         raise click.ClickException(
-            "Couldn't determine how omnicraft is installed; upgrade it manually."
+            "Não foi possível determinar como o omnicraft está instalado; atualize-o manualmente."
         )
     if info.is_editable:
         raise click.ClickException(
-            "This is an editable install — update it with `git pull`, not `omni upgrade`."
+            "Esta é uma instalação editável — atualize-a com `git pull`, não `omni upgrade`."
         )
 
     # A git/VCS install tracks a moving git ref, not a PyPI release. Its
@@ -3741,14 +3748,15 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     )
     if latest is None:
         raise click.ClickException(
-            "Couldn't reach the package index to check for a newer release. Check your "
-            "connection (or OMNICRAFT_INDEX_URL / your configured index) and try again."
+            "Não foi possível acessar o índice de pacotes para checar uma release mais nova. "
+            "Verifique sua conexão (ou OMNICRAFT_INDEX_URL / seu índice configurado) e "
+            "tente de novo."
         )
     if not _is_newer(latest, current):
-        click.echo(f"omnicraft is up to date (v{current}).")
+        click.echo(f"omnicraft está atualizado (v{current}).")
         return
 
-    click.echo(f"A new release is available: v{current} → v{latest}.")
+    click.echo(f"Uma nova release está disponível: v{current} → v{latest}.")
     if check_only:
         # Non-zero so scripts/CI can gate on "an upgrade is available".
         # SystemExit (not ctx.exit) because main() runs the group with
@@ -3759,7 +3767,8 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     suggestion = _build_upgrade_suggestion(info, allow_prerelease=pre)
     if not suggestion.runnable:
         raise click.ClickException(
-            f"No automatic upgrade command is known for this install. {suggestion.command}."
+            f"Nenhum comando de atualização automática é conhecido para esta instalação. "
+            f"{suggestion.command}."
         )
 
     _drain_and_stop_local_server(force=force)
@@ -3768,7 +3777,8 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     code = _run_upgrade_command(suggestion.command, console)
     if code != 0:
         raise click.ClickException(
-            f"Upgrade command exited with status {code}; your previous install is intact."
+            f"O comando de atualização saiu com status {code}; "
+            "sua instalação anterior está intacta."
         )
 
     # Trust the installed version, not the installer's exit code. The running
@@ -3780,21 +3790,21 @@ def upgrade(check_only: bool, force: bool, pre: bool) -> None:
     new_version, _ = _probe_installed_distribution()
     if new_version is None:
         click.echo(
-            "Ran the upgrade command, but couldn't confirm the installed version. "
-            "Run `omni upgrade --check` to verify."
+            "O comando de atualização rodou, mas não foi possível confirmar a versão "
+            "instalada. Rode `omni upgrade --check` para verificar."
         )
         return
     if _is_newer(new_version, current):
         click.echo(
-            f"✓ Upgraded to v{new_version}. Re-run your command — the local "
-            "server will start on the new version."
+            f"✓ Atualizado para v{new_version}. Rode seu comando de novo — o "
+            "servidor local vai iniciar na nova versão."
         )
         return
     raise click.ClickException(
-        f"The upgrade command ran but omnicraft is still v{new_version} (expected "
-        f"v{latest}). The install is likely version-pinned, a cooldown / "
-        "exclude-newer is excluding the new release, or the index cache is stale. "
-        "Reinstall it explicitly — e.g. `uv tool upgrade --reinstall omnicraft` or "
+        f"O comando de atualização rodou mas o omnicraft ainda é v{new_version} (esperado "
+        f"v{latest}). A instalação provavelmente está com versão fixada, um cooldown / "
+        "exclude-newer está excluindo a nova release, ou o cache do índice está velho. "
+        "Reinstale explicitamente — ex. `uv tool upgrade --reinstall omnicraft` ou "
         f"`pip install --force-reinstall 'omnicraft=={latest}'`."
     )
 
@@ -4142,9 +4152,9 @@ def _reject_native_on_windows(harness: str) -> None:
     """
     if IS_WINDOWS:
         raise click.ClickException(
-            f"`omnicraft {harness}` (native tmux/PTY terminal) is not supported on "
-            "Windows. Use an SDK-based harness via `omnicraft run <agent.yaml>` "
-            "or the web UI."
+            f"`omnicraft {harness}` (terminal nativo tmux/PTY) não é suportado no "
+            "Windows. Use um harness baseado em SDK via `omnicraft run <agent.yaml>` "
+            "ou o web UI."
         )
 
 
@@ -4158,10 +4168,10 @@ def _reject_native_on_windows(harness: str) -> None:
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Starts a local runner, binds the session, "
-        "launches Claude in a terminal resource, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Inicia um runner local, vincula a sessão, "
+        "lança o Claude em um recurso de terminal e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -4172,9 +4182,9 @@ def _reject_native_on_windows(harness: str) -> None:
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to claude-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões claude-native."
     ),
 )
 @click.option(
@@ -4183,7 +4193,7 @@ def _reject_native_on_windows(harness: str) -> None:
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
 @click.option(
     "--host",
@@ -4191,8 +4201,8 @@ def _reject_native_on_windows(harness: str) -> None:
     is_flag=True,
     default=False,
     help=(
-        "Register this machine as a host (inline equivalent of `omnicraft host`). "
-        "Requires --server."
+        "Registra esta máquina como host (equivalente inline de `omnicraft host`). "
+        "Requer --server."
     ),
 )
 @click.option(
@@ -4201,9 +4211,9 @@ def _reject_native_on_windows(harness: str) -> None:
     is_flag=True,
     default=False,
     help=(
-        "Use your existing Claude Code configuration instead of Databricks auth. "
-        "When set, any configured provider is ignored and Claude "
-        "authenticates via its own ``~/.claude/`` settings."
+        "Usa sua configuração existente do Claude Code em vez da auth do Databricks. "
+        "Quando definido, qualquer provedor configurado é ignorado e o Claude "
+        "autentica via suas próprias configs em ``~/.claude/``."
     ),
 )
 @click.option(
@@ -4212,8 +4222,8 @@ def _reject_native_on_windows(harness: str) -> None:
     is_flag=True,
     default=False,
     help=(
-        "Print native Claude startup timing marks to stderr. Also enabled by "
-        f"{_CLAUDE_STARTUP_PROFILE_ENV_VAR}=1."
+        "Imprime marcas de tempo da inicialização nativa do Claude no stderr. Também "
+        f"habilitado por {_CLAUDE_STARTUP_PROFILE_ENV_VAR}=1."
     ),
 )
 @click.option(
@@ -4222,10 +4232,10 @@ def _reject_native_on_windows(harness: str) -> None:
     default=None,
     metavar="CMD",
     help=(
-        "Claude Code CLI executable to run. "
-        "Defaults to ``claude``. Use this when a wrapper binary replaces the "
-        "``claude`` CLI while preserving its interface (e.g. a custom launcher "
-        "that injects auth or environment before delegating to ``claude``)."
+        "Executável do CLI Claude Code para rodar. "
+        "Padrão é ``claude``. Use isto quando um binário wrapper substitui o "
+        "CLI ``claude`` preservando sua interface (ex. um lançador customizado "
+        "que injeta auth ou ambiente antes de delegar ao ``claude``)."
     ),
 )
 @click.argument("claude_args", nargs=-1, type=click.UNPROCESSED)
@@ -4247,13 +4257,13 @@ def claude(
     #     existing Claude config.
     # :param profile_startup: When True, print startup timing marks.
     # :param claude_args: Pass-through args for ``claude``.
-    """Launch Claude Code in an OmniCraft terminal.
+    """Lança o Claude Code em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft claude
       omnicraft claude --resume conv_abc123
-      omnicraft claude --resume                  # interactive picker
+      omnicraft claude --resume                  # seletor interativo
       omnicraft claude --server https://<app>.databricksapps.com
     """
     _reject_native_on_windows("claude")
@@ -4281,8 +4291,8 @@ def claude(
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
     startup_profiler.mark("arguments validated")
 
@@ -4324,10 +4334,10 @@ def claude(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch Codex, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar o Codex e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -4338,9 +4348,9 @@ def claude(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to codex-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões codex-native."
     ),
 )
 @click.option(
@@ -4349,14 +4359,14 @@ def claude(
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
-@click.option("--model", default=None, help="Codex model to use for the native thread.")
+@click.option("--model", default=None, help="Modelo Codex para usar na thread nativa.")
 @click.option(
     "-p",
     "--prompt",
     default=None,
-    help="Send this as the first message after the Codex TUI starts.",
+    help="Envia isto como a primeira mensagem depois que a TUI do Codex inicia.",
 )
 @click.argument("codex_args", nargs=-1, type=click.UNPROCESSED)
 def codex(
@@ -4374,21 +4384,21 @@ def codex(
     # :param model: Codex model id.
     # :param prompt: Optional first prompt.
     # :param codex_args: Pass-through args for ``codex`` before ``resume``.
-    """Launch Codex TUI in an OmniCraft terminal.
+    """Lança a TUI do Codex em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft codex
       omnicraft codex --resume conv_abc123
-      omnicraft codex --resume                  # interactive picker
+      omnicraft codex --resume                  # seletor interativo
       omnicraft codex --server https://<app>.databricksapps.com
     """
     _reject_native_on_windows("codex")
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     from omnicraft.codex_native import run_codex_native
@@ -4408,8 +4418,8 @@ def codex(
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     # Ensure the host daemon (local when ``--server`` is omitted/empty,
@@ -4443,10 +4453,10 @@ def codex(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch OpenCode, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar OpenCode, e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -4457,9 +4467,9 @@ def codex(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to opencode-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões opencode-native."
     ),
 )
 @click.option(
@@ -4468,9 +4478,9 @@ def codex(
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
-@click.option("--model", default=None, help="OpenCode model to use for the native session.")
+@click.option("--model", default=None, help="Modelo OpenCode para usar na sessão nativa.")
 @click.argument("opencode_args", nargs=-1, type=click.UNPROCESSED)
 def opencode(
     server: str | None,
@@ -4484,13 +4494,13 @@ def opencode(
     # :param session_id: Legacy ``--session`` id; mutually exclusive with ``--resume``.
     # :param model: OpenCode model id pinned on the wrapper spec.
     # :param opencode_args: Pass-through args persisted for the ``opencode attach`` TUI.
-    """Launch OpenCode TUI in an OmniCraft terminal.
+    """Lança a TUI do OpenCode em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft opencode
       omnicraft opencode --resume conv_abc123
-      omnicraft opencode --resume                  # interactive picker
+      omnicraft opencode --resume                  # seletor interativo
       omnicraft opencode --server https://<app>.databricksapps.com
     """
     from omnicraft.opencode_native import run_opencode_native
@@ -4511,8 +4521,8 @@ def opencode(
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     # Ensure the host daemon (local when ``--server`` is omitted/empty, remote
@@ -4542,10 +4552,10 @@ def opencode(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch Pi, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar Pi, e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -4556,9 +4566,9 @@ def opencode(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to pi-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões pi-native."
     ),
 )
 @click.option(
@@ -4567,7 +4577,7 @@ def opencode(
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
 @click.argument("pi_args", nargs=-1, type=click.UNPROCESSED)
 def pi(
@@ -4576,20 +4586,20 @@ def pi(
     session_id: str | None,
     pi_args: tuple[str, ...],
 ) -> None:
-    """Launch Pi TUI in an OmniCraft terminal.
+    """Lança a TUI do Pi em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft pi
       omnicraft pi --resume conv_abc123
-      omnicraft pi --resume                    # interactive picker
+      omnicraft pi --resume                    # seletor interativo
       omnicraft pi --model local-deepseek/deepseek-v4-flash
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     from omnicraft.pi_native import run_pi_native
@@ -4710,9 +4720,9 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
             )
             # Announce: this mutates the user's config on a launch command.
             click.echo(
-                f"No default {family_label(family)} credential set — "
-                f"using {_credential_label(entry_name, entry)} and saving it as "
-                f"the default (change anytime with: omnicraft /model).",
+                f"Nenhuma credencial {family_label(family)} padrão definida — "
+                f"usando {_credential_label(entry_name, entry)} e salvando como "
+                f"o padrão (mude quando quiser com: omnicraft /model).",
                 err=True,
             )
             return
@@ -4730,10 +4740,10 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch the Cursor TUI, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar a TUI do Cursor, e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -4744,9 +4754,9 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to cursor-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões cursor-native."
     ),
 )
 @click.option(
@@ -4755,7 +4765,7 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
 @click.option(
     "--mode",
@@ -4763,15 +4773,15 @@ def _ensure_bundled_agent_brain_credential(name: str) -> None:
     default=None,
     type=click.Choice(["plan", "ask"]),
     help=(
-        "Start cursor-agent in the given execution mode. "
-        "``plan``: read-only/planning (analyze, propose plans, no edits). "
-        "``ask``: Q&A style for explanations and questions (read-only)."
+        "Inicia o cursor-agent no modo de execução dado. "
+        "``plan``: somente leitura/planejamento (analisa, propõe planos, sem edições). "
+        "``ask``: estilo perguntas e respostas para explicações e perguntas (somente leitura)."
     ),
 )
 @click.option(
     "--model",
     default=None,
-    help="Cursor model to use for the native TUI (e.g. gpt-5.2, claude-4.6-sonnet-medium).",
+    help="Modelo Cursor para usar na TUI nativa (ex. gpt-5.2, claude-4.6-sonnet-medium).",
 )
 @click.argument("cursor_args", nargs=-1, type=click.UNPROCESSED)
 def cursor(
@@ -4784,23 +4794,23 @@ def cursor(
 ) -> None:
     # Param docs live in comments — Click uses the docstring for --help.
     # :param model: Cursor model id passed to cursor-agent as ``--model``.
-    """Launch the Cursor TUI in an OmniCraft terminal.
+    """Lança a TUI do Cursor em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft cursor
       omnicraft cursor --model gpt-5.2
       omnicraft cursor --resume conv_abc123
-      omnicraft cursor --resume                 # interactive picker
-      omnicraft cursor --mode plan              # start in plan (read-only) mode
-      omnicraft cursor --mode ask               # start in ask (Q&A) mode
+      omnicraft cursor --resume                 # seletor interativo
+      omnicraft cursor --mode plan              # inicia no modo plan (somente leitura)
+      omnicraft cursor --mode ask               # inicia no modo ask (perguntas e respostas)
     """
     _reject_native_on_windows("cursor")
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     from omnicraft.cursor_native import run_cursor_native
@@ -4840,10 +4850,10 @@ def cursor(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch the Kiro TUI, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar a TUI do Kiro, e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -4854,9 +4864,9 @@ def cursor(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to kiro-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões kiro-native."
     ),
 )
 @click.option(
@@ -4865,29 +4875,29 @@ def cursor(
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
-@click.option("--model", default=None, help="Kiro model to use for the native chat.")
-@click.option("--effort", default=None, help="Kiro effort level to use for the native chat.")
-@click.option("--agent", "kiro_agent", default=None, help="Kiro agent to use for the native chat.")
+@click.option("--model", default=None, help="Modelo Kiro para usar no chat nativo.")
+@click.option("--effort", default=None, help="Nível de esforço do Kiro para o chat nativo.")
+@click.option("--agent", "kiro_agent", default=None, help="Agente Kiro para usar no chat nativo.")
 @click.option(
     "--trust-tools",
     "trust_tools",
     multiple=True,
     metavar="TOOL",
-    help="Trust a specific Kiro tool. May be passed multiple times.",
+    help="Confia em uma ferramenta específica do Kiro. Pode ser passado várias vezes.",
 )
 @click.option(
     "--trust-all-tools",
     is_flag=True,
     default=False,
-    help="Explicitly trust all Kiro tools for this local launch.",
+    help="Confia explicitamente em todas as ferramentas do Kiro neste lançamento local.",
 )
 @click.option(
     "-p",
     "--prompt",
     default=None,
-    help="Send this as the initial Kiro chat input when the TUI starts.",
+    help="Envia isto como a entrada inicial do chat do Kiro quando a TUI inicia.",
 )
 @click.argument("kiro_args", nargs=-1, type=click.UNPROCESSED)
 def kiro(
@@ -4902,20 +4912,20 @@ def kiro(
     prompt: str | None,
     kiro_args: tuple[str, ...],
 ) -> None:
-    """Launch the Kiro TUI in an OmniCraft terminal.
+    """Lança a TUI do Kiro em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft kiro
       omnicraft kiro --resume conv_abc123
-      omnicraft kiro --resume                  # interactive picker
+      omnicraft kiro --resume                  # seletor interativo
       omnicraft kiro --model auto -p "review this repo"
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
     _reject_reserved_kiro_resume_args(kiro_args)
 
@@ -4956,8 +4966,8 @@ def _reject_reserved_kiro_resume_args(kiro_args: tuple[str, ...]) -> None:
     reserved = {"--resume", "--resume-id", "--resume-picker"}
     if any(arg == flag or arg.startswith(f"{flag}=") for arg in kiro_args for flag in reserved):
         raise click.UsageError(
-            "Kiro resume flags are reserved for OmniCraft resume handling; use "
-            "`omnicraft kiro --resume [CONVERSATION]` instead."
+            "As flags de resume do Kiro são reservadas para o tratamento de resume do "
+            "OmniCraft; use `omnicraft kiro --resume [CONVERSATION]` em vez disso."
         )
 
 
@@ -4993,10 +5003,10 @@ def _build_kiro_launch_args(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch the Goose TUI, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar a TUI do Goose, e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -5007,9 +5017,9 @@ def _build_kiro_launch_args(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to goose-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões goose-native."
     ),
 )
 @click.option(
@@ -5018,7 +5028,7 @@ def _build_kiro_launch_args(
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
 @click.argument("goose_args", nargs=-1, type=click.UNPROCESSED)
 def goose(
@@ -5027,19 +5037,19 @@ def goose(
     session_id: str | None,
     goose_args: tuple[str, ...],
 ) -> None:
-    """Launch the Goose TUI in an OmniCraft terminal.
+    """Lança a TUI do Goose em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft goose
       omnicraft goose --resume conv_abc123
-      omnicraft goose --resume                 # interactive picker
+      omnicraft goose --resume                 # seletor interativo
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     from omnicraft.goose_native import run_goose_native
@@ -5073,10 +5083,10 @@ def goose(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch the Hermes TUI, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar a TUI do Hermes, e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -5087,9 +5097,9 @@ def goose(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to hermes-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões hermes-native."
     ),
 )
 @click.option(
@@ -5098,7 +5108,7 @@ def goose(
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
 @click.argument("hermes_args", nargs=-1, type=click.UNPROCESSED)
 def hermes(
@@ -5107,19 +5117,19 @@ def hermes(
     session_id: str | None,
     hermes_args: tuple[str, ...],
 ) -> None:
-    """Launch the Hermes TUI in an OmniCraft terminal.
+    """Lança a TUI do Hermes em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft hermes
       omnicraft hermes --resume conv_abc123
-      omnicraft hermes --resume                 # interactive picker
+      omnicraft hermes --resume                 # seletor interativo
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     from omnicraft.hermes_native import run_hermes_native
@@ -5153,10 +5163,10 @@ def hermes(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, binds a runner, "
-        "launches Antigravity (agy) in a terminal resource, and attaches "
-        'this TTY. Pass --server "" to auto-spawn a persistent local '
-        "server in the background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, vincula um runner, "
+        "lança o Antigravity (agy) em um recurso de terminal e anexa "
+        'este TTY. Passe --server "" para auto-criar um servidor local '
+        "persistente em segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -5167,9 +5177,9 @@ def hermes(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to antigravity-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões antigravity-native."
     ),
 )
 @click.option(
@@ -5178,9 +5188,9 @@ def hermes(
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
-@click.option("--model", default=None, help="Antigravity (agy) model to use for the session.")
+@click.option("--model", default=None, help="Modelo Antigravity (agy) para usar na sessão.")
 @click.argument("antigravity_args", nargs=-1, type=click.UNPROCESSED)
 def antigravity(
     server: str | None,
@@ -5189,13 +5199,13 @@ def antigravity(
     model: str | None,
     antigravity_args: tuple[str, ...],
 ) -> None:
-    """Launch the Antigravity (agy) TUI in an OmniCraft terminal.
+    """Lança a TUI do Antigravity (agy) em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft antigravity
       omnicraft antigravity --resume conv_abc123
-      omnicraft antigravity --resume                  # interactive picker
+      omnicraft antigravity --resume                  # seletor interativo
       omnicraft antigravity --server https://<app>.databricksapps.com
     """
     # Validate option combinations BEFORE any side effects (daemon spawn,
@@ -5203,8 +5213,8 @@ def antigravity(
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     from omnicraft.antigravity_native import run_antigravity_native
@@ -5247,10 +5257,10 @@ def antigravity(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch the qwen TUI, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar a TUI do qwen, e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -5261,9 +5271,9 @@ def antigravity(
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to qwen-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões qwen-native."
     ),
 )
 @click.option(
@@ -5272,7 +5282,7 @@ def antigravity(
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
 @click.argument("qwen_args", nargs=-1, type=click.UNPROCESSED)
 def qwen(
@@ -5281,19 +5291,19 @@ def qwen(
     session_id: str | None,
     qwen_args: tuple[str, ...],
 ) -> None:
-    """Launch the qwen (Qwen Code) TUI in an OmniCraft terminal.
+    """Lança a TUI do qwen (Qwen Code) em um terminal OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft qwen
       omnicraft qwen --resume conv_abc123
-      omnicraft qwen --resume                  # interactive picker
+      omnicraft qwen --resume                  # seletor interativo
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     from omnicraft.qwen_native import run_qwen_native
@@ -5358,16 +5368,16 @@ def _run_bundled_agent(name: str, run_args: tuple[str, ...]) -> None:
 def fucho(run_args: tuple[str, ...]) -> None:
     # Param docs live in comments — Click uses the docstring for --help.
     # :param run_args: Pass-through args for ``run``.
-    """Launch fucho, the bundled multi-agent coding orchestrator.
+    """Lança o fucho, o orquestrador de código multiagente incluído.
 
-    Shorthand for ``omnicraft run`` on the packaged fucho agent — the same
-    agent a bare ``omnicraft`` launches when a Claude credential is
-    configured. All ``run`` options are accepted and forwarded.
+    Atalho para ``omnicraft run`` no agente fucho empacotado — o mesmo
+    agente que um ``omnicraft`` puro lança quando uma credencial Claude está
+    configurada. Todas as opções de ``run`` são aceitas e repassadas.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft fucho
-      omnicraft fucho -p "review the last commit"
+      omnicraft fucho -p "revise o último commit"
       omnicraft fucho --server https://<app>.databricksapps.com
     """
     _run_bundled_agent("fucho", run_args)
@@ -5383,17 +5393,17 @@ def fucho(run_args: tuple[str, ...]) -> None:
 def lilo(run_args: tuple[str, ...]) -> None:
     # Param docs live in comments — Click uses the docstring for --help.
     # :param run_args: Pass-through args for ``run``.
-    """Launch lilo, the bundled two-headed brainstorming agent.
+    """Lança o lilo, o agente de brainstorming de duas cabeças incluído.
 
-    Shorthand for ``omnicraft run`` on the packaged lilo agent. Lilo fans
-    every question out to both a Claude and a GPT sub-agent, so a Claude
-    and an OpenAI provider must both be configured. All ``run`` options are
-    accepted and forwarded.
+    Atalho para ``omnicraft run`` no agente lilo empacotado. O Lilo distribui
+    cada pergunta tanto para um sub-agente Claude quanto para um GPT, então um
+    provedor Claude e um OpenAI devem ambos estar configurados. Todas as opções
+    de ``run`` são aceitas e repassadas.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft lilo
-      omnicraft lilo -p "name ideas for a CLI that runs agents"
+      omnicraft lilo -p "ideias de nome para um CLI que roda agentes"
     """
     _run_bundled_agent("lilo", run_args)
 
@@ -5408,10 +5418,10 @@ def lilo(run_args: tuple[str, ...]) -> None:
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Ensures the host daemon, asks the "
-        "daemon-spawned runner to launch the Kimi TUI, and attaches this TTY. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and use that instead of a remote one."
+        "URL omnicraft remota. Garante o daemon host, pede ao "
+        "runner criado pelo daemon para lançar a TUI do Kimi, e anexa este TTY. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e usar esse em vez de um remoto."
     ),
 )
 @click.option(
@@ -5422,9 +5432,9 @@ def lilo(run_args: tuple[str, ...]) -> None:
     flag_value=_RESUME_PICKER_SENTINEL,
     default=None,
     help=(
-        "Resume a prior OmniCraft conversation. With a conversation id "
-        "(e.g. ``--resume conv_abc123``) attaches directly; with no value "
-        "opens an interactive picker scoped to kimi-native sessions."
+        "Retoma uma conversa anterior do OmniCraft. Com um id de conversa "
+        "(ex. ``--resume conv_abc123``) anexa diretamente; sem valor "
+        "abre um seletor interativo restrito a sessões kimi-native."
     ),
 )
 @click.option(
@@ -5433,7 +5443,7 @@ def lilo(run_args: tuple[str, ...]) -> None:
     metavar="SESSION_ID",
     default=None,
     hidden=True,
-    help="Deprecated alias for ``--resume <id>``; kept for one release.",
+    help="Alias descontinuado para ``--resume <id>``; mantido por uma release.",
 )
 @click.argument("kimi_args", nargs=-1, type=click.UNPROCESSED)
 def kimi(
@@ -5442,28 +5452,29 @@ def kimi(
     session_id: str | None,
     kimi_args: tuple[str, ...],
 ) -> None:
-    """Launch the Kimi Code TUI in an OmniCraft terminal.
+    """Lança a TUI do Kimi Code em um terminal OmniCraft.
 
-    Boots Moonshot AI's interactive ``kimi`` TUI
-    (https://github.com/MoonshotAI/Kimi-Code) in a runner-owned terminal and
-    attaches your TTY — the native experience, embedded in the OmniCraft web
-    UI. No OmniCraft provider config is needed: kimi authenticates against its
-    own backend (``kimi login`` for OAuth, or a Moonshot API key).
+    Inicia a TUI interativa ``kimi`` da Moonshot AI
+    (https://github.com/MoonshotAI/Kimi-Code) em um terminal de propriedade do
+    runner e anexa seu TTY — a experiência nativa, embutida no web UI do
+    OmniCraft. Nenhuma config de provedor do OmniCraft é necessária: o kimi
+    autentica contra seu próprio backend (``kimi login`` para OAuth, ou uma
+    chave de API da Moonshot).
 
-    For the headless SDK harness (per-turn ``kimi -p`` behind the OmniCraft
-    REPL) use ``omnicraft run --harness kimi`` instead.
+    Para o harness SDK headless (``kimi -p`` por turno atrás do REPL do
+    OmniCraft) use ``omnicraft run --harness kimi`` em vez disso.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft kimi
       omnicraft kimi --resume conv_abc123
-      omnicraft kimi --resume                   # interactive picker
+      omnicraft kimi --resume                   # seletor interativo
     """
     choice = _split_resume_value(resume)
     if session_id is not None and (choice.picker or choice.conversation_id is not None):
         raise click.UsageError(
-            "--session and --resume are mutually exclusive; "
-            "prefer --resume (--session is deprecated).",
+            "--session e --resume são mutuamente exclusivos; "
+            "prefira --resume (--session está descontinuado).",
         )
 
     from omnicraft.kimi_native import run_kimi_native
@@ -5493,9 +5504,9 @@ def kimi(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. When set, the picker / lookup queries "
-        "this server instead of starting a local one. Required when "
-        "running ``omnicraft resume`` without a conversation id."
+        "URL omnicraft remota. Quando definida, o seletor / a busca consulta "
+        "este servidor em vez de iniciar um local. Obrigatório ao "
+        "rodar ``omnicraft resume`` sem um id de conversa."
     ),
 )
 def resume(
@@ -5509,21 +5520,21 @@ def resume(
     #     ``"conv_abc123"``. None falls through to the picker.
     # :param server: Remote OmniCraft server URL (optional in id mode;
     #     required in picker mode).
-    """Resume an OmniCraft conversation, auto-dispatching by runtime.
+    """Retoma uma conversa do OmniCraft, despachando automaticamente pelo runtime.
 
     \b
-    With CONV_ID: looks up the conversation and dispatches to the
-    matching wrapper. claude-native sessions land in
-    ``omnicraft claude``; everything else surfaces a clear hint to
-    use ``omnicraft run --resume <id> <agent.yaml>``.
+    Com CONV_ID: procura a conversa e despacha para o
+    wrapper correspondente. Sessões claude-native vão para
+    ``omnicraft claude``; todo o resto exibe uma dica clara para
+    usar ``omnicraft run --resume <id> <agent.yaml>``.
 
     \b
-    Without CONV_ID: opens a cross-agent picker over your prior
-    conversations (requires ``--server``). Dispatch follows from
-    the row you select.
+    Sem CONV_ID: abre um seletor entre agentes sobre suas conversas
+    anteriores (requer ``--server``). O despacho segue da
+    linha que você selecionar.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft resume conv_abc123
       omnicraft resume conv_abc123 --server https://<app>.databricksapps.com
       omnicraft resume --server https://<app>.databricksapps.com
@@ -5539,10 +5550,10 @@ def resume(
 @cli.group("session", invoke_without_command=True)
 @click.pass_context
 def session(ctx: click.Context) -> None:
-    """Manage OmniCraft sessions.
+    """Gerencia sessões do OmniCraft.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft session export --id conv_abc123
       omnicraft session export --id conv_abc123 --output transcript.jsonl
       omnicraft session export --id conv_abc123 --server https://myserver.com
@@ -5557,7 +5568,7 @@ def session(ctx: click.Context) -> None:
     "session_id",
     required=True,
     metavar="SESSION_ID",
-    help="Session ID to export, e.g. conv_abc123.",
+    help="ID da sessão para exportar, ex. conv_abc123.",
 )
 @click.option(
     "--output",
@@ -5565,27 +5576,27 @@ def session(ctx: click.Context) -> None:
     "output",
     default=None,
     metavar="FILE",
-    help="Output file path.  Defaults to <SESSION_ID>.jsonl in the current directory.",
+    help="Caminho do arquivo de saída.  Padrão: <SESSION_ID>.jsonl no diretório atual.",
 )
 @click.option(
     "--server",
     default=None,
     help=(
-        "OmniCraft server URL. "
-        "Defaults to the configured server, or a local server already running."
+        "URL do servidor OmniCraft. "
+        "Padrão: o servidor configurado, ou um servidor local já em execução."
     ),
 )
 def session_export(session_id: str, output: str | None, server: str | None) -> None:
-    """Export a session transcript to a portable JSONL file.
+    """Exporta a transcrição de uma sessão para um arquivo JSONL portável.
 
-    Each line of the output is a JSON object.  The first line carries
-    the session metadata (``"record_type": "session_meta"``); every
-    subsequent line is one conversation item
-    (``"record_type": "item"``).  The file preserves full turn order
-    and can be re-imported with a future ``omnicraft session import``.
+    Cada linha da saída é um objeto JSON.  A primeira linha carrega
+    os metadados da sessão (``"record_type": "session_meta"``); toda
+    linha subsequente é um item de conversa
+    (``"record_type": "item"``).  O arquivo preserva a ordem completa dos
+    turnos e pode ser reimportado com um futuro ``omnicraft session import``.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft session export --id conv_abc123
       omnicraft session export --id conv_abc123 --output my_session.jsonl
       omnicraft session export --id conv_abc123 --server https://myserver.com
@@ -5612,7 +5623,7 @@ def session_export(session_id: str, output: str | None, server: str | None) -> N
             params={"include_items": "false", "include_liveness": "false"},
         )
         if resp.status_code == 404:
-            raise click.ClickException(f"Session {session_id!r} not found.")
+            raise click.ClickException(f"Sessão {session_id!r} não encontrada.")
         resp.raise_for_status()
         session_data = resp.json()
 
@@ -5639,7 +5650,7 @@ def session_export(session_id: str, output: str | None, server: str | None) -> N
                     break
                 after = page.get("last_id")
 
-    click.echo(f"Exported {n_items} item(s) from {session_id} to {out_path}")
+    click.echo(f"Exportado(s) {n_items} item(ns) de {session_id} para {out_path}")
 
 
 # Shared option help for ``run`` and the harness commands. These are the same
@@ -5654,23 +5665,23 @@ _HARNESS_CHOICES_HELP = (
     "'cursor', 'kimi', "
     "'openai-agents', 'open-responses', 'pi', 'antigravity', 'qwen', 'goose', or 'copilot'"
 )
-_HARNESS_HELP = f"Harness to use for a local agent: {_HARNESS_CHOICES_HELP}."
+_HARNESS_HELP = f"Harness para usar em um agente local: {_HARNESS_CHOICES_HELP}."
 _RUN_HARNESS_HELP = (
-    f"Harness to use: {_HARNESS_CHOICES_HELP}. Without AGENT, launches that harness directly."
+    f"Harness para usar: {_HARNESS_CHOICES_HELP}. Sem AGENT, lança esse harness diretamente."
 )
-_MODEL_HELP = "Model to use for the agent."
-_PROMPT_HELP = "Send this as the first message when the REPL starts."
-_SYSTEM_PROMPT_HELP = "Instructions to use for the agent."
+_MODEL_HELP = "Modelo para usar no agente."
+_PROMPT_HELP = "Envia isto como a primeira mensagem quando o REPL inicia."
+_SYSTEM_PROMPT_HELP = "Instruções para usar no agente."
 _RESUME_HELP = (
-    "Resume a prior conversation. With no value, opens an interactive "
-    "picker; with a conversation id (e.g. --resume conv_abc123), attaches "
-    "directly to that conversation."
+    "Retoma uma conversa anterior. Sem valor, abre um seletor "
+    "interativo; com um id de conversa (ex. --resume conv_abc123), anexa "
+    "diretamente a essa conversa."
 )
-_CONTINUE_HELP = "Continue the most recent conversation for this agent."
-_NO_SESSION_HELP = "Use a fresh temporary local session store for this run."
+_CONTINUE_HELP = "Continua a conversa mais recente deste agente."
+_NO_SESSION_HELP = "Usa um store de sessão local temporário novo para esta execução."
 
-_FORK_HELP = "Fork an existing session by id and open the REPL on the fork."
-_LOG_HELP = "Write a JSON dump of the conversation to ~/.omnicraft/logs/ on exit."
+_FORK_HELP = "Bifurca uma sessão existente por id e abre o REPL na bifurcação."
+_LOG_HELP = "Escreve um dump JSON da conversa em ~/.omnicraft/logs/ ao sair."
 
 
 _DEFAULT_HARNESS_PROMPTS = {
@@ -5722,7 +5733,7 @@ def _validate_harness(harness: str) -> None:
     if canonicalize_harness(harness) in OMNICRAFT_HARNESSES:
         return
     allowed = ", ".join(sorted(OMNICRAFT_HARNESSES))
-    raise click.ClickException(f"Unsupported harness {harness!r}. Expected one of: {allowed}.")
+    raise click.ClickException(f"Harness {harness!r} não suportado. Esperado um de: {allowed}.")
 
 
 def _default_harness_prompt(harness: str) -> str:
@@ -5799,9 +5810,9 @@ def _materialize_harness_launcher_file(
 def _missing_run_agent_message() -> str:
     """Return the no-AGENT ``run`` guidance shown on missing input."""
     return (
-        "Provide an AGENT path, pass --server to connect to a server, "
-        "or pass --harness to launch a built-in "
-        "harness directly:\n"
+        "Forneça um caminho de AGENT, passe --server para conectar a um servidor, "
+        "ou passe --harness para lançar um "
+        "harness interno diretamente:\n"
         "  omnicraft run examples/hello_world.yaml\n"
         "  omnicraft run --server http://localhost:6767\n"
         "  omnicraft run --harness claude-sdk\n"
@@ -5976,8 +5987,8 @@ def _dispatch_native_terminal_harness(
         # redirect. ``--model`` and session selection (--resume/--continue) ARE
         # honored here.
         raise click.ClickException(
-            f"`run --harness {harness}` launches the {native_agent.display_name} TUI directly; "
-            f"the REPL-only option(s) {', '.join(unsupported)} have no effect there — remove them."
+            f"`run --harness {harness}` lança a TUI do {native_agent.display_name} diretamente; "
+            f"a(s) opção(ões) só-de-REPL {', '.join(unsupported)} não têm efeito ali — remova-as."
         )
 
     server = _ensure_backend(server)
@@ -6000,7 +6011,7 @@ def _dispatch_native_terminal_harness(
         # _resolve_resume_target behavior).
         if session_id is None:
             raise click.ClickException(
-                f"No prior conversation for agent {native_agent.agent_name!r}."
+                f"Nenhuma conversa anterior para o agente {native_agent.agent_name!r}."
             )
 
     common = {
@@ -6037,7 +6048,9 @@ def _dispatch_native_terminal_harness(
 
         run_kimi_native(kimi_args=passthrough, **common)
     else:  # pragma: no cover - new native agent added without a dispatch arm
-        raise click.ClickException(f"No native terminal launcher wired for harness {harness!r}.")
+        raise click.ClickException(
+            f"Nenhum lançador de terminal nativo ligado ao harness {harness!r}."
+        )
     return True
 
 
@@ -6060,9 +6073,9 @@ def _reject_agent_with_native_terminal_harness(harness: str) -> None:
     if native_agent is None:
         return
     raise click.ClickException(
-        f"`--harness {harness}` launches the {native_agent.display_name} TUI and "
-        f"ignores an AGENT spec; drop the AGENT path and run "
-        f"`omnicraft {native_agent.terminal_name}` (or `run --harness {harness}`)."
+        f"`--harness {harness}` lança a TUI do {native_agent.display_name} e "
+        f"ignora um spec de AGENT; remova o caminho de AGENT e rode "
+        f"`omnicraft {native_agent.terminal_name}` (ou `run --harness {harness}`)."
     )
 
 
@@ -6130,8 +6143,8 @@ def _dispatch_run(
     """
     if target is not None and _is_server_url(target):
         raise click.ClickException(
-            "Server URLs are no longer accepted as the AGENT argument. "
-            f"Use `omnicraft run --server {target}` instead."
+            "URLs de servidor não são mais aceitas como o argumento AGENT. "
+            f"Use `omnicraft run --server {target}` em vez disso."
         )
 
     if target is None:
@@ -6235,8 +6248,8 @@ def _dispatch_run(
             return
         if ephemeral:
             raise click.ClickException(
-                "--no-session requires an AGENT path; no-AGENT harness launch "
-                "already uses a generated temporary agent spec."
+                "--no-session requer um caminho de AGENT; o lançamento de harness sem "
+                "AGENT já usa um spec de agente temporário gerado."
             )
         target = str(
             _materialize_harness_launcher_file(
@@ -6259,19 +6272,15 @@ def _dispatch_run(
     if server is not None:
         if _is_server_url(target):
             raise click.ClickException(
-                "--server is for binding a LOCAL agent YAML to a remote "
-                "server. Pass a YAML path as the target (got a URL)."
+                "--server serve para vincular um YAML de agente LOCAL a um servidor "
+                "remoto. Passe um caminho de YAML como alvo (recebeu uma URL)."
             )
 
     if fork_session_id is not None:
         if resume_conversation_id or resume_latest or resume_picker:
-            raise click.ClickException(
-                "--fork is mutually exclusive with --resume and --continue."
-            )
+            raise click.ClickException("--fork é mutuamente exclusivo com --resume e --continue.")
         if prompt is not None:
-            raise click.ClickException(
-                "--fork requires interactive REPL mode; remove -p/--prompt."
-            )
+            raise click.ClickException("--fork requer o modo REPL interativo; remova -p/--prompt.")
 
     harness = canonicalize_harness(harness)
     if prompt is not None:
@@ -6296,8 +6305,8 @@ def _dispatch_run(
             return
         if log:
             raise click.ClickException(
-                "--log is only supported in interactive REPL mode on this CLI path; "
-                "remove -p/--prompt to run headlessly."
+                "--log só é suportado no modo REPL interativo neste caminho do CLI; "
+                "remova -p/--prompt para rodar em modo headless."
             )
         # Headless ``-p`` runs against the daemon-backed server too (the
         # host daemon connects to ``--server`` or starts a local server),
@@ -6408,15 +6417,16 @@ def _require_live_conversation(
     # raises), so the server-down and missing-session cases both land here.
     if result.status_code == 0:
         raise click.ClickException(
-            f"Couldn't reach a server at {base_url}: {_host_error_text(result.body)}. "
-            "`attach` never starts a server — check the URL, or start one with "
+            f"Não foi possível acessar um servidor em {base_url}: "
+            f"{_host_error_text(result.body)}. "
+            "`attach` nunca inicia um servidor — verifique a URL, ou inicie um com "
             "`omnicraft run`."
         )
     if result.status_code != 200:
         raise click.ClickException(
-            f"No live session '{conversation_id}' on {base_url} "
-            f"(server returned {result.status_code}). Run `omnicraft host status` "
-            "to list live sessions, or `omnicraft run <agent.yaml>` to start one."
+            f"Nenhuma sessão ativa '{conversation_id}' em {base_url} "
+            f"(servidor retornou {result.status_code}). Rode `omnicraft host status` "
+            "para listar sessões ativas, ou `omnicraft run <agent.yaml>` para iniciar uma."
         )
 
 
@@ -6426,14 +6436,14 @@ def _require_live_conversation(
     "--server",
     default=None,
     help=(
-        "AP server hosting the session. Defaults to the configured server, "
-        "or a local server already running in the background."
+        "Servidor AP hospedando a sessão. Padrão: o servidor configurado, "
+        "ou um servidor local já em execução em segundo plano."
     ),
 )
 @click.option(
     "--tools",
     default=None,
-    help="Client-side tool set name (e.g. 'coding') for shell access.",
+    help="Nome do conjunto de ferramentas do lado do cliente (ex. 'coding') para acesso ao shell.",
 )
 @click.option(
     "--debug-events",
@@ -6441,9 +6451,9 @@ def _require_live_conversation(
     is_flag=True,
     default=False,
     help=(
-        "Enable the SSE-to-UI debug pipeline: Ctrl+E event tape "
-        "overlay, JSONL event log (~/.omnicraft/debug/), and "
-        "pipeline stage counters in the toolbar."
+        "Habilita o pipeline de debug SSE-para-UI: sobreposição de fita "
+        "de eventos Ctrl+E, log de eventos JSONL (~/.omnicraft/debug/) e "
+        "contadores de estágio do pipeline na toolbar."
     ),
 )
 def attach(
@@ -6452,17 +6462,17 @@ def attach(
     tools: str | None,
     debug_events: bool,
 ) -> None:
-    """Attach the REPL to a LIVE session — never starts anything.
+    """Anexa o REPL a uma sessão ATIVA — nunca inicia nada.
 
-    ``attach`` is a thin client: it joins an already-running conversation
-    on a server and streams its I/O. It never spawns a server, runner, or
-    harness, applies no model/harness defaults, and errors loudly when
-    there is nothing live to attach to. To START a session use
-    ``omnicraft run``; to reopen/restart a stored one use
+    ``attach`` é um cliente leve: junta-se a uma conversa já em execução
+    em um servidor e transmite sua E/S. Nunca cria um servidor, runner ou
+    harness, não aplica padrões de model/harness e erra em alto e bom som
+    quando não há nada ativo para anexar. Para INICIAR uma sessão use
+    ``omnicraft run``; para reabrir/reiniciar uma armazenada use
     ``omnicraft resume``.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft attach conv_abc123
       omnicraft attach conv_abc123 --server https://<app>.databricksapps.com
     """
@@ -6470,15 +6480,15 @@ def attach(
     base_url = _resolve_attach_server(server, cfg.get("server"))
     if base_url is None:
         raise click.ClickException(
-            "No server to attach to. `attach` joins a LIVE session on a running "
-            "server — start one with `omnicraft run`, or point at one with "
+            "Nenhum servidor para anexar. `attach` junta-se a uma sessão ATIVA em um "
+            "servidor em execução — inicie um com `omnicraft run`, ou aponte para um com "
             "`--server <url>`."
         )
     if conversation is None:
         raise click.ClickException(
-            "Nothing to attach to: `attach` joins a LIVE session by id. "
-            f"Run `omnicraft host status` to list sessions on {base_url}, or "
-            "`omnicraft run <agent.yaml>` to start a new one."
+            "Nada para anexar: `attach` junta-se a uma sessão ATIVA por id. "
+            f"Rode `omnicraft host status` para listar sessões em {base_url}, ou "
+            "`omnicraft run <agent.yaml>` para iniciar uma nova."
         )
     _require_live_conversation(base_url=base_url, conversation_id=conversation)
     auto_open_conversation = _resolve_auto_open_conversation_from_config(cfg)
@@ -6507,7 +6517,7 @@ def attach(
 @click.option(
     "--tools",
     default=None,
-    help="Client-side tool set name (e.g. 'coding') for shell access.",
+    help="Nome do conjunto de ferramentas do lado do cliente (ex. 'coding') para acesso ao shell.",
 )
 @click.option("--harness", default=None, help=_RUN_HARNESS_HELP)
 @click.option("--model", default=None, help=_MODEL_HELP)
@@ -6532,11 +6542,11 @@ def attach(
     "--server",
     default=None,
     help=(
-        "Remote omnicraft URL. Uploads the local YAML as an ephemeral "
-        "agent, spawns a LOCAL runner that tunnels to this server (so "
-        "terminals/MCPs run on your laptop), and connects the REPL to it. "
-        'Pass --server "" to auto-spawn a persistent local server in the '
-        "background and target that instead of a remote one."
+        "URL omnicraft remota. Faz upload do YAML local como um agente "
+        "efêmero, cria um runner LOCAL que faz túnel para este servidor (para "
+        "terminais/MCPs rodarem no seu laptop) e conecta o REPL a ele. "
+        'Passe --server "" para auto-criar um servidor local persistente em '
+        "segundo plano e mirar nele em vez de um remoto."
     ),
 )
 @click.option(
@@ -6545,9 +6555,9 @@ def attach(
     is_flag=True,
     default=False,
     help=(
-        "Enable the SSE-to-UI debug pipeline: Ctrl+E event tape "
-        "overlay, JSONL event log (~/.omnicraft/debug/), and "
-        "pipeline stage counters in the toolbar."
+        "Habilita o pipeline de debug SSE-para-UI: sobreposição de fita "
+        "de eventos Ctrl+E, log de eventos JSONL (~/.omnicraft/debug/) e "
+        "contadores de estágio do pipeline na toolbar."
     ),
 )
 @click.option(
@@ -6556,8 +6566,8 @@ def attach(
     is_flag=True,
     default=False,
     help=(
-        "Register this machine as a host with the remote server "
-        "(inline equivalent of `omnicraft host`). Requires --server."
+        "Registra esta máquina como um host no servidor remoto "
+        "(equivalente inline de `omnicraft host`). Requer --server."
     ),
 )
 def run(
@@ -6576,22 +6586,22 @@ def run(
     debug_events: bool,
     register_host: bool,
 ) -> None:
-    """Start a session with an OmniCraft agent.
+    """Inicia uma sessão com um agente OmniCraft.
 
-    AGENT may be an agent YAML file or an agent directory. Without AGENT,
-    pass ``--server`` to connect directly to a server, or pass
-    ``--harness`` to launch a built-in harness directly.
+    AGENT pode ser um arquivo YAML de agente ou um diretório de agente. Sem AGENT,
+    passe ``--server`` para conectar diretamente a um servidor, ou passe
+    ``--harness`` para lançar um harness interno diretamente.
 
-    Default: omnicraft server+REPL architecture (spawns a local
-    server, REPL connects as an HTTP client). With ``--server <url>`` and
-    no AGENT, connect directly to that server; with AGENT, use local
-    runner + remote server topology (RUNNER.md §6 Flow 1) - laptop hosts
-    runner/harnesses, server hosts state.
+    Padrão: arquitetura servidor+REPL do omnicraft (cria um servidor
+    local, o REPL conecta como cliente HTTP). Com ``--server <url>`` e
+    sem AGENT, conecta diretamente a esse servidor; com AGENT, usa a topologia
+    runner local + servidor remoto (RUNNER.md §6 Flow 1) - o laptop hospeda
+    runner/harnesses, o servidor hospeda o estado.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft run --harness claude-sdk
-      omnicraft run --harness codex -p "review the last commit"
+      omnicraft run --harness codex -p "revise o último commit"
       omnicraft run examples/hello_world.yaml
       omnicraft run examples/hello_world.yaml --harness codex --model gpt-5.4-mini
       omnicraft run --server http://localhost:6767
@@ -6749,10 +6759,12 @@ class _HostGroup(click.Group):
         url = positionals[0]
         if opts.get("server") is not None:
             raise click.UsageError(
-                "Pass the server URL either positionally or via --server, not both."
+                "Passe a URL do servidor posicionalmente ou via --server, não ambos."
             )
         if positionals[1:]:
-            raise click.UsageError(f"Unexpected extra argument(s): {' '.join(positionals[1:])}")
+            raise click.UsageError(
+                f"Argumento(s) extra(s) inesperado(s): {' '.join(positionals[1:])}"
+            )
         # remove() drops the first token equal to `url`. Safe because the only
         # value-taking group option (--server) triggers the conflict error above,
         # so the URL can't be some other option's value.
@@ -6796,8 +6808,8 @@ def _prompt_stop_local_server() -> None:
         return
     try:
         stop = click.confirm(
-            f"\nThe local server at {url} is still running so your sessions and "
-            "the Web UI stay reachable across `host`/`run`.\nStop it too?",
+            f"\nO servidor local em {url} ainda está rodando para que suas sessões e "
+            "o Web UI continuem acessíveis entre `host`/`run`.\nParar ele também?",
             default=False,
         )
     except click.Abort:
@@ -6807,53 +6819,53 @@ def _prompt_stop_local_server() -> None:
         stop = False
     if stop:
         stop_local_omnicraft_server()
-        click.echo(f"Stopped the local server ({url}).")
+        click.echo(f"Servidor local parado ({url}).")
     else:
-        click.echo(f"Left the local server running at {url}.")
+        click.echo(f"Servidor local deixado rodando em {url}.")
 
 
 @cli.group("host", cls=_HostGroup, invoke_without_command=True)
-@click.option("--server", default=None, help="Remote omnicraft server URL.")
+@click.option("--server", default=None, help="URL do servidor omnicraft remoto.")
 @click.option(
     "--non-interactive",
     "non_interactive",
     is_flag=True,
     default=False,
     help=(
-        "Never prompt for sign-in. When the server requires auth and you "
-        "are not logged in, fail with the `omnicraft login` hint instead of "
-        "launching the browser login flow. Use this in scripts and CI."
+        "Nunca pede login. Quando o servidor requer auth e você "
+        "não está logado, falha com a dica `omnicraft login` em vez de "
+        "lançar o fluxo de login no navegador. Use isto em scripts e CI."
     ),
 )
 @click.pass_context
 def host(ctx: click.Context, server: str | None, non_interactive: bool) -> None:
     """
-    Register this machine as a host with a server.
+    Registra esta máquina como um host em um servidor.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft host https://omnicraft-app.databricksapps.com
       omnicraft host --server https://omnicraft-app.databricksapps.com
-      omnicraft host ""   # spawn + connect to a local server
+      omnicraft host ""   # cria + conecta a um servidor local
 
-    The server URL may be given positionally (``omnicraft host
-    <url>``) or via ``--server <url>``. A leading ``status``, ``stop``,
-    or ``stop-session`` token still runs that management subcommand.
+    A URL do servidor pode ser dada posicionalmente (``omnicraft host
+    <url>``) ou via ``--server <url>``. Um token inicial ``status``, ``stop``
+    ou ``stop-session`` ainda roda aquele subcomando de gerenciamento.
 
-    When the target server is Databricks-fronted and you are not signed
-    in, ``host`` runs the same flow ``omnicraft login`` would before
-    connecting (an interactive browser flow). Pass ``--non-interactive``
-    to keep the old scripted behavior: fail with the login command to run
-    instead of prompting.
+    Quando o servidor alvo é fronteado por Databricks e você não está
+    logado, ``host`` roda o mesmo fluxo que ``omnicraft login`` rodaria antes
+    de conectar (um fluxo interativo no navegador). Passe ``--non-interactive``
+    para manter o comportamento antigo de script: falhar com o comando de login
+    a ser rodado em vez de pedir.
 
-    :param ctx: Click invocation context. ``ctx.invoked_subcommand`` is
-        set when a management subcommand such as ``"status"`` is running.
-    :param server: Remote OmniCraft server URL, e.g.
-        ``"https://example.databricksapps.com"``. ``None`` falls back
-        to config; empty string selects local mode.
-    :param non_interactive: When ``True``, never launch the browser login
-        for an un-authed remote server — fail with the ``omnicraft login``
-        hint instead.
+    :param ctx: Contexto de invocação do Click. ``ctx.invoked_subcommand`` é
+        definido quando um subcomando de gerenciamento como ``"status"`` está rodando.
+    :param server: URL do servidor OmniCraft remoto, ex.
+        ``"https://example.databricksapps.com"``. ``None`` recai
+        na config; string vazia seleciona o modo local.
+    :param non_interactive: Quando ``True``, nunca lança o login no navegador
+        para um servidor remoto não autenticado — falha com a dica
+        ``omnicraft login`` em vez disso.
     """
     ctx.ensure_object(dict)
     ctx.obj["server"] = server
@@ -6984,7 +6996,7 @@ def _selected_daemon_records(
     :raises click.ClickException: If ``--server`` and ``--all`` conflict.
     """
     if all_targets and server is not None:
-        raise click.ClickException("Use either --server or --all, not both.")
+        raise click.ClickException("Use --server ou --all, não os dois.")
     if all_targets or (server is None and default_all):
         return _list_daemon_records()
     target = _normalize_daemon_target(_resolve_host_server(server))
@@ -7101,21 +7113,24 @@ def _decode_sessions_page(
             sessions=[],
             last_id=None,
             has_more=False,
-            error=f"session list failed: {_host_error_text(result.body)}",
+            error=f"listagem de sessões falhou: {_host_error_text(result.body)}",
         )
     if result.status_code >= 400:
         return _SessionsPageResult(
             sessions=[],
             last_id=None,
             has_more=False,
-            error=(f"session list failed ({result.status_code}): {_host_error_text(result.body)}"),
+            error=(
+                f"listagem de sessões falhou ({result.status_code}): "
+                f"{_host_error_text(result.body)}"
+            ),
         )
     if not isinstance(result.body, dict):
         return _SessionsPageResult(
             sessions=[],
             last_id=None,
             has_more=False,
-            error="session list returned a non-object response",
+            error="a listagem de sessões retornou uma resposta que não é objeto",
         )
     data = result.body.get("data")
     if not isinstance(data, list):
@@ -7123,7 +7138,7 @@ def _decode_sessions_page(
             sessions=[],
             last_id=None,
             has_more=False,
-            error="session list returned a malformed data field",
+            error="a listagem de sessões retornou um campo de dados malformado",
         )
     rows = [s for s in data if isinstance(s, dict)]
     last_id = result.body.get("last_id")
@@ -7189,14 +7204,14 @@ def _sessions_for_daemon(
         return _DaemonSessionsResult(
             base_url=None,
             sessions=[],
-            error="local OmniCraft server is not reachable",
+            error="servidor OmniCraft local inacessível",
         )
     host_id = record.host_id or _load_existing_host_id()
     if not host_id:
         return _DaemonSessionsResult(
             base_url=base_url,
             sessions=[],
-            error="host id is not available in local config",
+            error="id do host não disponível na config local",
         )
     pages = _fetch_session_pages(
         base_url=base_url,
@@ -7302,10 +7317,10 @@ def _add_daemon_host_status(
     base_url = payload.get("server_url")
     host_id = payload.get("host_id")
     if not isinstance(base_url, str):
-        payload["error"] = "local OmniCraft server is not reachable"
+        payload["error"] = "servidor OmniCraft local inacessível"
         return
     if not isinstance(host_id, str) or not host_id:
-        payload["error"] = "host id is not available in local config"
+        payload["error"] = "id do host não disponível na config local"
         return
     from omnicraft.claude_native_bridge import url_component
 
@@ -7318,10 +7333,11 @@ def _add_daemon_host_status(
         status = host_result.body.get("status")
         payload["host_status"] = status if isinstance(status, str) else None
     elif host_result.status_code == 0:
-        payload["error"] = f"host status failed: {_host_error_text(host_result.body)}"
+        payload["error"] = f"status do host falhou: {_host_error_text(host_result.body)}"
     elif host_result.status_code >= 400:
         payload["error"] = (
-            f"host status failed ({host_result.status_code}): {_host_error_text(host_result.body)}"
+            f"status do host falhou ({host_result.status_code}): "
+            f"{_host_error_text(host_result.body)}"
         )
 
 
@@ -7563,27 +7579,27 @@ def _add_host_payload_sessions_table(console: Console, payload: _HostPayload) ->
     raw_sessions = payload.get("sessions")
     sessions = raw_sessions if isinstance(raw_sessions, list) else []
     if not sessions:
-        console.print("  [dim]No owned sessions found.[/dim]")
+        console.print("  [dim]Nenhuma sessão própria encontrada.[/dim]")
         return
-    table = _host_table("Sessions")
+    table = _host_table("Sessões")
     widths = _host_sessions_table_widths(console_width=console.width, sessions=sessions)
     table.add_column(
-        "Session ID",
+        "ID da sessão",
         style="bold",
         overflow="ellipsis",
         no_wrap=True,
         max_width=widths.session_id,
     )
-    table.add_column("State", width=7, no_wrap=True)
+    table.add_column("Estado", width=7, no_wrap=True)
     table.add_column("Runner", width=7, no_wrap=True)
     table.add_column(
-        "Runner ID",
+        "ID do runner",
         overflow="ellipsis",
         no_wrap=True,
         max_width=widths.runner_id,
     )
     table.add_column(
-        "Title",
+        "Título",
         overflow="ellipsis",
         no_wrap=True,
         max_width=widths.title,
@@ -7625,7 +7641,7 @@ def _echo_daemon_payloads(payloads: list[_HostPayload]) -> None:
     """
     console = _host_console()
     if not payloads:
-        console.print("[dim]No host daemons found.[/dim]")
+        console.print("[dim]Nenhum daemon host encontrado.[/dim]")
         return
     for idx, payload in enumerate(payloads):
         if idx:
@@ -7659,9 +7675,11 @@ def _echo_daemon_payloads(payloads: list[_HostPayload]) -> None:
 
 
 @host.command("status")
-@click.option("--server", default=None, help="Inspect only this server target.")
-@click.option("--all", "all_targets", is_flag=True, help="Inspect all known daemon targets.")
-@click.option("--json", "json_output", is_flag=True, help="Emit JSON.")
+@click.option("--server", default=None, help="Inspeciona apenas este alvo de servidor.")
+@click.option(
+    "--all", "all_targets", is_flag=True, help="Inspeciona todos os alvos de daemon conhecidos."
+)
+@click.option("--json", "json_output", is_flag=True, help="Emite JSON.")
 @click.pass_context
 def host_status(
     ctx: click.Context,
@@ -7670,13 +7688,13 @@ def host_status(
     json_output: bool,
 ) -> None:
     """
-    Inspect host daemon, runner, and session status.
+    Inspeciona o status do daemon host, runner e sessões.
 
-    :param ctx: Click context carrying group-level options.
-    :param server: Optional server target to inspect, e.g.
+    :param ctx: Contexto do Click carregando opções de nível de grupo.
+    :param server: Alvo de servidor opcional para inspecionar, ex.
         ``"https://example.databricksapps.com"``.
-    :param all_targets: Whether to inspect every known daemon target.
-    :param json_output: Whether to emit machine-readable JSON.
+    :param all_targets: Se deve inspecionar todos os alvos de daemon conhecidos.
+    :param json_output: Se deve emitir JSON legível por máquina.
     """
     if server is None:
         server = _host_group_option(ctx, "server")
@@ -7718,11 +7736,11 @@ def _stop_session_on_server(
     )
     if result.status_code == 0:
         raise click.ClickException(
-            f"Failed to stop session {session_id!r}: {_host_error_text(result.body)}"
+            f"Falha ao parar a sessão {session_id!r}: {_host_error_text(result.body)}"
         )
     if result.status_code >= 400:
         raise click.ClickException(
-            f"Failed to stop session {session_id!r} ({result.status_code}): "
+            f"Falha ao parar a sessão {session_id!r} ({result.status_code}): "
             f"{_host_error_text(result.body)}"
         )
 
@@ -7744,7 +7762,7 @@ def _stop_daemon_sessions(
     result = _sessions_for_daemon(record)
     if result.error is not None:
         if force:
-            click.echo(f"{record.target}: skipping session stop: {result.error}", err=True)
+            click.echo(f"{record.target}: pulando parada de sessão: {result.error}", err=True)
             return 0
         raise click.ClickException(f"{record.target}: {result.error}")
     if result.base_url is None:
@@ -7797,19 +7815,21 @@ def _terminate_daemon(record: _HostDaemonRecord, *, force: bool) -> None:
                 return
             time.sleep(0.1)
     raise click.ClickException(
-        f"Daemon {record.pid} for {record.target!r} did not exit; retry with --force."
+        f"O daemon {record.pid} para {record.target!r} não saiu; tente de novo com --force."
     )
 
 
 @host.command("stop")
-@click.option("--server", default=None, help="Stop only this server target.")
-@click.option("--all", "all_targets", is_flag=True, help="Stop all known daemon targets.")
+@click.option("--server", default=None, help="Para apenas este alvo de servidor.")
+@click.option(
+    "--all", "all_targets", is_flag=True, help="Para todos os alvos de daemon conhecidos."
+)
 @click.option(
     "--daemon-only",
     is_flag=True,
-    help="Terminate daemon processes without first stopping sessions.",
+    help="Termina os processos de daemon sem primeiro parar as sessões.",
 )
-@click.option("--force", is_flag=True, help="Continue after failures and use SIGKILL if needed.")
+@click.option("--force", is_flag=True, help="Continua após falhas e usa SIGKILL se necessário.")
 @click.pass_context
 def host_stop(
     ctx: click.Context,
@@ -7819,33 +7839,33 @@ def host_stop(
     force: bool,
 ) -> None:
     """
-    Stop host daemon sessions, then stop daemon processes.
+    Para as sessões do daemon host, depois para os processos de daemon.
 
-    :param ctx: Click context carrying group-level options.
-    :param server: Optional server target to stop, e.g.
+    :param ctx: Contexto do Click carregando opções de nível de grupo.
+    :param server: Alvo de servidor opcional para parar, ex.
         ``"https://example.databricksapps.com"``.
-    :param all_targets: Whether to stop every known daemon target.
-    :param daemon_only: Skip server-side session stop calls when ``True``.
-    :param force: Continue after failures and use SIGKILL if needed.
+    :param all_targets: Se deve parar todos os alvos de daemon conhecidos.
+    :param daemon_only: Pula as chamadas de parada de sessão do servidor quando ``True``.
+    :param force: Continua após falhas e usa SIGKILL se necessário.
     """
     if server is None:
         server = _host_group_option(ctx, "server")
     records = _selected_daemon_records(server=server, all_targets=all_targets, default_all=False)
     if not records:
-        click.echo("No matching host daemon found.")
+        click.echo("Nenhum daemon host correspondente encontrado.")
         return
     for record in records:
         stopped = 0
         if not daemon_only:
             stopped = _stop_daemon_sessions(record, force=force)
         _terminate_daemon(record, force=force)
-        click.echo(f"Stopped {record.target} daemon pid={record.pid}; sessions_stopped={stopped}.")
+        click.echo(f"Daemon {record.target} parado pid={record.pid}; sessions_stopped={stopped}.")
 
 
 @host.command("stop-session")
 @click.argument("session_ids", nargs=-1, required=True)
-@click.option("--server", default=None, help="Server that owns the sessions.")
-@click.option("--force", is_flag=True, help="Continue after individual stop failures.")
+@click.option("--server", default=None, help="Servidor dono das sessões.")
+@click.option("--force", is_flag=True, help="Continua após falhas de parada individuais.")
 @click.pass_context
 def host_stop_session(
     ctx: click.Context,
@@ -7854,15 +7874,15 @@ def host_stop_session(
     force: bool,
 ) -> None:
     """
-    Stop specific sessions without stopping a daemon.
+    Para sessões específicas sem parar um daemon.
 
-    :param ctx: Click context carrying group-level options.
-    :param session_ids: Session ids to stop, e.g.
+    :param ctx: Contexto do Click carregando opções de nível de grupo.
+    :param session_ids: Ids de sessão para parar, ex.
         ``["conv_abc123", "conv_def456"]``.
-    :param server: OmniCraft server URL that owns the sessions, e.g.
-        ``"https://example.databricksapps.com"``. ``None`` falls back
-        to config/local discovery.
-    :param force: Continue after individual stop failures.
+    :param server: URL do servidor OmniCraft dono das sessões, ex.
+        ``"https://example.databricksapps.com"``. ``None`` recai
+        na descoberta de config/local.
+    :param force: Continua após falhas de parada individuais.
     """
     if server is None:
         server = _host_group_option(ctx, "server")
@@ -7871,7 +7891,7 @@ def host_stop_session(
         resolved_server = local_server_url_if_healthy()
         if resolved_server is None:
             raise click.ClickException(
-                "No server was supplied and no local OmniCraft server is reachable."
+                "Nenhum servidor foi fornecido e nenhum servidor OmniCraft local está acessível."
             )
     for session_id in session_ids:
         try:
@@ -7882,14 +7902,14 @@ def host_stop_session(
         except click.ClickException:
             if not force:
                 raise
-            click.echo(f"Failed to stop session {session_id!r}.", err=True)
+            click.echo(f"Falha ao parar a sessão {session_id!r}.", err=True)
             continue
-        click.echo(f"Stopped session {session_id}.")
+        click.echo(f"Sessão {session_id} parada.")
 
 
 @cli.command(hidden=True)
 def version() -> None:
-    """Print the installed OmniCraft version."""
+    """Imprime a versão instalada do OmniCraft."""
     print(_format_version())
 
 
@@ -7916,14 +7936,14 @@ def _parse_config_settings(
     for item in settings:
         if "=" not in item:
             raise click.ClickException(
-                f"Expected KEY=VALUE, got: {item!r}. "
-                "Example: omnicraft config set --global default_agent=myagent.yaml"
+                f"Esperado KEY=VALUE, recebido: {item!r}. "
+                "Exemplo: omnicraft config set --global default_agent=myagent.yaml"
             )
         key, _, value = item.partition("=")
         if key not in _GLOBAL_CONFIG_KEYS:
             raise click.ClickException(
-                f"Unknown config key {key!r}. "
-                f"Supported keys: {', '.join(sorted(_GLOBAL_CONFIG_KEYS))}"
+                f"Chave de config {key!r} desconhecida. "
+                f"Chaves suportadas: {', '.join(sorted(_GLOBAL_CONFIG_KEYS))}"
             )
         # Resolve ``default_agent`` to an absolute path so ``omnicraft`` works from
         # any working directory, not just the directory where config was set.
@@ -7954,8 +7974,8 @@ def _validate_unset_keys(unset_keys: tuple[str, ...]) -> list[str]:
     for key in unset_keys:
         if key not in _GLOBAL_CONFIG_KEYS:
             raise click.ClickException(
-                f"Unknown config key {key!r}. "
-                f"Supported keys: {', '.join(sorted(_GLOBAL_CONFIG_KEYS))}"
+                f"Chave de config {key!r} desconhecida. "
+                f"Chaves suportadas: {', '.join(sorted(_GLOBAL_CONFIG_KEYS))}"
             )
         validated.append(key)
     return validated
@@ -7977,8 +7997,8 @@ def _print_config_defaults() -> None:
     local_cfg = {k: v for k, v in _load_local_config().items() if k in _GLOBAL_CONFIG_KEYS}
     if not global_cfg and not local_cfg:
         click.echo(
-            "  (none set — `omnicraft config set key=value` for project,\n"
-            "   or `omnicraft config set --global key=value` for user-level)"
+            "  (nenhum definido — `omnicraft config set key=value` para projeto,\n"
+            "   ou `omnicraft config set --global key=value` para nível de usuário)"
         )
         return
     global_path = _effective_global_config_path()
@@ -8019,17 +8039,17 @@ class _ConfigGroup(click.Group):
         :returns: A hint string for a recognized legacy form, else ``None``.
         """
         if first == "--list":
-            return "`config --list` is now `omnicraft config list`."
+            return "`config --list` agora é `omnicraft config list`."
         if first == "--unset":
-            return "`config --unset KEY` is now `omnicraft config unset KEY`."
+            return "`config --unset KEY` agora é `omnicraft config unset KEY`."
         if first == "--global":
             return (
-                "`--global` now goes on the subcommand — "
-                "`omnicraft config set --global KEY=VALUE` or "
+                "`--global` agora vai no subcomando — "
+                "`omnicraft config set --global KEY=VALUE` ou "
                 "`omnicraft config unset --global KEY`."
             )
         if "=" in first and not first.startswith("-"):
-            return f"setting defaults is now `omnicraft config set {first}`."
+            return f"definir padrões agora é `omnicraft config set {first}`."
         return None
 
     def parse_args(self, ctx: click.Context, args: list[str]) -> list[str]:
@@ -8053,33 +8073,33 @@ class _ConfigGroup(click.Group):
 
 @cli.group("config", cls=_ConfigGroup)
 def config_grp() -> None:
-    """Get, set, and view OmniCraft defaults and credentials.
+    """Obtém, define e visualiza os padrões e credenciais do OmniCraft.
 
-    Defaults (auto_open_conversation, default_agent, harness, model,
-    server) are used by ``omnicraft run``. Project-level config
-    (``.omnicraft/config.yaml`` in the cwd, like ``.git/config``) overrides
-    user-level config (``~/.omnicraft/config.yaml``, like ``~/.gitconfig``).
+    Os padrões (auto_open_conversation, default_agent, harness, model,
+    server) são usados pelo ``omnicraft run``. A config de nível de projeto
+    (``.omnicraft/config.yaml`` no cwd, como ``.git/config``) sobrescreve
+    a config de nível de usuário (``~/.omnicraft/config.yaml``, como ``~/.gitconfig``).
 
     \b
-    Subcommands:
-      list   Show the effective defaults + configured credentials (by harness).
-      set    Set one or more defaults (KEY=VALUE).
-      unset  Remove one or more defaults.
+    Subcomandos:
+      list   Mostra os padrões efetivos + credenciais configuradas (por harness).
+      set    Define um ou mais padrões (KEY=VALUE).
+      unset  Remove um ou mais padrões.
     """
 
 
 @config_grp.command("list")
 def config_list() -> None:
-    """List the effective defaults and configured credentials.
+    """Lista os padrões efetivos e as credenciais configuradas.
 
-    Prints the defaults (user + project), then the configured model
-    credentials grouped by harness with each harness's default marked — the
-    merged view of everything ``omnicraft run`` will use (including
-    ambient-detected credentials).
+    Imprime os padrões (usuário + projeto), depois as credenciais de modelo
+    configuradas agrupadas por harness com o padrão de cada harness marcado — a
+    visão combinada de tudo que o ``omnicraft run`` vai usar (incluindo
+    credenciais detectadas no ambiente).
 
     :returns: None.
     """
-    click.echo("Defaults")
+    click.echo("Padrões")
     _print_config_defaults()
     click.echo()
     _print_credentials_by_harness()
@@ -8091,27 +8111,27 @@ def config_list() -> None:
     "is_global",
     is_flag=True,
     default=False,
-    help="Write to ~/.omnicraft/config.yaml (user-level) instead of the project config.",
+    help="Escreve em ~/.omnicraft/config.yaml (nível de usuário) em vez da config do projeto.",
 )
 @click.argument("settings", nargs=-1, required=True, metavar="KEY=VALUE...")
 def config_set(is_global: bool, settings: tuple[str, ...]) -> None:
-    """Set one or more OmniCraft defaults.
+    """Define um ou mais padrões do OmniCraft.
 
-    Without ``--global``, pairs are written to ``.omnicraft/config.yaml``
-    in the current directory (project-level, like ``.git/config``); with
-    ``--global`` to ``~/.omnicraft/config.yaml`` (user-level, like
-    ``~/.gitconfig``). Project values take precedence.
+    Sem ``--global``, os pares são escritos em ``.omnicraft/config.yaml``
+    no diretório atual (nível de projeto, como ``.git/config``); com
+    ``--global`` em ``~/.omnicraft/config.yaml`` (nível de usuário, como
+    ``~/.gitconfig``). Os valores de projeto têm precedência.
 
-    Supported keys: auto_open_conversation, default_agent, harness,
+    Chaves suportadas: auto_open_conversation, default_agent, harness,
     model, server.
 
-    :param is_global: When ``True``, write to ``~/.omnicraft/config.yaml``;
-        when ``False``, to ``.omnicraft/config.yaml`` in cwd.
-    :param settings: ``KEY=VALUE`` pairs to set, e.g.
+    :param is_global: Quando ``True``, escreve em ``~/.omnicraft/config.yaml``;
+        quando ``False``, em ``.omnicraft/config.yaml`` no cwd.
+    :param settings: Pares ``KEY=VALUE`` para definir, ex.
         ``("default_agent=examples/hello.yaml", "model=gpt-5.4-mini")``.
 
     \b
-    Examples:
+    Exemplos:
       omnicraft config set default_agent=examples/hello_world.yaml
       omnicraft config set --global server=https://<app>.databricksapps.com
     """
@@ -8123,7 +8143,7 @@ def config_set(is_global: bool, settings: tuple[str, ...]) -> None:
         parsed = _parse_config_settings(settings, resolve_paths=False)
         _save_local_config(parsed, ())
         config_path = Path.cwd() / _LOCAL_CONFIG_RELPATH
-    click.echo(f"Set {len(parsed)} key(s) in {config_path}")
+    click.echo(f"Definida(s) {len(parsed)} chave(s) em {config_path}")
 
 
 @config_grp.command("unset")
@@ -8132,15 +8152,15 @@ def config_set(is_global: bool, settings: tuple[str, ...]) -> None:
     "is_global",
     is_flag=True,
     default=False,
-    help="Remove from ~/.omnicraft/config.yaml (user-level) instead of the project config.",
+    help="Remove de ~/.omnicraft/config.yaml (nível de usuário) em vez da config do projeto.",
 )
 @click.argument("keys", nargs=-1, required=True, metavar="KEY...")
 def config_unset(is_global: bool, keys: tuple[str, ...]) -> None:
-    """Remove one or more OmniCraft defaults.
+    """Remove um ou mais padrões do OmniCraft.
 
-    :param is_global: When ``True``, remove from ``~/.omnicraft/config.yaml``;
-        when ``False``, from ``.omnicraft/config.yaml`` in cwd.
-    :param keys: Keys to remove, e.g. ``("server", "model")``.
+    :param is_global: Quando ``True``, remove de ``~/.omnicraft/config.yaml``;
+        quando ``False``, de ``.omnicraft/config.yaml`` no cwd.
+    :param keys: Chaves para remover, ex. ``("server", "model")``.
     """
     validated = _validate_unset_keys(keys)
     if is_global:
@@ -8149,7 +8169,7 @@ def config_unset(is_global: bool, keys: tuple[str, ...]) -> None:
     else:
         _save_local_config({}, tuple(validated))
         config_path = Path.cwd() / _LOCAL_CONFIG_RELPATH
-    click.echo(f"Unset {len(validated)} key(s) from {config_path}")
+    click.echo(f"Removida(s) {len(validated)} chave(s) de {config_path}")
 
 
 # Node version hint shared by the preflight problem messages and surfaced
@@ -8158,7 +8178,7 @@ def config_unset(is_global: bool, keys: tuple[str, ...]) -> None:
 # Node API added in 22.10 that is absent from every 20.x release. On older
 # Node it surfaces as the opaque
 # ``TypeError: webidl.util.markAsUncloneable is not a function``.
-_NODE_MIN_VERSION_HINT = "Node.js 22 LTS or newer (a 22.10+ API is required)"
+_NODE_MIN_VERSION_HINT = "Node.js 22 LTS ou mais novo (uma API 22.10+ é necessária)"
 
 
 def _node_version(node_path: str) -> str | None:
@@ -8204,7 +8224,7 @@ def _node_dependency_problem() -> str | None:
     """
     node = shutil.which("node")
     if node is None:
-        return f"node not found — Claude, Codex, and Pi need {_NODE_MIN_VERSION_HINT}."
+        return f"node não encontrado — Claude, Codex e Pi precisam de {_NODE_MIN_VERSION_HINT}."
     # Probe the exact API the bundled undici calls. Exit 0 ⇒ capability
     # present; exit 1 ⇒ too old; we treat any other failure as inconclusive.
     probe = (
@@ -8223,8 +8243,11 @@ def _node_dependency_problem() -> str | None:
     if result.returncode == 0:
         return None
     version = _node_version(node)
-    detected = f" (detected {version})" if version else ""
-    return f"Node.js is too old{detected} — Claude, Codex, and Pi need {_NODE_MIN_VERSION_HINT}."
+    detected = f" (detectado {version})" if version else ""
+    return (
+        f"Node.js muito antigo{detected} — Claude, Codex e Pi precisam de "
+        f"{_NODE_MIN_VERSION_HINT}."
+    )
 
 
 @contextlib.contextmanager
@@ -8357,7 +8380,7 @@ def _run_configure_databricks() -> None:
     # gateway workspace(s) only — not the MCP-only profiles, which are
     # authenticated during profile onboarding and have no ucode role.
     workspace_urls = model_gateway_workspace_urls()
-    click.echo("Running `ucode configure --workspaces ...`...")
+    click.echo("Rodando `ucode configure --workspaces ...`...")
 
     result = subprocess.run(
         build_ucode_configure_command(ucode_command, workspace_urls=workspace_urls),
@@ -8365,11 +8388,14 @@ def _run_configure_databricks() -> None:
     )
     if result.returncode != 0:
         raise click.ClickException(
-            f"`ucode configure` exited with code {result.returncode}; "
-            "see the command output above for details."
+            f"`ucode configure` saiu com o código {result.returncode}; "
+            "veja a saída do comando acima para detalhes."
         )
 
-    click.echo("ucode configuration complete. OmniCraft will use state.json for harness setup.")
+    click.echo(
+        "Configuração do ucode concluída. O OmniCraft usará state.json para configurar "
+        "os harnesses."
+    )
 
 
 def _warn_missing_harness_dependencies() -> None:
@@ -8395,15 +8421,16 @@ def _warn_missing_harness_dependencies() -> None:
         problems.append(node_problem)
     if shutil.which("tmux") is None:
         problems.append(
-            "tmux not found — native Claude/Codex need tmux (macOS: `brew install tmux`)."
+            "tmux não encontrado — Claude/Codex nativos precisam de tmux "
+            "(macOS: `brew install tmux`)."
         )
     if not problems:
         return
-    ui.warn("Some harnesses need external tools:")
+    ui.warn("Alguns harnesses precisam de ferramentas externas:")
     for problem in problems:
         ui.err_console.print(f"  • {problem}", style="omni.warning", markup=False)
     ui.err_console.print(
-        "You can configure credentials now; install these before launching those harnesses.",
+        "Você pode configurar credenciais agora; instale estas antes de lançar esses harnesses.",
         style="omni.warning",
         markup=False,
     )
@@ -8737,7 +8764,7 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         # credential live in ~/.codex/config.toml; the entry only pins it.
         det = cli_config_dets[choice - base_option_count]
         if det.model_provider is None:  # always set on cli-config detections
-            raise click.ClickException("internal: cli-config detection missing model_provider")
+            raise click.ClickException("interno: detecção de cli-config sem model_provider")
         name = det.name
         entry = build_cli_config_provider_entry("codex", det.model_provider, det.display_name)
         # Re-adding is the user saying "I want this auto-detected credential
@@ -8760,17 +8787,17 @@ def _configure_harness_add(family: str | None = None) -> str | None:
             # it's the only non-gateway path that still prompts for a name.
             others = other_key_providers()
             if not others:  # ponytail: every catalog key-provider is already a preset/configured
-                click.echo("No other API-key providers left to add.")
+                click.echo("Nenhum outro provedor de chave de API para adicionar.")
                 return None
             _other_choice = select(
-                "Which provider?",
+                "Qual provedor?",
                 [provider_display_name(p) for p in others],
                 clear_on_exit=True,
             )
             if _other_choice < 0:  # Esc — abort the add
                 return None
             provider = others[_other_choice]
-            candidate = prompt_text("Name for this provider", default=provider)
+            candidate = prompt_text("Nome para este provedor", default=provider)
         disp = provider_display_name(provider)
         family = family_for_key_provider(provider)
         # The entry name is resolved from the key's source (not just the
@@ -8786,7 +8813,7 @@ def _configure_harness_add(family: str | None = None) -> str | None:
             provider in detected
             and detected[provider].kind == "key"
             and click.confirm(
-                f"Detected {detected[provider].source} in the environment — use it?",
+                f"Detectado {detected[provider].source} no ambiente — usar?",
                 default=True,
             )
         ):
@@ -8801,7 +8828,7 @@ def _configure_harness_add(family: str | None = None) -> str | None:
             name = _resolve_key_provider_name(
                 config_now, family, candidate, f"keychain:{candidate}"
             )
-            pasted = prompt_text(f"{disp} API key", hide_input=True)
+            pasted = prompt_text(f"Chave de API do {disp}", hide_input=True)
             secret_store.store_secret(name, pasted)
             api_key_ref = f"keychain:{name}"
 
@@ -8818,7 +8845,7 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         # default (blank-enter accepts it); an unknown provider has no default,
         # so the user types a model id. ``.strip() or None`` keeps an
         # all-whitespace entry from becoming a bogus pin.
-        typed = prompt_text("Default model", default=catalog_default)
+        typed = prompt_text("Modelo padrão", default=catalog_default)
         default_model = typed.strip() or None
 
         # A third-party OpenAI-compatible vendor (OpenRouter, Groq, …) is
@@ -8844,12 +8871,14 @@ def _configure_harness_add(family: str | None = None) -> str | None:
     elif kind == "subscription":
         cli_name = chosen.cli  # preset by the flat option (claude / codex)
         if cli_name is None:
-            raise click.ClickException("internal: subscription option missing a cli login")
+            raise click.ClickException("interno: opção de assinatura sem um login de cli")
         from omnicraft.onboarding.harness_install import harness_install_spec, harness_login
 
         login_family = {agent: fam for fam, agent in _FAMILY_UCODE_AGENT.items()}.get(cli_name)
         if login_family is None:
-            raise click.ClickException(f"internal: no login family for cli {cli_name!r}")
+            raise click.ClickException(
+                f"interno: nenhuma família de login para o cli {cli_name!r}"
+            )
         spec = harness_install_spec(login_family)
         disp = spec.display if spec is not None else cli_name
         # A harness has at most ONE subscription — the CLI's own login. If one
@@ -8865,8 +8894,8 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         if existing_subs:
             brand = _CLI_LOGIN_BRAND.get(cli_name, cli_name)
             replace = select(
-                f"A {brand} subscription is already configured. Replace it?",
-                ["Replace it", "Keep the current one"],
+                f"Uma assinatura {brand} já está configurada. Substituir?",
+                ["Substituir", "Manter a atual"],
                 default=0,
                 clear_on_exit=True,
             )
@@ -8877,9 +8906,9 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         # once the CLI is actually authenticated — otherwise we'd persist a
         # phantom subscription that strands the user at the harness's own login
         # screen at run time (the exact bug this whole flow fixes).
-        console.print(f"  [dim]Signing in to {disp} (its login will open)…[/dim]")
+        console.print(f"  [dim]Entrando em {disp} (o login dele vai abrir)…[/dim]")
         if not harness_login(login_family):
-            return f"✗ {disp} login not completed — subscription not added"
+            return f"✗ Login do {disp} não concluído — assinatura não adicionada"
         # Login succeeded — drop the existing subscription(s) for this CLI so the
         # canonical entry is the only one left (clearing the old default lets the
         # new entry re-claim the family default below). Done AFTER login so a
@@ -8894,19 +8923,19 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         entry = build_subscription_provider_entry(cli_name)
 
     elif kind == "gateway":
-        name = prompt_text("Name for this gateway", default="gateway")
-        base_url = prompt_text("Gateway base_url (OpenAI/Anthropic-compatible)")
-        pasted = prompt_text("Gateway API key", hide_input=True)
+        name = prompt_text("Nome para este gateway", default="gateway")
+        base_url = prompt_text("base_url do gateway (compatível com OpenAI/Anthropic)")
+        pasted = prompt_text("Chave de API do gateway", hide_input=True)
         secret_store.store_secret(name, pasted)
         # Which harness surfaces — one clear pick instead of two y/n prompts.
         # (These are *harness* surfaces: Codex/OpenAI → codex + openai-agents;
         # Claude/Anthropic → claude-sdk + native-claude.)
         surface_choice = select(
-            "Which harnesses can this gateway drive?",
+            "Quais harnesses este gateway pode dirigir?",
             [
-                "Both Claude and Codex",
-                "Codex / OpenAI only (codex, openai-agents)",
-                "Claude only (claude-sdk, native-claude)",
+                "Claude e Codex",
+                "Só Codex / OpenAI (codex, openai-agents)",
+                "Só Claude (claude-sdk, native-claude)",
             ],
             default=0,
             clear_on_exit=True,
@@ -8928,10 +8957,10 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         wire_api: str | None = None
         if OPENAI_FAMILY in families:
             wire_choice = select(
-                "OpenAI wire protocol for this gateway?",
+                "Protocolo de comunicação OpenAI para este gateway?",
                 [
                     "Responses API (OpenAI, LiteLLM)",
-                    "Chat Completions (OpenRouter, most OSS-model gateways)",
+                    "Chat Completions (OpenRouter, maioria dos gateways de modelo OSS)",
                 ],
                 default=1 if "openrouter" in base_url.lower() else 0,
                 clear_on_exit=True,
@@ -8949,12 +8978,12 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         models: dict[str, str] = {}
         if OPENAI_FAMILY in families:
             models[OPENAI_FAMILY] = prompt_text(
-                "Default model for the Codex / OpenAI surface",
+                "Modelo padrão para a superfície Codex / OpenAI",
                 default=default_chat_model("openrouter"),
             ).strip()
         if ANTHROPIC_FAMILY in families:
             models[ANTHROPIC_FAMILY] = prompt_text(
-                "Default model for the Claude surface (the gateway's Claude model id)"
+                "Modelo padrão para a superfície Claude (o id do modelo Claude do gateway)"
             ).strip()
         entry = build_gateway_provider_entry(
             base_url=base_url,
@@ -8969,24 +8998,25 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         # authenticates from AWS_BEARER_TOKEN_BEDROCK in the env at launch
         # (Claude Code ignores apiKeyHelper once Bedrock mode is on), so offer
         # to reference an exported token, else store a pasted one in the keychain.
-        name = prompt_text("Name for this Bedrock provider", default="bedrock")
+        name = prompt_text("Nome para este provedor Bedrock", default="bedrock")
         base_url = prompt_text(
-            "Bedrock base_url (regional runtime endpoint, or your Bedrock-compatible gateway)",
+            "base_url do Bedrock (endpoint de runtime regional, ou seu gateway "
+            "compatível com Bedrock)",
             default="https://bedrock-runtime.us-east-1.amazonaws.com",
         )
         if os.environ.get("AWS_BEARER_TOKEN_BEDROCK") and click.confirm(
-            "Detected AWS_BEARER_TOKEN_BEDROCK in the environment — use it?", default=True
+            "Detectado AWS_BEARER_TOKEN_BEDROCK no ambiente — usar?", default=True
         ):
             api_key_ref = "env:AWS_BEARER_TOKEN_BEDROCK"
         else:
-            pasted = prompt_text("Amazon Bedrock API key (bearer token)", hide_input=True)
+            pasted = prompt_text("Chave de API do Amazon Bedrock (bearer token)", hide_input=True)
             secret_store.store_secret(name, pasted)
             api_key_ref = f"keychain:{name}"
         # Bedrock has no catalog default and Claude's own default model is
         # usually not enabled on a Bedrock account, so pin an explicit id.
         default_model = (
             prompt_text(
-                "Default model (Bedrock inference-profile id, e.g. "
+                "Modelo padrão (id de inference-profile do Bedrock, ex. "
                 "us.anthropic.claude-opus-4-5-20251101-v1:0)"
             ).strip()
             or None
@@ -9016,7 +9046,7 @@ def _configure_harness_add(family: str | None = None) -> str | None:
             # The status renders through Text.from_markup, where the literal
             # `[databricks]` in the install command would parse as a tag.
             return (
-                "✗ Databricks routing needs the databricks extra — "
+                "✗ O roteamento Databricks precisa do extra databricks — "
                 f"{_rich_escape(DATABRICKS_EXTRA_INSTALL_HINT)}"
             )
 
@@ -9042,15 +9072,15 @@ def _configure_harness_add(family: str | None = None) -> str | None:
             ucode_workspace_exists,
         )
 
-        _routed = f"{family_label(family)}'s" if family is not None else "your harnesses'"
+        _routed = family_label(family) if family is not None else "seus harnesses"
         console.print(
-            f"  [dim]Routes {_routed} model calls through this workspace's "
-            "Databricks Unity AI Gateway (via ucode), so usage is governed and "
-            "billed there. This signs you into the workspace and runs "
-            "`ucode configure` for it.[/dim]"
+            f"  [dim]Roteia as chamadas de modelo de {_routed} pelo "
+            "Databricks Unity AI Gateway deste workspace (via ucode), então o uso é "
+            "governado e cobrado lá. Isto faz seu login no workspace e roda "
+            "`ucode configure` para ele.[/dim]"
         )
         workspace_url = prompt_text(
-            "Databricks workspace URL (e.g. https://example.cloud.databricks.com)"
+            "URL do workspace Databricks (ex. https://example.cloud.databricks.com)"
         ).strip()
         if not workspace_url:  # blank — abort the add
             return None
@@ -9063,8 +9093,8 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         normalized_workspace_url = normalize_workspace_url(workspace_url)
         if normalized_workspace_url != workspace_url.rstrip("/"):
             console.print(
-                f"  [dim]Using {normalized_workspace_url} — ignored the extra "
-                "path from the pasted URL.[/dim]"
+                f"  [dim]Usando {normalized_workspace_url} — o caminho extra da "
+                "URL colada foi ignorado.[/dim]"
             )
         workspace_url = normalized_workspace_url
 
@@ -9082,8 +9112,8 @@ def _configure_harness_add(family: str | None = None) -> str | None:
         # otherwise routing would silently fall back and confuse the user.
         if not ucode_workspace_exists(workspace_url):
             raise click.ClickException(
-                f"`ucode configure` finished but recorded no state for {workspace_url}. "
-                "Re-run and check the ucode output above."
+                f"`ucode configure` terminou mas não registrou estado para {workspace_url}. "
+                "Rode de novo e verifique a saída do ucode acima."
             )
         # Wipe the verbose login + ucode output so the menu we return to (with a
         # "✓ Added databricks" status) renders on a clean screen.
@@ -9133,8 +9163,8 @@ def _configure_harness_add(family: str | None = None) -> str | None:
             became_default.append(fam)
     if became_default:
         labels = " · ".join(family_label(f) for f in became_default)
-        return f"✓ Added {name} — default for {labels}"
-    return f"✓ Added {name}"
+        return f"✓ {name} adicionado — padrão para {labels}"
+    return f"✓ {name} adicionado"
 
 
 def _adopt_detected_providers() -> list[str]:
@@ -9248,7 +9278,7 @@ def _compact_credential_label(det: DetectedProvider) -> str:
         # Fallback to the raw CLI name is unreachable for today's detections
         # (see _CLI_LOGIN_BRAND) but keeps an added CLI readable, not crashing.
         brand = _CLI_LOGIN_BRAND.get(det.name, det.name)
-        return f"{brand} Subscription"
+        return f"Assinatura {brand}"
     # A cli-config detection carries the provider's own display name
     # ("Databricks AI Gateway"); other kinds ignore the keyword.
     return credential_label(det.kind, det.name, display_name=det.display_name)
@@ -9282,8 +9312,8 @@ def _announce_auto_configured_credentials(adopted: list[str]) -> None:
     if not labels:
         return
     console.print(
-        "\n[dim]Found existing credentials on your machine, "
-        f"auto-configured for omnicraft: {', '.join(labels)}[/dim]"
+        "\n[dim]Encontrei credenciais existentes na sua máquina, "
+        f"configuradas automaticamente para o omnicraft: {', '.join(labels)}[/dim]"
     )
 
 
@@ -9435,31 +9465,31 @@ def _prompt_install_harness(family: str) -> bool:
     label = family_label(family)
     cmd = " ".join(harness_install_command(family))
     choice = select(
-        f"{label}'s CLI isn't installed. Install it now?",
+        f"O CLI do {label} não está instalado. Instalar agora?",
         [
-            f"Yes — install ({cmd})",
-            "No — back to harnesses",
-            "I'll run it myself (show the command)",
+            f"Sim — instalar ({cmd})",
+            "Não — voltar aos harnesses",
+            "Eu mesmo rodo (mostrar o comando)",
         ],
         descriptions=[
-            f"Runs `{cmd}` (needs npm), then continues to credential setup.",
-            "Return to the harness picker without installing.",
-            "Print the command so you can install it yourself, then return.",
+            f"Roda `{cmd}` (precisa de npm), depois continua para a configuração de credenciais.",
+            "Volta ao seletor de harnesses sem instalar.",
+            "Imprime o comando para você instalar por conta, depois volta.",
         ],
         default=0,
         clear_on_exit=True,
     )
     if choice == 0:
-        console.print(f"  [dim]Installing {label} — running `{cmd}`…[/dim]")
+        console.print(f"  [dim]Instalando {label} — rodando `{cmd}`…[/dim]")
         if install_harness_cli(family):
-            console.print(f"  [green]✓ {label} installed[/green]")
+            console.print(f"  [green]✓ {label} instalado[/green]")
             return True
         console.print(
-            f"  [red]Install failed.[/red] Run it manually, then re-open: [bold]{cmd}[/bold]"
+            f"  [red]Falha na instalação.[/red] Rode manualmente e reabra: [bold]{cmd}[/bold]"
         )
         return False
     if choice == 2:  # run it yourself
-        console.print(f"  Install {label} with:\n    [bold]{cmd}[/bold]")
+        console.print(f"  Instale {label} com:\n    [bold]{cmd}[/bold]")
     return False
 
 
@@ -9533,31 +9563,33 @@ def _prompt_install_cursor() -> str | None:
     # ``[cursor]`` so it renders verbatim.
     cmd_markup = _rich_escape(cmd)
     choice = select(
-        "Cursor's SDK (cursor-sdk) isn't installed. Install it now?",
+        "O SDK do Cursor (cursor-sdk) não está instalado. Instalar agora?",
         [
-            f"Install it now ({cmd_markup})",
-            "Set the Cursor key anyway",
-            "I'll run it myself (show the command)",
+            f"Instalar agora ({cmd_markup})",
+            "Definir a chave do Cursor mesmo assim",
+            "Eu mesmo rodo (mostrar o comando)",
         ],
         descriptions=[
-            f"Runs `{cmd_markup}`, then continues.",
-            "Skip the install — store the key now; the SDK can be added later.",
-            "Print the command so you can install it yourself, then continue.",
+            f"Roda `{cmd_markup}`, depois continua.",
+            "Pula a instalação — armazena a chave agora; o SDK pode ser adicionado depois.",
+            "Imprime o comando para você instalar por conta, depois continua.",
         ],
         default=0,
         clear_on_exit=True,
     )
     if choice == 0:
-        console.print(f"  [dim]Installing the cursor extra — running `{cmd_markup}`…[/dim]")
+        console.print(f"  [dim]Instalando o extra cursor — rodando `{cmd_markup}`…[/dim]")
         if install_cursor_sdk():
-            console.print("  [green]✓ cursor-sdk installed[/green]")
-            return "✓ cursor-sdk installed"
-        console.print(f"  [red]Install failed.[/red] Run it manually: [bold]{cmd_markup}[/bold]")
-        return "✗ Install failed — set the key anyway, or install by hand"
+            console.print("  [green]✓ cursor-sdk instalado[/green]")
+            return "✓ cursor-sdk instalado"
+        console.print(
+            f"  [red]Falha na instalação.[/red] Rode manualmente: [bold]{cmd_markup}[/bold]"
+        )
+        return "✗ Falha na instalação — defina a chave mesmo assim, ou instale na mão"
     if choice < 0:
         return _SOFT_INSTALL_ABORT
     if choice == 2:  # run it yourself
-        console.print(f"  Install the cursor extra with:\n    [bold]{cmd_markup}[/bold]")
+        console.print(f"  Instale o extra cursor com:\n    [bold]{cmd_markup}[/bold]")
         return None
     # choice == 1 (set key anyway): fall through to the key menu silently.
     return None
@@ -9605,15 +9637,19 @@ def _manage_cursor_harness() -> None:
 
         rows: list[_HarnessMenuRow] = [
             _HarnessMenuRow(
-                "Replace API key (CURSOR_API_KEY)" if key_set else "Set API key (CURSOR_API_KEY)",
+                "Substituir chave de API (CURSOR_API_KEY)"
+                if key_set
+                else "Definir chave de API (CURSOR_API_KEY)",
                 action="set_key",
             )
         ]
         if key_set:
-            rows.append(_HarnessMenuRow("Remove API key", action="remove_key"))
-        rows.append(_HarnessMenuRow("← Back", action="back"))
+            rows.append(_HarnessMenuRow("Remover chave de API", action="remove_key"))
+        rows.append(_HarnessMenuRow("← Voltar", action="back"))
 
-        header = "Cursor — API key configured" if key_set else "Cursor — no API key yet"
+        header = (
+            "Cursor — chave de API configurada" if key_set else "Cursor — sem chave de API ainda"
+        )
         idx = select(header, [r.label for r in rows], clear_on_exit=True, status=status)
         if idx < 0:  # Esc / q
             return
@@ -9629,7 +9665,7 @@ def _manage_cursor_harness() -> None:
             if ref is not None and ref.startswith("keychain:"):
                 secret_store.delete_secret(ref[len("keychain:") :])
             _save_global_config({}, unset_keys=("cursor",))
-            status = "✓ Removed Cursor API key"
+            status = "✓ Chave de API do Cursor removida"
 
 
 def _set_cursor_api_key() -> str | None:
@@ -9659,26 +9695,24 @@ def _set_cursor_api_key() -> str | None:
     # ``.strip()`` below and the strip in ``resolve_secret``'s ``env:`` branch.
     raw_detected = os.environ.get("CURSOR_API_KEY")
     detected = raw_detected.strip() if raw_detected else None
-    if detected and click.confirm(
-        "Detected CURSOR_API_KEY in the environment — use it?", default=True
-    ):
+    if detected and click.confirm("Detectada CURSOR_API_KEY no ambiente — usar?", default=True):
         if not looks_like_cursor_api_key(detected) and not click.confirm(
-            "$CURSOR_API_KEY doesn't start with 'crsr_'. Use it anyway?", default=False
+            "$CURSOR_API_KEY não começa com 'crsr_'. Usar mesmo assim?", default=False
         ):
             return None
         _save_global_config(cursor_api_key_settings("env:CURSOR_API_KEY"))
-        return "✓ Cursor API key set (from $CURSOR_API_KEY)"
+        return "✓ Chave de API do Cursor definida (de $CURSOR_API_KEY)"
 
-    pasted = prompt_text("Cursor API key (CURSOR_API_KEY)", hide_input=True).strip()
+    pasted = prompt_text("Chave de API do Cursor (CURSOR_API_KEY)", hide_input=True).strip()
     if not pasted:
         return None
     if not looks_like_cursor_api_key(pasted) and not click.confirm(
-        "That doesn't start with 'crsr_'. Store it anyway?", default=False
+        "Isso não começa com 'crsr_'. Armazenar mesmo assim?", default=False
     ):
         return None
     secret_store.store_secret(CURSOR_SECRET_NAME, pasted)
     _save_global_config(cursor_api_key_settings(f"keychain:{CURSOR_SECRET_NAME}"))
-    return "✓ Cursor API key stored"
+    return "✓ Chave de API do Cursor armazenada"
 
 
 def _prompt_install_antigravity() -> str | None:
@@ -9705,31 +9739,33 @@ def _prompt_install_antigravity() -> str | None:
     # ``select`` renders through Rich markup, so escape the literal ``[antigravity]``.
     cmd_markup = _rich_escape(cmd)
     choice = select(
-        "Antigravity's SDK (google-antigravity) isn't installed. Install it now?",
+        "O SDK do Antigravity (google-antigravity) não está instalado. Instalar agora?",
         [
-            f"Install it now ({cmd_markup})",
-            "Set the Gemini key anyway",
-            "I'll run it myself (show the command)",
+            f"Instalar agora ({cmd_markup})",
+            "Definir a chave do Gemini mesmo assim",
+            "Eu mesmo rodo (mostrar o comando)",
         ],
         descriptions=[
-            f"Runs `{cmd_markup}`, then continues.",
-            "Skip the install — store the key now; the SDK can be added later.",
-            "Print the command so you can install it yourself, then continue.",
+            f"Roda `{cmd_markup}`, depois continua.",
+            "Pula a instalação — armazena a chave agora; o SDK pode ser adicionado depois.",
+            "Imprime o comando para você instalar por conta, depois continua.",
         ],
         default=0,
         clear_on_exit=True,
     )
     if choice == 0:
-        console.print(f"  [dim]Installing the antigravity extra — running `{cmd_markup}`…[/dim]")
+        console.print(f"  [dim]Instalando o extra antigravity — rodando `{cmd_markup}`…[/dim]")
         if install_antigravity_sdk():
-            console.print("  [green]✓ google-antigravity installed[/green]")
-            return "✓ google-antigravity installed"
-        console.print(f"  [red]Install failed.[/red] Run it manually: [bold]{cmd_markup}[/bold]")
-        return "✗ Install failed — set the key anyway, or install by hand"
+            console.print("  [green]✓ google-antigravity instalado[/green]")
+            return "✓ google-antigravity instalado"
+        console.print(
+            f"  [red]Falha na instalação.[/red] Rode manualmente: [bold]{cmd_markup}[/bold]"
+        )
+        return "✗ Falha na instalação — defina a chave mesmo assim, ou instale na mão"
     if choice < 0:
         return _SOFT_INSTALL_ABORT
     if choice == 2:
-        console.print(f"  Install the antigravity extra with:\n    [bold]{cmd_markup}[/bold]")
+        console.print(f"  Instale o extra antigravity com:\n    [bold]{cmd_markup}[/bold]")
         return None
     # choice == 1 (set key anyway): fall through to the key menu silently.
     return None
@@ -9773,18 +9809,20 @@ def _manage_antigravity_harness() -> None:
 
         rows: list[_HarnessMenuRow] = [
             _HarnessMenuRow(
-                "Replace Gemini API key" if key_set else "Set Gemini API key",
+                "Substituir chave de API do Gemini"
+                if key_set
+                else "Definir chave de API do Gemini",
                 action="set_key",
             )
         ]
         if key_set:
-            rows.append(_HarnessMenuRow("Remove API key", action="remove_key"))
-        rows.append(_HarnessMenuRow("← Back", action="back"))
+            rows.append(_HarnessMenuRow("Remover chave de API", action="remove_key"))
+        rows.append(_HarnessMenuRow("← Voltar", action="back"))
 
         header = (
-            "Antigravity — Gemini API key configured"
+            "Antigravity — chave de API do Gemini configurada"
             if key_set
-            else "Antigravity — no Gemini API key yet"
+            else "Antigravity — sem chave de API do Gemini ainda"
         )
         idx = select(header, [r.label for r in rows], clear_on_exit=True, status=status)
         if idx < 0:  # Esc / q
@@ -9803,7 +9841,7 @@ def _manage_antigravity_harness() -> None:
             if ref == f"keychain:{ANTIGRAVITY_SECRET_NAME}":
                 secret_store.delete_secret(ANTIGRAVITY_SECRET_NAME)
             _save_global_config({}, unset_keys=(ANTIGRAVITY_CONFIG_KEY,))
-            status = "✓ Removed Gemini API key"
+            status = "✓ Chave de API do Gemini removida"
 
 
 def _set_antigravity_api_key() -> str | None:
@@ -9829,29 +9867,28 @@ def _set_antigravity_api_key() -> str | None:
 
     detected_var = next((v for v in ANTIGRAVITY_ENV_VARS if os.environ.get(v)), None)
     if detected_var is not None and click.confirm(
-        f"Detected {detected_var} in the environment — use it?", default=True
+        f"Detectada {detected_var} no ambiente — usar?", default=True
     ):
         detected = os.environ[detected_var]
         if not looks_like_gemini_api_key(detected) and not click.confirm(
-            f"${detected_var} doesn't start with {ANTIGRAVITY_API_KEY_PREFIX_HINT}. "
-            "Use it anyway?",
+            f"${detected_var} não começa com {ANTIGRAVITY_API_KEY_PREFIX_HINT}. Usar mesmo assim?",
             default=False,
         ):
             return None
         _save_global_config(antigravity_api_key_settings(f"env:{detected_var}"))
-        return f"✓ Gemini API key set (from ${detected_var})"
+        return f"✓ Chave de API do Gemini definida (de ${detected_var})"
 
-    pasted = prompt_text("Gemini API key (GEMINI_API_KEY)", hide_input=True).strip()
+    pasted = prompt_text("Chave de API do Gemini (GEMINI_API_KEY)", hide_input=True).strip()
     if not pasted:
         return None
     if not looks_like_gemini_api_key(pasted) and not click.confirm(
-        f"That doesn't start with {ANTIGRAVITY_API_KEY_PREFIX_HINT}. Store it anyway?",
+        f"Isso não começa com {ANTIGRAVITY_API_KEY_PREFIX_HINT}. Armazenar mesmo assim?",
         default=False,
     ):
         return None
     secret_store.store_secret(ANTIGRAVITY_SECRET_NAME, pasted)
     _save_global_config(antigravity_api_key_settings(f"keychain:{ANTIGRAVITY_SECRET_NAME}"))
-    return "✓ Gemini API key stored"
+    return "✓ Chave de API do Gemini armazenada"
 
 
 def _qwen_auth_configured() -> bool:
@@ -9904,13 +9941,13 @@ def _print_qwen_auth_help() -> None:
     from omnicraft.onboarding.interactive import console
 
     console.print(
-        "\n  [bold]Authenticate Qwen Code[/bold]:\n"
-        "    • Interactive: run [bold]qwen[/bold] and use [bold]/auth[/bold] "
-        "(API key or Alibaba Cloud Coding Plan)\n"
-        "    • Headless / ACP: set [bold]OPENAI_API_KEY[/bold] + "
+        "\n  [bold]Autenticar o Qwen Code[/bold]:\n"
+        "    • Interativo: rode [bold]qwen[/bold] e use [bold]/auth[/bold] "
+        "(chave de API ou Alibaba Cloud Coding Plan)\n"
+        "    • Headless / ACP: defina [bold]OPENAI_API_KEY[/bold] + "
         "[bold]OPENAI_BASE_URL[/bold] + [bold]OPENAI_MODEL[/bold]\n"
-        "    • Coding Plan: [bold]BAILIAN_CODING_PLAN_API_KEY[/bold] + the "
-        "Coding Plan base URL\n"
+        "    • Coding Plan: [bold]BAILIAN_CODING_PLAN_API_KEY[/bold] + a "
+        "base URL do Coding Plan\n"
         "    • OpenRouter: [bold]OPENROUTER_API_KEY[/bold] + "
         "OPENAI_BASE_URL=https://openrouter.ai/api/v1\n"
     )
@@ -9932,16 +9969,16 @@ def _launch_qwen_auth() -> str | None:
     from omnicraft.onboarding.interactive import console
 
     if not harness_cli_installed(QWEN_KEY):
-        return "✗ qwen CLI not found"
+        return "✗ CLI qwen não encontrado"
     spec = harness_install_spec(QWEN_KEY)
     assert spec is not None
     console.print(
-        "  [dim]Launching Qwen — type [bold]/auth[/bold] to configure authentication, "
-        "then exit (/quit) to return.[/dim]"
+        "  [dim]Lançando o Qwen — digite [bold]/auth[/bold] para configurar a autenticação, "
+        "depois saia (/quit) para voltar.[/dim]"
     )
     with contextlib.suppress(OSError, KeyboardInterrupt):
         subprocess.run([spec.binary], check=False)
-    return "✓ authentication detected" if _qwen_auth_configured() else "Auth not detected yet"
+    return "✓ autenticação detectada" if _qwen_auth_configured() else "Auth ainda não detectada"
 
 
 def _manage_qwen_harness() -> None:
@@ -9976,33 +10013,33 @@ def _manage_qwen_harness() -> None:
     if not harness_cli_installed(QWEN_KEY):
         cmd = " ".join(harness_install_command(QWEN_KEY))
         choice = select(
-            "Qwen Code's CLI isn't installed. Install it now?",
+            "O CLI do Qwen Code não está instalado. Instalar agora?",
             [
-                f"Yes — install ({cmd})",
-                "No — back to harnesses",
-                "I'll run it myself (show the command)",
+                f"Sim — instalar ({cmd})",
+                "Não — voltar aos harnesses",
+                "Eu mesmo rodo (mostrar o comando)",
             ],
             descriptions=[
-                f"Runs `{cmd}` (needs npm), then continues to auth setup.",
-                "Return to the harness picker without installing.",
-                "Print the command so you can install it yourself, then return.",
+                f"Roda `{cmd}` (precisa de npm), depois continua para a configuração de auth.",
+                "Volta ao seletor de harnesses sem instalar.",
+                "Imprime o comando para você instalar por conta, depois volta.",
             ],
             default=0,
             clear_on_exit=True,
         )
         if choice == 0:
-            console.print(f"  [dim]Installing Qwen Code — running `{cmd}`…[/dim]")
+            console.print(f"  [dim]Instalando o Qwen Code — rodando `{cmd}`…[/dim]")
             if install_harness_cli(QWEN_KEY):
-                console.print("  [green]✓ Qwen Code installed[/green]")
+                console.print("  [green]✓ Qwen Code instalado[/green]")
             else:
                 console.print(
-                    f"  [red]Install failed.[/red] Run it manually, then re-open: "
+                    f"  [red]Falha na instalação.[/red] Rode manualmente e reabra: "
                     f"[bold]{cmd}[/bold]"
                 )
                 return
         else:
             if choice == 2:  # run it yourself
-                console.print(f"  Install Qwen Code with:\n    [bold]{cmd}[/bold]")
+                console.print(f"  Instale o Qwen Code com:\n    [bold]{cmd}[/bold]")
             return
 
     # Carry the prior action's confirmation as a transient status line.
@@ -10010,14 +10047,14 @@ def _manage_qwen_harness() -> None:
     while True:
         configured = _qwen_auth_configured()
         header = (
-            "Qwen Code — authentication detected"
+            "Qwen Code — autenticação detectada"
             if configured
-            else "Qwen Code — not authenticated yet"
+            else "Qwen Code — ainda não autenticado"
         )
         rows: list[_HarnessMenuRow] = [
-            _HarnessMenuRow("Open Qwen to run /auth", action="auth"),
-            _HarnessMenuRow("Show auth options", action="help"),
-            _HarnessMenuRow("← Back", action="back"),
+            _HarnessMenuRow("Abrir o Qwen para rodar /auth", action="auth"),
+            _HarnessMenuRow("Mostrar opções de auth", action="help"),
+            _HarnessMenuRow("← Voltar", action="back"),
         ]
         idx = select(header, [r.label for r in rows], clear_on_exit=True, status=status)
         if idx < 0:  # Esc / q
@@ -10037,11 +10074,11 @@ def _print_goose_auth_help() -> None:
     from omnicraft.onboarding.interactive import console
 
     console.print(
-        "\n  [bold]Configure Goose[/bold] (OmniCraft stores no Goose credential):\n"
-        "    • Interactive: run [bold]goose configure[/bold] to pick a provider "
-        "and store its key (keyring or ~/.config/goose/config.yaml)\n"
-        "    • Env override: set [bold]GOOSE_PROVIDER[/bold] + [bold]GOOSE_MODEL[/bold] "
-        "(plus the provider's key, e.g. ANTHROPIC_API_KEY / OPENAI_API_KEY)\n"
+        "\n  [bold]Configurar o Goose[/bold] (o OmniCraft não armazena credencial do Goose):\n"
+        "    • Interativo: rode [bold]goose configure[/bold] para escolher um provedor "
+        "e armazenar sua chave (keyring ou ~/.config/goose/config.yaml)\n"
+        "    • Override por env: defina [bold]GOOSE_PROVIDER[/bold] + [bold]GOOSE_MODEL[/bold] "
+        "(mais a chave do provedor, ex. ANTHROPIC_API_KEY / OPENAI_API_KEY)\n"
     )
 
 
@@ -10063,20 +10100,20 @@ def _launch_goose_configure() -> str | None:
     from omnicraft.onboarding.interactive import console
 
     if not harness_cli_installed(GOOSE_KEY):
-        return "✗ goose CLI not found"
+        return "✗ CLI goose não encontrado"
     spec = harness_install_spec(GOOSE_KEY)
     assert spec is not None
     console.print(
-        "  [dim]Launching [bold]goose configure[/bold] — pick a provider and "
-        "enter its key, then return.[/dim]"
+        "  [dim]Lançando [bold]goose configure[/bold] — escolha um provedor e "
+        "digite sua chave, depois volte.[/dim]"
     )
     with contextlib.suppress(OSError, KeyboardInterrupt):
         subprocess.run([spec.binary, "configure"], check=False)
     summary = goose_config_summary()
     if summary.provider:
         model = f" ({summary.model})" if summary.model else ""
-        return f"✓ provider configured: {summary.provider}{model}"
-    return "Provider not detected yet"
+        return f"✓ provedor configurado: {summary.provider}{model}"
+    return "Provedor ainda não detectado"
 
 
 def _manage_goose_harness() -> None:
@@ -10108,8 +10145,8 @@ def _manage_goose_harness() -> None:
         spec = harness_install_spec(GOOSE_KEY)
         hint = spec.install_hint if spec and spec.install_hint else "brew install block-goose-cli"
         console.print(
-            f"  Goose's CLI isn't installed. Install it with:\n    [bold]{hint}[/bold]\n"
-            "  then re-open this menu."
+            f"  O CLI do Goose não está instalado. Instale com:\n    [bold]{hint}[/bold]\n"
+            "  depois reabra este menu."
         )
         return
 
@@ -10118,13 +10155,13 @@ def _manage_goose_harness() -> None:
         summary = goose_config_summary()
         if summary.provider:
             model = f" · {summary.model}" if summary.model else ""
-            header = f"Goose — provider configured: {summary.provider}{model}"
+            header = f"Goose — provedor configurado: {summary.provider}{model}"
         else:
-            header = "Goose — no provider configured yet"
+            header = "Goose — nenhum provedor configurado ainda"
         rows: list[_HarnessMenuRow] = [
-            _HarnessMenuRow("Run goose configure", action="configure"),
-            _HarnessMenuRow("Show configuration options", action="help"),
-            _HarnessMenuRow("← Back", action="back"),
+            _HarnessMenuRow("Rodar goose configure", action="configure"),
+            _HarnessMenuRow("Mostrar opções de configuração", action="help"),
+            _HarnessMenuRow("← Voltar", action="back"),
         ]
         idx = select(header, [r.label for r in rows], clear_on_exit=True, status=status)
         if idx < 0:  # Esc / q
@@ -10144,10 +10181,11 @@ def _print_acp_examples() -> None:
     from omnicraft.onboarding.interactive import console
 
     console.print(
-        "\n  [bold]Custom ACP agents[/bold] — connect any agent that speaks the "
+        "\n  [bold]Agentes ACP customizados[/bold] — conecte qualquer agente que fale o "
         "Agent Client Protocol ([underline]agentclientprotocol.com[/underline]).\n"
-        "  OmniCraft stores no credential — log into each agent via its own CLI first.\n\n"
-        "  Example commands to paste:\n"
+        "  O OmniCraft não armazena credencial — faça login em cada agente pelo "
+        "seu próprio CLI primeiro.\n\n"
+        "  Comandos de exemplo para colar:\n"
         "    • Gemini CLI     [bold]gemini --experimental-acp[/bold]\n"
         "    • Qwen Code      [bold]qwen --acp[/bold]\n"
         "    • Goose          [bold]goose acp[/bold]\n"
@@ -10171,20 +10209,20 @@ def _add_acp_agent() -> None:
     from omnicraft.onboarding.interactive import console, prompt_text
 
     _print_acp_examples()
-    name = prompt_text("Agent name (e.g. Gemini CLI)").strip()
+    name = prompt_text("Nome do agente (ex. Gemini CLI)").strip()
     if not name:
-        console.print("  [yellow]No name entered — nothing added.[/yellow]")
+        console.print("  [yellow]Nenhum nome digitado — nada adicionado.[/yellow]")
         return
-    command = prompt_text("Command to launch (e.g. gemini --experimental-acp)").strip()
+    command = prompt_text("Comando para lançar (ex. gemini --experimental-acp)").strip()
     if not command:
-        console.print("  [yellow]No command entered — nothing added.[/yellow]")
+        console.print("  [yellow]Nenhum comando digitado — nada adicionado.[/yellow]")
         return
-    model = (prompt_text("Model (optional — Enter to skip)", default="") or "").strip() or None
+    model = (prompt_text("Modelo (opcional — Enter para pular)", default="") or "").strip() or None
 
     entries = list(acp_agents())
     entries.append(AcpAgentEntry(slug=slugify(name), name=name, command=command, model=model))
     _save_global_config(acp_agents_settings(entries))
-    console.print(f"  ✓ Added {name}")
+    console.print(f"  ✓ {name} adicionado")
 
 
 def _manage_acp_agent(slug: str) -> None:
@@ -10206,14 +10244,14 @@ def _manage_acp_agent(slug: str) -> None:
     suffix = f"  ·  {agent.model}" if agent.model else ""
     header = f"{agent.name} — {agent.command}{suffix}"
     rows: list[_HarnessMenuRow] = [
-        _HarnessMenuRow("Remove this agent", action="remove"),
-        _HarnessMenuRow("← Back", action="back"),
+        _HarnessMenuRow("Remover este agente", action="remove"),
+        _HarnessMenuRow("← Voltar", action="back"),
     ]
     idx = select(header, [r.label for r in rows], clear_on_exit=True)
     if idx < 0 or rows[idx].action == "back":
         return
     _save_global_config(acp_agents_settings([a for a in agents if a.slug != slug]))
-    console.print(f"  ✓ Removed {agent.name}")
+    console.print(f"  ✓ {agent.name} removido")
 
 
 def _manage_hermes_harness() -> None:
@@ -10242,16 +10280,16 @@ def _manage_hermes_harness() -> None:
             else "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
         )
         console.print(
-            f"  Hermes isn't installed. Install it with:\n    [bold]{hint}[/bold]\n"
-            "  then re-open this menu."
+            f"  O Hermes não está instalado. Instale com:\n    [bold]{hint}[/bold]\n"
+            "  depois reabra este menu."
         )
         return
 
     status: str | None = None
     while True:
         rows: list[_HarnessMenuRow] = [
-            _HarnessMenuRow("Run hermes model (configure provider)", action="model"),
-            _HarnessMenuRow("← Back", action="back"),
+            _HarnessMenuRow("Rodar hermes model (configurar provedor)", action="model"),
+            _HarnessMenuRow("← Voltar", action="back"),
         ]
         idx = select(
             "Hermes Agent",
@@ -10269,9 +10307,9 @@ def _manage_hermes_harness() -> None:
 
             try:
                 subprocess.run(["hermes", "model"], check=False)
-                status = "✓ hermes model completed"
+                status = "✓ hermes model concluído"
             except FileNotFoundError:
-                status = "✗ hermes binary not found"
+                status = "✗ binário hermes não encontrado"
 
 
 def _manage_kiro_harness() -> None:
@@ -10300,16 +10338,16 @@ def _manage_kiro_harness() -> None:
             else "curl -fsSL https://cli.kiro.dev/install | bash"
         )
         console.print(
-            f"  Kiro isn't installed. Install it with:\n    [bold]{hint}[/bold]\n"
-            "  then re-open this menu."
+            f"  O Kiro não está instalado. Instale com:\n    [bold]{hint}[/bold]\n"
+            "  depois reabra este menu."
         )
         return
 
     status: str | None = None
     while True:
         rows: list[_HarnessMenuRow] = [
-            _HarnessMenuRow("Run kiro-cli login (sign in)", action="login"),
-            _HarnessMenuRow("← Back", action="back"),
+            _HarnessMenuRow("Rodar kiro-cli login (fazer login)", action="login"),
+            _HarnessMenuRow("← Voltar", action="back"),
         ]
         idx = select(
             "Kiro",
@@ -10327,9 +10365,9 @@ def _manage_kiro_harness() -> None:
 
             try:
                 subprocess.run(["kiro-cli", "login"], check=False)
-                status = "✓ kiro-cli login completed"
+                status = "✓ kiro-cli login concluído"
             except FileNotFoundError:
-                status = "✗ kiro-cli binary not found"
+                status = "✗ binário kiro-cli não encontrado"
 
 
 def _print_kimi_auth_help() -> None:
@@ -10346,15 +10384,15 @@ def _print_kimi_auth_help() -> None:
     from omnicraft.onboarding.interactive import console
 
     console.print(
-        "\n  [bold]Authenticate Kimi Code[/bold] (kimi manages its own config in "
+        "\n  [bold]Autenticar o Kimi Code[/bold] (o kimi gerencia sua própria config em "
         "~/.kimi/config.toml):\n"
-        "    • Default provider: run [bold]kimi login[/bold] "
-        "(Moonshot OAuth, or paste a Moonshot API key)\n"
-        "    • Other providers: run [bold]kimi provider add[/bold] "
-        "(OpenAI-compatible endpoint, gateway, …), then pin that model id in "
-        "the agent spec\n"
-        "    • OmniCraft stores no kimi credential and cannot thread one per "
-        "spawn — configure it once in the kimi CLI\n"
+        "    • Provedor padrão: rode [bold]kimi login[/bold] "
+        "(OAuth da Moonshot, ou cole uma chave de API da Moonshot)\n"
+        "    • Outros provedores: rode [bold]kimi provider add[/bold] "
+        "(endpoint compatível com OpenAI, gateway, …), depois fixe esse id de modelo "
+        "no spec do agente\n"
+        "    • O OmniCraft não armazena credencial do kimi e não pode passar uma por "
+        "spawn — configure uma vez no CLI do kimi\n"
     )
 
 
@@ -10395,9 +10433,9 @@ def _manage_kimi_harness() -> None:
         spec = harness_install_spec(KIMI_KEY)
         hint = (spec.install_hint if spec else None) or "see Kimi Code docs"
         console.print(
-            "  Kimi Code's CLI isn't installed. Install it with:\n"
+            "  O CLI do Kimi Code não está instalado. Instale com:\n"
             f"    [bold]{hint}[/bold]\n"
-            "  then re-open this menu to sign in."
+            "  depois reabra este menu para fazer login."
         )
         return
 
@@ -10405,13 +10443,13 @@ def _manage_kimi_harness() -> None:
     status: str | None = None
     while True:
         rows: list[_HarnessMenuRow] = [
-            _HarnessMenuRow("Sign in (kimi login)", action="login"),
-            _HarnessMenuRow("Sign out (kimi logout)", action="logout"),
-            _HarnessMenuRow("Show auth options", action="help"),
-            _HarnessMenuRow("← Back", action="back"),
+            _HarnessMenuRow("Entrar (kimi login)", action="login"),
+            _HarnessMenuRow("Sair (kimi logout)", action="logout"),
+            _HarnessMenuRow("Mostrar opções de auth", action="help"),
+            _HarnessMenuRow("← Voltar", action="back"),
         ]
         idx = select(
-            "Kimi Code — authentication is managed by the kimi CLI",
+            "Kimi Code — a autenticação é gerenciada pelo CLI do kimi",
             [r.label for r in rows],
             clear_on_exit=True,
             status=status,
@@ -10425,13 +10463,15 @@ def _manage_kimi_harness() -> None:
             # ``kimi login`` runs in the foreground (OAuth / API-key prompt);
             # its boolean return is unreliable for kimi (no status probe), so
             # don't assert success — just confirm the flow finished.
-            console.print("  [dim]Signing in to Kimi (its login will open)…[/dim]")
+            console.print("  [dim]Entrando no Kimi (o login dele vai abrir)…[/dim]")
             harness_login(KIMI_KEY)
-            status = "kimi login flow finished — kimi stores its own credentials"
+            status = (
+                "fluxo de login do kimi finalizado — o kimi armazena suas próprias credenciais"
+            )
         elif action == "logout":
-            console.print("  [dim]Signing out of Kimi…[/dim]")
+            console.print("  [dim]Saindo do Kimi…[/dim]")
             harness_logout(KIMI_KEY)
-            status = "kimi logout flow finished"
+            status = "fluxo de logout do kimi finalizado"
         elif action == "help":
             _print_kimi_auth_help()
             status = None
@@ -10463,31 +10503,33 @@ def _prompt_install_copilot() -> str | None:
     # ``[copilot]`` so it renders verbatim.
     cmd_markup = _rich_escape(cmd)
     choice = select(
-        "Copilot's SDK (github-copilot-sdk) isn't installed. Install it now?",
+        "O SDK do Copilot (github-copilot-sdk) não está instalado. Instalar agora?",
         [
-            f"Install it now ({cmd_markup})",
-            "Set the GitHub token anyway",
-            "I'll run it myself (show the command)",
+            f"Instalar agora ({cmd_markup})",
+            "Definir o token do GitHub mesmo assim",
+            "Eu mesmo rodo (mostrar o comando)",
         ],
         descriptions=[
-            f"Runs `{cmd_markup}`, then continues.",
-            "Skip the install — store the token now; the SDK can be added later.",
-            "Print the command so you can install it yourself, then continue.",
+            f"Roda `{cmd_markup}`, depois continua.",
+            "Pula a instalação — armazena o token agora; o SDK pode ser adicionado depois.",
+            "Imprime o comando para você instalar por conta, depois continua.",
         ],
         default=0,
         clear_on_exit=True,
     )
     if choice == 0:
-        console.print(f"  [dim]Installing the copilot extra — running `{cmd_markup}`…[/dim]")
+        console.print(f"  [dim]Instalando o extra copilot — rodando `{cmd_markup}`…[/dim]")
         if install_copilot_sdk():
-            console.print("  [green]✓ github-copilot-sdk installed[/green]")
-            return "✓ github-copilot-sdk installed"
-        console.print(f"  [red]Install failed.[/red] Run it manually: [bold]{cmd_markup}[/bold]")
-        return "✗ Install failed — set the token anyway, or install by hand"
+            console.print("  [green]✓ github-copilot-sdk instalado[/green]")
+            return "✓ github-copilot-sdk instalado"
+        console.print(
+            f"  [red]Falha na instalação.[/red] Rode manualmente: [bold]{cmd_markup}[/bold]"
+        )
+        return "✗ Falha na instalação — defina o token mesmo assim, ou instale na mão"
     if choice < 0:
         return _SOFT_INSTALL_ABORT
     if choice == 2:  # run it yourself
-        console.print(f"  Install the copilot extra with:\n    [bold]{cmd_markup}[/bold]")
+        console.print(f"  Instale o extra copilot com:\n    [bold]{cmd_markup}[/bold]")
         return None
     # choice == 1 (set token anyway): fall through to the token menu silently.
     return None
@@ -10537,16 +10579,18 @@ def _manage_copilot_harness() -> None:
 
         rows: list[_HarnessMenuRow] = [
             _HarnessMenuRow(
-                "Replace GitHub token" if token_set else "Set GitHub token",
+                "Substituir token do GitHub" if token_set else "Definir token do GitHub",
                 action="set_key",
             )
         ]
         if token_set:
-            rows.append(_HarnessMenuRow("Remove GitHub token", action="remove_key"))
-        rows.append(_HarnessMenuRow("← Back", action="back"))
+            rows.append(_HarnessMenuRow("Remover token do GitHub", action="remove_key"))
+        rows.append(_HarnessMenuRow("← Voltar", action="back"))
 
         header = (
-            "Copilot — GitHub token configured" if token_set else "Copilot — no GitHub token yet"
+            "Copilot — token do GitHub configurado"
+            if token_set
+            else "Copilot — sem token do GitHub ainda"
         )
         idx = select(header, [r.label for r in rows], clear_on_exit=True, status=status)
         if idx < 0:  # Esc / q
@@ -10565,7 +10609,7 @@ def _manage_copilot_harness() -> None:
             if ref == f"keychain:{COPILOT_SECRET_NAME}":
                 secret_store.delete_secret(COPILOT_SECRET_NAME)
             _save_global_config({}, unset_keys=(COPILOT_CONFIG_KEY,))
-            status = "✓ Removed Copilot GitHub token"
+            status = "✓ Token do GitHub do Copilot removido"
 
 
 def _set_copilot_github_token() -> str | None:
@@ -10591,30 +10635,30 @@ def _set_copilot_github_token() -> str | None:
 
     detected_var = next((v for v in COPILOT_TOKEN_ENV_VARS if os.environ.get(v)), None)
     if detected_var is not None and click.confirm(
-        f"Detected {detected_var} in the environment — use it?", default=True
+        f"Detectado {detected_var} no ambiente — usar?", default=True
     ):
         detected = os.environ[detected_var]
         if not looks_like_github_copilot_token(detected) and not click.confirm(
-            f"${detected_var} doesn't look like a Copilot-capable GitHub token "
-            "(github_pat_/gho_). Use it anyway?",
+            f"${detected_var} não parece um token do GitHub compatível com Copilot "
+            "(github_pat_/gho_). Usar mesmo assim?",
             default=False,
         ):
             return None
         _save_global_config(copilot_github_token_settings(f"env:{detected_var}"))
-        return f"✓ Copilot GitHub token set (from ${detected_var})"
+        return f"✓ Token do GitHub do Copilot definido (de ${detected_var})"
 
-    pasted = prompt_text("GitHub token with Copilot access", hide_input=True).strip()
+    pasted = prompt_text("Token do GitHub com acesso ao Copilot", hide_input=True).strip()
     if not pasted:
         return None
     if not looks_like_github_copilot_token(pasted) and not click.confirm(
-        "That doesn't look like a Copilot-capable GitHub token (github_pat_/gho_). "
-        "Store it anyway?",
+        "Isso não parece um token do GitHub compatível com Copilot (github_pat_/gho_). "
+        "Armazenar mesmo assim?",
         default=False,
     ):
         return None
     secret_store.store_secret(COPILOT_SECRET_NAME, pasted)
     _save_global_config(copilot_github_token_settings(f"keychain:{COPILOT_SECRET_NAME}"))
-    return "✓ Copilot GitHub token stored"
+    return "✓ Token do GitHub do Copilot armazenado"
 
 
 def _manage_credential(provider: str, family: str) -> str | None:
@@ -10654,11 +10698,13 @@ def _manage_credential(provider: str, family: str) -> str | None:
     if default is None or default.name != provider:
         rows.append(
             _HarnessMenuRow(
-                f"Make default for {family_label(family)}", action="set_default", provider=provider
+                f"Tornar padrão para {family_label(family)}",
+                action="set_default",
+                provider=provider,
             )
         )
-    rows.append(_HarnessMenuRow("Remove", action="remove", provider=provider))
-    rows.append(_HarnessMenuRow("← Back", action="back"))
+    rows.append(_HarnessMenuRow("Remover", action="remove", provider=provider))
+    rows.append(_HarnessMenuRow("← Voltar", action="back"))
 
     idx = select(label, [r.label for r in rows], clear_on_exit=True)
     if idx < 0:  # Esc / q — back to the credential list, no change
@@ -10714,12 +10760,12 @@ def _remove_subscription(provider: str, family: str) -> str | None:
         else "logout"
     )
     choice = select(
-        f"Remove {disp} subscription?",
-        [f"Yes — sign out of {disp} and remove", "No — keep it"],
+        f"Remover a assinatura {disp}?",
+        [f"Sim — sair do {disp} e remover", "Não — manter"],
         descriptions=[
-            f"Runs `{logout_cmd}`, signing you out of the standalone {disp} CLI "
-            "too, then removes it here.",
-            f"Leave the subscription and your {disp} login untouched.",
+            f"Roda `{logout_cmd}`, deslogando você do CLI standalone do {disp} "
+            "também, depois remove aqui.",
+            f"Deixa a assinatura e seu login do {disp} intactos.",
         ],
         default=1,  # default to the non-destructive choice
         clear_on_exit=True,
@@ -10731,10 +10777,10 @@ def _remove_subscription(provider: str, family: str) -> str | None:
     # we say so, since the standalone login may persist (and be re-detected).
     _remove_credential(provider)
     if signed_out:
-        return f"✓ Signed out of {disp} and removed"
+        return f"✓ Deslogado do {disp} e removido"
     return (
-        f"✓ Removed {disp} subscription — note: `{logout_cmd}` did not complete, "
-        f"so you may still be signed in to the {disp} CLI"
+        f"✓ Assinatura {disp} removida — nota: `{logout_cmd}` não concluiu, "
+        f"então você pode ainda estar logado no CLI do {disp}"
     )
 
 
@@ -10782,7 +10828,7 @@ def _remove_databricks_provider(provider: str) -> str:
             cleaned.append("unregistered ucode's web_search MCP")
         if cleaned:
             cleanup_note = f" — {', '.join(cleaned)}"
-    removed_msg = _remove_credential(provider) or f"✓ Removed {provider}"
+    removed_msg = _remove_credential(provider) or f"✓ {provider} removido"
     return f"{removed_msg}{cleanup_note}"
 
 
@@ -10806,7 +10852,7 @@ def _set_harness_default(provider: str, family: str) -> str | None:
     entry = load_providers({"providers": block}).get(provider)
     label = _credential_label(provider, entry) if entry is not None else provider
     _save_global_config({"providers": set_default_provider(block, provider, family)})
-    return f"✓ {label} is now the {family_label(family)} default"
+    return f"✓ {label} agora é o padrão de {family_label(family)}"
 
 
 def _clear_detection_dismissal(name: str) -> None:
@@ -10876,8 +10922,10 @@ def _remove_credential(provider: str) -> str | None:
         settings[DISMISSED_DETECTIONS_KEY] = sorted(dismissed_detection_names(config) | {provider})
     _save_global_config(settings)  # wholesale replace per key
     if backing is not None:
-        return f"✓ Removed {label} — it stays on your machine but won't be auto-configured again"
-    return f"✓ Removed {label}"
+        return (
+            f"✓ {label} removido — permanece na sua máquina mas não será autoconfigurado de novo"
+        )
+    return f"✓ {label} removido"
 
 
 def _launch_opencode_auth_login() -> str | None:
@@ -10896,19 +10944,19 @@ def _launch_opencode_auth_login() -> str | None:
     from omnicraft.onboarding.opencode_auth import opencode_auth_summary
 
     if not harness_cli_installed(OPENCODE_KEY):
-        return "✗ opencode CLI not found"
+        return "✗ CLI opencode não encontrado"
     spec = harness_install_spec(OPENCODE_KEY)
     assert spec is not None
     console.print(
-        "  [dim]Launching [bold]opencode auth login[/bold] — pick a provider and "
-        "sign in, then return.[/dim]"
+        "  [dim]Lançando [bold]opencode auth login[/bold] — escolha um provedor e "
+        "faça login, depois volte.[/dim]"
     )
     with contextlib.suppress(OSError, KeyboardInterrupt):
         subprocess.run([spec.binary, "auth", "login"], check=False)
     summary = opencode_auth_summary()
     if summary.has_provider:
-        return f"✓ providers: {summary.describe()}"
-    return "No provider detected yet"
+        return f"✓ provedores: {summary.describe()}"
+    return "Nenhum provedor detectado ainda"
 
 
 def _run_opencode_auth_list() -> None:
@@ -10961,7 +11009,7 @@ def _set_opencode_default_model(current: str | None) -> str | None:
 
     models = _list_opencode_models()
     if not models:
-        return "✗ no models — sign in to a provider first (opencode auth login)"
+        return "✗ sem modelos — faça login em um provedor primeiro (opencode auth login)"
     # `opencode models` can list hundreds of `provider/model` ids across every
     # provider on models.dev — too long for the picker (it overflows the
     # viewport and flickers). Narrow to the providers the user can actually
@@ -10975,30 +11023,30 @@ def _set_opencode_default_model(current: str | None) -> str | None:
     clear_index = -1
     if current is not None:
         clear_index = len(options)
-        options.append("Clear default (use OpenCode's own default)")
+        options.append("Limpar padrão (usar o padrão do próprio OpenCode)")
     default = models.index(current) if current in models else 0
     # Even filtered to reachable providers the list can exceed the screen, so
     # bound the picker to a scrolling viewport sized to the terminal (leaving
     # room for the title / status / footer / "N more" markers).
     rows = shutil.get_terminal_size(fallback=(80, 24)).lines
     idx = select(
-        "Pick OpenCode's default model",
+        "Escolha o modelo padrão do OpenCode",
         options,
         default=default,
         clear_on_exit=True,
-        status=f"current: {current}" if current else None,
+        status=f"atual: {current}" if current else None,
         max_visible=max(5, rows - 8),
     )
     if idx < 0:
         return None
     if idx == clear_index:
         _save_global_config({}, unset_keys=("opencode_model",))
-        console.print("  [green]✓ default model cleared[/green]")
-        return "✓ default model cleared"
+        console.print("  [green]✓ modelo padrão limpo[/green]")
+        return "✓ modelo padrão limpo"
     chosen = models[idx]
     _save_global_config({"opencode_model": chosen})
-    console.print(f"  [green]✓ default model set to[/green] [bold]{chosen}[/bold]")
-    return f"✓ default model: {chosen}"
+    console.print(f"  [green]✓ modelo padrão definido para[/green] [bold]{chosen}[/bold]")
+    return f"✓ modelo padrão: {chosen}"
 
 
 def _print_opencode_auth_help() -> None:
@@ -11006,15 +11054,18 @@ def _print_opencode_auth_help() -> None:
     from omnicraft.onboarding.interactive import console
 
     console.print(
-        "  OpenCode resolves a model from the provider its agent uses:\n"
-        "    • [bold]opencode auth login[/bold] — sign in to a provider (OpenAI, Anthropic, …);\n"
-        "      stored in ~/.local/share/opencode/auth.json.\n"
-        "    • Provider env vars (OPENAI_API_KEY / ANTHROPIC_API_KEY / …) are auto-detected.\n"
-        "    • Databricks gateway: set an agent ``profile`` (configured under Claude / Codex);\n"
-        "      OmniCraft synthesizes opencode's per-session provider config from it.\n"
-        "  OmniCraft stores no OpenCode credential of its own.\n"
-        "  [dim]Tip:[/dim] 'Set default model' picks which model `omni opencode` launches on\n"
-        "  (otherwise OpenCode uses its built-in default, opencode/big-pickle)."
+        "  O OpenCode resolve um modelo a partir do provedor que seu agente usa:\n"
+        "    • [bold]opencode auth login[/bold] — faça login em um provedor "
+        "(OpenAI, Anthropic, …);\n"
+        "      armazenado em ~/.local/share/opencode/auth.json.\n"
+        "    • Env vars de provedor (OPENAI_API_KEY / ANTHROPIC_API_KEY / …) são autodetectadas.\n"
+        "    • Gateway Databricks: defina um ``profile`` de agente "
+        "(configurado sob Claude / Codex);\n"
+        "      o OmniCraft sintetiza a config de provedor por sessão do opencode a partir dele.\n"
+        "  O OmniCraft não armazena credencial própria do OpenCode.\n"
+        "  [dim]Dica:[/dim] 'Definir modelo padrão' escolhe em qual modelo o "
+        "`omni opencode` lança\n"
+        "  (caso contrário o OpenCode usa seu padrão interno, opencode/big-pickle)."
     )
 
 
@@ -11045,32 +11096,32 @@ def _manage_opencode_harness() -> None:
     if not harness_cli_installed(OPENCODE_KEY):
         cmd = " ".join(harness_install_command(OPENCODE_KEY))
         choice = select(
-            "OpenCode's CLI isn't installed. Install it now?",
+            "O CLI do OpenCode não está instalado. Instalar agora?",
             [
-                f"Yes — install ({cmd})",
-                "No — back to harnesses",
-                "I'll run it myself (show the command)",
+                f"Sim — instalar ({cmd})",
+                "Não — voltar aos harnesses",
+                "Eu mesmo rodo (mostrar o comando)",
             ],
             descriptions=[
-                f"Runs `{cmd}` (needs npm).",
-                "Return to the harness picker without installing.",
-                "Print the command so you can install it yourself, then return.",
+                f"Roda `{cmd}` (precisa de npm).",
+                "Volta ao seletor de harnesses sem instalar.",
+                "Imprime o comando para você instalar por conta, depois volta.",
             ],
             default=0,
             clear_on_exit=True,
         )
         if choice == 0:
-            console.print(f"  [dim]Installing OpenCode — running `{cmd}`…[/dim]")
+            console.print(f"  [dim]Instalando o OpenCode — rodando `{cmd}`…[/dim]")
             if install_harness_cli(OPENCODE_KEY):
-                console.print("  [green]✓ OpenCode installed[/green]")
+                console.print("  [green]✓ OpenCode instalado[/green]")
             else:
                 console.print(
-                    f"  [red]Install failed.[/red] Run it manually, then re-open: "
+                    f"  [red]Falha na instalação.[/red] Rode manualmente e reabra: "
                     f"[bold]{cmd}[/bold]"
                 )
                 return
         elif choice == 2:  # run it yourself
-            console.print(f"  Install OpenCode with:\n    [bold]{cmd}[/bold]")
+            console.print(f"  Instale o OpenCode com:\n    [bold]{cmd}[/bold]")
             return
         else:
             return
@@ -11085,21 +11136,21 @@ def _manage_opencode_harness() -> None:
         summary = opencode_auth_summary()
         default_model = _load_effective_config().get("opencode_model")
         header = (
-            f"OpenCode — providers: {summary.describe()}"
+            f"OpenCode — provedores: {summary.describe()}"
             if summary.has_provider
-            else "OpenCode — no provider configured yet"
+            else "OpenCode — nenhum provedor configurado ainda"
         )
         model_label = (
-            f"Set default model (current: {default_model})"
+            f"Definir modelo padrão (atual: {default_model})"
             if default_model
-            else "Set default model"
+            else "Definir modelo padrão"
         )
         rows: list[_HarnessMenuRow] = [
-            _HarnessMenuRow("Run opencode auth login", action="login"),
+            _HarnessMenuRow("Rodar opencode auth login", action="login"),
             _HarnessMenuRow(model_label, action="model"),
-            _HarnessMenuRow("List providers & credentials", action="list"),
-            _HarnessMenuRow("Show provider options", action="help"),
-            _HarnessMenuRow("← Back", action="back"),
+            _HarnessMenuRow("Listar provedores e credenciais", action="list"),
+            _HarnessMenuRow("Mostrar opções de provedor", action="help"),
+            _HarnessMenuRow("← Voltar", action="back"),
         ]
         idx = select(header, [r.label for r in rows], clear_on_exit=True, status=status)
         if idx < 0:  # Esc / q
@@ -11129,7 +11180,7 @@ def _run_configure_harnesses_interactive() -> None:
     newly auto-configured machine credentials in a callout — then loops on
     the level-1 harness overview. Every harness is shown on a single compact
     row — the harness name on the left, then an aligned ``✓``/``✗`` status
-    column (the configured credential, or "Not installed" / "Not configured")
+    column (the configured credential, or "Não instalado" / "Não configurado")
     — in 0.3 priority order: Claude, Codex, Cursor, OpenCode,
     Hermes, Pi, then Antigravity, Qwen Code, Goose, Copilot, Kiro, Kimi Code.
     The actionable hint (install command / next step) renders only for the
@@ -11258,7 +11309,7 @@ def _run_configure_harnesses_interactive() -> None:
         # Selection-only tooltip. The command is escaped so a bracketed extra
         # (e.g. ``pip install "omnicraft[cursor]"``) renders literally instead of
         # parsing as Rich markup.
-        return f"Install with `{escape(command)}`"
+        return f"Instale com `{escape(command)}`"
 
     def _truncate_cells(text: str, max_cells: int) -> str:
         """Truncate *text* to a terminal-cell budget, adding an ellipsis if needed."""
@@ -11285,13 +11336,13 @@ def _run_configure_harnesses_interactive() -> None:
             return (
                 fam,
                 name,
-                "Not installed",
+                "Não instalado",
                 "missing",
                 _install_hint(" ".join(harness_install_command(fam))),
             )
         default = surface_default_provider(config, fam)
         if default is None:
-            return (fam, name, "Not configured", "warn", "Open to add a credential.")
+            return (fam, name, "Não configurado", "warn", "Abra para adicionar uma credencial.")
         label = _family_credential_label(config, fam, default.name, default)
         return (fam, name, label, "ready", "")
 
@@ -11311,13 +11362,13 @@ def _run_configure_harnesses_interactive() -> None:
         # soft dependency; the key is independently storable, so a missing SDK
         # is surfaced as the install hint, not a hard block).
         if cursor_api_key_configured(config) or bool(os.environ.get("CURSOR_API_KEY")):
-            rows.append((CURSOR_KEY, "Cursor", "API key", "ready", ""))
+            rows.append((CURSOR_KEY, "Cursor", "Chave de API", "ready", ""))
         elif not cursor_sdk_installed():
             rows.append(
                 (
                     CURSOR_KEY,
                     "Cursor",
-                    "Not installed",
+                    "Não instalado",
                     "missing",
                     _install_hint(extra_install_display(CURSOR_EXTRA)),
                 ),
@@ -11327,9 +11378,9 @@ def _run_configure_harnesses_interactive() -> None:
                 (
                     CURSOR_KEY,
                     "Cursor",
-                    "Not configured",
+                    "Não configurado",
                     "warn",
-                    "Open to add the Cursor API key.",
+                    "Abra para adicionar a chave de API do Cursor.",
                 ),
             )
 
@@ -11341,7 +11392,7 @@ def _run_configure_harnesses_interactive() -> None:
                 (
                     _OPENCODE,
                     "OpenCode",
-                    "Not installed",
+                    "Não instalado",
                     "missing",
                     _install_hint(" ".join(harness_install_command(OPENCODE_KEY))),
                 ),
@@ -11353,9 +11404,9 @@ def _run_configure_harnesses_interactive() -> None:
                 (
                     _OPENCODE,
                     "OpenCode",
-                    "Not configured",
+                    "Não configurado",
                     "warn",
-                    "Open to sign in (opencode auth login).",
+                    "Abra para fazer login (opencode auth login).",
                 ),
             )
 
@@ -11374,7 +11425,7 @@ def _run_configure_harnesses_interactive() -> None:
                 else "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"
             )
             rows.append(
-                (_HERMES, "Hermes", "Not installed", "missing", _install_hint(hermes_hint)),
+                (_HERMES, "Hermes", "Não instalado", "missing", _install_hint(hermes_hint)),
             )
         elif hermes.ready:
             rows.append((_HERMES, "Hermes", hermes.describe(), "ready", ""))
@@ -11383,9 +11434,9 @@ def _run_configure_harnesses_interactive() -> None:
                 (
                     _HERMES,
                     "Hermes",
-                    "Not configured",
+                    "Não configurado",
                     "warn",
-                    "Open to configure with `hermes model`.",
+                    "Abra para configurar com `hermes model`.",
                 ),
             )
 
@@ -11395,13 +11446,13 @@ def _run_configure_harnesses_interactive() -> None:
         if antigravity_api_key_configured(config) or any(
             os.environ.get(v) for v in ANTIGRAVITY_ENV_VARS
         ):
-            rows.append((_ANTIGRAVITY, "Antigravity", "Gemini API key", "ready", ""))
+            rows.append((_ANTIGRAVITY, "Antigravity", "Chave de API do Gemini", "ready", ""))
         elif not antigravity_sdk_installed():
             rows.append(
                 (
                     _ANTIGRAVITY,
                     "Antigravity",
-                    "Not installed",
+                    "Não instalado",
                     "missing",
                     _install_hint(extra_install_display(ANTIGRAVITY_EXTRA)),
                 ),
@@ -11411,9 +11462,9 @@ def _run_configure_harnesses_interactive() -> None:
                 (
                     _ANTIGRAVITY,
                     "Antigravity",
-                    "Not configured",
+                    "Não configurado",
                     "warn",
-                    "Open to add the Gemini API key.",
+                    "Abra para adicionar a chave de API do Gemini.",
                 ),
             )
 
@@ -11424,21 +11475,21 @@ def _run_configure_harnesses_interactive() -> None:
                 (
                     _QWEN,
                     "Qwen Code",
-                    "Not installed",
+                    "Não instalado",
                     "missing",
                     _install_hint(" ".join(harness_install_command(QWEN_KEY))),
                 ),
             )
         elif _qwen_auth_configured():
-            rows.append((_QWEN, "Qwen Code", "Authenticated", "ready", ""))
+            rows.append((_QWEN, "Qwen Code", "Autenticado", "ready", ""))
         else:
             rows.append(
                 (
                     _QWEN,
                     "Qwen Code",
-                    "Not configured",
+                    "Não configurado",
                     "warn",
-                    "Open to set up auth (/auth or env vars).",
+                    "Abra para configurar a auth (/auth ou env vars).",
                 ),
             )
 
@@ -11450,27 +11501,33 @@ def _run_configure_harnesses_interactive() -> None:
                 if goose_spec and goose_spec.install_hint
                 else "brew install block-goose-cli"
             )
-            rows.append((_GOOSE, "Goose", "Not installed", "missing", _install_hint(goose_hint)))
+            rows.append((_GOOSE, "Goose", "Não instalado", "missing", _install_hint(goose_hint)))
         else:
             goose_summary = goose_config_summary()
             if goose_summary.provider:
                 rows.append((_GOOSE, "Goose", goose_summary.provider, "ready", ""))
             else:
                 rows.append(
-                    (_GOOSE, "Goose", "Not configured", "warn", "Open to run `goose configure`."),
+                    (
+                        _GOOSE,
+                        "Goose",
+                        "Não configurado",
+                        "warn",
+                        "Abra para rodar `goose configure`.",
+                    ),
                 )
 
         # Copilot — GitHub token (github-copilot-sdk extra is soft).
         if copilot_github_token_configured(config) or any(
             os.environ.get(v) for v in COPILOT_TOKEN_ENV_VARS
         ):
-            rows.append((COPILOT_KEY, "Copilot", "GitHub token", "ready", ""))
+            rows.append((COPILOT_KEY, "Copilot", "Token do GitHub", "ready", ""))
         elif not copilot_sdk_installed():
             rows.append(
                 (
                     COPILOT_KEY,
                     "Copilot",
-                    "Not installed",
+                    "Não instalado",
                     "missing",
                     _install_hint(extra_install_display(COPILOT_EXTRA)),
                 ),
@@ -11480,9 +11537,9 @@ def _run_configure_harnesses_interactive() -> None:
                 (
                     COPILOT_KEY,
                     "Copilot",
-                    "Not configured",
+                    "Não configurado",
                     "warn",
-                    "Open to add the GitHub token.",
+                    "Abra para adicionar o token do GitHub.",
                 ),
             )
 
@@ -11491,7 +11548,7 @@ def _run_configure_harnesses_interactive() -> None:
         # "not configured" until the user signs in.
         if harness_cli_installed(KIRO_KEY):
             rows.append(
-                (_KIRO, "Kiro", "Not configured", "warn", "Sign in with `kiro-cli login`.")
+                (_KIRO, "Kiro", "Não configurado", "warn", "Faça login com `kiro-cli login`.")
             )
         else:
             kiro_spec = harness_install_spec(KIRO_KEY)
@@ -11500,19 +11557,19 @@ def _run_configure_harnesses_interactive() -> None:
                 if kiro_spec and kiro_spec.install_hint
                 else "curl -fsSL https://cli.kiro.dev/install | bash"
             )
-            rows.append((_KIRO, "Kiro", "Not installed", "missing", _install_hint(kiro_hint)))
+            rows.append((_KIRO, "Kiro", "Não instalado", "missing", _install_hint(kiro_hint)))
 
         # Kimi Code — native CLI, own auth via `kimi login`; there is no local
         # login status probe yet. Curl-installed (no npm package), so use its
         # install_hint when absent and show "not configured" when present.
         if harness_cli_installed(KIMI_KEY):
             rows.append(
-                (_KIMI, "Kimi Code", "Not configured", "warn", "Sign in with `kimi login`.")
+                (_KIMI, "Kimi Code", "Não configurado", "warn", "Faça login com `kimi login`.")
             )
         else:
             kimi_spec = harness_install_spec(KIMI_KEY)
             kimi_hint = (kimi_spec.install_hint if kimi_spec else None) or "see Kimi Code docs"
-            rows.append((_KIMI, "Kimi Code", "Not installed", "missing", _install_hint(kimi_hint)))
+            rows.append((_KIMI, "Kimi Code", "Não instalado", "missing", _install_hint(kimi_hint)))
 
         # Custom ACP agents — the generic `acp` harness driving any user-configured
         # ACP-agent command. Each configured agent gets its own overview row
@@ -11529,16 +11586,18 @@ def _run_configure_harnesses_interactive() -> None:
                     agent.name,
                     f"ACP · {agent.command}",
                     "ready",
-                    "Select to remove this ACP agent.",
+                    "Selecione para remover este agente ACP.",
                 )
             )
         rows.append(
             (
                 _ACP_ADD,
-                "Add custom ACP agent" if acp_summary.configured else "Custom ACP agent",
-                "" if acp_summary.configured else "None configured",
+                "Adicionar agente ACP customizado"
+                if acp_summary.configured
+                else "Agente ACP customizado",
+                "" if acp_summary.configured else "Nenhum configurado",
                 "action",
-                "Add an ACP agent (gemini, qwen, goose, …).",
+                "Adicione um agente ACP (gemini, qwen, goose, …).",
             )
         )
         return rows
@@ -11570,12 +11629,12 @@ def _run_configure_harnesses_interactive() -> None:
             selectable.append(True)
             row_target.append(target)
             descriptions.append(desc)
-        options.append("Quit")
+        options.append("Sair")
         selectable.append(True)
         row_target.append(_QUIT)
         descriptions.append("")
         idx = select(
-            "Configure harnesses",
+            "Configurar harnesses",
             options,
             descriptions=descriptions,
             selectable=selectable,
@@ -11617,19 +11676,19 @@ def _run_configure_harnesses_interactive() -> None:
 @click.option(
     "--internal-beta/--no-internal-beta",
     default=False,
-    help="Run the standard model/credential setup (default): choose a "
-    "provider for each harness and set your defaults. Pass --internal-beta "
-    "to configure Databricks internal-beta defaults and authentication.",
+    help="Roda a configuração padrão de modelo/credencial (padrão): escolha um "
+    "provedor para cada harness e defina seus padrões. Passe --internal-beta "
+    "para configurar padrões e autenticação do internal-beta do Databricks.",
 )
 def setup(internal_beta: bool) -> None:
     """
-    Launch the OmniCraft first-time setup flow.
+    Lança o fluxo de configuração inicial do OmniCraft.
 
-    By default this runs the standard model/credential picker — choose a
-    provider for each harness and set your defaults, then start a session
-    with ``omnicraft run``. (List configured credentials with
-    ``omnicraft config list``.) Pass ``--internal-beta`` to configure
-    Databricks internal-beta defaults and authentication instead.
+    Por padrão isto roda o seletor padrão de modelo/credencial — escolha um
+    provedor para cada harness e defina seus padrões, depois inicie uma sessão
+    com ``omnicraft run``. (Liste as credenciais configuradas com
+    ``omnicraft config list``.) Passe ``--internal-beta`` para configurar
+    padrões e autenticação do internal-beta do Databricks em vez disso.
     """
     from omnicraft.inner import ui
 
@@ -11638,7 +11697,7 @@ def setup(internal_beta: bool) -> None:
     # on short terminals it combines with the missing-tool warning and scrolls
     # the menu off the first screen.
     if shutil.get_terminal_size(fallback=(80, 24)).lines >= 32:
-        ui.print_landing(tagline="all your agents, one cli")
+        ui.print_landing(tagline="todos os seus agentes, um só cli")
     else:
         ui.print_brandmark("setup")
 
@@ -11650,8 +11709,8 @@ def setup(internal_beta: bool) -> None:
             import omnicraft.onboarding.internal_beta  # noqa: F401
         except ImportError:
             raise click.ClickException(
-                "Databricks internal-beta setup is not available in this build. "
-                "Run `omnicraft setup` for the standard model/credential setup."
+                "A configuração internal-beta do Databricks não está disponível neste build. "
+                "Rode `omnicraft setup` para a configuração padrão de modelo/credencial."
             ) from None
         # Internal-beta routing mints workspace OAuth tokens via
         # databricks-sdk at runtime, and the SDK ships in the `databricks`
@@ -11664,8 +11723,8 @@ def setup(internal_beta: bool) -> None:
 
         if not databricks_sdk_installed():
             raise click.ClickException(
-                "Databricks internal-beta setup needs the databricks extra "
-                f"(databricks-sdk). Reinstall with:\n  {DATABRICKS_EXTRA_INSTALL_HINT}"
+                "A configuração internal-beta do Databricks precisa do extra databricks "
+                f"(databricks-sdk). Reinstale com:\n  {DATABRICKS_EXTRA_INSTALL_HINT}"
             )
         # Surface missing external tooling (Node, tmux) before the Databricks
         # bootstrap so a fresh machine sees every gap at once.
@@ -11683,7 +11742,7 @@ def setup(internal_beta: bool) -> None:
         install_demo_databricks_cli()
         with _isolated_databricks_cfg():
             if not run_onboarding():
-                raise click.ClickException("onboarding did not complete; see output above.")
+                raise click.ClickException("o onboarding não concluiu; veja a saída acima.")
             _run_configure_databricks()
         agent_path = _materialize_internal_beta_agents()
         _save_global_config(
@@ -11696,8 +11755,8 @@ def setup(internal_beta: bool) -> None:
                 "auth": {"type": "databricks", "profile": "oss"},
             }
         )
-        click.echo(f"Set default_agent={agent_path} in {_GLOBAL_CONFIG_PATH}")
-        click.echo("Type `omnicraft claude` to get started with Claude Code on omnicraft.")
+        click.echo(f"Definido default_agent={agent_path} em {_GLOBAL_CONFIG_PATH}")
+        click.echo("Digite `omnicraft claude` para começar com o Claude Code no omnicraft.")
         return
 
     # --no-internal-beta: the standard model/credential picker. It warns
@@ -11736,11 +11795,11 @@ if _sandbox_providers():
 
 @cli.group("debug")
 def debug() -> None:
-    """Internal maintenance commands (advanced — not needed for normal use).
+    """Comandos internos de manutenção (avançado — não necessários para uso normal).
 
-    Houses operator-only database and accounts maintenance: tracking-DB
-    schema upgrades (``db-upgrade``) and the accounts→OIDC identity remap
-    (``migrate-accounts-to-oidc``).
+    Abriga a manutenção de banco de dados e contas apenas para operadores:
+    upgrades de schema do banco de rastreamento (``db-upgrade``) e o remapeamento
+    de identidade contas→OIDC (``migrate-accounts-to-oidc``).
     """
 
 
@@ -11748,29 +11807,29 @@ def debug() -> None:
 @click.argument("url")
 def debug_db_upgrade(url: str) -> None:
     """
-    Upgrade the schema of an OmniCraft tracking database to the
-    latest supported version.
+    Atualiza o schema de um banco de dados de rastreamento do OmniCraft para a
+    versão suportada mais recente.
 
-    URL is a SQLAlchemy database URL, e.g.
-    ``sqlite:////absolute/path/to/chat.db`` or
+    URL é uma URL de banco SQLAlchemy, ex.
+    ``sqlite:////caminho/absoluto/para/chat.db`` ou
     ``postgresql://user:pass@host/dbname``.
 
     \b
-    IMPORTANT: schema migrations can be slow and are not guaranteed
-    to be transactional — always take a backup of your database
-    before running migrations.
+    IMPORTANTE: migrações de schema podem ser lentas e não têm garantia
+    de serem transacionais — sempre faça um backup do seu banco
+    antes de rodar migrações.
     """
     from sqlalchemy import create_engine
 
     from omnicraft.db.utils import _run_migrations
 
-    click.echo(f"Upgrading {url} ...")
+    click.echo(f"Atualizando {url} ...")
     engine = create_engine(url)
     try:
         _run_migrations(engine, url)
     finally:
         engine.dispose()
-    click.echo("Upgrade complete.")
+    click.echo("Atualização concluída.")
 
 
 @debug.command("migrate-accounts-to-oidc")
@@ -11780,30 +11839,30 @@ def debug_db_upgrade(url: str) -> None:
     "maps",
     multiple=True,
     metavar="OLD=NEW",
-    help="Explicit identity remap, e.g. --map alice=alice@example.com "
-    "(repeatable; overrides --domain for the same OLD).",
+    help="Remapeamento explícito de identidade, ex. --map alice=alice@example.com "
+    "(repetível; sobrescreve --domain para o mesmo OLD).",
 )
 @click.option(
     "--domain",
     default=None,
     metavar="DOMAIN",
-    help="Append @DOMAIN to every bare (no-@) username, e.g. "
-    "--domain example.com maps alice -> alice@example.com.",
+    help="Acrescenta @DOMAIN a todo username sem @, ex. "
+    "--domain example.com mapeia alice -> alice@example.com.",
 )
 @click.option(
     "--commit",
     is_flag=True,
     default=False,
-    help="Apply the changes. Without this flag the command is a "
-    "dry run that reports what would change and mutates nothing.",
+    help="Aplica as mudanças. Sem esta flag o comando é um "
+    "dry run que reporta o que mudaria e não altera nada.",
 )
 @click.option(
     "--force",
     is_flag=True,
     default=False,
-    help="Allow merging onto a NEW id that already exists as a "
-    "distinct user (merges admin rights). Off by default to avoid "
-    "accidental privilege merges.",
+    help="Permite mesclar sobre um id NEW que já existe como um "
+    "usuário distinto (mescla direitos de admin). Desligado por padrão para evitar "
+    "mesclagens acidentais de privilégios.",
 )
 def debug_migrate_accounts_to_oidc(
     url: str,
@@ -11812,32 +11871,32 @@ def debug_migrate_accounts_to_oidc(
     commit: bool,
     force: bool,
 ) -> None:
-    """Remap user identities when switching the accounts provider to OIDC.
+    """Remapeia identidades de usuário ao trocar o provedor de contas para OIDC.
 
-    The accounts provider keys users by username (``alice``); OIDC keys
-    them by IdP email (``alice@example.com``). This rewrites every
-    user-id-bearing row (permission grants, comments, policies, tokens,
-    host ownership) so the team keeps its admin and data across the
-    switch. Provider-agnostic: it touches only the database, so run it
-    against your live DB *before* flipping ``OMNICRAFT_AUTH_PROVIDER``.
+    O provedor de contas indexa os usuários por username (``alice``); o OIDC os
+    indexa por email do IdP (``alice@example.com``). Isto reescreve toda linha
+    que carrega um user-id (concessões de permissão, comentários, políticas, tokens,
+    propriedade de host) para que o time mantenha seu admin e seus dados na
+    troca. Agnóstico de provedor: toca apenas o banco de dados, então rode-o
+    contra seu DB ao vivo *antes* de virar ``OMNICRAFT_AUTH_PROVIDER``.
 
-    URL is a SQLAlchemy database URL, e.g.
-    ``sqlite:////absolute/path/to/chat.db`` or
+    URL é uma URL de banco SQLAlchemy, ex.
+    ``sqlite:////caminho/absoluto/para/chat.db`` ou
     ``postgresql://user:pass@host/dbname``.
 
     \b
-    Examples:
-      # Dry run: append the org domain to every username
+    Exemplos:
+      # Dry run: acrescenta o domínio da org a todo username
       omnicraft debug migrate-accounts-to-oidc sqlite:///chat.db --domain example.com
-      # Apply it
+      # Aplica
       omnicraft debug migrate-accounts-to-oidc sqlite:///chat.db --domain example.com --commit
-      # Explicit per-user mapping (add --commit to apply)
+      # Mapeamento explícito por usuário (adicione --commit para aplicar)
       omnicraft debug migrate-accounts-to-oidc sqlite:///chat.db --map alice=alice@corp.com
 
     \b
-    IMPORTANT: always back up your database before running with
-    --commit. The remap runs in one transaction but rewrites primary
-    keys across several tables.
+    IMPORTANTE: sempre faça backup do seu banco antes de rodar com
+    --commit. O remapeamento roda em uma transação mas reescreve chaves
+    primárias em várias tabelas.
     """
     from sqlalchemy import create_engine
 
@@ -11851,23 +11910,23 @@ def debug_migrate_accounts_to_oidc(
         # Explicit --map pairs win over the domain-derived mapping.
         for pair in maps:
             if "=" not in pair:
-                raise click.BadParameter(f"--map expects OLD=NEW, got {pair!r}")
+                raise click.BadParameter(f"--map espera OLD=NEW, recebeu {pair!r}")
             old, new = (part.strip() for part in pair.split("=", 1))
             if not old or not new:
-                raise click.BadParameter(f"--map expects non-empty OLD=NEW, got {pair!r}")
+                raise click.BadParameter(f"--map espera OLD=NEW não vazio, recebeu {pair!r}")
             mapping[old] = new
 
         if not mapping:
-            raise click.UsageError("nothing to migrate: pass --domain DOMAIN and/or --map OLD=NEW")
+            raise click.UsageError("nada para migrar: passe --domain DOMAIN e/ou --map OLD=NEW")
 
         report = remap_identities(engine, mapping, dry_run=not commit, force=force)
     finally:
         engine.dispose()
 
-    mode = "COMMITTED" if report.committed else "DRY RUN (no changes written)"
-    click.echo(f"\nIdentity remap — {mode}")
-    click.echo(f"  database: {url}")
-    click.echo(f"  mappings ({len(report.mapping)}):")
+    mode = "COMMITADO" if report.committed else "DRY RUN (nenhuma mudança escrita)"
+    click.echo(f"\nRemapeamento de identidade — {mode}")
+    click.echo(f"  banco de dados: {url}")
+    click.echo(f"  mapeamentos ({len(report.mapping)}):")
     for old, new in report.mapping.items():
         click.echo(f"    {old}  ->  {new}")
 
@@ -11876,35 +11935,35 @@ def debug_migrate_accounts_to_oidc(
     # This is the #1 footgun with --domain when the IdP email isn't
     # <username>@<domain> (e.g. GitHub returning a @gmail.com address).
     click.echo(
-        "\n  ⚠ Each NEW id must match the email your IdP returns for that user.\n"
-        "    If it doesn't, that user logs in as a new principal — re-add them to\n"
-        "    the admin list, or re-run with --map OLD=<exact-idp-email>."
+        "\n  ⚠ Cada id NEW deve corresponder ao email que seu IdP retorna para aquele usuário.\n"
+        "    Se não corresponder, esse usuário loga como um novo principal — readicione-o à\n"
+        "    lista de admins, ou rode de novo com --map OLD=<email-exato-do-idp>."
     )
     bare = sorted({new for new in report.mapping.values() if "@" not in new})
     if bare:
         click.echo(
-            "    These targets have no '@' and are unlikely to be IdP emails: " + ", ".join(bare)
+            "    Estes alvos não têm '@' e provavelmente não são emails de IdP: " + ", ".join(bare)
         )
 
     if report.per_table:
-        click.echo("  rows changed:")
+        click.echo("  linhas alteradas:")
         for table, count in sorted(report.per_table.items()):
             click.echo(f"    {table}: {count}")
     else:
-        click.echo("  rows changed: none")
+        click.echo("  linhas alteradas: nenhuma")
 
     if report.skipped_missing:
-        click.echo(f"  skipped (no user row): {', '.join(report.skipped_missing)}")
+        click.echo(f"  pulados (sem linha de usuário): {', '.join(report.skipped_missing)}")
     if report.refused:
         click.echo(
-            "  REFUSED (NEW id already exists — re-run with --force to merge): "
+            "  RECUSADO (id NEW já existe — rode de novo com --force para mesclar): "
             + ", ".join(report.refused)
         )
 
     if not report.committed:
-        click.echo("\nThis was a dry run. Re-run with --commit to apply.\n")
+        click.echo("\nIsto foi um dry run. Rode de novo com --commit para aplicar.\n")
     else:
-        click.echo("\nDone. Flip OMNICRAFT_AUTH_PROVIDER=oidc and restart.\n")
+        click.echo("\nConcluído. Vire OMNICRAFT_AUTH_PROVIDER=oidc e reinicie.\n")
 
 
 @debug.command("logs")
@@ -11914,25 +11973,26 @@ def debug_migrate_accounts_to_oidc(
     type=click.Choice(["runner", "host-runner", "server", "cli"], case_sensitive=False),
     default="runner",
     show_default=True,
-    help="Log category: runner (local CLI runner via omnicraft run), "
-    "host-runner (runner spawned by a host daemon), "
-    "server (local server), or cli (CLI diagnostics).",
+    help="Categoria de log: runner (runner local do CLI via omnicraft run), "
+    "host-runner (runner criado por um daemon host), "
+    "server (servidor local), ou cli (diagnósticos do CLI).",
 )
 @click.option(
     "--session",
     "session_id",
     default=None,
     metavar="SESSION_ID",
-    help="Filter host-runner logs by session id, e.g. conv_abc123. "
-    "Only applies to --type host-runner. Shows all log files for the "
-    "session, oldest first.",
+    help="Filtra logs de host-runner por id de sessão, ex. conv_abc123. "
+    "Só se aplica a --type host-runner. Mostra todos os arquivos de log da "
+    "sessão, do mais antigo primeiro.",
 )
 @click.option(
     "--list",
     "list_only",
     is_flag=True,
     default=False,
-    help="List available log files with size and timestamp instead of showing content.",
+    help="Lista os arquivos de log disponíveis com tamanho e timestamp "
+    "em vez de mostrar o conteúdo.",
 )
 @click.option(
     "--lines",
@@ -11941,50 +12001,50 @@ def debug_migrate_accounts_to_oidc(
     show_default=True,
     metavar="N",
     type=click.IntRange(min=0),
-    help="Lines to show from the end of the log (0 = entire file). "
-    "With --session, applied per file.",
+    help="Linhas a mostrar do fim do log (0 = arquivo inteiro). "
+    "Com --session, aplicado por arquivo.",
 )
 @click.option(
     "--follow",
     "-f",
     is_flag=True,
     default=False,
-    help="Follow the latest log file in real-time (like tail -f). "
-    "With --session, follows the most recent file for the session. "
-    "Not supported on Windows.",
+    help="Acompanha o arquivo de log mais recente em tempo real (como tail -f). "
+    "Com --session, acompanha o arquivo mais recente da sessão. "
+    "Não suportado no Windows.",
 )
 def debug_logs(
     log_type: str, session_id: str | None, list_only: bool, lines: int, follow: bool
 ) -> None:
-    """Show runner, server, or CLI diagnostic logs.
+    """Mostra os logs de diagnóstico do runner, servidor ou CLI.
 
-    Prints the tail of the most recent log file for the chosen category.
-    Use ``--list`` to see all available files, or ``--follow`` to stream
-    new output as it is written.
+    Imprime o final do arquivo de log mais recente da categoria escolhida.
+    Use ``--list`` para ver todos os arquivos disponíveis, ou ``--follow`` para
+    transmitir a nova saída conforme é escrita.
 
-    Pass ``--session SESSION_ID`` (``--type host-runner`` only) to scope
-    output to all log files produced for a specific session across relaunches.
+    Passe ``--session SESSION_ID`` (só ``--type host-runner``) para restringir a
+    saída a todos os arquivos de log produzidos para uma sessão específica entre relançamentos.
 
     \b
-    Log locations (relative to ~/.omnicraft or $OMNICRAFT_DATA_DIR):
+    Locais dos logs (relativos a ~/.omnicraft ou $OMNICRAFT_DATA_DIR):
       runner       logs/runner/runner-*.log
       host-runner  logs/host-runner/runner-*.log
       server       logs/server/*server*.log
       cli          logs/cli-*.log
 
     \b
-    Examples:
-      # Tail the most recent local runner log (default)
+    Exemplos:
+      # Mostra o final do log de runner local mais recente (padrão)
       omnicraft debug logs
-      # List all local runner log files with sizes
+      # Lista todos os arquivos de log de runner local com tamanhos
       omnicraft debug logs --list
-      # Show host-runner logs for a specific session (across relaunches)
+      # Mostra logs de host-runner de uma sessão específica (entre relançamentos)
       omnicraft debug logs --type host-runner --session conv_abc123
-      # List host-runner log files for a session
+      # Lista arquivos de log de host-runner de uma sessão
       omnicraft debug logs --type host-runner --session conv_abc123 --list
-      # Follow the latest server log in real-time
+      # Acompanha o log de servidor mais recente em tempo real
       omnicraft debug logs --type server --follow
-      # Show the full latest CLI diagnostics log
+      # Mostra o log completo de diagnósticos do CLI mais recente
       omnicraft debug logs --type cli -n 0
     """
     import re
@@ -11993,10 +12053,10 @@ def debug_logs(
     from omnicraft.host.local_server import _local_data_dir
 
     if session_id is not None and log_type != "host-runner":
-        raise click.UsageError("--session is only supported with --type host-runner")
+        raise click.UsageError("--session só é suportado com --type host-runner")
 
     if follow and IS_WINDOWS:
-        raise click.UsageError("--follow is not supported on Windows")
+        raise click.UsageError("--follow não é suportado no Windows")
 
     data_dir = _local_data_dir()
 
@@ -12011,7 +12071,7 @@ def debug_logs(
     log_dir, pattern = _log_configs[log_type]
 
     if not log_dir.exists():
-        raise click.ClickException(f"No {log_type} logs found — {log_dir} does not exist.")
+        raise click.ClickException(f"Nenhum log de {log_type} encontrado — {log_dir} não existe.")
 
     if session_id is not None:
         # Sanitize the same way connect.py does so the glob matches.
@@ -12028,17 +12088,17 @@ def debug_logs(
     if not log_files:
         if session_id is not None:
             raise click.ClickException(
-                f"No host-runner logs found for session {session_id!r}. "
-                "Session ids appear in filenames only for runners launched "
-                "after this feature was added."
+                f"Nenhum log de host-runner encontrado para a sessão {session_id!r}. "
+                "Ids de sessão aparecem nos nomes de arquivo apenas para runners lançados "
+                "depois que este recurso foi adicionado."
             )
-        raise click.ClickException(f"No {log_type} log files found in {log_dir}.")
+        raise click.ClickException(f"Nenhum arquivo de log de {log_type} encontrado em {log_dir}.")
 
     if list_only:
         header = (
-            f"host-runner logs for session {session_id!r} in {log_dir}:"
+            f"logs de host-runner da sessão {session_id!r} em {log_dir}:"
             if session_id
-            else f"{log_type} logs in {log_dir}:"
+            else f"logs de {log_type} em {log_dir}:"
         )
         click.echo(header)
         for f in log_files:
@@ -12219,7 +12279,8 @@ def _workspace_api_server_url(server: str) -> str:
         return server
     if _workspace_mount_probe_matches(candidate, api_probe):
         click.echo(
-            f"Using {display_server_url(candidate)} (Databricks workspace-hosted omnicraft)."
+            f"Usando {display_server_url(candidate)} "
+            "(omnicraft hospedado no workspace Databricks)."
         )
         return candidate
     # The anonymous probe came back inconclusive (404 on Azure even
@@ -12239,25 +12300,26 @@ def _workspace_api_server_url(server: str) -> str:
             authed_probe = None
         if authed_probe is not None and _workspace_mount_probe_matches(candidate, authed_probe):
             click.echo(
-                f"Using {display_server_url(candidate)} (Databricks workspace-hosted omnicraft)."
+                f"Usando {display_server_url(candidate)} "
+                "(omnicraft hospedado no workspace Databricks)."
             )
             return candidate
         click.echo(
-            f"Note: {server} answers like a Databricks workspace, but "
-            f"{candidate} did not answer as an omnicraft server even with "
-            f"the cached workspace credentials. Connecting to {server} as "
-            "given; if omnicraft is hosted on this workspace, refresh the "
-            f"login with `databricks auth login --host {server}` or pass "
-            "the full mount URL."
+            f"Nota: {server} responde como um workspace Databricks, mas "
+            f"{candidate} não respondeu como um servidor omnicraft mesmo com "
+            f"as credenciais de workspace em cache. Conectando a {server} como "
+            "informado; se o omnicraft estiver hospedado neste workspace, atualize o "
+            f"login com `databricks auth login --host {server}` ou passe "
+            "a URL completa do mount."
         )
         return server
     click.echo(
-        f"Note: {server} answers like a Databricks workspace, but "
-        f"{candidate} did not answer the anonymous probe "
-        f"(HTTP {api_probe.status_code}). Some edges hide the mount from "
-        "unauthenticated requests — if omnicraft is hosted on this "
-        f"workspace, run `databricks auth login --host {server}` and "
-        "retry, or pass the full mount URL."
+        f"Nota: {server} responde como um workspace Databricks, mas "
+        f"{candidate} não respondeu à sondagem anônima "
+        f"(HTTP {api_probe.status_code}). Algumas edges escondem o mount de "
+        "requisições não autenticadas — se o omnicraft estiver hospedado neste "
+        f"workspace, rode `databricks auth login --host {server}` e "
+        "tente de novo, ou passe a URL completa do mount."
     )
     return server
 
@@ -12405,13 +12467,13 @@ def _databricks_login(server: str, workspace_host: str, org_id: str | None = Non
         databricks_sdk_installed,
     )
 
-    click.echo(f"{server} authenticates via the Databricks workspace {workspace_host}.")
+    click.echo(f"{server} autentica via o workspace Databricks {workspace_host}.")
 
     if not databricks_sdk_installed():
         raise click.ClickException(
-            "Logging in to a Databricks-fronted server (a Databricks App or "
-            "workspace-hosted omnicraft) requires the `databricks` extra "
-            f"(databricks-sdk is not installed). Reinstall with:\n  "
+            "Fazer login em um servidor fronteado por Databricks (um Databricks App ou "
+            "omnicraft hospedado no workspace) requer o extra `databricks` "
+            f"(databricks-sdk não está instalado). Reinstale com:\n  "
             f"{DATABRICKS_EXTRA_INSTALL_HINT}"
         )
 
@@ -12431,15 +12493,15 @@ def _databricks_login(server: str, workspace_host: str, org_id: str | None = Non
         # validated against the issuer). One fresh browser login
         # replaces the bad cache entry; then re-verify.
         click.echo(
-            f"The cached Databricks credentials were rejected by {server} "
-            f"(HTTP {verify.status_code}) — refreshing the workspace login."
+            f"As credenciais Databricks em cache foram rejeitadas por {server} "
+            f"(HTTP {verify.status_code}) — atualizando o login do workspace."
         )
         token = _login_and_mint_workspace_token(workspace_host, org_id)
         verify = _verify_databricks_server_token(server, token, org_id)
     if verify.status_code != 200:
         raise click.ClickException(
-            f"{workspace_host} accepted the login, but {server} rejected the token "
-            f"(HTTP {verify.status_code}). Check that your user has access to this app."
+            f"{workspace_host} aceitou o login, mas {server} rejeitou o token "
+            f"(HTTP {verify.status_code}). Verifique se seu usuário tem acesso a este app."
         )
     user_id: str | None = None
     with contextlib.suppress(ValueError):
@@ -12457,9 +12519,10 @@ def _databricks_login(server: str, workspace_host: str, org_id: str | None = Non
         # back to the org id the workspace stamps on responses.
         org_id=org_id or verify.headers.get("x-databricks-org-id"),
     )
-    who = f" as {user_id}" if user_id else ""
+    who = f" como {user_id}" if user_id else ""
     click.echo(
-        f"Logged in{who}. Commands targeting {server} now mint workspace tokens automatically."
+        f"Login feito{who}. Comandos mirando {server} agora geram tokens de "
+        "workspace automaticamente."
     )
 
 
@@ -12480,8 +12543,8 @@ def _login_and_mint_workspace_token(workspace_host: str, org_id: str | None = No
     token = _databricks_workspace_token(workspace_host)
     if token is None:
         raise click.ClickException(
-            f"Workspace login completed but no token resolves for {workspace_host}. "
-            f"Run `databricks auth token --host {workspace_host}` to debug."
+            f"O login do workspace concluiu mas nenhum token resolve para {workspace_host}. "
+            f"Rode `databricks auth token --host {workspace_host}` para depurar."
         )
     return token
 
@@ -12502,20 +12565,20 @@ def _run_databricks_browser_login(workspace_host: str, org_id: str | None = None
     databricks_bin = shutil.which("databricks")
     if databricks_bin is None:
         raise click.ClickException(
-            "The Databricks CLI is required to log in to a workspace. "
-            "Install it first: https://docs.databricks.com/dev-tools/cli/install.html"
+            "O CLI do Databricks é necessário para fazer login em um workspace. "
+            "Instale-o primeiro: https://docs.databricks.com/dev-tools/cli/install.html"
         )
     login_host = _host_with_org(workspace_host, org_id)
-    click.echo(f"Opening browser to log in to {login_host} ...")
+    click.echo(f"Abrindo o navegador para fazer login em {login_host} ...")
     result = subprocess.run(
         [databricks_bin, "auth", "login", "--host", login_host],
         check=False,
     )
     if result.returncode != 0:
         raise click.ClickException(
-            f"`databricks auth login --host {login_host}` failed "
-            f"(exit {result.returncode}). If the workspace is unreachable from "
-            "this machine (VPN / IP access lists), resolve that and retry."
+            f"`databricks auth login --host {login_host}` falhou "
+            f"(saída {result.returncode}). Se o workspace estiver inacessível "
+            "desta máquina (VPN / listas de acesso por IP), resolva isso e tente de novo."
         )
 
 
@@ -12546,7 +12609,7 @@ def _verify_databricks_server_token(
         )
     except _httpx.HTTPError as exc:
         raise click.ClickException(
-            f"Could not reach {server}/v1/me to verify login: {exc}"
+            f"Não foi possível acessar {server}/v1/me para verificar o login: {exc}"
         ) from exc
 
 
@@ -12590,49 +12653,49 @@ def _remember_default_server(server: str) -> None:
         ``"https://example.databricks.com/api/2.0/omnicraft"``.
     """
     _save_global_config({"server": server})
-    click.echo(f"Set {server} as your default server.")
+    click.echo(f"Definido {server} como seu servidor padrão.")
 
 
 @cli.command("login")
 @click.argument("server_url")
 def login(server_url: str) -> None:
-    """Authenticate with a remote OmniCraft server.
+    """Autentica com um servidor OmniCraft remoto.
 
-    Probes the server's auth mode and runs the matching flow:
-
-    \b
-    - accounts mode: prompts for username + password (no browser
-      needed), POSTs ``/auth/login``, stores the session JWT in
-      ``~/.omnicraft/auth_tokens.json`` keyed by server URL.
-    - OIDC mode: opens the browser, polls the CLI ticket endpoint,
-      stores the session JWT when the browser flow completes.
-    - header mode: no login needed (proxy injects identity); we
-      print a hint and exit successfully.
-    - Databricks-fronted (a Databricks App, or omnicraft hosted on
-      a workspace API path): detected from the probe response — we
-      log in to the workspace via ``databricks auth login --host
-      <workspace>`` (browser) and store a pointer record so later
-      commands mint fresh workspace tokens automatically. Requires
-      the ``databricks`` extra.
-
-    Subsequent ``omnicraft run --server <url>`` commands then
-    use the stored token via the runner / host-tunnel auth chain. A
-    successful login also records the server as the user-level default
-    (the ``server`` key in ``~/.omnicraft/config.yaml``), so a bare
-    ``omnicraft`` afterwards targets it instead of whatever default
-    ``setup`` baked in.
+    Sonda o modo de auth do servidor e roda o fluxo correspondente:
 
     \b
-    Example:
+    - modo contas: pede usuário + senha (sem navegador
+      necessário), faz POST em ``/auth/login``, armazena o JWT de sessão em
+      ``~/.omnicraft/auth_tokens.json`` indexado pela URL do servidor.
+    - modo OIDC: abre o navegador, faz polling no endpoint de ticket do CLI,
+      armazena o JWT de sessão quando o fluxo do navegador conclui.
+    - modo header: nenhum login necessário (o proxy injeta a identidade); nós
+      imprimimos uma dica e saímos com sucesso.
+    - fronteado por Databricks (um Databricks App, ou omnicraft hospedado em
+      um caminho de API de workspace): detectado a partir da resposta da sondagem — nós
+      fazemos login no workspace via ``databricks auth login --host
+      <workspace>`` (navegador) e armazenamos um registro-ponteiro para que comandos
+      posteriores gerem novos tokens de workspace automaticamente. Requer
+      o extra ``databricks``.
+
+    Comandos ``omnicraft run --server <url>`` subsequentes então
+    usam o token armazenado via a cadeia de auth runner / host-tunnel. Um
+    login bem-sucedido também registra o servidor como o padrão de nível de usuário
+    (a chave ``server`` em ``~/.omnicraft/config.yaml``), então um
+    ``omnicraft`` puro depois mira nele em vez de qualquer padrão que o
+    ``setup`` tenha fixado.
+
+    \b
+    Exemplo:
       omnicraft login http://localhost:6767
-      omnicraft login example.cloud.databricks.com/omnicraft  # https:// assumed
-      omnicraft          # connects to the server just logged in to
+      omnicraft login example.cloud.databricks.com/omnicraft  # https:// assumido
+      omnicraft          # conecta ao servidor que acabou de logar
 
-    :param server_url: The remote server URL, e.g.
-        ``"http://localhost:6767"``. A missing scheme defaults to
-        ``https://`` (``http://`` for loopback hosts), and the workspace
-        web-UI URL (``<ws>/omnicraft``) is accepted alongside the bare
-        workspace root.
+    :param server_url: A URL do servidor remoto, ex.
+        ``"http://localhost:6767"``. Um esquema ausente assume
+        ``https://`` (``http://`` para hosts loopback), e a URL do web-UI do
+        workspace (``<ws>/omnicraft``) é aceita junto com a raiz
+        do workspace pura.
     """
     import httpx as _httpx
 
@@ -12652,7 +12715,7 @@ def login(server_url: str) -> None:
         probe = _httpx.get(f"{server}/v1/me", timeout=10.0)
     except _httpx.HTTPError as exc:
         raise click.ClickException(
-            f"Could not reach {server}/v1/me: {exc}\nIs the server running?"
+            f"Não foi possível acessar {server}/v1/me: {exc}\nO servidor está rodando?"
         ) from exc
 
     databricks_workspace = _databricks_workspace_login_target(server, probe)
@@ -12674,9 +12737,9 @@ def login(server_url: str) -> None:
         # Header mode (or already authenticated). Tell the user
         # they don't need to log in and exit cleanly.
         click.echo(
-            f"{server} is in header-auth mode — no login needed. "
-            "The proxy in front of it injects your identity on every "
-            "request."
+            f"{server} está no modo de auth por header — nenhum login necessário. "
+            "O proxy na frente dele injeta sua identidade em cada "
+            "requisição."
         )
         _remember_default_server(server)
         return
@@ -12698,8 +12761,8 @@ def login(server_url: str) -> None:
         resp.raise_for_status()
     except _httpx.HTTPError as exc:
         raise click.ClickException(
-            f"Could not reach {server}/auth/cli-login: {exc}\n"
-            f"Is the server running with OMNICRAFT_AUTH_PROVIDER=oidc?"
+            f"Não foi possível acessar {server}/auth/cli-login: {exc}\n"
+            f"O servidor está rodando com OMNICRAFT_AUTH_PROVIDER=oidc?"
         ) from exc
 
     data = resp.json()
@@ -12707,8 +12770,8 @@ def login(server_url: str) -> None:
     login_url = f"{server}{data['login_url']}"
 
     # Step 2: Open the browser.
-    click.echo(f"Opening browser for login: {login_url}")
-    click.echo("Waiting for authentication...")
+    click.echo(f"Abrindo o navegador para login: {login_url}")
+    click.echo("Aguardando a autenticação...")
     webbrowser.open(login_url)
 
     # Step 3: Poll until the ticket is fulfilled or expired.
@@ -12737,15 +12800,15 @@ def login(server_url: str) -> None:
                 user_id=user_id,
                 expires_at=_time.time() + expires_in,
             )
-            click.echo(f"Logged in as {user_id}")
+            click.echo(f"Login feito como {user_id}")
             _remember_default_server(server)
             return
         # 410 or other error — ticket expired.
-        raise click.ClickException("Login ticket expired or was rejected. Please try again.")
+        raise click.ClickException("O ticket de login expirou ou foi rejeitado. Tente de novo.")
 
     raise click.ClickException(
-        "Login timed out — the browser flow was not completed "
-        f"within {_CLI_LOGIN_TIMEOUT_SECONDS} seconds."
+        "O login expirou — o fluxo do navegador não foi concluído "
+        f"em {_CLI_LOGIN_TIMEOUT_SECONDS} segundos."
     )
 
 
@@ -12778,11 +12841,11 @@ def _accounts_login(server: str) -> None:
 
     from omnicraft.cli_auth import store_token
 
-    click.echo(f"Signing in to {server} (accounts auth).")
+    click.echo(f"Entrando em {server} (auth de contas).")
     # `admin` is the bootstrap username; prefill to match what
     # the web LoginPage does.
-    username = click.prompt("Username", default="admin")
-    password = click.prompt("Password", hide_input=True)
+    username = click.prompt("Usuário", default="admin")
+    password = click.prompt("Senha", hide_input=True)
 
     try:
         resp = _httpx.post(
@@ -12791,17 +12854,19 @@ def _accounts_login(server: str) -> None:
             timeout=10.0,
         )
     except _httpx.HTTPError as exc:
-        raise click.ClickException(f"Could not reach {server}/auth/login: {exc}") from exc
+        raise click.ClickException(f"Não foi possível acessar {server}/auth/login: {exc}") from exc
 
     if resp.status_code == 401:
         # Generic message — matches what the server returns and
         # what the web form shows. Don't echo the username back
         # in case the terminal is being recorded / shared.
-        raise click.ClickException("Invalid username or password.")
+        raise click.ClickException("Usuário ou senha inválidos.")
     if resp.status_code >= 500:
-        raise click.ClickException("Server error during login. Try again in a moment.")
+        raise click.ClickException(
+            "Erro do servidor durante o login. Tente de novo em um momento."
+        )
     if not resp.is_success:
-        raise click.ClickException(f"Login failed ({resp.status_code}): {resp.text[:200]}")
+        raise click.ClickException(f"Login falhou ({resp.status_code}): {resp.text[:200]}")
 
     body = resp.json()
     token = body["token"]
@@ -12816,7 +12881,7 @@ def _accounts_login(server: str) -> None:
         user_id=user_id,
         expires_at=_time.time() + expires_in,
     )
-    click.echo(f"Logged in as {user_id}.")
+    click.echo(f"Login feito como {user_id}.")
 
 
 # Direction codes used by ``pane-split`` and ``pane-picker``.
@@ -12827,43 +12892,43 @@ _PANE_SPLIT_DIRECTIONS = ("v", "h", "w")
 
 
 @cli.command("pane-split", hidden=True)
-@click.option("-v", "direction", flag_value="v", help="Vertical split (new pane below)")
+@click.option("-v", "direction", flag_value="v", help="Divisão vertical (novo pane abaixo)")
 @click.option(
     "-h",
     "direction",
     flag_value="h",
-    help="Horizontal split (new pane to the right)",
+    help="Divisão horizontal (novo pane à direita)",
 )
-@click.option("-w", "direction", flag_value="w", help="New window/tab")
+@click.option("-w", "direction", flag_value="w", help="Nova janela/aba")
 @click.option(
     "-p",
     "--parent-pane",
     "parent_pane",
     required=True,
-    help="Tmux pane id of the parent omnicraft pane (e.g. '%0'). "
-    "Forwarded by the wrapped key-binding via #{pane_id}.",
+    help="Id do pane tmux do pane omnicraft pai (ex. '%0'). "
+    "Repassado pelo key-binding encapsulado via #{pane_id}.",
 )
 def pane_split(direction: str | None, parent_pane: str) -> None:
     """
-    Split the parent omnicraft pane and run the chooser in the new pane.
+    Divide o pane omnicraft pai e roda o seletor no novo pane.
 
-    Internal subcommand invoked by the tmux key-binding wrappers
-    installed by ``omnicraft.repl._tmux_pane``. The wrapper fires
-    ``run-shell 'omnicraft pane-split -<v|h|w> -p #{pane_id}'`` when
-    the user presses their split key while focused on an omnicraft
-    pane; tmux substitutes ``#{pane_id}`` to the focused pane's id
-    and we exec the right ``tmux split-window`` / ``new-window``
-    invocation pointing at ``omnicraft pane-picker``.
+    Subcomando interno invocado pelos wrappers de key-binding do tmux
+    instalados por ``omnicraft.repl._tmux_pane``. O wrapper dispara
+    ``run-shell 'omnicraft pane-split -<v|h|w> -p #{pane_id}'`` quando
+    o usuário pressiona sua tecla de divisão enquanto focado em um pane
+    omnicraft; o tmux substitui ``#{pane_id}`` pelo id do pane focado
+    e nós executamos a invocação ``tmux split-window`` / ``new-window``
+    correta apontando para ``omnicraft pane-picker``.
 
-    :param direction: One of ``v`` / ``h`` / ``w``. Required.
-    :param parent_pane: The omnicraft pane id, e.g. ``%0``. Required.
+    :param direction: Um de ``v`` / ``h`` / ``w``. Obrigatório.
+    :param parent_pane: O id do pane omnicraft, ex. ``%0``. Obrigatório.
     """
     import shlex
 
     from omnicraft.repl._tmux_pane import _resolve_omnicraft_argv
 
     if direction not in _PANE_SPLIT_DIRECTIONS:
-        raise click.ClickException("pane-split requires exactly one of -v, -h, or -w")
+        raise click.ClickException("pane-split requer exatamente um de -v, -h ou -w")
     # The new pane runs ``omnicraft pane-picker`` which reads the
     # parent's pane options and exec's into the chosen agent run.
     # We pass the parent pane id explicitly because the new pane's
@@ -12912,30 +12977,31 @@ def pane_split(direction: str | None, parent_pane: str) -> None:
     "--parent-pane",
     "parent_pane",
     required=True,
-    help="Tmux pane id of the parent omnicraft pane (e.g. '%0'). "
-    "Used to read launch context (agent name, launch argv, server URL) "
-    "from custom pane options the parent set via "
+    help="Id do pane tmux do pane omnicraft pai (ex. '%0'). "
+    "Usado para ler o contexto de lançamento (nome do agente, argv de lançamento, "
+    "URL do servidor) "
+    "das opções de pane customizadas que o pai definiu via "
     "``omnicraft.repl._tmux_pane.register_pane``.",
 )
 def pane_picker(parent_pane: str) -> None:
     """
-    Launch a fresh REPL conversation in the current new pane.
+    Lança uma nova conversa REPL no novo pane atual.
 
-    Internal subcommand. The new tmux pane (created by
-    ``omnicraft pane-split``) execs this command, which:
+    Subcomando interno. O novo pane tmux (criado por
+    ``omnicraft pane-split``) executa este comando, que:
 
-    1. Reads the parent omnicraft pane's ``@omnicraft-launch-argv``
-       and friends.
-    2. ``os.execvp``\\s the parent's launch argv to spawn a new
-       REPL against the same agent in this pane.
+    1. Lê o ``@omnicraft-launch-argv`` do pane omnicraft pai
+       e associados.
+    2. Faz ``os.execvp`` do argv de lançamento do pai para criar um novo
+       REPL contra o mesmo agente neste pane.
 
-    v1 has exactly one path: "new conversation with the same
-    agent". A chooser dialog (sub-agent listing, "continue
-    sub-agent X", etc.) lands in Phase 2 — see
-    ``designs/REPL_TMUX_PANE_SPLIT.md``. With only one option,
-    a chooser is friction; we just exec.
+    A v1 tem exatamente um caminho: "nova conversa com o mesmo
+    agente". Um diálogo seletor (listagem de sub-agentes, "continuar
+    sub-agente X", etc.) chega na Fase 2 — veja
+    ``designs/REPL_TMUX_PANE_SPLIT.md``. Com apenas uma opção,
+    um seletor é fricção; nós apenas executamos.
 
-    :param parent_pane: The parent omnicraft pane id, e.g. ``%0``.
+    :param parent_pane: O id do pane omnicraft pai, ex. ``%0``.
     """
     import json
 
@@ -12947,8 +13013,8 @@ def pane_picker(parent_pane: str) -> None:
     launch_argv_json = read_pane_option(parent_pane, OPT_LAUNCH_ARGV)
     if not launch_argv_json:
         click.echo(
-            f"error: parent pane {parent_pane} has no omnicraft context "
-            f"(missing {OPT_LAUNCH_ARGV} option). Cannot launch sibling REPL.",
+            f"erro: o pane pai {parent_pane} não tem contexto omnicraft "
+            f"(opção {OPT_LAUNCH_ARGV} ausente). Não é possível lançar o REPL irmão.",
             err=True,
         )
         sys.exit(1)
@@ -12956,15 +13022,14 @@ def pane_picker(parent_pane: str) -> None:
         launch_argv = json.loads(launch_argv_json)
     except json.JSONDecodeError as exc:
         click.echo(
-            f"error: parent pane {parent_pane}'s {OPT_LAUNCH_ARGV} option "
-            f"is not valid JSON: {exc}",
+            f"erro: a opção {OPT_LAUNCH_ARGV} do pane pai {parent_pane} não é JSON válido: {exc}",
             err=True,
         )
         sys.exit(1)
     if not isinstance(launch_argv, list) or not launch_argv:
         click.echo(
-            f"error: parent pane {parent_pane}'s launch argv is empty or "
-            f"not a list — cannot reconstruct a launch command.",
+            f"erro: o argv de lançamento do pane pai {parent_pane} está vazio ou "
+            f"não é uma lista — não é possível reconstruir um comando de lançamento.",
             err=True,
         )
         sys.exit(1)

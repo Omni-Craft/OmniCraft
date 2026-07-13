@@ -721,7 +721,7 @@ def test_foreground_connect_refuses_duplicate_live_daemon(
     )
 
     assert result.exit_code != 0
-    assert "already running for this server" in result.output
+    assert "já está rodando para este servidor" in result.output
     assert "pid=4242" in result.output
 
 
@@ -767,8 +767,8 @@ def test_foreground_connect_local_prompts_and_stops_server_on_yes(
 
     assert result.exit_code == 0, result.output
     assert stopped == [True]
-    assert "Stop it too?" in result.output
-    assert "Stopped the local server (http://127.0.0.1:8000)." in result.output
+    assert "Parar ele também?" in result.output
+    assert "Servidor local parado (http://127.0.0.1:8000)." in result.output
 
 
 def test_foreground_connect_local_prompt_declined_leaves_server(
@@ -786,7 +786,7 @@ def test_foreground_connect_local_prompt_declined_leaves_server(
     result = CliRunner().invoke(cli_group, ["host", ""], input="n\n")
 
     assert result.exit_code == 0, result.output
-    assert "Left the local server running at http://127.0.0.1:8000." in result.output
+    assert "Servidor local deixado rodando em http://127.0.0.1:8000." in result.output
 
 
 def test_foreground_connect_local_prompt_aborted_leaves_server(
@@ -819,7 +819,7 @@ def test_foreground_connect_local_prompt_aborted_leaves_server(
 
     # Exit 0 (Abort swallowed, no traceback) and the server is left running.
     assert result.exit_code == 0, result.output
-    assert "Left the local server running at http://127.0.0.1:8000." in result.output
+    assert "Servidor local deixado rodando em http://127.0.0.1:8000." in result.output
 
 
 def test_foreground_connect_local_prompts_after_keyboard_interrupt(
@@ -842,7 +842,7 @@ def test_foreground_connect_local_prompts_after_keyboard_interrupt(
     result = CliRunner().invoke(cli_group, ["host", ""], input="n\n")
 
     assert result.exit_code == 0, result.output
-    assert "Stop it too?" in result.output
+    assert "Parar ele também?" in result.output
 
 
 def test_foreground_connect_local_no_prompt_when_server_absent(
@@ -860,7 +860,7 @@ def test_foreground_connect_local_no_prompt_when_server_absent(
     result = CliRunner().invoke(cli_group, ["host", ""], input="y\n")
 
     assert result.exit_code == 0, result.output
-    assert "Stop it too?" not in result.output
+    assert "Parar ele também?" not in result.output
 
 
 def test_foreground_connect_reused_server_omits_prompt(
@@ -894,7 +894,7 @@ def test_foreground_connect_reused_server_omits_prompt(
     result = CliRunner().invoke(cli_group, ["host", ""], input="y\n")
 
     assert result.exit_code == 0, result.output
-    assert "Stop it too?" not in result.output
+    assert "Parar ele também?" not in result.output
 
 
 def test_foreground_connect_connection_failure_skips_prompt(
@@ -939,7 +939,7 @@ def test_foreground_connect_remote_omits_local_server_prompt(
     result = CliRunner().invoke(cli_group, ["host", "--server", "https://server.example.com"])
 
     assert result.exit_code == 0, result.output
-    assert "Stop it too?" not in result.output
+    assert "Parar ele também?" not in result.output
 
 
 def test_host_status_json_reports_daemon_host_and_sessions(
@@ -1032,7 +1032,7 @@ def test_host_status_reports_unreachable_daemon_without_traceback(
     result = CliRunner().invoke(cli_group, ["host", "status"])
 
     assert result.exit_code == 0, result.output
-    assert "host status failed: ConnectError" in result.output
+    assert "status do host falhou: ConnectError" in result.output
     assert "mode=server" in result.output
     assert "pid=4242" in result.output
     assert "Traceback" not in result.output
@@ -1260,7 +1260,7 @@ def test_discover_local_server_url_raises_when_daemon_dead(
     """If the daemon exits before its server is ready, fail loud (not hang)."""
     monkeypatch.setattr(cli, "local_server_url_if_healthy", lambda: None)
     monkeypatch.setattr(cli, "_host_daemon_alive", lambda: False)
-    with pytest.raises(click.ClickException, match="exited before"):
+    with pytest.raises(click.ClickException, match="saiu antes"):
         _discover_local_server_url(timeout=5.0)
 
 

@@ -26,6 +26,7 @@ import logging
 import mimetypes
 import os
 import tempfile
+import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -1363,6 +1364,152 @@ async def _execute_list_models_tool(*, agent_spec: Any | None) -> str:
     return json.dumps(catalog)
 
 
+# ── Sub-agent first-output watchdog ─────────────────────────────────
+# A freshly dispatched child whose harness stalls BEFORE its first signal
+# (e.g. a hung boot, or a native terminal whose briefing was never
+# delivered) never registers an in-flight turn, so the idle reaper later
+# kills it silently and the parent orchestrator waits on its inbox
+# forever. The watchdog polls the child for its first REAL output and,
+# when none arrives in time, fails the dispatch loudly into the parent
+# inbox — the same "boot failure" signal orchestrator prompts already
+# know how to handle (drop the worker / re-dispatch fresh).
+_SUBAGENT_WATCHDOG_POLL_S = float(os.environ.get("OMNICRAFT_SUBAGENT_WATCHDOG_POLL_S", "20"))
+# Child no longer busy and still zero output → it died quietly; fail fast.
+_SUBAGENT_WATCHDOG_QUIET_FAIL_S = float(
+    os.environ.get("OMNICRAFT_SUBAGENT_WATCHDOG_QUIET_FAIL_S", "240")
+)
+# Child claims busy but produced nothing at all → stuck; fail eventually.
+_SUBAGENT_WATCHDOG_HARD_FAIL_S = float(
+    os.environ.get("OMNICRAFT_SUBAGENT_WATCHDOG_HARD_FAIL_S", "900")
+)
+# Item types that prove the worker actually did something. The dispatched
+# user message and resource events (terminal creation) do NOT count — a
+# stuck native child has exactly those and nothing else.
+_SUBAGENT_OUTPUT_ITEM_TYPES = frozenset({"function_call", "function_call_output", "reasoning"})
+_subagent_watchdog_tasks: set[asyncio.Task[None]] = set()
+
+
+def _child_produced_output(items: list[dict[str, Any]]) -> bool:
+    """
+    Whether a child session shows any real worker output.
+
+    :param items: Parsed ``GET /v1/sessions/{id}/items`` rows.
+    :returns: ``True`` on the first tool call / reasoning / assistant
+        message; ``False`` when the child only holds the dispatched user
+        message and resource events (the stuck-at-boot signature).
+    """
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        itype = item.get("type")
+        if itype in _SUBAGENT_OUTPUT_ITEM_TYPES:
+            return True
+        if itype == "message" and item.get("role") == "assistant":
+            return True
+    return False
+
+
+def _arm_subagent_first_output_watchdog(
+    child_session_id: str,
+    *,
+    server_client: httpx.AsyncClient,
+) -> None:
+    """
+    Arm the first-output watchdog for a freshly created child session.
+
+    Fire-and-forget: the task keeps a module-level reference so it isn't
+    garbage-collected mid-watch.
+
+    :param child_session_id: The new child session id, e.g. ``"conv_abc"``.
+    :param server_client: HTTP client pointed at the OmniCraft server.
+    """
+    task = asyncio.create_task(
+        _watch_subagent_first_output(child_session_id, server_client=server_client),
+        name=f"subagent-first-output-watchdog-{child_session_id}",
+    )
+    _subagent_watchdog_tasks.add(task)
+    task.add_done_callback(_subagent_watchdog_tasks.discard)
+
+
+async def _watch_subagent_first_output(
+    child_session_id: str,
+    *,
+    server_client: httpx.AsyncClient,
+) -> None:
+    """
+    Poll a fresh child until it proves alive, or fail the dispatch loudly.
+
+    Exits quietly as soon as the child shows real output (or its work
+    entry reaches a terminal state through the normal paths). Fails the
+    dispatch into the parent inbox when the child produced NOTHING and
+    either went quiet (no longer busy after the quiet deadline) or is
+    still nominally busy past the hard deadline.
+
+    :param child_session_id: Child session id, e.g. ``"conv_abc"``.
+    :param server_client: HTTP client pointed at the OmniCraft server.
+    """
+    from omnicraft.runner import app as _runner_app
+
+    started = time.monotonic()
+    try:
+        while True:
+            await asyncio.sleep(_SUBAGENT_WATCHDOG_POLL_S)
+            entry = _runner_app.get_subagent_work(child_session_id)
+            if entry is None or entry.status in ("completed", "failed", "cancelled"):
+                return
+            status: str | None = None
+            items: list[dict[str, Any]] = []
+            try:
+                sess_resp = await server_client.get(f"/v1/sessions/{child_session_id}")
+                if sess_resp.status_code == 404:
+                    # Child deleted out from under us — nothing to watch.
+                    return
+                if sess_resp.status_code < 400:
+                    status = sess_resp.json().get("status")
+                items_resp = await server_client.get(f"/v1/sessions/{child_session_id}/items")
+                if items_resp.status_code < 400:
+                    body = items_resp.json()
+                    raw = body.get("data", body) if isinstance(body, dict) else body
+                    items = raw if isinstance(raw, list) else []
+            except httpx.HTTPError:
+                # Transient server hiccup — try again on the next poll.
+                continue
+            if _child_produced_output(items):
+                return
+            elapsed = time.monotonic() - started
+            busy = status in ("running", "waiting")
+            if elapsed >= _SUBAGENT_WATCHDOG_HARD_FAIL_S or (
+                elapsed >= _SUBAGENT_WATCHDOG_QUIET_FAIL_S and not busy
+            ):
+                _logger.error(
+                    "sub-agent %s produced no output after %.0fs (status=%s); "
+                    "failing the dispatch into the parent inbox",
+                    child_session_id,
+                    elapsed,
+                    status,
+                )
+                _runner_app.mark_subagent_work_terminal(
+                    child_session_id,
+                    status="failed",
+                    output=(
+                        f"[System: sub-agent task {child_session_id} produced no "
+                        f"output after {elapsed:.0f}s — the worker harness likely "
+                        "stalled during boot or its first message was never "
+                        "delivered. The task was marked failed. Re-dispatch a "
+                        "fresh sub-agent (use a fresh worktree for coding work) "
+                        "instead of waiting on this one.]"
+                    ),
+                )
+                return
+    except asyncio.CancelledError:
+        raise
+    except Exception:
+        _logger.exception(
+            "sub-agent first-output watchdog crashed for %s",
+            child_session_id,
+        )
+
+
 async def _execute_subagent_tool(
     args: dict[str, Any],
     *,
@@ -1836,6 +1983,18 @@ async def _execute_subagent_tool(
         if teardown_warning is not None:
             return f"{error}\n{teardown_warning}"
         return error
+
+    # Fresh children get a first-output watchdog: a dispatched worker whose
+    # harness stalls before its first signal never turns "in-flight", so the
+    # idle reaper eventually kills it SILENTLY and the parent waits on its
+    # inbox forever (observed live: a claude-native child booted to an empty
+    # prompt, the briefing never landed, and the orchestrator hung for ~1h).
+    # The watchdog fails the dispatch loudly into the parent inbox instead.
+    if created_child:
+        _arm_subagent_first_output_watchdog(
+            child_session_id,
+            server_client=server_client,
+        )
 
     # Return the structured handle mirrored from ``spawn.py``. The debug panel
     # parses this to discover child sessions in the sidebar.

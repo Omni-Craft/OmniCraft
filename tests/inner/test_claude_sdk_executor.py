@@ -84,6 +84,36 @@ class TestPromptExtraction(unittest.TestCase):
         self.assertIn("ZEBRA-99", prompt)
         self.assertIn("Summarize our conversation.", prompt)
 
+    def test_history_replay_omits_image_base64(self):
+        """A prior message's attached image must NOT re-enter the prompt as
+        base64 text.
+
+        Regression: replaying history after a reconnect serialized the whole
+        data URI via json.dumps — one screenshot pushed the request to ~4M
+        tokens and the API rejected it with "Prompt is too long".
+        """
+        executor = self._make_executor()
+        fake_b64 = "A" * 200_000  # stands in for a multi-MB screenshot
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "input_text", "text": "segue a referencia do site"},
+                    {"type": "input_image", "image_url": f"data:image/png;base64,{fake_b64}"},
+                ],
+            },
+            {"role": "assistant", "content": "Recebido."},
+            {"role": "user", "content": "Continue de onde paramos."},
+        ]
+        prompt = executor._build_prompt(messages, resume_session=False)
+        self.assertIsInstance(prompt, str)
+        # The text around the image survives; the payload does not.
+        self.assertIn("segue a referencia do site", prompt)
+        self.assertIn("imagem anexada", prompt)
+        self.assertIn("image/png", prompt)
+        self.assertNotIn(fake_b64[:64], prompt)
+        self.assertLess(len(prompt), 5_000)
+
 
 # ---------------------------------------------------------------------------
 # Tests: Constructor and properties

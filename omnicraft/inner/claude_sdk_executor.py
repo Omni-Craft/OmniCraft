@@ -2665,7 +2665,7 @@ class ClaudeSDKExecutor(Executor):
             elif isinstance(raw_content, str):
                 content = raw_content
             else:
-                content = json.dumps(raw_content, ensure_ascii=True)
+                content = ClaudeSDKExecutor._history_safe_text(raw_content)
             lines.append(f"{role}: {content}")
         lines.append("")
         lines.append(
@@ -2679,6 +2679,53 @@ class ClaudeSDKExecutor(Executor):
                 *latest_content,
             ]
         return f"{history_prefix}\n\nuser: {latest_content}"
+
+    @staticmethod
+    def _history_safe_text(raw_content: Any) -> str:
+        """
+        Serialize a structured message content for the history prefix.
+
+        Binary blocks (``input_image`` / ``input_file`` data URIs) are replaced
+        by a short placeholder instead of their base64 payload: a single
+        attached screenshot re-serialized verbatim into the text prefix blew a
+        replayed session past the model's token limit ("Prompt is too long",
+        ~4M tokens from one image). History is context, not a byte transport —
+        the model only needs to know an attachment was there.
+
+        :param raw_content: The message's structured content, e.g.
+            ``[{"type": "input_text", ...}, {"type": "input_image", ...}]``.
+        :returns: A compact text rendering, e.g.
+            ``"olha a referência [imagem anexada: image/png, ~2.9MB]"``.
+        """
+        if not isinstance(raw_content, list):
+            return json.dumps(raw_content, ensure_ascii=True)
+        parts: list[str] = []
+        for block in raw_content:
+            if not isinstance(block, dict):
+                parts.append(json.dumps(block, ensure_ascii=True))
+                continue
+            btype = block.get("type")
+            if btype in ("input_text", "output_text", "text"):
+                parts.append(str(block.get("text", "")))
+                continue
+            if btype in ("input_image", "input_file"):
+                uri = str(block.get("image_url") or block.get("file_url") or "")
+                media = "desconhecido"
+                size = ""
+                if uri.startswith("data:"):
+                    header, _, payload = uri.partition(",")
+                    media = header.removeprefix("data:").replace(";base64", "") or media
+                    # base64 → bytes: 3/4 ratio is close enough for a label.
+                    size = f", ~{len(payload) * 3 // 4 // 1024}KB"
+                label = "imagem anexada" if btype == "input_image" else "arquivo anexado"
+                name = block.get("filename") or block.get("name")
+                name_part = f" '{name}'" if name else ""
+                parts.append(
+                    f"[{label}{name_part}: {media}{size} — conteúdo omitido no histórico]"
+                )
+                continue
+            parts.append(json.dumps(block, ensure_ascii=True))
+        return " ".join(p for p in parts if p)
 
     @staticmethod
     def _extract_latest_user_content(

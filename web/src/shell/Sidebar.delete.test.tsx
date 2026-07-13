@@ -268,6 +268,7 @@ function renderSidebarRouted(path: string) {
         <MemoryRouter initialEntries={[path]}>
           <Routes>
             <Route path="/" element={tree} />
+            <Route path="/code" element={tree} />
             <Route path="/c/:conversationId" element={tree} />
           </Routes>
         </MemoryRouter>
@@ -288,7 +289,7 @@ function fireDeleteFrom(row: HTMLElement) {
 }
 
 describe("active-session redirect on successful delete", () => {
-  it("redirects to / when the deleted conversation is still the active one", () => {
+  it("redirects to the code surface when the deleted conversation is still active", () => {
     mockConversations([CONV, CONV_OTHER]);
     renderSidebarRouted("/c/conv_1");
     expect(screen.getByTestId("loc")).toHaveTextContent("/c/conv_1");
@@ -297,9 +298,9 @@ describe("active-session redirect on successful delete", () => {
     const onSuccess = fireDeleteFrom(row);
     act(() => onSuccess());
 
-    // Still viewing conv_1 when it was deleted → bounce to / so the chat
-    // surface doesn't 404 on the missing id.
-    expect(screen.getByTestId("loc")).toHaveTextContent("/");
+    // Still viewing conv_1 when it was deleted → bounce away from the now-missing
+    // id, staying on the Code surface (a code session) rather than falling to Início.
+    expect(screen.getByTestId("loc")).toHaveTextContent("/code");
   });
 
   it("does NOT redirect when the user navigated away before the delete resolved", () => {

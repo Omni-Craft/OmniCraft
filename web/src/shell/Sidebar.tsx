@@ -2349,6 +2349,7 @@ function ConversationRow({
   // `useParams` reads from the active matched route. On `/`, the param is
   // undefined; on `/c/:conversationId`, it carries the active id.
   const { conversationId: activeId } = useParams<{ conversationId: string }>();
+  const inCode = useInCode();
   // The sidebar lists only top-level sessions; child (sub-agent) rows are
   // omitted. When the user clicks a sub-agent in the Agents rail the active
   // id becomes the child's, which matches no row here — so highlighting on
@@ -2555,7 +2556,8 @@ function ConversationRow({
         // deleted, bounce back to `/` so the chat surface doesn't
         // 404-loop on the now-missing id. Read the live activeId (ref)
         // — they may have navigated away while the delete was in flight.
-        if (activeIdRef.current === conversation.id) navigate("/", { replace: true });
+        if (activeIdRef.current === conversation.id)
+          navigate(inCode ? "/code" : "/", { replace: true });
       },
     });
   }
@@ -3415,6 +3417,7 @@ function BulkActionBar({
 }) {
   const navigate = useNavigate();
   const { conversationId: activeId } = useParams<{ conversationId: string }>();
+  const inCode = useInCode();
   const bulkArchive = useBulkArchiveConversations();
   const bulkDelete = useBulkDeleteConversations();
 
@@ -3477,11 +3480,12 @@ function BulkActionBar({
     setConfirmDeleteOpen(false);
     bulkDelete.mutate(ids, {
       onSuccess: () => {
-        if (activeId && ids.includes(activeId)) navigate("/", { replace: true });
+        if (activeId && ids.includes(activeId)) navigate(inCode ? "/code" : "/", { replace: true });
         onDeselectAll();
       },
       onError: (err: any) => {
-        if (activeId && err?.succeeded?.includes(activeId)) navigate("/", { replace: true });
+        if (activeId && err?.succeeded?.includes(activeId))
+          navigate(inCode ? "/code" : "/", { replace: true });
       },
     });
   }

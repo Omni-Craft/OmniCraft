@@ -87,7 +87,7 @@ def test_describe_lists_stored_and_env(monkeypatch: pytest.MonkeyPatch, tmp_path
     _write_auth(tmp_path, {"anthropic": {"type": "api", "key": "x"}})
     monkeypatch.setenv("OPENAI_API_KEY", "sk-x")
     text = oc.opencode_auth_summary().describe()
-    assert "1 stored (anthropic)" in text
+    assert "1 armazenado(s) (anthropic)" in text
     assert "env: OpenAI" in text
 
 

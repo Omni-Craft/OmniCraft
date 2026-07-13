@@ -117,7 +117,7 @@ def test_ready_gates_on_installed_binary(tmp_path: Path, monkeypatch) -> None:
         (HermesConfigSummary(True, "openrouter", "z-ai/glm-5.2"), "openrouter / z-ai/glm-5.2"),
         (HermesConfigSummary(True, "openrouter", None), "openrouter"),
         (HermesConfigSummary(True, None, "z-ai/glm-5.2"), "z-ai/glm-5.2"),
-        (HermesConfigSummary(True, None, None), "Configured"),
+        (HermesConfigSummary(True, None, None), "Configurado"),
     ],
 )
 def test_describe_variants(summary: HermesConfigSummary, expected: str) -> None:

@@ -157,13 +157,13 @@ def _arrow_menu(
                     line = f"{prefix}{label}"
                 sys.stdout.write(f"\033[2K{line}\n")
         # Hint line.
-        hints = f"{_DIM}  \u2191\u2193 navigate"
+        hints = f"{_DIM}  \u2191\u2193 navegar"
         if multi:
-            hints += "  space select/unselect  enter confirm"
+            hints += "  espa\u00e7o selecionar/desmarcar  enter confirmar"
         else:
-            hints += "  enter select"
+            hints += "  enter selecionar"
         if allow_back:
-            hints += "  esc go back"
+            hints += "  esc voltar"
         hints += _RESET
         sys.stdout.write(f"\033[2K{hints}\n")
         sys.stdout.flush()
@@ -226,31 +226,31 @@ def _arrow_menu_fallback(
     """Non-interactive fallback when stdin is not a tty."""
     disabled = disabled or set()
     for i, label in enumerate(options):
-        marker = " [unavailable]" if i in disabled else ""
+        marker = " [indisponível]" if i in disabled else ""
         console.print(f"  {i + 1}. {label}{marker}")
     console.print()
 
     if multi:
         while True:
             available = ",".join(str(i + 1) for i in range(len(options)) if i not in disabled)
-            raw = str(click.prompt("Select (comma-separated)", default=available))
+            raw = str(click.prompt("Selecione (separado por vírgula)", default=available))
             try:
                 indices = [int(x.strip()) - 1 for x in raw.split(",")]
                 if all(0 <= i < len(options) and i not in disabled for i in indices) and indices:
                     return indices
             except ValueError:
                 pass
-            console.print("  [red]Invalid selection.[/red]")
+            console.print("  [red]Seleção inválida.[/red]")
     else:
         while True:
-            raw = str(click.prompt("Choice", default=str(default + 1)))
+            raw = str(click.prompt("Escolha", default=str(default + 1)))
             try:
                 idx = int(raw) - 1
                 if 0 <= idx < len(options) and idx not in disabled:
                     return idx
             except ValueError:
                 pass
-            console.print("  [red]Invalid selection.[/red]")
+            console.print("  [red]Seleção inválida.[/red]")
 
 
 # ---------------------------------------------------------------------------
@@ -308,9 +308,9 @@ def _text_prompt(
         sys.stdout.flush()
 
     def _render_hint() -> None:
-        hints = f"\n{_DIM}  enter confirm"
+        hints = f"\n{_DIM}  enter confirmar"
         if allow_back:
-            hints += "  esc go back"
+            hints += "  esc voltar"
         hints += _RESET
         sys.stdout.write(hints)
         sys.stdout.flush()
@@ -386,7 +386,7 @@ _CLI_HARNESSES: dict[str, dict[str, str]] = {
     "pi": {
         "cli": "pi",
         "display": "Pi",
-        "install": "(see Pi documentation)",
+        "install": "(veja a documentação do Pi)",
     },
 }
 
@@ -395,13 +395,13 @@ _CLI_HARNESSES: dict[str, dict[str, str]] = {
 _API_HARNESSES: dict[str, dict[str, str]] = {
     "openai-agents": {
         "display": "OpenAI Agents",
-        "description": "OpenAI API or any OpenAI-compatible endpoint",
+        "description": "API da OpenAI ou qualquer endpoint compatível com OpenAI",
         "package": "agents",
         "install": "pip install openai-agents",
     },
     "antigravity": {
         "display": "Antigravity (Gemini)",
-        "description": "Antigravity / Gemini API key, or an OpenAI-compatible gateway",
+        "description": "chave de API do Antigravity / Gemini, ou um gateway compatível com OpenAI",
         "package": "google.antigravity",
         "install": "pip install google-antigravity",
     },
@@ -527,26 +527,26 @@ def _prompt_global_auth() -> tuple[dict[str, str], None] | tuple[None, None]:
         try:
             if sub == 0:
                 console.print()
-                console.print("  [bold]How will omnicraft authenticate with the LLM?[/bold]")
+                console.print("  [bold]Como o omnicraft vai autenticar com o LLM?[/bold]")
                 console.print()
 
                 # Menu label only (display text, not a credential). Named to
                 # avoid an api_key/secret substring so CodeQL's clear-text
                 # logging heuristic doesn't flag the menu render as leaking a
                 # key (it's just the words "API key" on a button).
-                direct_auth_label = "API key"
+                direct_auth_label = "chave de API"
                 if profiles:
                     profiles_hint = ", ".join(profiles[:3])
                     if len(profiles) > 3:
-                        profiles_hint += f", +{len(profiles) - 3} more"
+                        profiles_hint += f", +{len(profiles) - 3} mais"
                     db_label = (
-                        f"Databricks\n        {_DIM}profiles detected: {profiles_hint}{_RESET}"
+                        f"Databricks\n        {_DIM}perfis detectados: {profiles_hint}{_RESET}"
                     )
                 else:
                     db_label = (
                         f"Databricks\n"
-                        f"        {_DIM}no profiles in ~/.databrickscfg — "
-                        f"you can still type a profile name{_RESET}"
+                        f"        {_DIM}nenhum perfil em ~/.databrickscfg — "
+                        f"você ainda pode digitar um nome de perfil{_RESET}"
                     )
                 choice = _arrow_menu([direct_auth_label, db_label])
                 sub = 1
@@ -556,20 +556,20 @@ def _prompt_global_auth() -> tuple[dict[str, str], None] | tuple[None, None]:
                     # API key path
                     console.print()
                     console.print(
-                        "  [dim]Tip: the key is stored in ~/.omnicraft/config.yaml,"
-                        " not in the agent YAML.[/dim]"
+                        "  [dim]Dica: a chave é armazenada em ~/.omnicraft/config.yaml,"
+                        " não no YAML do agente.[/dim]"
                     )
                     console.print()
-                    api_key_val = _text_prompt("API key", hide_input=True)
+                    api_key_val = _text_prompt("chave de API", hide_input=True)
                     if not api_key_val:
                         sub = 0
                         continue
                     console.print()
                     console.print(
-                        "  [dim]Leave blank to use the default OpenAI endpoint"
+                        "  [dim]Deixe em branco para usar o endpoint padrão da OpenAI"
                         " (https://api.openai.com/v1).[/dim]"
                     )
-                    base_url_val = _text_prompt("Base URL (optional)", default="")
+                    base_url_val = _text_prompt("Base URL (opcional)", default="")
                     auth_dict = {"type": "api_key", "api_key": api_key_val}
                     if base_url_val:
                         auth_dict["base_url"] = base_url_val
@@ -579,9 +579,11 @@ def _prompt_global_auth() -> tuple[dict[str, str], None] | tuple[None, None]:
                     default_profile = profiles[0] if len(profiles) == 1 else None
                     if profiles:
                         hint = ", ".join(profiles)
-                        console.print(f"  [dim]Detected profiles: {hint}[/dim]")
+                        console.print(f"  [dim]Perfis detectados: {hint}[/dim]")
                         console.print()
-                    profile_val = _text_prompt("Databricks profile name", default=default_profile)
+                    profile_val = _text_prompt(
+                        "Nome do perfil do Databricks", default=default_profile
+                    )
                     if not profile_val:
                         sub = 0
                         continue
@@ -608,22 +610,22 @@ def _prompt_server_url(current: str | None) -> str | None:
     """
     console.print()
     if current:
-        console.print(f"  [dim]Server URL already configured: {current}[/dim]")
-        console.print("  [dim]Press Enter to keep it, or type a new URL.[/dim]")
+        console.print(f"  [dim]URL do servidor já configurada: {current}[/dim]")
+        console.print("  [dim]Pressione Enter para manter, ou digite uma nova URL.[/dim]")
         console.print()
         try:
-            val = _text_prompt("Server URL", default=current)
+            val = _text_prompt("URL do servidor", default=current)
             return val or current
         except _GoBack:
             return current
-    console.print("  [bold]Server URL[/bold]")
+    console.print("  [bold]URL do servidor[/bold]")
     console.print(
-        "  [dim]The OmniCraft server your agents connect to."
-        " Leave blank to run locally (no server).[/dim]"
+        "  [dim]O servidor OmniCraft ao qual seus agentes se conectam."
+        " Deixe em branco para rodar localmente (sem servidor).[/dim]"
     )
     console.print()
     try:
-        val = _text_prompt("Server URL (optional)", default="")
+        val = _text_prompt("URL do servidor (opcional)", default="")
         return val or None
     except _GoBack:
         return None
@@ -665,18 +667,18 @@ def _prompt_existing_or_new(configs: list[Path]) -> Path | None:
     """
     while True:
         console.print()
-        console.print("[bold]What would you like to do?[/bold]")
+        console.print("[bold]O que você gostaria de fazer?[/bold]")
         console.print()
-        choice = _arrow_menu(["Create a new OmniCraft", "Run an existing OmniCraft"])
+        choice = _arrow_menu(["Criar um novo OmniCraft", "Rodar um OmniCraft existente"])
         if choice == 0:
             return None
 
         try:
             console.print()
-            console.print("[bold]Pick an existing agent:[/bold]")
+            console.print("[bold]Escolha um agente existente:[/bold]")
             console.print()
             labels = [p.stem for p in configs]
-            labels.append("Type a path…")
+            labels.append("Digitar um caminho…")
             picked = _arrow_menu(labels)
             if picked == len(configs):
                 return _prompt_agent_config_path()
@@ -688,18 +690,18 @@ def _prompt_existing_or_new(configs: list[Path]) -> Path | None:
 def _prompt_agent_config_path() -> Path:
     """Prompt for a YAML agent config path and validate that it exists."""
     while True:
-        raw = _text_prompt("Agent YAML path", default="", allow_back=True).strip()
+        raw = _text_prompt("Caminho do YAML do agente", default="", allow_back=True).strip()
         if not raw:
             raise _GoBack
         path = Path(raw).expanduser()
         if not path.exists():
-            console.print(f"  [red]{path} does not exist.[/red]")
+            console.print(f"  [red]{path} não existe.[/red]")
             continue
         if not path.is_file():
-            console.print(f"  [red]{path} is not a file.[/red]")
+            console.print(f"  [red]{path} não é um arquivo.[/red]")
             continue
         if path.suffix not in {".yaml", ".yml"}:
-            console.print("  [red]Please enter a .yaml or .yml file.[/red]")
+            console.print("  [red]Por favor, informe um arquivo .yaml ou .yml.[/red]")
             continue
         return path
 
@@ -714,46 +716,57 @@ def _show_welcome() -> None:
     from omnicraft.inner.mascots import MASCOT_ART_COLOR
 
     banner = startup_banner_strings(
-        "Welcome to OmniCraft!",
-        hint_line="skip anytime: omnicraft run <agent.yaml>",
+        "Bem-vindo ao OmniCraft!",
+        hint_line="pule quando quiser: omnicraft run <agent.yaml>",
         art_color=MASCOT_ART_COLOR,
     )
     console.print()
     sys.stdout.write(banner.ansi + "\n")
     console.print()
-    console.print("  OmniCraft is a declarative agent authoring and runtime framework.")
-    console.print("  Define your agent in a YAML config and the framework handles the rest.")
-    console.print()
     console.print(
-        "  [dim]\u2022[/dim] [bold]Declarative[/bold]"
-        " [dim]- describe your agent in YAML, not code[/dim]"
+        "  O OmniCraft \u00e9 um framework declarativo de cria\u00e7\u00e3o e "
+        "execu\u00e7\u00e3o de agentes."
     )
     console.print(
-        "  [dim]\u2022[/dim] [bold]Portable[/bold]   "
-        " [dim]- run on any LLM or harness"
-        " (Claude Code, Codex, OpenAI Agents, and more)[/dim]"
-    )
-    console.print(
-        "  [dim]\u2022[/dim] [bold]Deployable[/bold] "
-        " [dim]- ship as a CLI, web UI, Slack bot,"
-        " REST API, or in the cloud[/dim]"
-    )
-    console.print(
-        "  [dim]\u2022[/dim] [bold]Governable[/bold] "
-        " [dim]- add policies for permissions, approvals,"
-        " and cost controls[/dim]"
-    )
-    console.print(
-        "  [dim]\u2022[/dim] [bold]Composable[/bold] "
-        " [dim]- use agents as tools, chain them with"
-        " supervisors, or wrap them in code[/dim]"
+        "  Defina seu agente em uma configura\u00e7\u00e3o YAML e o framework cuida do resto."
     )
     console.print()
-    console.print("  This setup flow will help you create your first YAML config.")
-    console.print("  Once you're familiar, just write your own and run:")
+    console.print(
+        "  [dim]\u2022[/dim] [bold]Declarativo[/bold]"
+        " [dim]- descreva seu agente em YAML, n\u00e3o em c\u00f3digo[/dim]"
+    )
+    console.print(
+        "  [dim]\u2022[/dim] [bold]Port\u00e1vel[/bold]   "
+        " [dim]- rode em qualquer LLM ou harness"
+        " (Claude Code, Codex, OpenAI Agents e mais)[/dim]"
+    )
+    console.print(
+        "  [dim]\u2022[/dim] [bold]Implant\u00e1vel[/bold]"
+        " [dim]- entregue como CLI, web UI, bot do Slack,"
+        " API REST ou na nuvem[/dim]"
+    )
+    console.print(
+        "  [dim]\u2022[/dim] [bold]Govern\u00e1vel[/bold] "
+        " [dim]- adicione pol\u00edticas para permiss\u00f5es, aprova\u00e7\u00f5es"
+        " e controles de custo[/dim]"
+    )
+    console.print(
+        "  [dim]\u2022[/dim] [bold]Combin\u00e1vel[/bold] "
+        " [dim]- use agentes como ferramentas, encadeie-os com"
+        " supervisores ou envolva-os em c\u00f3digo[/dim]"
+    )
+    console.print()
+    console.print(
+        "  Este fluxo de configura\u00e7\u00e3o vai ajudar voc\u00ea a criar sua "
+        "primeira configura\u00e7\u00e3o YAML."
+    )
+    console.print("  Quando estiver familiarizado, basta escrever a sua e rodar:")
     console.print("  [dim]omnicraft run <your-agent.yaml>[/dim]")
     console.print()
-    console.print("  [dim]Check out examples/ in the repo for ready-to-run agent configs.[/dim]")
+    console.print(
+        "  [dim]Confira examples/ no reposit\u00f3rio para configura\u00e7\u00f5es "
+        "de agente prontas para rodar.[/dim]"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -764,28 +777,29 @@ def _show_welcome() -> None:
 def _prompt_use_case() -> int:
     """Prompt for use case. Returns 1 (single), 2 (multi), or 3 (custom)."""
     console.print(
-        "  Here are two popular coding agent scenarios where people find OmniCraft useful:"
+        "  Aqui estão dois cenários populares de agentes de código onde as "
+        "pessoas acham o OmniCraft útil:"
     )
     console.print()
     options = [
         (
-            f"Enhance a single coding agent\n"
-            f"        {_DIM}Add better tools and guardrails to"
-            f" Claude Code, Codex, or other coding agents{_RESET}"
+            f"Aprimorar um único agente de código\n"
+            f"        {_DIM}Adicione ferramentas e guardrails melhores ao"
+            f" Claude Code, Codex ou outros agentes de código{_RESET}"
         ),
         "",
         (
-            f"Build a multi-agent coding system\n"
-            f"        {_DIM}Multiple coding agents working together,"
-            f" e.g. Codex reviews Claude Code's work{_RESET}"
+            f"Construir um sistema de código multiagente\n"
+            f"        {_DIM}Vários agentes de código trabalhando juntos,"
+            f" ex.: o Codex revisa o trabalho do Claude Code{_RESET}"
         ),
         "",
-        "Or build something different:",
+        "Ou construa algo diferente:",
         "",
         (
-            f"Custom agent\n"
-            f"        {_DIM}Not limited to coding agents;"
-            f" define any (multi-)agent with a guided setup{_RESET}"
+            f"Agente personalizado\n"
+            f"        {_DIM}Não se limita a agentes de código;"
+            f" defina qualquer (multi)agente com uma configuração guiada{_RESET}"
         ),
     ]
     disabled = {1, 3, 4, 5}  # blank lines and label are not selectable
@@ -825,19 +839,21 @@ def _prompt_agent_name(use_case: int) -> str:
     """
     default = _default_agent_name(use_case)
     console.print(
-        f"  [dim]Press enter to use [bold]{default}[/bold], or type a name."
-        f"\n  The name will be used as the YAML filename"
+        f"  [dim]Pressione enter para usar [bold]{default}[/bold], ou digite um nome."
+        f"\n  O nome ser\u00e1 usado como nome do arquivo YAML"
         f" ({default} \u2192 {default}.yaml)[/dim]"
     )
     console.print()
     while True:
-        raw = _text_prompt("Name your agent", default=default)
+        raw = _text_prompt("Nomeie seu agente", default=default)
         sanitized = _sanitize_agent_name(raw)
         if sanitized != raw.strip():
-            console.print(f"  [dim](sanitized to: {sanitized})[/dim]")
+            console.print(f"  [dim](ajustado para: {sanitized})[/dim]")
         existing_path = _AGENTS_DIR / f"{sanitized}.yaml"
         if existing_path.exists():
-            console.print(f"  [red]{sanitized}.yaml already exists. Pick a different name.[/red]")
+            console.print(
+                f"  [red]{sanitized}.yaml j\u00e1 existe. Escolha um nome diferente.[/red]"
+            )
             continue
         return sanitized
 
@@ -864,11 +880,11 @@ def _build_agent_labels(
         harness_order.append(harness)
         if path:
             mark = _CHECK
-            detail = f"{_DIM}found at {path}{_RESET}"
+            detail = f"{_DIM}encontrado em {path}{_RESET}"
             any_available = True
         else:
             mark = _CROSS
-            detail = f"{_DIM}not found ({info['install']}){_RESET}"
+            detail = f"{_DIM}não encontrado ({info['install']}){_RESET}"
             disabled.add(i)
         labels.append(f"{mark} {info['display']:<18} {detail}")
 
@@ -881,7 +897,8 @@ def _show_no_agents_found(labels: list[str]) -> None:
         console.print(f"  {label}")
     console.print()
     console.print(
-        "  [yellow]No coding agents found. Install at least one, then try again.[/yellow]"
+        "  [yellow]Nenhum agente de código encontrado. Instale pelo menos um "
+        "e tente de novo.[/yellow]"
     )
 
 
@@ -902,7 +919,7 @@ def _show_coding_agents_and_pick(detected: dict[str, str | None]) -> _AgentChoic
     harness = harness_order[choice]
     display = _CLI_HARNESSES[harness]["display"]
 
-    console.print(f"\n  Selected: [bold]{display}[/bold]")
+    console.print(f"\n  Selecionado: [bold]{display}[/bold]")
     return _AgentChoice(harness=harness, display=display)
 
 
@@ -924,7 +941,8 @@ def _show_coding_agents_and_pick_multi(
         return None
 
     console.print(
-        "  Which coding agents should work together? Select the ones you want to collaborate."
+        "  Quais agentes de código devem trabalhar juntos? Selecione os que "
+        "você quer que colaborem."
     )
     console.print()
     first_available = next(i for i in range(len(labels)) if i not in disabled)
@@ -975,33 +993,33 @@ def _prompt_supervisor(detected: dict[str, str | None]) -> _SupervisorConfig:
             if sub == 0:
                 # --- Sub-step 0: Task description ---
                 console.print(
-                    "  Your coding agents need a supervisor to coordinate them."
-                    " The supervisor is an agent that decides which worker to call"
-                    " and when."
+                    "  Seus agentes de código precisam de um supervisor para coordená-los."
+                    " O supervisor é um agente que decide qual worker chamar"
+                    " e quando."
                 )
                 console.print()
                 console.print(
-                    "  [bold]How should your agents collaborate?[/bold]"
-                    " Describe the workflow in plain English."
+                    "  [bold]Como seus agentes devem colaborar?[/bold]"
+                    " Descreva o fluxo de trabalho em linguagem simples."
                 )
                 console.print(
-                    "  [dim]For example: Always ask Claude Code to write code,"
-                    " then call Codex to review it."
-                    "\n  If Codex finds issues, send them back to Claude Code"
-                    " to fix.[/dim]"
+                    "  [dim]Por exemplo: Sempre peça ao Claude Code para escrever o código,"
+                    " depois chame o Codex para revisá-lo."
+                    "\n  Se o Codex encontrar problemas, envie-os de volta ao Claude Code"
+                    " para corrigir.[/dim]"
                 )
                 console.print()
-                task = _text_prompt("Collaboration task", allow_back=True)
+                task = _text_prompt("Tarefa de colaboração", allow_back=True)
                 sub = 1
 
             if sub == 1:
                 # --- Sub-step 1: Pick supervisor harness ---
                 console.print()
-                console.print("  [bold]Pick a harness for the supervisor:[/bold]")
+                console.print("  [bold]Escolha um harness para o supervisor:[/bold]")
                 console.print(
-                    "  [dim]This is what your supervisor agent will run with."
-                    " It's fine to use a coding agent here too"
-                    " - it won't conflict with your workers.[/dim]"
+                    "  [dim]É com isso que seu agente supervisor vai rodar."
+                    " Tudo bem usar um agente de código aqui também"
+                    " - ele não vai conflitar com seus workers.[/dim]"
                 )
                 console.print()
 
@@ -1016,7 +1034,7 @@ def _prompt_supervisor(detected: dict[str, str | None]) -> _SupervisorConfig:
                         detail = f"{_DIM}{info['description']}{_RESET}"
                     else:
                         mark = _CROSS
-                        detail = f"{_DIM}package not installed ({info['install']}){_RESET}"
+                        detail = f"{_DIM}pacote não instalado ({info['install']}){_RESET}"
                         disabled.add(idx)
                     labels.append(f"{mark} {info['display']:<18} {detail}")
 
@@ -1026,9 +1044,9 @@ def _prompt_supervisor(detected: dict[str, str | None]) -> _SupervisorConfig:
                         console.print(f"  {label}")
                     console.print()
                     console.print(
-                        "  [yellow]No harnesses available. Install a coding"
-                        " agent or the openai-agents package,"
-                        " then try again.[/yellow]"
+                        "  [yellow]Nenhum harness disponível. Instale um agente"
+                        " de código ou o pacote openai-agents,"
+                        " e tente de novo.[/yellow]"
                     )
                     raise SystemExit(1)
 
@@ -1100,30 +1118,30 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                 profile = None
 
                 console.print()
-                console.print("  [bold]How should the supervisor access an LLM?[/bold]")
+                console.print("  [bold]Como o supervisor deve acessar um LLM?[/bold]")
                 console.print()
 
                 # OpenAI API option.
                 if has_key:
-                    openai_detail = f"{_DIM}OPENAI_API_KEY detected{_RESET}"
+                    openai_detail = f"{_DIM}OPENAI_API_KEY detectada{_RESET}"
                 else:
-                    openai_detail = f"{_DIM}will need OPENAI_API_KEY{_RESET}"
+                    openai_detail = f"{_DIM}vai precisar de OPENAI_API_KEY{_RESET}"
                 openai_label = f"OpenAI API\n        {openai_detail}"
 
                 # Custom endpoint option.
                 custom_parts = []
                 if has_base:
-                    custom_parts.append("OPENAI_BASE_URL detected")
+                    custom_parts.append("OPENAI_BASE_URL detectada")
                 else:
-                    custom_parts.append("will need OPENAI_BASE_URL")
+                    custom_parts.append("vai precisar de OPENAI_BASE_URL")
                 if has_key:
-                    custom_parts.append("OPENAI_API_KEY detected")
+                    custom_parts.append("OPENAI_API_KEY detectada")
                 else:
-                    custom_parts.append("will need OPENAI_API_KEY")
+                    custom_parts.append("vai precisar de OPENAI_API_KEY")
                 custom_label = (
-                    f"Custom endpoint\n"
-                    f"        {_DIM}any URL that speaks the OpenAI"
-                    f" Responses API"
+                    f"Endpoint personalizado\n"
+                    f"        {_DIM}qualquer URL que fale a API"
+                    f" Responses da OpenAI"
                     f" -- {', '.join(custom_parts)}{_RESET}"
                 )
 
@@ -1133,12 +1151,14 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                     db_label = (
                         f"Databricks\n"
                         f"        {_DIM}{len(profiles)}"
-                        f" profile{'s' if len(profiles) != 1 else ''}"
-                        f" detected: {profiles_hint}{_RESET}"
+                        f" {'perfis' if len(profiles) != 1 else 'perfil'}"
+                        f" {'detectados' if len(profiles) != 1 else 'detectado'}:"
+                        f" {profiles_hint}{_RESET}"
                     )
                 else:
                     db_label = (
-                        f"Databricks\n        {_DIM}no profiles found in ~/.databrickscfg{_RESET}"
+                        f"Databricks\n        {_DIM}nenhum perfil encontrado "
+                        f"em ~/.databrickscfg{_RESET}"
                     )
 
                 labels = [openai_label, custom_label, db_label]
@@ -1158,7 +1178,7 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                     console.print()
                     if has_base:
                         base_url = os.environ["OPENAI_BASE_URL"]
-                        console.print(f"  Using OPENAI_BASE_URL: [bold]{base_url}[/bold]")
+                        console.print(f"  Usando OPENAI_BASE_URL: [bold]{base_url}[/bold]")
                     else:
                         base_url = _text_prompt("OPENAI_BASE_URL")
                     if not has_key:
@@ -1168,9 +1188,9 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                     console.print()
                     if len(profiles) == 1:
                         profile = profiles[0]
-                        console.print(f"  Using profile: [bold]{profile}[/bold]")
+                        console.print(f"  Usando perfil: [bold]{profile}[/bold]")
                     else:
-                        console.print("  [bold]Pick a Databricks profile:[/bold]")
+                        console.print("  [bold]Escolha um perfil do Databricks:[/bold]")
                         console.print()
                         pidx = _arrow_menu(list(profiles))
                         profile = profiles[pidx]
@@ -1180,8 +1200,8 @@ def _prompt_openai_agents_config() -> _SupervisorConfig:
                 # --- Pick model ---
                 default_model = "databricks-gpt-5-4" if profile else "gpt-4o"
                 console.print()
-                console.print("  [bold]Which model should the supervisor use?[/bold]")
-                model = _text_prompt("Supervisor model", default=default_model)
+                console.print("  [bold]Qual modelo o supervisor deve usar?[/bold]")
+                model = _text_prompt("Modelo do supervisor", default=default_model)
 
                 return _SupervisorConfig(
                     harness="openai-agents",
@@ -1332,8 +1352,8 @@ def _store_default_config(yaml_path: Path, supervisor: _SupervisorConfig | None 
         elif supervisor.api_key:
             settings["auth"] = {"type": "api_key", "api_key": "$OPENAI_API_KEY"}
     _save_global_config(settings)
-    console.print(f"  [green]✓ stored default_agent in {_GLOBAL_CONFIG_PATH}[/green]")
-    console.print("  [dim]Type `omnicraft` to start a new session.[/dim]\n")
+    console.print(f"  [green]✓ default_agent armazenado em {_GLOBAL_CONFIG_PATH}[/green]")
+    console.print("  [dim]Digite `omnicraft` para iniciar uma nova sessão.[/dim]\n")
 
 
 def _finish_new_setup(
@@ -1351,18 +1371,20 @@ def _finish_new_setup(
     """
     console.print()
     file_uri = yaml_path.resolve().as_uri()
-    console.print(f"  Created: [bold][link={file_uri}]{yaml_path}[/link][/bold]")
+    console.print(f"  Criado: [bold][link={file_uri}]{yaml_path}[/link][/bold]")
 
     # Show YAML preview in a syntax-highlighted panel.
     syntax = Syntax(yaml_content, "yaml", theme="ansi_dark", line_numbers=False)
     console.print()
-    console.print(Panel(syntax, title="Agent config preview", border_style="dim", expand=False))
+    console.print(
+        Panel(syntax, title="Prévia da configuração do agente", border_style="dim", expand=False)
+    )
     console.print()
     console.print(
-        "  [dim]Tip: Edit this YAML directly to change harness,"
-        " model, add policies, tools, and more.[/dim]\n"
-        f"  [dim]Run it anytime with:[/dim] omnicraft run [link={file_uri}]{yaml_path}[/link]\n"
-        "  [dim]See examples:[/dim] omnicraft/examples/ in the repo, or omnicraft run --help\n"
+        "  [dim]Dica: Edite este YAML diretamente para mudar o harness,"
+        " o modelo, adicionar políticas, ferramentas e mais.[/dim]\n"
+        f"  [dim]Rode quando quiser com:[/dim] omnicraft run [link={file_uri}]{yaml_path}[/link]\n"
+        "  [dim]Veja exemplos:[/dim] omnicraft/examples/ no repositório, ou omnicraft run --help\n"
     )
 
     _store_default_config(yaml_path, supervisor=supervisor)
@@ -1372,7 +1394,7 @@ def _finish_existing_setup(yaml_path: Path) -> None:
     """Store an existing agent config as the global default."""
     console.print()
     file_uri = yaml_path.resolve().as_uri()
-    console.print(f"  Selected: [bold][link={file_uri}]{yaml_path}[/link][/bold]\n")
+    console.print(f"  Selecionado: [bold][link={file_uri}]{yaml_path}[/link][/bold]\n")
     _store_default_config(yaml_path)
 
 
@@ -1415,7 +1437,7 @@ def run_wizard_and_launch() -> None:
 
     # ── Step 1: Server URL ────────────────────────────────────────────
     _section()
-    console.print("  [bold]Step 1 / 3 — Server URL[/bold]")
+    console.print("  [bold]Passo 1 / 3 — URL do servidor[/bold]")
     server_url = _prompt_server_url(existing_server)
     if server_url:
         save_settings["server"] = server_url
@@ -1425,14 +1447,14 @@ def run_wizard_and_launch() -> None:
     # authenticate with the OmniCraft server, so no separate ``profile:`` key
     # is needed in the global config.
     _section()
-    console.print("  [bold]Step 2 / 3 — LLM auth[/bold]")
+    console.print("  [bold]Passo 2 / 3 — Autenticação do LLM[/bold]")
     if existing_auth and isinstance(existing_auth, dict):
         auth_type = existing_auth.get("type", "?")
         console.print()
-        console.print(f"  [dim]LLM auth already configured: type={auth_type}.[/dim]")
+        console.print(f"  [dim]Autenticação do LLM já configurada: type={auth_type}.[/dim]")
         console.print()
         try:
-            reconfig = _arrow_menu(["Keep existing auth", "Re-configure"])
+            reconfig = _arrow_menu(["Manter autenticação existente", "Reconfigurar"])
         except _GoBack:
             reconfig = 0  # treat Escape as "keep existing"
         if reconfig == 1:
@@ -1446,22 +1468,26 @@ def run_wizard_and_launch() -> None:
 
     # ── Step 3: Default agent YAML ───────────────────────────────────
     _section()
-    console.print("  [bold]Step 3 / 3 — Default agent YAML[/bold]")
+    console.print("  [bold]Passo 3 / 3 — YAML do agente padrão[/bold]")
     console.print()
     if existing_agent:
-        console.print(f"  [dim]Default agent already set: {existing_agent}[/dim]")
-        console.print("  [dim]Press Enter to keep it, or type a new path.[/dim]")
+        console.print(f"  [dim]Agente padrão já definido: {existing_agent}[/dim]")
+        console.print("  [dim]Pressione Enter para manter, ou digite um novo caminho.[/dim]")
         console.print()
     else:
         console.print(
-            "  [dim]Path to your agent YAML file (e.g. examples/hello_world.yaml).[/dim]"
+            "  [dim]Caminho para o arquivo YAML do seu agente "
+            "(ex.: examples/hello_world.yaml).[/dim]"
         )
         console.print(
-            "  [dim]Leave blank to skip — run ``omnicraft run <yaml>`` directly later.[/dim]"
+            "  [dim]Deixe em branco para pular — rode ``omnicraft run <yaml>`` "
+            "diretamente mais tarde.[/dim]"
         )
         console.print()
     try:
-        agent_path_raw = _text_prompt("Agent YAML path (optional)", default=existing_agent)
+        agent_path_raw = _text_prompt(
+            "Caminho do YAML do agente (opcional)", default=existing_agent
+        )
         if agent_path_raw:
             agent_path = str(Path(agent_path_raw).expanduser().resolve())
             save_settings["default_agent"] = agent_path
@@ -1470,19 +1496,19 @@ def run_wizard_and_launch() -> None:
 
     # ── Persist ───────────────────────────────────────────────────────
     console.print()
-    console.rule("[bold]Done![/bold]", style="green")
+    console.rule("[bold]Concluído![/bold]", style="green")
     console.print()
     if save_settings:
         _save_global_config(save_settings)
-        console.print(f"  [green]✓ Config saved to {_GLOBAL_CONFIG_PATH}[/green]")
+        console.print(f"  [green]✓ Configuração salva em {_GLOBAL_CONFIG_PATH}[/green]")
     else:
-        console.print("  [dim]No changes — config unchanged.[/dim]")
+        console.print("  [dim]Nenhuma mudança — configuração inalterada.[/dim]")
     console.print()
     if save_settings.get("default_agent"):
         console.print(
-            f"  Run your agent:  [bold]omnicraft run {save_settings['default_agent']}[/bold]"
+            f"  Rode seu agente:  [bold]omnicraft run {save_settings['default_agent']}[/bold]"
         )
     else:
-        console.print("  Run an agent:  [bold]omnicraft run <your-agent.yaml>[/bold]")
-    console.print("  See examples:   [bold]omnicraft/examples/[/bold] in the repo")
+        console.print("  Rode um agente:   [bold]omnicraft run <your-agent.yaml>[/bold]")
+    console.print("  Veja exemplos:    [bold]omnicraft/examples/[/bold] no repositório")
     console.print()

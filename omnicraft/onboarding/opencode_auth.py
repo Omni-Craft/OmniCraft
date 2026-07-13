@@ -123,11 +123,12 @@ class OpenCodeAuthSummary:
         parts: list[str] = []
         if self.stored_providers:
             parts.append(
-                f"{len(self.stored_providers)} stored ({', '.join(sorted(self.stored_providers))})"
+                f"{len(self.stored_providers)} armazenado(s) "
+                f"({', '.join(sorted(self.stored_providers))})"
             )
         if self.env_providers:
             parts.append(f"env: {', '.join(self.env_providers)}")
-        return " · ".join(parts) if parts else "no provider configured yet"
+        return " · ".join(parts) if parts else "nenhum provedor configurado ainda"
 
 
 def opencode_auth_summary() -> OpenCodeAuthSummary:

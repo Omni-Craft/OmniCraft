@@ -140,7 +140,7 @@ def test_harness_setup_hint_antigravity_surfaces_sign_in() -> None:
     hint = hi.harness_setup_hint("antigravity-native")
     assert "antigravity.google/cli/install.sh" in hint
     assert "agy" in hint
-    assert "sign" in hint.lower()
+    assert "login" in hint.lower()
 
 
 def test_install_command_rejects_non_npm_harness() -> None:

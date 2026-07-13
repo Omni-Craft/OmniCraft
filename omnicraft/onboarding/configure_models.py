@@ -333,7 +333,7 @@ def credential_label(
     if kind == SUBSCRIPTION_KIND:
         # Within a harness there is only one subscription, so the plan
         # name adds no information — just "Subscription".
-        return "Subscription"
+        return "Assinatura"
     if kind == DATABRICKS_KIND:
         return f"Databricks ({profile})" if profile else "Databricks"
     if kind == CLI_CONFIG_KIND:
@@ -342,7 +342,7 @@ def credential_label(
         # the readable fallback.
         return display_name or provider_name
     if kind == KEY_KIND:
-        return f"{provider_display_name(provider_name)} API Key"
+        return f"Chave de API {provider_display_name(provider_name)}"
     if kind == BEDROCK_KIND:
         # The credential is always AWS Bedrock; the entry name is user-chosen
         # (like a gateway), so naming it after the provider id gave "Bedrock
@@ -428,44 +428,45 @@ def add_menu_options() -> list[AddOption]:
         # so each family-scoped menu leads with "<vendor> API key" then
         # "<vendor> subscription".
         _opt(
-            "OpenAI — API key",
-            "Use an OpenAI API key (platform.openai.com).",
+            "OpenAI — chave de API",
+            "Use uma chave de API da OpenAI (platform.openai.com).",
             KEY_KIND,
             provider="openai",
         ),
         _opt(
-            "Anthropic — API key",
-            "Use an Anthropic API key (console.anthropic.com).",
+            "Anthropic — chave de API",
+            "Use uma chave de API da Anthropic (console.anthropic.com).",
             KEY_KIND,
             provider="anthropic",
         ),
         _opt(
-            "Gemini — API key",
-            "Use a Google Gemini API key (aistudio.google.com) for the antigravity harness.",
+            "Gemini — chave de API",
+            "Use uma chave de API do Google Gemini (aistudio.google.com) "
+            "para o harness antigravity.",
             KEY_KIND,
             provider="gemini",
         ),
         _opt(
-            "ChatGPT — subscription",
-            "Use your ChatGPT plan via the codex CLI login.",
+            "ChatGPT — assinatura",
+            "Use seu plano ChatGPT pelo login da CLI codex.",
             SUBSCRIPTION_KIND,
             cli="codex",
         ),
         _opt(
-            "Claude — subscription (Pro/Max)",
-            "Use your Claude Pro/Max plan via the claude CLI login.",
+            "Claude — assinatura (Pro/Max)",
+            "Use seu plano Claude Pro/Max pelo login da CLI claude.",
             SUBSCRIPTION_KIND,
             cli="claude",
         ),
         # Cross-vendor extras, alphabetical (Gateway before OpenRouter).
         _opt(
-            "Gateway — custom base URL + key (e.g. OpenRouter)",
-            "An OpenAI/Anthropic-compatible proxy: LiteLLM, Ollama, OpenRouter, vLLM, …",
+            "Gateway — base URL personalizada + chave (ex.: OpenRouter)",
+            "Um proxy compatível com OpenAI/Anthropic: LiteLLM, Ollama, OpenRouter, vLLM, …",
             GATEWAY_KIND,
         ),
         _opt(
-            "OpenRouter — API key",
-            "One key, many models (openrouter.ai).",
+            "OpenRouter — chave de API",
+            "Uma chave, muitos modelos (openrouter.ai).",
             KEY_KIND,
             provider="openrouter",
         ),
@@ -475,16 +476,16 @@ def add_menu_options() -> list[AddOption]:
         # selecting it aborts with the same hint (_configure_harness_add).
         _opt(
             "Databricks — workspace",
-            "Route harnesses through a Databricks workspace's Unity AI Gateway (via ucode)."
+            "Roteie harnesses pelo Unity AI Gateway de um workspace Databricks (via ucode)."
             if databricks_sdk_installed()
             # Markup-safe (rendered via Text.from_markup): no literal
             # brackets, so the extra is named in prose here and the exact
             # `omnicraft[databricks]` command appears on selection.
-            else "Requires the Databricks extra — select for the install command.",
+            else "Requer o extra Databricks — selecione para ver o comando de instalação.",
             DATABRICKS_KIND,
         ),
         _opt(
-            "Other provider — API key",
+            "Outro provedor — chave de API",
             "Groq, DeepSeek, xAI, Mistral, Together AI, Fireworks, …",
             KEY_KIND,
             other=True,
@@ -493,9 +494,9 @@ def add_menu_options() -> list[AddOption]:
         # native ``omnicraft claude`` terminal in Bedrock mode. Listed last so it
         # never shifts the first-party / extras order users already know.
         _opt(
-            "AWS Bedrock — API key",
-            "AWS Bedrock or a Bedrock-compatible gateway for the native Claude "
-            "terminal (omnicraft claude). Claude only.",
+            "AWS Bedrock — chave de API",
+            "AWS Bedrock ou um gateway compatível com Bedrock para o terminal "
+            "Claude nativo (omnicraft claude). Somente Claude.",
             BEDROCK_KIND,
         ),
     ]
@@ -603,9 +604,9 @@ def render_provider_listing_by_harness(
     """
     from omnicraft.onboarding.provider_config import provider_families
 
-    console.print(f"[{ACCENT}]Credentials (by harness)[/]")
+    console.print(f"[{ACCENT}]Credenciais (por harness)[/]")
     if not providers:
-        console.print("  [dim]none configured yet[/dim]")
+        console.print("  [dim]nenhuma configurada ainda[/dim]")
         return
     for family in (ANTHROPIC_FAMILY, OPENAI_FAMILY, GEMINI_FAMILY, PI_SURFACE):
         console.print(f"  [bold]{_FAMILY_LABEL[family]}[/]")
@@ -615,7 +616,7 @@ def render_provider_listing_by_harness(
             if family in provider_families(entry)
         ]
         if not serving:
-            console.print("    [dim](none configured)[/dim]")
+            console.print("    [dim](nenhuma configurada)[/dim]")
             continue
         for name, entry in serving:
             glyph = _KIND_GLYPH.get(entry.kind, "")
@@ -625,7 +626,7 @@ def render_provider_listing_by_harness(
                 f"    {glyph} [{kind_style}]{entry.kind}[/] [bold]{name}[/] [dim]{summary}[/dim]"
             )
             if family in _provider_default_families(entry, config):
-                line += " [green]✓ default[/green]"
+                line += " [green]✓ padrão[/green]"
             console.print(line)
 
 
@@ -667,9 +668,9 @@ def _entry_models_summary(entry: ProviderEntry) -> str:
         databricks profile).
     """
     if entry.kind == SUBSCRIPTION_KIND:
-        return f"via {entry.cli} CLI"
+        return f"via CLI {entry.cli}"
     if entry.kind == DATABRICKS_KIND:
-        return f"profile: {entry.profile}"
+        return f"perfil: {entry.profile}"
     if entry.kind == CLI_CONFIG_KIND:
         return f"~/.{entry.cli}/config.toml: {entry.model_provider}"
     # Inline-family kinds: list each family's default model, else note the
@@ -682,7 +683,7 @@ def _entry_models_summary(entry: ProviderEntry) -> str:
             models.append(default_model)
     if models:
         return ", ".join(models)
-    return "base_url set"
+    return "base_url definido"
 
 
 def render_provider_listing(
@@ -713,7 +714,7 @@ def render_provider_listing(
     :returns: None. Side effect: writes the listing to the shared console.
     """
     if providers:
-        console.print(f"[{ACCENT}]Configured providers[/]")
+        console.print(f"[{ACCENT}]Provedores configurados[/]")
         for name, entry in providers.items():
             glyph = _KIND_GLYPH.get(entry.kind, "")
             kind_style = _KIND_STYLE.get(entry.kind, "white")
@@ -722,10 +723,10 @@ def render_provider_listing(
             line = f"  {glyph} [{kind_style}]{entry.kind}[/] [bold]{name}[/] [dim]{summary}[/dim]"
             if default_families:
                 labels = " · ".join(_FAMILY_LABEL[f] for f in default_families)
-                line += f" [green]✓ default · {labels}[/green]"
+                line += f" [green]✓ padrão · {labels}[/green]"
             console.print(line)
     else:
-        console.print("[dim]No providers configured yet.[/dim]")
+        console.print("[dim]Nenhum provedor configurado ainda.[/dim]")
 
     configured_names = set(providers)
     # A detected CLI login (``det.name`` is the CLI, e.g. ``"claude"``) is
@@ -744,7 +745,7 @@ def render_provider_listing(
     ]
     if hints:
         console.print()
-        console.print("[dim]Detected (not configured):[/dim]")
+        console.print("[dim]Detectados (não configurados):[/dim]")
         for det in hints:
             console.print(f"  [cyan]{det.name}[/cyan] [dim]({det.source})[/dim]")
 
@@ -914,7 +915,7 @@ def build_gateway_provider_entry(
     :raises ValueError: If *families* is empty.
     """
     if not families:
-        raise ValueError("a gateway must serve at least one family")
+        raise ValueError("um gateway deve servir pelo menos uma família")
     models = models or {}
     body: dict[str, object] = {"kind": GATEWAY_KIND}
     for family in families:

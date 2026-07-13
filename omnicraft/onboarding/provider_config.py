@@ -451,8 +451,8 @@ def resolve_secret(ref: str) -> str:
         value = secrets.load_secret(name)
         if value is None:
             raise OmniCraftError(
-                f"no stored secret named {name!r}; run "
-                "`omnicraft setup --no-internal-beta` to set it.",
+                f"nenhum segredo armazenado com o nome {name!r}; rode "
+                "`omnicraft setup --no-internal-beta` para defini-lo.",
                 code=ErrorCode.INVALID_INPUT,
             )
         return value
@@ -463,8 +463,8 @@ def resolve_secret(ref: str) -> str:
             prefixed = omnicraft_prefixed_env_name(var)
             fallback = f" or ${prefixed}" if prefixed != var else ""
             raise OmniCraftError(
-                f"Unresolved environment variable '${var}' referenced by "
-                f"'env:{var}'. Set ${var}{fallback} in the environment.",
+                f"Variável de ambiente '${var}' não resolvida, referenciada por "
+                f"'env:{var}'. Defina ${var}{fallback} no ambiente.",
                 code=ErrorCode.INVALID_INPUT,
             )
         _actual_var, value = resolved
@@ -584,7 +584,7 @@ def _parse_family(provider_name: str, family_name: str, raw: dict[str, object]) 
     base_url_raw = raw.get("base_url")
     if not isinstance(base_url_raw, str) or not base_url_raw:
         raise OmniCraftError(
-            f"{prefix}.base_url is required and must be a string.",
+            f"{prefix}.base_url é obrigatório e deve ser uma string.",
             code=ErrorCode.INVALID_INPUT,
         )
 
@@ -600,13 +600,13 @@ def _parse_family(provider_name: str, family_name: str, raw: dict[str, object]) 
     set_names = [n for n, v in present if isinstance(v, str) and v]
     if len(set_names) > 1:
         raise OmniCraftError(
-            f"{prefix} must set exactly one of 'api_key', 'api_key_ref', or "
-            f"'auth_command', not multiple ({', '.join(set_names)}).",
+            f"{prefix} deve definir exatamente um entre 'api_key', 'api_key_ref' ou "
+            f"'auth_command', não vários ({', '.join(set_names)}).",
             code=ErrorCode.INVALID_INPUT,
         )
     if not set_names:
         raise OmniCraftError(
-            f"{prefix} requires one of 'api_key', 'api_key_ref', or 'auth_command'.",
+            f"{prefix} requer um entre 'api_key', 'api_key_ref' ou 'auth_command'.",
             code=ErrorCode.INVALID_INPUT,
         )
 
@@ -619,10 +619,10 @@ def _parse_family(provider_name: str, family_name: str, raw: dict[str, object]) 
     # stays valid for anthropic/openai families (gateways / dynamic tokens).
     if family_name == GEMINI_FAMILY and isinstance(auth_command_raw, str) and auth_command_raw:
         raise OmniCraftError(
-            f"{prefix}.auth_command is not allowed on a 'gemini' family: the "
-            "antigravity harness drives Gemini with a static GEMINI_API_KEY, and "
-            "an auth_command mints a bearer token the google SDK cannot use as one. "
-            "Use a static key source ('api_key' or 'api_key_ref') instead.",
+            f"{prefix}.auth_command não é permitido em uma família 'gemini': o "
+            "harness antigravity aciona o Gemini com um GEMINI_API_KEY estático, e "
+            "um auth_command gera um token bearer que o SDK do google não consegue usar como tal. "
+            "Use uma fonte de chave estática ('api_key' ou 'api_key_ref').",
             code=ErrorCode.INVALID_INPUT,
         )
 
@@ -641,7 +641,7 @@ def _parse_family(provider_name: str, family_name: str, raw: dict[str, object]) 
         wire_api = str(wire_api_raw)
         if wire_api not in _VALID_WIRE_API:
             raise OmniCraftError(
-                f"{prefix}.wire_api must be one of {_VALID_WIRE_API}, got {wire_api!r}.",
+                f"{prefix}.wire_api deve ser um entre {_VALID_WIRE_API}, recebido {wire_api!r}.",
                 code=ErrorCode.INVALID_INPUT,
             )
 
@@ -704,8 +704,8 @@ def _parse_default_families(
         requested = {str(f).strip() for f in default_raw}
     else:
         raise OmniCraftError(
-            f"provider {name!r}: 'default' must be true/false, a family name, "
-            f"or a list of family names, got {default_raw!r}.",
+            f"provedor {name!r}: 'default' deve ser true/false, um nome de família, "
+            f"ou uma lista de nomes de família, recebido {default_raw!r}.",
             code=ErrorCode.INVALID_INPUT,
         )
     # pi is a valid default scope only when the provider is a pi-capable KIND
@@ -720,8 +720,8 @@ def _parse_default_families(
     invalid = requested - allowed
     if invalid:
         raise OmniCraftError(
-            f"provider {name!r}: 'default' names {sorted(invalid)}, which it does "
-            f"not serve (serves {sorted(allowed)}).",
+            f"provedor {name!r}: 'default' indica {sorted(invalid)}, que ele não "
+            f"serve (serve {sorted(allowed)}).",
             code=ErrorCode.INVALID_INPUT,
         )
     return frozenset(requested)
@@ -771,8 +771,8 @@ def _parse_provider(name: str, raw: dict[str, object]) -> ProviderEntry:
     kind_raw = raw.get("kind")
     if not isinstance(kind_raw, str) or kind_raw not in _VALID_KINDS:
         raise OmniCraftError(
-            f"provider {name!r}: 'kind' is required and must be one of "
-            f"{_VALID_KINDS}, got {kind_raw!r}.",
+            f"provedor {name!r}: 'kind' é obrigatório e deve ser um entre "
+            f"{_VALID_KINDS}, recebido {kind_raw!r}.",
             code=ErrorCode.INVALID_INPUT,
         )
     kind: ProviderKind = kind_raw  # type: ignore[assignment]  # validated against _VALID_KINDS above
@@ -791,8 +791,8 @@ def _parse_provider(name: str, raw: dict[str, object]) -> ProviderEntry:
         cli_raw = raw.get("cli")
         if not isinstance(cli_raw, str) or not cli_raw:
             raise OmniCraftError(
-                f"provider {name!r}: a 'cli' (e.g. 'claude' or 'codex') is "
-                "required when kind is 'subscription'.",
+                f"provedor {name!r}: um 'cli' (ex.: 'claude' ou 'codex') é "
+                "obrigatório quando kind é 'subscription'.",
                 code=ErrorCode.INVALID_INPUT,
             )
         # A subscription serves the family its CLI implies (claude→anthropic,
@@ -818,16 +818,17 @@ def _parse_provider(name: str, raw: dict[str, object]) -> ProviderEntry:
         # deliberate extension, not a value to silently accept here.
         if cli_raw != "codex":
             raise OmniCraftError(
-                f"provider {name!r}: kind 'cli-config' requires cli: 'codex' "
-                f"(the only CLI with config-file model providers), got {cli_raw!r}.",
+                f"provedor {name!r}: kind 'cli-config' requer cli: 'codex' "
+                f"(a única CLI com provedores de modelo em arquivo de config), "
+                f"recebido {cli_raw!r}.",
                 code=ErrorCode.INVALID_INPUT,
             )
         model_provider_raw = raw.get("model_provider")
         if not isinstance(model_provider_raw, str) or not model_provider_raw:
             raise OmniCraftError(
-                f"provider {name!r}: a 'model_provider' (the [model_providers.X] "
-                "id in ~/.codex/config.toml, e.g. 'Databricks') is required when "
-                "kind is 'cli-config'.",
+                f"provedor {name!r}: um 'model_provider' (o id [model_providers.X] "
+                "em ~/.codex/config.toml, ex.: 'Databricks') é obrigatório quando "
+                "kind é 'cli-config'.",
                 code=ErrorCode.INVALID_INPUT,
             )
         display_name_raw = raw.get("display_name")
@@ -856,7 +857,7 @@ def _parse_provider(name: str, raw: dict[str, object]) -> ProviderEntry:
         profile_raw = raw.get("profile")
         if not isinstance(profile_raw, str) or not profile_raw:
             raise OmniCraftError(
-                f"provider {name!r}: a 'profile' is required when kind is 'databricks'.",
+                f"provedor {name!r}: um 'profile' é obrigatório quando kind é 'databricks'.",
                 code=ErrorCode.INVALID_INPUT,
             )
         # Databricks (ucode) routes the anthropic/openai surfaces + pi, but NOT
@@ -880,8 +881,8 @@ def _parse_provider(name: str, raw: dict[str, object]) -> ProviderEntry:
             families[family_name] = _parse_family(name, family_name, family_raw)
     if not families:
         raise OmniCraftError(
-            f"provider {name!r} (kind {kind!r}) configures no "
-            "'anthropic', 'openai', or 'gemini' family.",
+            f"provedor {name!r} (kind {kind!r}) não configura nenhuma "
+            "família 'anthropic', 'openai' ou 'gemini'.",
             code=ErrorCode.INVALID_INPUT,
         )
     # The Gemini surface is key-ONLY (the antigravity flavors need either a raw
@@ -891,10 +892,10 @@ def _parse_provider(name: str, raw: dict[str, object]) -> ProviderEntry:
     # gemini configures nothing it can actually serve: reject it loudly here.
     if kind != KEY_KIND and set(families) == {GEMINI_FAMILY}:
         raise OmniCraftError(
-            f"provider {name!r} (kind {kind!r}) declares only a 'gemini' family, "
-            "but the Gemini surface is served only by a 'key' provider with a real "
-            "GEMINI_API_KEY (a gateway/local proxy cannot drive the antigravity "
-            "harness). Use kind: 'key', or add an 'anthropic'/'openai' family.",
+            f"provedor {name!r} (kind {kind!r}) declara apenas uma família 'gemini', "
+            "mas a superfície Gemini é servida somente por um provedor 'key' com um "
+            "GEMINI_API_KEY real (um proxy gateway/local não consegue acionar o harness "
+            "antigravity). Use kind: 'key' ou adicione uma família 'anthropic'/'openai'.",
             code=ErrorCode.INVALID_INPUT,
         )
     # Scope the parseable default to the families this kind can actually serve:
@@ -948,7 +949,7 @@ def load_providers(config: dict[str, object]) -> dict[str, ProviderEntry]:
     for name, raw in providers_raw.items():
         if not isinstance(raw, dict):
             raise OmniCraftError(
-                f"provider {str(name)!r} must be a mapping.",
+                f"provedor {str(name)!r} deve ser um mapping.",
                 code=ErrorCode.INVALID_INPUT,
             )
         result[str(name)] = _parse_provider(str(name), raw)
@@ -1099,8 +1100,8 @@ def get_default_provider(config: dict[str, object], family: str) -> ProviderEntr
     if len(candidates) > 1:
         names = ", ".join(sorted(e.name for e in candidates))
         raise OmniCraftError(
-            f"multiple providers set 'default: true' for the {family!r} family "
-            f"({names}); at most one may be the default per family.",
+            f"vários provedores definem 'default: true' para a família {family!r} "
+            f"({names}); no máximo um pode ser o padrão por família.",
             code=ErrorCode.INVALID_INPUT,
         )
     return candidates[0]
@@ -1283,7 +1284,7 @@ def _source_descriptor(family: FamilyConfig) -> str:
     if family.auth_command is not None:
         return f"auth_command: {family.auth_command}"
     raise OmniCraftError(
-        "provider family has no credential source.",
+        "a família do provedor não tem fonte de credencial.",
         code=ErrorCode.INVALID_INPUT,
     )
 
@@ -1325,7 +1326,7 @@ def describe_active_credential(
             kind=provider.kind,
             family=None,
             model=model_override,
-            source=f"{provider.cli} CLI login",
+            source=f"login da CLI {provider.cli}",
             base_url=None,
         )
 
@@ -1337,7 +1338,7 @@ def describe_active_credential(
             kind=provider.kind,
             family=None,
             model=model_override,
-            source=f"profile: {provider.profile}",
+            source=f"perfil: {provider.profile}",
             base_url=None,
         )
 
@@ -1350,7 +1351,7 @@ def describe_active_credential(
             kind=provider.kind,
             family=None,
             model=model_override,
-            source=f"~/.codex/config.toml provider: {provider.model_provider}",
+            source=f"~/.codex/config.toml provedor: {provider.model_provider}",
             base_url=None,
         )
 
@@ -1400,12 +1401,15 @@ def set_default_provider(
     """
     if name not in providers:
         raise OmniCraftError(
-            f"cannot set default: provider {name!r} is not declared under 'providers:'.",
+            f"não é possível definir o padrão: provedor {name!r} não está "
+            f"declarado em 'providers:'.",
             code=ErrorCode.INVALID_INPUT,
         )
     target_raw = providers[name]
     if not isinstance(target_raw, dict):
-        raise OmniCraftError(f"provider {name!r} must be a mapping.", code=ErrorCode.INVALID_INPUT)
+        raise OmniCraftError(
+            f"provedor {name!r} deve ser um mapping.", code=ErrorCode.INVALID_INPUT
+        )
     target_served = provider_families(_parse_provider(name, target_raw))
     # The families to (re)assign to *name*: a single scoped family, or all
     # it serves when unscoped.
@@ -1414,8 +1418,8 @@ def set_default_provider(
     else:
         if family not in target_served:
             raise OmniCraftError(
-                f"cannot set default: provider {name!r} does not serve the "
-                f"{family!r} family (serves {sorted(target_served)}).",
+                f"não é possível definir o padrão: provedor {name!r} não serve a "
+                f"família {family!r} (serve {sorted(target_served)}).",
                 code=ErrorCode.INVALID_INPUT,
             )
         scope = {family}

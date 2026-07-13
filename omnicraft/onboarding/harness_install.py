@@ -182,7 +182,7 @@ _HARNESS_INSTALL: dict[str, HarnessInstallSpec] = {
         package=None,
         status_args=("models",),
         install_hint="curl -fsSL https://antigravity.google/cli/install.sh | bash",
-        auth_hint="run `agy` once and complete the browser sign-in",
+        auth_hint="rode `agy` uma vez e conclua o login no navegador",
     ),
     GOOSE_KEY: HarnessInstallSpec(
         "Goose",
@@ -341,11 +341,13 @@ def harness_setup_hint(harness: str | None) -> str:
     if spec is not None and spec.package is None and spec.install_hint:
         login = ""
         if spec.login_args:
-            login = f", then run `{spec.binary} {' '.join(spec.login_args)}`"
+            login = f", e então rode `{spec.binary} {' '.join(spec.login_args)}`"
         elif spec.auth_hint:
-            login = f", then {spec.auth_hint}"
-        return f"install the {spec.binary} CLI on that machine with `{spec.install_hint}`{login}"
-    return "run `omnicraft setup` on that machine to install the CLI and set a default credential"
+            login = f", e então {spec.auth_hint}"
+        return f"instale o CLI {spec.binary} nessa máquina com `{spec.install_hint}`{login}"
+    return (
+        "rode `omnicraft setup` nessa máquina para instalar o CLI e definir uma credencial padrão"
+    )
 
 
 def harness_install_spec(key: str) -> HarnessInstallSpec | None:

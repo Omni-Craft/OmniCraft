@@ -1434,11 +1434,11 @@ def test_startup_header_appends_per_family_creds_line() -> None:
         description=None,
         model_label="claude-sonnet-4-6",
         credential="Subscription",
-        creds_line="Claude → Subscription   ·   Codex → Subscription",
+        creds_line="Claude → Assinatura   ·   Codex → Assinatura",
     )
     plain = re.sub(r"\x1b\[[0-9;]*m", "", _render_startup_banner_ansi("nessie", header=header))
-    assert "Claude → Subscription" in plain
-    assert "Codex → Subscription" in plain
+    assert "Claude → Assinatura" in plain
+    assert "Codex → Assinatura" in plain
     # A personality-laden lead-in (with the agent name) precedes the creds line.
     lead = "Try asking nessie to spawn the following sub-agents!"
     assert lead in plain
@@ -1774,7 +1774,7 @@ def test_model_readout_subscription_shows_subscription_not_brand(tmp_path) -> No
     }
     lines = _build_model_readout_lines(config, "claude-sdk", None)
     active = lines[0]
-    assert "Subscription" in active  # canonical shared label is used
+    assert "Assinatura" in active  # canonical shared label is used
     assert "Claude-Subscription" not in active, (
         "readout must not derive the provider label from the provider id "
         "(claude-subscription → 'Claude-Subscription'); it should use the "
@@ -1812,7 +1812,7 @@ def test_build_startup_header_subscription_credential(tmp_path, monkeypatch) -> 
     assert header.credential is not None
     # Exact equality proves both the glyph suppression and that the
     # empty-glyph join left no stray leading whitespace.
-    assert header.credential == "Subscription"
+    assert header.credential == "Assinatura"
     # Single family → no per-family creds line (the box row already says it).
     assert header.creds_line is None
     # The description is summarized for the box.
@@ -1853,7 +1853,7 @@ def test_build_startup_header_creds_line_hints_first_available(tmp_path, monkeyp
     assert header.creds_line is not None
     # anthropic has its explicit default; openai has none → the hint names the
     # first-available credential the launch falls back to (the Databricks ws).
-    assert "Claude → Subscription" in header.creds_line
+    assert "Claude → Assinatura" in header.creds_line
     assert "Codex → no default → will use 🧱 Databricks (gtm-ws)" in header.creds_line
 
 
@@ -1896,8 +1896,8 @@ def test_build_startup_header_creds_line_includes_pi_surface(tmp_path, monkeypat
     assert header.creds_line is not None
     # Each surface resolves its own effective credential. Subscriptions
     # render glyphless in the header; other kinds keep their glyph (🧱).
-    assert "Claude → Subscription" in header.creds_line
-    assert "Codex → Subscription" in header.creds_line
+    assert "Claude → Assinatura" in header.creds_line
+    assert "Codex → Assinatura" in header.creds_line
     assert "Pi → 🧱 Databricks (my-ws)" in header.creds_line
     # The ticket glyph never reaches the header creds line.
     assert "🎟" not in header.creds_line

@@ -4494,7 +4494,7 @@ def test_announce_auto_configured_credentials_names_creds_compactly(
 
     A user who never ran setup must see exactly which credentials were
     auto-configured. Asserts every credential's compact human label reaches the
-    one-line output — an env key as ``Anthropic API Key``, and the two CLI
+    one-line output — an env key as ``Chave de API Anthropic``, and the two CLI
     logins as brand-qualified ``Claude Subscription`` / ``ChatGPT Subscription``
     (NOT a bare ``Subscription``, which would be ambiguous in an inline list).
     Detections are real :class:`DetectedProvider` objects so a field-handling
@@ -4522,7 +4522,7 @@ def test_announce_auto_configured_credentials_names_creds_compactly(
     # The three credentials render inline, comma-joined, in adoption order —
     # the env key by vendor, the CLI logins brand-qualified (not a bare,
     # ambiguous "Subscription").
-    assert "Anthropic API Key, Claude Subscription, ChatGPT Subscription" in normalized
+    assert "Chave de API Anthropic, Claude Subscription, ChatGPT Subscription" in normalized
 
 
 def test_announce_auto_configured_credentials_empty_is_silent(
@@ -4563,7 +4563,7 @@ def test_adopt_ambient_credentials_announces_only_what_was_adopted(
     adopted = _adopt_ambient_credentials()
 
     assert adopted == ["anthropic"]
-    assert "Anthropic API Key" in capsys.readouterr().out
+    assert "Chave de API Anthropic" in " ".join(capsys.readouterr().out.split())
 
 
 def test_ensure_sqlite_parent_dir_creates_missing_dir(tmp_path: Path) -> None:

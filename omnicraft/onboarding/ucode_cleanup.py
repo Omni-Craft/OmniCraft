@@ -145,9 +145,9 @@ def strip_ucode_codex_config(config_path: Path | None = None) -> bool:
         doc = tomlkit.parse(path.read_text(encoding="utf-8"))
     except tomlkit.exceptions.ParseError as exc:
         raise OmniCraftError(
-            f"{path} is not valid TOML ({exc}); leaving it unchanged. "
-            "Remove ucode's `profile`/`profiles.ucode`/"
-            "`model_providers.ucode-databricks` entries by hand.",
+            f"{path} não é um TOML válido ({exc}); deixando-o inalterado. "
+            "Remova as entradas `profile`/`profiles.ucode`/"
+            "`model_providers.ucode-databricks` do ucode na mão.",
             code=ErrorCode.INVALID_INPUT,
         ) from exc
 

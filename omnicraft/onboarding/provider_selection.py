@@ -54,7 +54,7 @@ def resolve_provider_from_model(model_string: str) -> ProviderSelection:
     """
     if "/" not in model_string:
         raise click.ClickException(
-            f"Model must be in provider/model_name format, got: {model_string!r}"
+            f"O modelo deve estar no formato provedor/nome_do_modelo, recebido: {model_string!r}"
         )
 
     provider, _ = model_string.split("/", 1)
@@ -96,8 +96,8 @@ def _read_credentials_from_env(provider: str) -> dict[str, str]:
                     creds["base_url"] = base_url[1]
             return creds
         raise click.ClickException(
-            f"Non-interactive mode requires {env_var} or "
-            f"OMNICRAFT_{env_var} for provider {provider!r}."
+            f"O modo não interativo requer {env_var} ou "
+            f"OMNICRAFT_{env_var} para o provedor {provider!r}."
         )
 
     # Complex providers — check default auth mode fields.
@@ -135,7 +135,7 @@ def _collect_env_credentials(
 
     if missing:
         raise click.ClickException(
-            f"Non-interactive mode requires these env vars for provider "
-            f"{provider!r}: {', '.join(missing)}"
+            f"O modo não interativo requer estas variáveis de ambiente para o "
+            f"provedor {provider!r}: {', '.join(missing)}"
         )
     return credentials

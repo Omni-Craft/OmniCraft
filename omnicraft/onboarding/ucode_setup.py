@@ -95,7 +95,7 @@ def configure_ucode_for_workspace(
         :func:`find_ucode_command`) or ``ucode configure`` exits non-zero.
     """
     ucode_command = find_ucode_command()
-    click.echo(f"Running `ucode configure --workspaces {workspace_url}`...")
+    click.echo(f"Rodando `ucode configure --workspaces {workspace_url}`...")
     result = subprocess.run(
         build_ucode_configure_command(
             ucode_command, workspace_urls=[workspace_url], agents=agents
@@ -104,10 +104,13 @@ def configure_ucode_for_workspace(
     )
     if result.returncode != 0:
         raise click.ClickException(
-            f"`ucode configure` exited with code {result.returncode}; "
-            "see the command output above for details."
+            f"`ucode configure` saiu com o código {result.returncode}; "
+            "veja a saída do comando acima para detalhes."
         )
-    click.echo("ucode configuration complete. OmniCraft will use state.json for harness setup.")
+    click.echo(
+        "Configuração do ucode concluída. O OmniCraft vai usar state.json "
+        "para configurar os harnesses."
+    )
 
 
 def ucode_workspace_exists(workspace_url: str) -> bool:
@@ -144,7 +147,7 @@ def find_ucode_command() -> list[str]:
     ucode = shutil.which("ucode")
     if ucode is None:
         raise click.ClickException(
-            "uvx is not on PATH and ucode is not installed. Install uv, then retry:\n"
-            "  uv tool install uv  # provides uvx"
+            "uvx não está no PATH e o ucode não está instalado. Instale o uv e tente de novo:\n"
+            "  uv tool install uv  # fornece o uvx"
         )
     return [ucode]

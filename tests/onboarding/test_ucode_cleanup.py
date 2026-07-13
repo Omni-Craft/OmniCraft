@@ -183,7 +183,7 @@ def test_strip_malformed_toml_raises_and_leaves_file(tmp_path: Path) -> None:
     config_path = tmp_path / "config.toml"
     config_path.write_text(original, encoding="utf-8")
 
-    with pytest.raises(OmniCraftError, match="not valid TOML"):
+    with pytest.raises(OmniCraftError, match="não é um TOML válido"):
         strip_ucode_codex_config(config_path)
     # The broken file is exactly as we found it.
     assert config_path.read_text(encoding="utf-8") == original

@@ -115,7 +115,7 @@ def test_select_fallback_reprompts_on_invalid_then_accepts(
     out = capsys.readouterr().out
     # The reject path printed the invalid-selection notice exactly once
     # for the bad "9" entry.
-    assert "Invalid selection." in out
+    assert "Seleção inválida." in out
 
 
 def test_select_rejects_mismatched_descriptions(non_tty: None) -> None:
@@ -291,8 +291,8 @@ def test_prompt_text_fallback_hidden_value_confirms_without_echoing_secret(
 
     assert result == secret
     out = capsys.readouterr().out
-    assert "input hidden" in out
-    assert f"received ({len(secret)} characters)" in out
+    assert "entrada oculta" in out
+    assert f"recebido ({len(secret)} caracteres)" in out
     assert secret not in out
 
 
@@ -309,8 +309,8 @@ def test_prompt_text_fallback_hidden_empty_input_does_not_confirm(
 
     assert result == default
     out = capsys.readouterr().out
-    assert "input hidden" in out
-    assert "received" not in out
+    assert "entrada oculta" in out
+    assert "recebido" not in out
     assert default not in out
 
 

@@ -58,7 +58,7 @@ def test_find_ucode_command_raises_when_no_runner_exists() -> None:
         try:
             find_ucode_command()
         except click.ClickException as exc:
-            assert "uvx is not on PATH" in str(exc)
+            assert "uvx não está no PATH" in str(exc)
         else:
             raise AssertionError("expected ClickException")
 
@@ -211,7 +211,7 @@ def test_configure_ucode_for_workspace_raises_on_nonzero_exit() -> None:
     with (
         patch("omnicraft.onboarding.ucode_setup.find_ucode_command", return_value=["ucode"]),
         patch("omnicraft.onboarding.ucode_setup.subprocess.run", _run),
-        pytest.raises(ClickException, match="exited with code 3"),
+        pytest.raises(ClickException, match="saiu com o código 3"),
     ):
         configure_ucode_for_workspace("https://example.cloud.databricks.com")
 

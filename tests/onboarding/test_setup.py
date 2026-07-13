@@ -243,5 +243,5 @@ def test_login_databricks_workspace_raises_without_cli(
     """No ``databricks`` CLI on PATH → a clear ClickException with install help,
     not a confusing crash deep in the login subprocess."""
     monkeypatch.setattr(setup_mod, "find_databricks_cli", lambda: None)
-    with pytest.raises(ClickException, match=r"`databricks` CLI not on PATH"):
+    with pytest.raises(ClickException, match=r"CLI `databricks` não está no PATH"):
         login_databricks_workspace("https://example-my-ws.cloud.databricks.com")

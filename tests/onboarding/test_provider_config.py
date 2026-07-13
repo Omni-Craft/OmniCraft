@@ -440,7 +440,7 @@ def test_gemini_only_gateway_local_rejected_at_parse(kind: str) -> None:
     author to ``kind: 'key'`` for a real GEMINI_API_KEY.
     """
     raw = {"kind": kind, "gemini": {"base_url": "https://x/v1beta", "api_key_ref": "env:G"}}
-    with pytest.raises(OmniCraftError, match="Gemini surface"):
+    with pytest.raises(OmniCraftError, match="superfície Gemini"):
         load_providers({"providers": {"gw": raw}})
 
 
@@ -457,7 +457,9 @@ def test_gemini_auth_command_rejected_at_parse() -> None:
     configure-harness readiness path while spawn rejects it.
     """
     raw = {"kind": "key", "gemini": {"base_url": "https://x/v1beta", "auth_command": "echo tok"}}
-    with pytest.raises(OmniCraftError, match="auth_command is not allowed on a 'gemini' family"):
+    with pytest.raises(
+        OmniCraftError, match="auth_command não é permitido em uma família 'gemini'"
+    ):
         load_providers({"providers": {"google": raw}})
 
 
@@ -675,7 +677,7 @@ def test_parse_cli_config_entry() -> None:
         # be a deliberate extension, not a silently-accepted value.
         (
             {"kind": "cli-config", "cli": "claude", "model_provider": "X"},
-            "requires cli: 'codex'",
+            "requer cli: 'codex'",
         ),
         # The pin target is the entry's whole point — fail loud without it.
         ({"kind": "cli-config", "cli": "codex"}, "'model_provider'"),
@@ -724,7 +726,7 @@ def test_describe_active_credential_cli_config() -> None:
     assert cred.provider_name == "codex-databricks"
     # The source names the file and the pinned provider — the two facts a
     # user needs to find/edit the underlying credential.
-    assert cred.source == "~/.codex/config.toml provider: Databricks"
+    assert cred.source == "~/.codex/config.toml provedor: Databricks"
     # No inline endpoint/model: both live in the CLI's own config.
     assert cred.base_url is None
     assert cred.model is None

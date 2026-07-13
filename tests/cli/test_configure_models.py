@@ -193,20 +193,20 @@ def test_configure_models_list_groups_configured_providers(isolated_config) -> N
     # anthropic is the Claude default and openai the Codex default, so the
     # default marker appears at least twice. A miss means the default
     # cross-check picked the wrong family or omitted the marker.
-    assert result.output.count("✓ default") >= 2
+    assert result.output.count("✓ padrão") >= 2
 
 
 def test_configure_models_add_key_provider_writes_entry_and_secret(isolated_config) -> None:
     """Adding a ``key`` provider writes the family entry + stores the secret.
 
-    Pipes the interactive add flow (flat menu "Anthropic — API key" →
+    Pipes the interactive add flow (flat menu "Anthropic — chave de API" →
     paste key → pick default model → make default → quit). Asserts the
     exact ``providers:`` entry shape AND that the pasted key reached the
     secret store under ``keychain:anthropic``. A failure here means the add
     flow wrote a malformed entry or lost the secret.
     """
     # L1: 1=Claude → L2 (no credentials): 1=+Add → scoped anthropic add menu
-    # 1="Anthropic — API key" → paste key → default model blank (= catalog
+    # 1="Anthropic — chave de API" → paste key → default model blank (= catalog
     # default) → L2: q=back → L1: q=exit.
     stdin = "\n".join(["1", "1", "1", "sk-ant-test-key", "", "q", "q"]) + "\n"
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
@@ -496,7 +496,7 @@ def test_configure_models_remove_drops_entry(isolated_config) -> None:
 def test_add_menu_options_are_friendly_and_credential_aware() -> None:
     """The add menu shows intuitive provider+credential labels, not raw ids.
 
-    Proves the user-facing fix: choices read like "OpenAI — API key" and
+    Proves the user-facing fix: choices read like "OpenAI — chave de API" and
     "Claude — subscription", and each label resolves to the right
     (kind, provider/cli). A failure means a menu entry would show a raw id
     (e.g. "openai") or map to the wrong credential path.
@@ -511,15 +511,15 @@ def test_add_menu_options_are_friendly_and_credential_aware() -> None:
     # The friendly, credential-aware labels are present (the user's
     # examples) — matched as suffixes so the test isn't coupled to the
     # exact emoji glyph.
-    assert any(o.label.endswith("OpenAI — API key") for o in options)
-    assert any(o.label.endswith("ChatGPT — subscription") for o in options)
-    assert any(o.label.endswith("Claude — subscription (Pro/Max)") for o in options)
+    assert any(o.label.endswith("OpenAI — chave de API") for o in options)
+    assert any(o.label.endswith("ChatGPT — assinatura") for o in options)
+    assert any(o.label.endswith("Claude — assinatura (Pro/Max)") for o in options)
 
     # Each resolves to the correct kind + preset provider/cli.
     by_provider = {o.provider: o for o in options if o.provider}
     by_cli = {o.cli: o for o in options if o.cli}
     assert by_provider["openai"].kind == "key"
-    assert by_provider["openai"].label.endswith("OpenAI — API key")
+    assert by_provider["openai"].label.endswith("OpenAI — chave de API")
     assert by_cli["codex"].kind == "subscription"
     assert by_cli["claude"].kind == "subscription"
     # The catch-all has no preset provider (the user picks one next).
@@ -541,48 +541,48 @@ def test_add_menu_options_ordering() -> None:
     # subscriptions, then Gateway, OpenRouter, Databricks, Other.
     full = [o.label.split(None, 1)[1] for o in add_menu_options()]
     assert full == [
-        "OpenAI — API key",
-        "Anthropic — API key",
-        "Gemini — API key",
-        "ChatGPT — subscription",
-        "Claude — subscription (Pro/Max)",
-        "Gateway — custom base URL + key (e.g. OpenRouter)",
-        "OpenRouter — API key",
+        "OpenAI — chave de API",
+        "Anthropic — chave de API",
+        "Gemini — chave de API",
+        "ChatGPT — assinatura",
+        "Claude — assinatura (Pro/Max)",
+        "Gateway — base URL personalizada + chave (ex.: OpenRouter)",
+        "OpenRouter — chave de API",
         "Databricks — workspace",
-        "Other provider — API key",
+        "Outro provedor — chave de API",
         # Bedrock is appended last so it never shifts the established order.
-        "AWS Bedrock — API key",
+        "AWS Bedrock — chave de API",
     ]
 
     # Codex (openai) scoped: API key, subscription, Gateway, OpenRouter,
     # Databricks, Other — Databricks immediately above Other.
     codex = [o.label.split(None, 1)[1] for o in add_menu_options_for_family(OPENAI_FAMILY)]
     assert codex == [
-        "OpenAI — API key",
-        "ChatGPT — subscription",
-        "Gateway — custom base URL + key (e.g. OpenRouter)",
-        "OpenRouter — API key",
+        "OpenAI — chave de API",
+        "ChatGPT — assinatura",
+        "Gateway — base URL personalizada + chave (ex.: OpenRouter)",
+        "OpenRouter — chave de API",
         "Databricks — workspace",
-        "Other provider — API key",
+        "Outro provedor — chave de API",
     ]
-    assert codex.index("Databricks — workspace") < codex.index("Other provider — API key")
+    assert codex.index("Databricks — workspace") < codex.index("Outro provedor — chave de API")
 
     # Claude (anthropic) scoped: API key, subscription, Gateway, Databricks
     # (no OpenRouter / Other — those are openai-family).
     claude = [o.label.split(None, 1)[1] for o in add_menu_options_for_family(ANTHROPIC_FAMILY)]
     assert claude == [
-        "Anthropic — API key",
-        "Claude — subscription (Pro/Max)",
-        "Gateway — custom base URL + key (e.g. OpenRouter)",
+        "Anthropic — chave de API",
+        "Claude — assinatura (Pro/Max)",
+        "Gateway — base URL personalizada + chave (ex.: OpenRouter)",
         "Databricks — workspace",
-        "AWS Bedrock — API key",
+        "AWS Bedrock — chave de API",
     ]
 
     # Gemini (antigravity) scoped: API key only — Gemini is key-only (no
     # subscription/gateway/Databricks), and it must NOT appear in the
     # openai-family "Other provider" catch-all (asserted via `codex` above).
     gemini = [o.label.split(None, 1)[1] for o in add_menu_options_for_family(GEMINI_FAMILY)]
-    assert gemini == ["Gemini — API key"]
+    assert gemini == ["Gemini — chave de API"]
 
 
 def test_add_menu_databricks_option_gated_on_extra(monkeypatch) -> None:
@@ -608,7 +608,7 @@ def test_add_menu_databricks_option_gated_on_extra(monkeypatch) -> None:
     # description carries the gate.
     assert databricks.kind == "databricks"
     assert databricks.description == (
-        "Requires the Databricks extra — select for the install command."
+        "Requer o extra Databricks — selecione para ver o comando de instalação."
     )
 
     # With the SDK present (the dev/CI env — no patch), the description
@@ -668,10 +668,10 @@ def test_configure_models_add_databricks_aborts_without_extra(
 @pytest.mark.parametrize(
     "kind,name,profile,expected",
     [
-        ("subscription", "claude-subscription", None, "Subscription"),
-        ("subscription", "codex-subscription", None, "Subscription"),
-        ("key", "anthropic", None, "Anthropic API Key"),
-        ("key", "openai", None, "OpenAI API Key"),
+        ("subscription", "claude-subscription", None, "Assinatura"),
+        ("subscription", "codex-subscription", None, "Assinatura"),
+        ("key", "anthropic", None, "Chave de API Anthropic"),
+        ("key", "openai", None, "Chave de API OpenAI"),
         ("databricks", "databricks", "oss", "Databricks (oss)"),
         ("databricks", "databricks", None, "Databricks"),
         ("gateway", "my-proxy", None, "My-Proxy"),  # display-name fallback
@@ -928,7 +928,7 @@ def test_render_listing_excludes_configured_subscription_clis(
     """A detected CLI login isn't shown as "not configured" once its subscription is added.
 
     Regression: a ``subscription`` provider is named e.g. ``claude-subscription``,
-    so the listing's "Detected (not configured)" filter — which compared the
+    so the listing's "Detectados (não configurados):" filter — which compared the
     detected CLI name (``"claude"``) against provider *names* — missed it,
     and the login kept showing as not-configured even after the user added
     it. The CLI must be excluded once a subscription wraps it, while an
@@ -954,10 +954,10 @@ def test_render_listing_excludes_configured_subscription_clis(
 
     # The configured subscription is listed…
     assert "claude-subscription" in out
-    # …and its wrapped CLI is NOT offered under "Detected (not configured)"…
+    # …and its wrapped CLI is NOT offered under "Detectados (não configurados):"…
     assert "claude CLI login" not in out
     # …while an unrelated ambient detection still surfaces as a hint.
-    assert "Detected (not configured)" in out
+    assert "Detectados (não configurados):" in out
     assert "gemini" in out
 
 
@@ -1102,7 +1102,7 @@ def test_readd_same_source_key_updates_in_place(isolated_config, monkeypatch) ->
 def test_multiple_keys_show_source_bracket(isolated_config) -> None:
     """When >1 API key serves a harness, each row is qualified with its source.
 
-    Two anthropic keys would otherwise both read as "Anthropic API Key". The
+    Two anthropic keys would otherwise both read as "Chave de API Anthropic". The
     manager appends the source hint — ``$ENV_VAR`` for an env ref, the stored
     name for a keychain ref — so the rows are distinguishable. A lone key has
     no qualifier (covered implicitly by the other add tests).
@@ -1154,7 +1154,7 @@ def test_configure_models_add_other_provider_prompts_for_name(
     # env var so detection doesn't add a "use the detected key?" prompt.
     monkeypatch.delenv("XAI_API_KEY", raising=False)
     # "Other" is openai-family, so it lives in the Codex add menu. L1 2=Codex
-    # → L2 1=+Add → openai menu 6="Other provider — API key" (order: OpenAI
+    # → L2 1=+Add → openai menu 6="Outro provedor — chave de API" (order: OpenAI
     # key, ChatGPT sub, Gateway, OpenRouter, Databricks, Other) → which
     # provider → xAI(1) → NAME "my-xai" → key → default model blank → L2
     # q=back → L1 q=exit.
@@ -1252,7 +1252,7 @@ def test_configure_models_add_openrouter_key_uses_vendor_endpoint_and_chat_wire(
     """
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     # OpenRouter key is openai-family → Codex add menu. L1 2=Codex → L2
-    # 1=+Add → openai menu 4="OpenRouter — API key" (order: OpenAI key,
+    # 1=+Add → openai menu 4="OpenRouter — chave de API" (order: OpenAI key,
     # ChatGPT sub, Gateway, OpenRouter, Databricks, Other) → key → default
     # model blank → L2 q=back → L1 q=exit.
     stdin = "\n".join(["2", "1", "4", "sk-or-test", "", "q", "q"]) + "\n"
@@ -1562,7 +1562,7 @@ def test_overview_marks_unconfigured_with_x_and_configured_without_checkmark(
     # Configured Claude: the green ✓ rides the aligned status column, not the
     # name — so "✓ Claude" never appears, but the credential's "✓ …" does.
     assert "✓ Claude" not in out
-    assert "✓ Anthropic API Key" in out
+    assert "✓ Chave de API Anthropic" in out
     # Installed-but-unconfigured Codex: the row's status is a ✗ "Not configured".
     assert "Codex" in out
     assert "✗ Not configured" in out
@@ -2062,8 +2062,8 @@ def test_pi_add_menu_offers_keys_gateway_databricks_but_no_subscription() -> Non
     assert "subscription" not in kinds
     # Both vendors' keys are offered (pi spans both families), plus the
     # cross-vendor extras and Databricks.
-    assert any(o.label.endswith("Anthropic — API key") for o in options)
-    assert any(o.label.endswith("OpenAI — API key") for o in options)
+    assert any(o.label.endswith("Anthropic — chave de API") for o in options)
+    assert any(o.label.endswith("OpenAI — chave de API") for o in options)
     assert "gateway" in kinds
     assert "databricks" in kinds
 
@@ -2131,7 +2131,7 @@ def test_configure_harnesses_pi_page_excludes_subscription_rows(isolated_config)
     """The Pi page lists only credentials pi can use; subscriptions are absent.
 
     Seed a claude subscription (the anthropic default) plus an openai key.
-    Pi's level 2 must show the key — marked ✓ default via the fallback,
+    Pi's level 2 must show the key — marked ✓ padrão via the fallback,
     which skips the subscription — and no ``Subscription`` row at all. A
     regression that lists subscriptions under Pi lets the user "select" a
     credential the pi harness silently can't consume.
@@ -2170,7 +2170,7 @@ def test_configure_harnesses_pi_page_excludes_subscription_rows(isolated_config)
     pi_frame = pi_frame.split("Configure harnesses", 1)[0]
     # The key row appears and carries the effective-default marker (the
     # fallback skipped the subscription); no Subscription row is offered.
-    assert "OpenAI API Key" in pi_frame
+    assert "Chave de API OpenAI" in pi_frame
     assert "✓ default" in pi_frame
     assert "Subscription" not in pi_frame
 
@@ -2959,7 +2959,7 @@ def test_antigravity_install_now_invokes_runner_without_index(
 
 
 def _other_key_add_menu_index(family: str) -> int:
-    """Return the 1-based numbered-fallback position of "Other provider — API key".
+    """Return the 1-based numbered-fallback position of "Outro provedor — chave de API".
 
     Computed from the live per-family add menu rather than hardcoded, so a
     reordering of :func:`add_menu_options` doesn't aim this test's piped stdin
@@ -2978,7 +2978,7 @@ def _other_key_add_menu_index(family: str) -> int:
 def test_configure_harnesses_add_other_key_no_remaining_providers_aborts_cleanly(
     isolated_config, monkeypatch
 ) -> None:
-    """Picking "Other provider — API key" with no catalog providers left aborts
+    """Picking "Outro provedor — chave de API" with no catalog providers left aborts
     cleanly instead of crashing.
 
     Regression for #820: when every catch-all key provider is already configured,
@@ -3000,7 +3000,7 @@ def test_configure_harnesses_add_other_key_no_remaining_providers_aborts_cleanly
     monkeypatch.setattr("omnicraft.onboarding.configure_models.other_key_providers", list)
 
     other = _other_key_add_menu_index(PI_SURFACE)
-    # L1 6=Pi → L2 1=+Add → add menu <other>=Other provider — API key → L2 q=back → L1 q=exit.
+    # L1 6=Pi → L2 1=+Add → add menu <other>=Outro provedor — chave de API → L2 q=back → L1 q=exit.
     stdin = "\n".join(["6", "1", str(other), "q", "q"]) + "\n"
     result = CliRunner().invoke(cli, ["setup", "--no-internal-beta"], input=stdin)
 
@@ -3030,7 +3030,7 @@ def test_build_bedrock_provider_entry_shape() -> None:
 def test_configure_models_add_bedrock_writes_entry_and_secret(
     isolated_config, monkeypatch
 ) -> None:
-    """Adding 'AWS Bedrock — API key' from the Claude menu writes a kind: bedrock entry.
+    """Adding 'AWS Bedrock — chave de API' from the Claude menu writes a kind: bedrock entry.
 
     Drives the new interactive path: Claude harness → +Add → 'AWS Bedrock —
     API key' (last in the Claude-scoped menu) → name, base_url, pasted bearer
@@ -3041,7 +3041,7 @@ def test_configure_models_add_bedrock_writes_entry_and_secret(
     """
     # No exported token → the paste→keychain path (deterministic prompts).
     monkeypatch.delenv("AWS_BEARER_TOKEN_BEDROCK", raising=False)
-    # L1 1=Claude → L2 1=+Add → Claude menu 5='AWS Bedrock — API key'
+    # L1 1=Claude → L2 1=+Add → Claude menu 5='AWS Bedrock — chave de API'
     # (1=Anthropic key, 2=Claude sub, 3=Gateway, 4=Databricks, 5=Bedrock) →
     # name; base_url; pasted key; default model → L2 q=back → L1 q=exit.
     stdin = (

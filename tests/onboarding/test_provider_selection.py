@@ -56,7 +56,7 @@ def test_resolve_missing_env_var_raises(
 
 def test_resolve_rejects_model_without_slash() -> None:
     """Model string without provider/ prefix should raise."""
-    with pytest.raises(ClickException, match="provider/model_name"):
+    with pytest.raises(ClickException, match="provedor/nome_do_modelo"):
         resolve_provider_from_model("gpt-5.4")
 
 

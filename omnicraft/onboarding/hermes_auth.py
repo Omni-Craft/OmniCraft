@@ -77,7 +77,7 @@ class HermesConfigSummary:
         """
         if self.provider and self.model:
             return f"{self.provider} / {self.model}"
-        return self.provider or self.model or "Configured"
+        return self.provider or self.model or "Configurado"
 
 
 def _model_section() -> dict:

@@ -320,10 +320,10 @@ def _login_profile(cli: str, spec: ProfileSpec, console: Console) -> bool:
             check=False,
         )
     except KeyboardInterrupt:
-        console.print(f"  [yellow]cancelled {spec.name}[/yellow]")
+        console.print(f"  [yellow]cancelado {spec.name}[/yellow]")
         return False
     if result.returncode != 0:
-        console.print(f"  [red]failed (exit {result.returncode})[/red]")
+        console.print(f"  [red]falhou (saída {result.returncode})[/red]")
         return False
     console.print(f"  [green]✓ {spec.name}[/green]")
     time.sleep(_OAUTH_BETWEEN_LOGIN_SLEEP_SECONDS)
@@ -340,7 +340,10 @@ def _apply_silent_aliases(aliasable: tuple[tuple[str, ProfileSpec], ...], consol
         try:
             _alias_profile(source, spec.name)
         except (ValueError, OSError) as exc:
-            console.print(f"  [yellow]could not alias {spec.name} from {source}: {exc}[/yellow]")
+            console.print(
+                f"  [yellow]não foi possível criar alias de {spec.name} "
+                f"a partir de {source}: {exc}[/yellow]"
+            )
             continue
         n += 1
     return n
@@ -364,7 +367,7 @@ def run_onboarding() -> bool:
 
     console = Console()
     if os.environ.get(SKIP_ENV_VAR):
-        console.print(f"  [dim]{SKIP_ENV_VAR} set; skipping.[/dim]")
+        console.print(f"  [dim]{SKIP_ENV_VAR} definido; pulando.[/dim]")
         return False
 
     cli = find_databricks_cli()
@@ -375,15 +378,15 @@ def run_onboarding() -> bool:
             "| sh"
         )
         console.print(
-            f"\n  [bold red]`databricks` CLI not on PATH.[/bold red]\n"
-            f"  Install with:\n    [cyan]{installer}[/cyan]\n"
+            f"\n  [bold red]CLI `databricks` não está no PATH.[/bold red]\n"
+            f"  Instale com:\n    [cyan]{installer}[/cyan]\n"
         )
         return False
 
     console.print(
         Panel(
-            "[bold]OmniCraft onboarding[/bold]\n\n"
-            "Setting up the Databricks profiles OmniCraft needs "
+            "[bold]Configuração do OmniCraft[/bold]\n\n"
+            "Configurando os perfis do Databricks que o OmniCraft precisa "
             f"({', '.join(f'`{s.name}`' for s in DEFAULT_PROFILES)}).",
             border_style="cyan",
             padding=(1, 2),
@@ -396,7 +399,7 @@ def run_onboarding() -> bool:
     if actions.aliasable:
         n = _apply_silent_aliases(actions.aliasable, console)
         if n:
-            console.print(f"\n  [green]✓ aliased {n} existing profile(s)[/green]")
+            console.print(f"\n  [green]✓ alias criado para {n} perfil(is) existente(s)[/green]")
         existing = _existing_profile_hosts()
         actions = _compute_actions(existing)
 
@@ -407,7 +410,7 @@ def run_onboarding() -> bool:
         actions = _compute_actions(existing)
 
     if not actions.oauth and not actions.wrong_host:
-        console.print("\n  [bold green]all profiles ready.[/bold green]\n")
+        console.print("\n  [bold green]todos os perfis prontos.[/bold green]\n")
         return True
 
     for spec in actions.oauth:
@@ -416,10 +419,10 @@ def run_onboarding() -> bool:
     actions = _compute_actions(_existing_profile_hosts())
     done = not actions.oauth and not actions.wrong_host
     if done:
-        console.print("\n  [bold green]✓ onboarding complete.[/bold green]\n")
+        console.print("\n  [bold green]✓ configuração concluída.[/bold green]\n")
     else:
         names = [s.name for s in actions.oauth] + [s.name for s, _ in actions.wrong_host]
-        console.print(f"\n  [yellow]still missing: {', '.join(names)}[/yellow]\n")
+        console.print(f"\n  [yellow]ainda faltando: {', '.join(names)}[/yellow]\n")
     return done
 
 
@@ -440,26 +443,27 @@ def _handle_wrong_host(cli: str, spec: ProfileSpec, current_host: str, console: 
     :param console: Rich console for the surrounding messaging.
     """
     console.print(
-        f"\n  [yellow]! `{spec.name}` exists but points at the wrong workspace:[/yellow]\n"
-        f"    current:  {current_host}\n"
-        f"    expected: {spec.host}\n"
-        f"  [dim]Overwriting will REPLACE the existing `{spec.name}` section in "
-        f"~/.databrickscfg. To keep your existing one, decline below and rename it "
-        f"first (e.g. `databricks auth login --profile {spec.name}-personal "
+        f"\n  [yellow]! `{spec.name}` existe mas aponta para o workspace errado:[/yellow]\n"
+        f"    atual:    {current_host}\n"
+        f"    esperado: {spec.host}\n"
+        f"  [dim]Sobrescrever vai SUBSTITUIR a seção `{spec.name}` existente em "
+        f"~/.databrickscfg. Para manter a sua, recuse abaixo e renomeie-a "
+        f"primeiro (ex.: `databricks auth login --profile {spec.name}-personal "
         f"--host {current_host}`).[/dim]"
     )
     if not sys.stdin.isatty():
         console.print(
-            f"  [dim](non-TTY — skipping. Rename your existing `{spec.name}` and re-run.)[/dim]"
+            f"  [dim](sem TTY — pulando. Renomeie seu `{spec.name}` existente "
+            f"e rode de novo.)[/dim]"
         )
         return
     try:
-        answer = input(f"  Overwrite `{spec.name}`? [y/N] ").strip().lower()
+        answer = input(f"  Sobrescrever `{spec.name}`? [y/N] ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         console.print()
         return
     if answer not in ("y", "yes"):
-        console.print(f"  [dim]Skipped `{spec.name}`.[/dim]")
+        console.print(f"  [dim]`{spec.name}` pulado.[/dim]")
         return
     # The Databricks CLI refuses ``--host X --profile NAME`` when NAME already
     # exists with a different host ("conflicts with --host"). Drop the existing
@@ -558,8 +562,8 @@ def login_databricks_workspace(workspace_url: str, *, console: Console | None = 
             "| sh"
         )
         raise click.ClickException(
-            "`databricks` CLI not on PATH — required to authenticate the workspace.\n"
-            f"  Install with:\n    {installer}"
+            "CLI `databricks` não está no PATH — necessária para autenticar o workspace.\n"
+            f"  Instale com:\n    {installer}"
         )
 
     existing = _existing_profile_hosts()
@@ -567,7 +571,7 @@ def login_databricks_workspace(workspace_url: str, *, console: Console | None = 
 
     current_host = existing.get(profile)
     if current_host is not None and _host_matches(current_host, workspace_url):
-        console.print(f"  [green]✓ using existing Databricks profile `{profile}`[/green]")
+        console.print(f"  [green]✓ usando perfil do Databricks existente `{profile}`[/green]")
         return profile
     if current_host is not None:
         # Name collides with a profile bound to a different host; the CLI
@@ -577,14 +581,14 @@ def login_databricks_workspace(workspace_url: str, *, console: Console | None = 
     spec = ProfileSpec(
         name=profile,
         host=workspace_url,
-        purpose="Databricks model serving (Unity AI Gateway)",
+        purpose="Serviço de modelos do Databricks (Unity AI Gateway)",
         # The user is adding this workspace specifically for model serving, so
         # it's a gateway workspace.
         is_model_gateway=True,
     )
     if not _login_profile(cli, spec, console):
         raise click.ClickException(
-            f"`databricks auth login` failed for {workspace_url}; see the output above."
+            f"`databricks auth login` falhou para {workspace_url}; veja a saída acima."
         )
     return profile
 
@@ -624,8 +628,8 @@ def maybe_run_onboarding() -> None:
         n = _apply_silent_aliases(actions.aliasable, console)
         if n:
             console.print(
-                f"omnicraft: aliased {n} existing profile(s) "
-                f"to OmniCraft names: "
+                f"omnicraft: alias criado para {n} perfil(is) existente(s) "
+                f"com nomes OmniCraft: "
                 f"{', '.join(spec.name for _, spec in actions.aliasable)}"
             )
         existing = _existing_profile_hosts()
@@ -635,12 +639,13 @@ def maybe_run_onboarding() -> None:
         return
 
     missing_parts = [s.name for s in actions.oauth]
-    missing_parts += [f"{s.name} (wrong host)" for s, _ in actions.wrong_host]
+    missing_parts += [f"{s.name} (host errado)" for s, _ in actions.wrong_host]
     console.print(
-        f"\n  [yellow]OmniCraft needs Databricks profiles: {', '.join(missing_parts)}[/yellow]"
+        f"\n  [yellow]OmniCraft precisa de perfis do Databricks: "
+        f"{', '.join(missing_parts)}[/yellow]"
     )
     try:
-        answer = input("  Run onboarding now? [Y/n] ").strip().lower()
+        answer = input("  Rodar configuração agora? [Y/n] ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         console.print()
         return
@@ -648,6 +653,6 @@ def maybe_run_onboarding() -> None:
         run_onboarding()
     else:
         console.print(
-            "  [dim]run `omnicraft setup --internal-beta` when ready "
-            f"(or `{SKIP_ENV_VAR}=1` to silence).[/dim]"
+            "  [dim]rode `omnicraft setup --internal-beta` quando estiver pronto "
+            f"(ou `{SKIP_ENV_VAR}=1` para silenciar).[/dim]"
         )

@@ -294,11 +294,11 @@ def _select_fallback(
             console.print(f"  {len(number_to_index)}. {label}")
         else:
             console.print(f"  {label}")
-    console.print(f"  [{MUTED}](q to go back)[/{MUTED}]")
+    console.print(f"  [{MUTED}](q para voltar)[/{MUTED}]")
     console.print()
     default_number = number_to_index.index(default) + 1 if default in number_to_index else 1
     while True:
-        raw = str(click.prompt("Choice", default=str(default_number)))
+        raw = str(click.prompt("Escolha", default=str(default_number)))
         # "q" is the fallback's abort, mirroring Esc on the TTY path — it
         # returns -1 so callers go back / cancel without a dedicated menu row.
         if raw.strip().lower() == "q":
@@ -309,7 +309,7 @@ def _select_fallback(
                 return number_to_index[number - 1]
         except ValueError:
             pass
-        console.print("  [red]Invalid selection.[/red]")
+        console.print("  [red]Seleção inválida.[/red]")
 
 
 def _term_width() -> int:
@@ -540,7 +540,7 @@ def prompt_text(
             )
         )
 
-    console.print(f"  [{MUTED}](input hidden; paste your key, then press Enter)[/{MUTED}]")
+    console.print(f"  [{MUTED}](entrada oculta; cole sua chave e pressione Enter)[/{MUTED}]")
     received_hidden_input = False
     termui = cast(_TermUIWithHiddenPrompt, click.termui)
     hidden_prompt_func = termui.hidden_prompt_func
@@ -567,7 +567,7 @@ def prompt_text(
 
     if received_hidden_input and value:
         count = len(value)
-        unit = "character" if count == 1 else "characters"
-        console.print(f"  [{MUTED}]✓ received ({count} {unit})[/{MUTED}]")
+        unit = "caractere" if count == 1 else "caracteres"
+        console.print(f"  [{MUTED}]✓ recebido ({count} {unit})[/{MUTED}]")
 
     return value

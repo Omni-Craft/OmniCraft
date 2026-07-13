@@ -24,6 +24,7 @@ import {
 import { applyThemePalette, readThemePalette } from "./lib/themePalette";
 import { initChatStore } from "./store/chatStore";
 import "./index.css";
+import { RootErrorBoundary } from "@/components/RootErrorBoundary";
 
 // Start tracing before any request fires so fetch/XHR are patched in time
 // and a trace begins in the browser. No-op unless a collector endpoint is
@@ -100,13 +101,15 @@ void _bootProbe.then((info) => {
             <TooltipProvider>
               <ImageLightboxProvider>
                 <BrowserRouter>
-                  <SessionUpdatesProvider>
-                    <RunnerHealthProvider>
-                      <QueueFlushProvider>
-                        <App />
-                      </QueueFlushProvider>
-                    </RunnerHealthProvider>
-                  </SessionUpdatesProvider>
+                  <RootErrorBoundary>
+                    <SessionUpdatesProvider>
+                      <RunnerHealthProvider>
+                        <QueueFlushProvider>
+                          <App />
+                        </QueueFlushProvider>
+                      </RunnerHealthProvider>
+                    </SessionUpdatesProvider>
+                  </RootErrorBoundary>
                 </BrowserRouter>
               </ImageLightboxProvider>
             </TooltipProvider>

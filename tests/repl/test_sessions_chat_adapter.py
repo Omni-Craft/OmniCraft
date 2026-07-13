@@ -998,5 +998,5 @@ def test_failed_status_event_without_error_falls_back() -> None:
 
     items = _render_failed_status_error(RichBlockFormatter(), host, event)  # type: ignore[arg-type]
 
-    assert "turn failed" in host.text
+    assert "turno falhou" in " ".join(host.text.split())
     assert items

@@ -26,7 +26,7 @@ class _AsyncSession(_Session):
 @pytest.mark.asyncio
 async def test_effort_command_registered() -> None:
     assert "/effort" in COMMANDS
-    assert "lists options" in COMMANDS["/effort"][0]
+    assert "lista as opções" in COMMANDS["/effort"][0]
 
 
 @pytest.mark.asyncio
@@ -35,7 +35,7 @@ async def test_effort_show_default_and_options() -> None:
     session = _Session()
     await handle_slash_command("/effort", session, None, host, RichBlockFormatter())  # type: ignore[arg-type]
     text = host.text
-    assert "reasoning effort: default" in text
+    assert "esforço de raciocínio: default" in text
     assert "none" in text and "minimal" in text and "xhigh" in text and "max" in text
     assert "default" in text
 
@@ -47,7 +47,7 @@ async def test_effort_show_current_override_and_options() -> None:
     session.reasoning_effort = "xhigh"
     await handle_slash_command("/effort", session, None, host, RichBlockFormatter())  # type: ignore[arg-type]
     text = host.text
-    assert "reasoning effort: xhigh" in text
+    assert "esforço de raciocínio: xhigh" in text
     assert "xhigh" in text
 
 
@@ -57,7 +57,7 @@ async def test_effort_sets_valid_value() -> None:
     session = _Session()
     await handle_slash_command("/effort high", session, None, host, RichBlockFormatter())  # type: ignore[arg-type]
     assert session.reasoning_effort == "high"
-    assert "future responses" in host.text
+    assert "para respostas futuras" in host.text
 
 
 @pytest.mark.asyncio
@@ -66,7 +66,7 @@ async def test_effort_awaits_async_sessions_adapter_setter() -> None:
     session = _AsyncSession()
     await handle_slash_command("/effort high", session, None, host, RichBlockFormatter())  # type: ignore[arg-type]
     assert session.reasoning_effort == "high"
-    assert "future responses" in host.text
+    assert "para respostas futuras" in host.text
 
 
 @pytest.mark.asyncio
@@ -77,7 +77,7 @@ async def test_effort_default_aliases_clear(alias: str) -> None:
     session.reasoning_effort = "high"
     await handle_slash_command(f"/effort {alias}", session, None, host, RichBlockFormatter())  # type: ignore[arg-type]
     assert session.reasoning_effort is None
-    assert "agent default" in host.text
+    assert "padrão do agente" in host.text
 
 
 @pytest.mark.asyncio
@@ -87,7 +87,7 @@ async def test_effort_invalid_value_does_not_mutate() -> None:
     session.reasoning_effort = "medium"
     await handle_slash_command("/effort extreme", session, None, host, RichBlockFormatter())  # type: ignore[arg-type]
     assert session.reasoning_effort == "medium"
-    assert "Invalid effort" in host.text
+    assert "Esforço inválido" in host.text
 
 
 @pytest.mark.asyncio
@@ -97,4 +97,4 @@ async def test_effort_mentions_current_response_unchanged_when_streaming() -> No
     session.is_streaming = True
     await handle_slash_command("/effort low", session, None, host, RichBlockFormatter())  # type: ignore[arg-type]
     assert session.reasoning_effort == "low"
-    assert "current response unchanged" in host.text
+    assert "resposta atual inalterada" in host.text

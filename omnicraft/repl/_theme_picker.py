@@ -47,8 +47,8 @@ _MUTED = "#6a6a6a"
 
 # Menu items in display order.
 _ITEMS: list[tuple[TerminalThemeName, str]] = [
-    ("dark", "dark mode"),
-    ("light", "light mode"),
+    ("dark", "modo escuro"),
+    ("light", "modo claro"),
 ]
 
 
@@ -64,16 +64,16 @@ def _build_dark_preview(width: int = 52) -> Panel:
     """
     body = Text.from_markup(
         f"  [{DARK_THEME.assistant}]assistant>[/{DARK_THEME.assistant}] "
-        f"Hello, I can help with that.\n"
+        f"Olá, posso ajudar com isso.\n"
         f'  [{DARK_THEME.muted}]⏵ read_file(path="src/main.py")[/{DARK_THEME.muted}]\n'
-        f"  [{DARK_THEME.success}]✓ tool completed[/{DARK_THEME.success}]  "
-        f"[{DARK_THEME.warning}]⚠ retry[/{DARK_THEME.warning}]  "
-        f"[{DARK_THEME.error}]✗ error[/{DARK_THEME.error}]\n"
-        f"  [{DARK_THEME.reasoning_style}]thinking step-by-step…[/{DARK_THEME.reasoning_style}]"
+        f"  [{DARK_THEME.success}]✓ ferramenta concluída[/{DARK_THEME.success}]  "
+        f"[{DARK_THEME.warning}]⚠ tentar de novo[/{DARK_THEME.warning}]  "
+        f"[{DARK_THEME.error}]✗ erro[/{DARK_THEME.error}]\n"
+        f"  [{DARK_THEME.reasoning_style}]pensando passo a passo…[/{DARK_THEME.reasoning_style}]"
     )
     return Panel(
         body,
-        title=Text.from_markup(f"[bold]dark[/bold] [{_MUTED}]preview[/{_MUTED}]"),
+        title=Text.from_markup(f"[bold]escuro[/bold] [{_MUTED}]prévia[/{_MUTED}]"),
         title_align="left",
         border_style=_ACCENT,
         width=width,
@@ -90,16 +90,16 @@ def _build_light_preview(width: int = 52) -> Panel:
     """
     body = Text.from_markup(
         f"  [{LIGHT_THEME.assistant}]assistant>[/{LIGHT_THEME.assistant}] "
-        f"Hello, I can help with that.\n"
+        f"Olá, posso ajudar com isso.\n"
         f'  [{LIGHT_THEME.muted}]⏵ read_file(path="src/main.py")[/{LIGHT_THEME.muted}]\n'
-        f"  [{LIGHT_THEME.success}]✓ tool completed[/{LIGHT_THEME.success}]  "
-        f"[{LIGHT_THEME.warning}]⚠ retry[/{LIGHT_THEME.warning}]  "
-        f"[{LIGHT_THEME.error}]✗ error[/{LIGHT_THEME.error}]\n"
-        f"  [{LIGHT_THEME.reasoning_style}]thinking step-by-step…[/{LIGHT_THEME.reasoning_style}]"
+        f"  [{LIGHT_THEME.success}]✓ ferramenta concluída[/{LIGHT_THEME.success}]  "
+        f"[{LIGHT_THEME.warning}]⚠ tentar de novo[/{LIGHT_THEME.warning}]  "
+        f"[{LIGHT_THEME.error}]✗ erro[/{LIGHT_THEME.error}]\n"
+        f"  [{LIGHT_THEME.reasoning_style}]pensando passo a passo…[/{LIGHT_THEME.reasoning_style}]"
     )
     return Panel(
         body,
-        title=Text.from_markup(f"[bold]light[/bold] [{_MUTED}]preview[/{_MUTED}]"),
+        title=Text.from_markup(f"[bold]claro[/bold] [{_MUTED}]prévia[/{_MUTED}]"),
         title_align="left",
         border_style=_ACCENT,
         width=width,
@@ -142,7 +142,7 @@ def _render_theme_picker(
 
     # Header.
     console.print(
-        Text.from_markup(f"\n  [{_ACCENT}]Choose your theme[/{_ACCENT}]"),
+        Text.from_markup(f"\n  [{_ACCENT}]Escolha seu tema[/{_ACCENT}]"),
     )
     console.print()
 
@@ -165,7 +165,7 @@ def _render_theme_picker(
     console.print()
     console.print(
         Text.from_markup(
-            f"  [{_MUTED}]↑/↓ navigate  ·  Enter confirm  ·  Esc accept current[/{_MUTED}]"
+            f"  [{_MUTED}]↑/↓ navegar  ·  Enter confirmar  ·  Esc manter atual[/{_MUTED}]"
         ),
     )
 
@@ -469,5 +469,5 @@ def build_theme_confirmation(
     :returns: A :class:`rich.text.Text` for ``host.output()``.
     """
     return Text.from_markup(
-        f"  [{_ACCENT}]❯[/{_ACCENT}] [bold]{theme.name}[/bold] [{_MUTED}]mode (saved)[/{_MUTED}]"
+        f"  [{_ACCENT}]❯[/{_ACCENT}] [bold]{theme.name}[/bold] [{_MUTED}]modo (salvo)[/{_MUTED}]"
     )

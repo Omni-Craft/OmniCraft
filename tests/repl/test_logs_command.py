@@ -86,7 +86,7 @@ def test_write_logs_zip_contains_only_explicit_current_session_files(tmp_path: P
 def test_logs_command_registered() -> None:
     """/logs appears in the slash-command registry and /help."""
     assert "/logs" in COMMANDS
-    assert "current session" in COMMANDS["/logs"][0].lower()
+    assert "sessão atual" in COMMANDS["/logs"][0].lower()
     assert "zip" in COMMANDS["/logs"][0].lower()
 
 
@@ -141,5 +141,5 @@ async def test_logs_command_creates_current_session_zip_at_requested_path(
             "logs/cli-current.log",
         ]
     assert "cli-old.log" not in zipfile.ZipFile(target).namelist()
-    assert "Collected 3 current-session log files" in host.text
-    assert "Conversation ID: sess_current" in host.text
+    assert "Coletado(s) 3 arquivo(s) de log da sessão atual" in " ".join(host.text.split())
+    assert "ID da conversa: sess_current" in host.text

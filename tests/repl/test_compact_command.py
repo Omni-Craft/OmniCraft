@@ -71,7 +71,7 @@ async def test_compact_refuses_while_streaming() -> None:
     )
 
     assert session.calls == 0
-    assert "Cannot compact while a response is running" in host.text
+    assert "Não é possível compactar enquanto uma resposta está em execução" in host.text
 
 
 @pytest.mark.asyncio
@@ -89,4 +89,4 @@ async def test_compact_surfaces_failure() -> None:
     )
 
     assert session.calls == 1
-    assert "Compaction failed: boom" in host.text
+    assert "Falha na compactação: boom" in host.text

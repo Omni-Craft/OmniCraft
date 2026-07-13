@@ -157,7 +157,7 @@ def test_report_command_registered() -> None:
     so users can't discover it.
     """
     assert "/report" in COMMANDS
-    assert "GitHub issue" in COMMANDS["/report"][0] or "report" in COMMANDS["/report"][0].lower()
+    assert "GitHub" in COMMANDS["/report"][0] or "issue" in COMMANDS["/report"][0].lower()
 
 
 @pytest.mark.asyncio
@@ -181,7 +181,7 @@ async def test_report_command_opens_browser_and_confirms(
     session = _Session(session_id="sess_abc", model="my-agent")
     await handle_slash_command("/report", session, None, host, RichBlockFormatter())  # type: ignore[arg-type]
 
-    assert "browser" in host.text.lower(), (
+    assert "navegador" in host.text.lower(), (
         f"Expected browser confirmation message, got: {host.text!r}"
     )
     # Exactly one URL was opened.

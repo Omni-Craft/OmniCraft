@@ -1440,7 +1440,7 @@ def test_startup_header_appends_per_family_creds_line() -> None:
     assert "Claude → Assinatura" in plain
     assert "Codex → Assinatura" in plain
     # A personality-laden lead-in (with the agent name) precedes the creds line.
-    lead = "Try asking nessie to spawn the following sub-agents!"
+    lead = "Peça ao nessie para criar os seguintes sub-agentes!"
     assert lead in plain
     # Both sit AFTER the box's bottom border (not interior rows), lead-in first.
     assert plain.index("╰") < plain.index(lead) < plain.index("Claude → "), (
@@ -1498,11 +1498,11 @@ def test_startup_header_shows_server_version_on_url_line() -> None:
             "fucho", server_url=remote, server_version="0.3.0.dev0", header=header
         ),
     )
-    assert "server 0.3.0.dev0" in plain
+    assert "servidor 0.3.0.dev0" in plain
     # URL and version share one line — find the row carrying the URL and
     # assert the version is on that same row.
     url_line = next(line for line in plain.split("\n") if remote in line)
-    assert "server 0.3.0.dev0" in url_line
+    assert "servidor 0.3.0.dev0" in url_line
     widths = [len(line) for line in plain.split("\n")]
     assert max(widths) < 80, f"combined URL+version row widened the box to {max(widths)} cols"
 
@@ -1536,7 +1536,7 @@ def test_startup_header_shows_local_server_url_with_version() -> None:
     )
     # The loopback URL and the version share one row in the header box.
     url_line = next(line for line in plain.split("\n") if local in line)
-    assert "server 0.3.0.dev0" in url_line
+    assert "servidor 0.3.0.dev0" in url_line
 
 
 def test_startup_header_shows_databricks_workspace_url_not_api_mount() -> None:
@@ -1854,7 +1854,7 @@ def test_build_startup_header_creds_line_hints_first_available(tmp_path, monkeyp
     # anthropic has its explicit default; openai has none → the hint names the
     # first-available credential the launch falls back to (the Databricks ws).
     assert "Claude → Assinatura" in header.creds_line
-    assert "Codex → no default → will use 🧱 Databricks (gtm-ws)" in header.creds_line
+    assert "Codex → sem padrão → usará 🧱 Databricks (gtm-ws)" in header.creds_line
 
 
 def test_build_startup_header_creds_line_includes_pi_surface(tmp_path, monkeypatch) -> None:
@@ -2300,7 +2300,7 @@ def test_clear_command_registered_in_help() -> None:
 
     assert "/clear" in COMMANDS, "/clear missing — /help would not list it"
     help_text, _ = COMMANDS["/clear"]
-    assert "clear" in help_text.lower(), (
+    assert "limpa" in help_text.lower(), (
         f"/clear's help text should mention clearing; got {help_text!r}"
     )
 
@@ -2628,7 +2628,7 @@ async def test_clear_command_renders_error_when_unbind_fails(
     )
 
     rendered = "\n".join(str(item) for item in host.output_calls)
-    assert "New conversation failed" in rendered and "unbind 404" in rendered, (
+    assert "Falha ao iniciar nova conversa" in rendered and "unbind 404" in rendered, (
         f"expected /clear to render the unbind error inline; got: {rendered!r}"
     )
     assert clear_calls == [], (
@@ -2675,7 +2675,7 @@ async def test_slash_command_exception_renders_inline_error(
     )
 
     rendered = "\n".join(str(item) for item in host.output_calls)
-    assert "Error: remote returned non-JSON" in rendered
+    assert "Erro: remote returned non-JSON" in rendered
 
 
 # ---------------------------------------------------------------------------

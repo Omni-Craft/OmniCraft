@@ -82,8 +82,8 @@ async def test_theme_no_args_shows_current_theme() -> None:
     await handle_slash_command("/theme", DummySession(), None, host, fmt)  # type: ignore[arg-type]
 
     rendered = _text(host)
-    assert "theme: light" in rendered
-    assert "usage: /theme light" in rendered
+    assert "tema: light" in rendered
+    assert "uso: /theme light" in rendered
 
 
 @pytest.mark.asyncio
@@ -104,7 +104,7 @@ async def test_theme_light_updates_host_and_formatter(
     assert host._style.get_attrs_for_style_str("class:bottom-toolbar").bgcolor == ""
     rendered = _text(host)
     assert "light" in rendered
-    assert "mode (saved)" in rendered
+    assert "modo (salvo)" in rendered
     assert (tmp_path / ".omnicraft" / "config.yaml").read_text(encoding="utf-8") == (
         "# OmniCraft user configuration\ntui:\n  theme: light\n"
     )
@@ -129,7 +129,7 @@ async def test_theme_dark_and_default_reset_to_default_theme(
     assert fmt.code_theme == LIGHT_THEME.code_theme
     rendered = _text(host)
     assert "light" in rendered
-    assert "mode (saved)" in rendered
+    assert "modo (salvo)" in rendered
     assert (tmp_path / ".omnicraft" / "config.yaml").read_text(encoding="utf-8") == (
         "# OmniCraft user configuration\n"
     )
@@ -144,4 +144,4 @@ async def test_theme_rejects_unknown_value() -> None:
 
     assert host.theme is LIGHT_THEME
     assert fmt.theme is LIGHT_THEME
-    assert "Invalid theme" in _text(host)
+    assert "Tema inválido" in _text(host)

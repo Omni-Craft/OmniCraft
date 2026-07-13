@@ -178,7 +178,7 @@ async def test_fork_command_registered() -> None:
     """``/fork`` is in the COMMANDS registry so ``/help`` lists it."""
     assert "/fork" in repl_mod.COMMANDS, "/fork missing from COMMANDS registry"
     help_text, _ = repl_mod.COMMANDS["/fork"]
-    assert "fork" in help_text.lower(), (
+    assert "bifurca" in help_text.lower(), (
         f"/fork help text should mention forking; got {help_text!r}"
     )
 
@@ -238,8 +238,8 @@ async def test_fork_happy_path_switches_in_place() -> None:
 
     # Output shows actionable recovery instructions with the old session id.
     plain = host.render_plain()
-    assert "conversation forked" in plain.lower(), (
-        f"Confirmation should say 'Conversation forked', got: {plain!r}."
+    assert "conversa bifurcada" in plain.lower(), (
+        f"Confirmation should say 'Conversa bifurcada', got: {plain!r}."
     )
     assert "/switch conv_src_999" in plain, (
         f"Output should show '/switch <previous id>' for recovery, got: {plain!r}."
@@ -349,8 +349,8 @@ async def test_fork_legacy_mode_renders_error() -> None:
 
     plain = host.render_plain()
     # Error message must mention the sessions API requirement.
-    assert "sessions API" in plain.lower() or "legacy" in plain.lower(), (
-        f"Expected legacy-mode error mentioning 'sessions API' or 'legacy', got: {plain!r}."
+    assert "sessions api" in plain.lower() or "legado" in plain.lower(), (
+        f"Expected legacy-mode error mentioning 'Sessions API' or 'legado', got: {plain!r}."
     )
 
     # fork() must NOT have been called.

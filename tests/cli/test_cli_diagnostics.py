@@ -435,7 +435,7 @@ async def test_slash_command_exceptions_reach_cli_log(
         RichBlockFormatter(),
     )
 
-    assert "Error: '_SessionWithoutModelSetter' object has no attribute" in host.text, (
+    assert "Erro: '_SessionWithoutModelSetter' object has no attribute" in host.text, (
         f"slash-command failures should still render inline for the user: {host.text!r}"
     )
     log_text = ctx.path.read_text(encoding="utf-8")

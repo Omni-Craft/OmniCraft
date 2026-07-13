@@ -306,7 +306,7 @@ def test_pick_conversation_tty_down_crosses_page_boundary() -> None:
         f"After ten Down keys, Enter should select row 11 "
         f"({conversations[10].id!r}), got {result.selected!r}."
     )
-    assert "page 2/2" in result.rendered, (
+    assert "página 2/2" in result.rendered, (
         f"Expected picker to redraw page 2 after moving past row 10. Output:\n{result.rendered!r}"
     )
 
@@ -430,14 +430,14 @@ def test_pick_conversation_empty_list_returns_none() -> None:
     in_ = io.StringIO("1\n")  # would NOT be read
     selected = pick_conversation([], agent_name="x", out=out, in_=in_)
     assert selected is None
-    assert "No prior conversations" in out.getvalue(), (
-        f"Empty-list message should mention 'No prior conversations', got {out.getvalue()!r}."
+    assert "Nenhuma conversa anterior" in out.getvalue(), (
+        f"Empty-list message should mention 'Nenhuma conversa anterior', got {out.getvalue()!r}."
     )
 
 
 def test_pick_conversation_invalid_input_reprompts() -> None:
     """
-    Garbage input (``hello``) prints "Invalid selection." and
+    Garbage input (``hello``) prints "Seleção inválida." and
     re-reads. Followed by a valid row number, the picker
     eventually returns that row — proving the loop didn't
     abort on the first bad input.
@@ -449,14 +449,14 @@ def test_pick_conversation_invalid_input_reprompts() -> None:
     assert selected == conversations[0].id, (
         f"Expected pick of row 1 (after recovering from invalid input), got {selected!r}."
     )
-    assert "Invalid selection." in out.getvalue()
+    assert "Seleção inválida." in out.getvalue()
 
 
 def test_pick_conversation_out_of_range_reprompts() -> None:
     """
     A row number that's a valid integer but out-of-bounds
     (``99`` when only 2 rows are visible) is rejected the same
-    way as garbage input — print "Invalid selection." and
+    way as garbage input — print "Seleção inválida." and
     re-read. Without this guard the picker would IndexError.
     """
     conversations = _convs(2)
@@ -472,7 +472,7 @@ def test_pick_conversation_out_of_range_reprompts() -> None:
     # Same printed-error contract as the garbage-input case —
     # if this assertion fails, the bounds branch is silently
     # re-prompting (confusing UX) instead of telling the user why.
-    assert "Invalid selection." in out.getvalue()
+    assert "Seleção inválida." in out.getvalue()
 
 
 def test_pick_conversation_paginates_with_n() -> None:
@@ -505,7 +505,7 @@ def test_pick_conversation_paginates_with_n() -> None:
 def test_pick_conversation_page_local_number_is_invalid_on_page_two() -> None:
     """
     On page 2 (rows 11-15), typing ``1`` is out of range and
-    must re-prompt with "Invalid selection." rather than
+    must re-prompt with "Seleção inválida." rather than
     selecting page 1's first row.
 
     This pins the compatibility numeric contract: a scripted
@@ -522,10 +522,10 @@ def test_pick_conversation_page_local_number_is_invalid_on_page_two() -> None:
     assert selected == conversations[10].id, (
         f"Expected ``11`` (after re-prompt) to select conversations[10], got {selected!r}."
     )
-    # The "Invalid selection." line proves the ``1`` was
+    # The "Seleção inválida." line proves the ``1`` was
     # rejected. If absent, the picker silently wrapped or
     # clamped and the contract is broken.
-    assert "Invalid selection." in out.getvalue()
+    assert "Seleção inválida." in out.getvalue()
 
 
 def test_pick_conversation_renders_preview_lines_when_provided() -> None:
@@ -759,7 +759,7 @@ def test_pick_conversation_from_store_unknown_agent_returns_none(
         in_=in_,
     )
     assert selected is None
-    assert "No prior conversations" in out.getvalue()
+    assert "Nenhuma conversa anterior" in out.getvalue()
 
 
 def test_pick_conversation_from_store_scopes_by_agent_name(
@@ -788,8 +788,8 @@ def test_pick_conversation_from_store_scopes_by_agent_name(
         in_=in_,
     )
     assert selected is None
-    assert "No prior conversations" in out.getvalue(), (
-        f"Expected 'No prior conversations' for an agent with no "
+    assert "Nenhuma conversa anterior" in out.getvalue(), (
+        f"Expected 'Nenhuma conversa anterior' for an agent with no "
         f"task-linked conversations, got {out.getvalue()!r}. If the "
         f"picker entered the input loop, the agent-name filter is not "
         f"applying."

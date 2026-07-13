@@ -183,7 +183,13 @@ class _SessionSnapshot(Protocol):
 # split the ``state: sleeping`` sync marker the e2e harness waits on
 # (tests/e2e/omnicraft/_pexpect_harness.py). /quit discoverability is
 # served by the grouped ``/help`` output instead.
-WELCOME_HINTS = ["/help help", "Ctrl+O debug", "Ctrl+T show tools", "Esc cancel", "Ctrl+C exit"]
+WELCOME_HINTS = [
+    "/help ajuda",
+    "Ctrl+O debug",
+    "Ctrl+T ferramentas",
+    "Esc cancelar",
+    "Ctrl+C sair",
+]
 
 # Per-request item count for ``client.sessions.list_items``
 # pagination. Matches the server's
@@ -409,7 +415,7 @@ def _build_startup_header(
                 # yet the head WILL launch through this one.
                 fallback = first_available_provider(config, fam)
                 if fallback is None:
-                    label = "not configured"
+                    label = "não configurado"
                 else:
                     cred_text = credential_label(
                         fallback.kind,
@@ -418,7 +424,7 @@ def _build_startup_header(
                         display_name=fallback.display_name,
                     )
                     label = (
-                        f"no default → will use {_header_glyph(fallback.kind)} {cred_text}"
+                        f"sem padrão → usará {_header_glyph(fallback.kind)} {cred_text}"
                     ).strip()
             else:
                 cred_text = credential_label(
@@ -532,10 +538,10 @@ def _render_startup_banner_ansi(
     if display_url is not None:
         url_row = display_url
         if version:
-            url_row = f"{display_url}  ·  server {version}"
+            url_row = f"{display_url}  ·  servidor {version}"
         info_lines.append(BannerLine(url_row, dim=True))
     elif version:
-        info_lines.append(BannerLine(f"server {server_version}", dim=True))
+        info_lines.append(BannerLine(f"servidor {server_version}", dim=True))
 
     banner = startup_banner_strings(ui_name, info_lines=info_lines, art_color="#0fb5bd")
     if header.creds_line:
@@ -543,7 +549,7 @@ def _render_startup_banner_ansi(
         # box. The creds line renders only for a multi-vendor agent, which
         # always means it spawns sub-agents of another vendor — so inviting the
         # user to "spawn" them is accurate. Indented to the REPL's left margin.
-        lead = f"Try asking {ui_name} to spawn the following sub-agents!"
+        lead = f"Peça ao {ui_name} para criar os seguintes sub-agentes!"
         return (
             f"{banner.ansi}\n\n"
             f"  {_ANSI_DIM}{lead}{_ANSI_RESET}\n"
@@ -1036,7 +1042,7 @@ def _make_elicitation_prompt(
             # the user might have forgotten they flipped it on.
             host.output(
                 Text.from_markup(
-                    f"   [{fmt.muted}]auto-approved · "
+                    f"   [{fmt.muted}]aprovado automaticamente · "
                     f"{ctx.policy_name} · {ctx.phase}[/{fmt.muted}]",
                 ),
             )
@@ -1044,18 +1050,18 @@ def _make_elicitation_prompt(
 
         host.output(
             Text.from_markup(
-                f"\n [{fmt.warning}]⚠ approval required · {ctx.phase}[/{fmt.warning}]",
+                f"\n [{fmt.warning}]⚠ aprovação necessária · {ctx.phase}[/{fmt.warning}]",
             ),
         )
         host.output(
             Text.from_markup(
-                f"   [{fmt.muted}]policy: {ctx.policy_name}[/{fmt.muted}]",
+                f"   [{fmt.muted}]política: {ctx.policy_name}[/{fmt.muted}]",
             ),
         )
         if ctx.message:
             host.output(
                 Text.from_markup(
-                    f"   [{fmt.muted}]reason: {ctx.message}[/{fmt.muted}]",
+                    f"   [{fmt.muted}]motivo: {ctx.message}[/{fmt.muted}]",
                 ),
             )
         if ctx.content_preview:
@@ -1064,7 +1070,7 @@ def _make_elicitation_prompt(
                 preview = preview[:200] + "…"
             host.output(
                 Text.from_markup(
-                    f"   [{fmt.muted}]preview:[/{fmt.muted}] {preview}",
+                    f"   [{fmt.muted}]prévia:[/{fmt.muted}] {preview}",
                 ),
             )
         _is_external_url = (
@@ -1078,16 +1084,16 @@ def _make_elicitation_prompt(
             # block keyboard approval.
             full_url = f"{server_url.rstrip('/')}{ctx.url}"
             host.output(
-                Text.from_markup(f"   [{fmt.accent}]approve:[/{fmt.accent}]"),
+                Text.from_markup(f"   [{fmt.accent}]aprovar:[/{fmt.accent}]"),
             )
             host.output(Text(full_url))
         else:
             # Our own URL or form mode — use keyboard y/a/n.
             host.output(
                 Text.from_markup(
-                    f"   [{fmt.accent}]y = approve once, "
-                    f"a = approve always (this session), "
-                    f"n = refuse[/{fmt.accent}]",
+                    f"   [{fmt.accent}]y = aprovar uma vez, "
+                    f"a = aprovar sempre (nesta sessão), "
+                    f"n = recusar[/{fmt.accent}]",
                 ),
             )
         future = state.begin(ctx.policy_name, ctx.phase, url_mode=bool(_is_external_url))
@@ -1611,7 +1617,7 @@ class _SessionsChatReplAdapter:
         :raises RuntimeError: If no session exists yet.
         """
         if self._session_id is None:
-            raise RuntimeError("No active conversation to compact")
+            raise RuntimeError("Nenhuma conversa ativa para compactar")
         await self._client.sessions.compact(self._session_id)
 
     def _hydrate_from_session_snapshot(self, session: _SessionSnapshot) -> None:
@@ -1670,9 +1676,10 @@ class _SessionsChatReplAdapter:
             if self._session_id is None:
                 if self._session_bundle is None:
                     raise RuntimeError(
-                        "Sessions API fresh session creation requires a local agent bundle. "
-                        "Start the REPL from `omnicraft run <agent.yaml>` so the CLI can "
-                        "upload the bundle through POST /v1/sessions."
+                        "A criação de uma nova sessão pela Sessions API requer um bundle "
+                        "de agente local. Inicie o REPL a partir de "
+                        "`omnicraft run <agent.yaml>` para que o CLI possa enviar o bundle "
+                        "via POST /v1/sessions."
                     )
                 if _dbg:
                     print(
@@ -1782,12 +1789,12 @@ class _SessionsChatReplAdapter:
             return
         async with self._bind_lock:
             if self._session_id is None:
-                raise RuntimeError("Cannot bind runner before a session exists")
+                raise RuntimeError("Não é possível vincular o runner antes da sessão existir")
             if self._runner_id is None:
                 raise RuntimeError(
-                    "Sessions API dispatch requires a registered runner id. "
-                    "Start through `omnicraft run <agent>` or pass --server so the CLI "
-                    "can launch and bind a runner."
+                    "O despacho da Sessions API requer um id de runner registrado. "
+                    "Inicie através de `omnicraft run <agent>` ou passe --server para "
+                    "que o CLI possa iniciar e vincular um runner."
                 )
             if self._bound_runner_id == self._runner_id:
                 self._clear_runner_recovery_error()
@@ -1875,8 +1882,8 @@ class _SessionsChatReplAdapter:
         """
         detail = str(exc) or repr(exc)
         if self._is_terminal_runner_recovery_error(exc):
-            return f"Runner recovery failed: {detail}"
-        return f"Runner recovery hit a transient error and will retry: {detail}"
+            return f"Falha na recuperação do runner: {detail}"
+        return f"A recuperação do runner encontrou um erro transitório e tentará de novo: {detail}"
 
     def _is_terminal_runner_recovery_error(self, exc: Exception) -> bool:
         """
@@ -2372,7 +2379,7 @@ class _SessionsChatReplAdapter:
                 if inspect.isawaitable(result):
                     result = await result
             except Exception as exc:  # noqa: BLE001
-                result = f"Error executing tool: {exc}"
+                result = f"Erro ao executar a ferramenta: {exc}"
             await self._client.sessions.post_event(
                 session_id,
                 {
@@ -2518,9 +2525,9 @@ class _SessionsChatReplAdapter:
             else:
                 hint_parts.append(str(prop_type))
             if default is not None:
-                hint_parts.append(f"default: {default}")
+                hint_parts.append(f"padrão: {default}")
             if key not in required:
-                hint_parts.append("optional")
+                hint_parts.append("opcional")
             hint = ", ".join(hint_parts)
             label_parts.append(f" [{hint}]")
 
@@ -2547,7 +2554,7 @@ class _SessionsChatReplAdapter:
                     elif key in required:
                         host.output(
                             Text(
-                                f"     ↳ {key} is required — enter a value (Esc cancels)",
+                                f"     ↳ {key} é obrigatório — digite um valor (Esc cancela)",
                                 style=fmt.warning,
                             ),
                         )
@@ -2565,7 +2572,7 @@ class _SessionsChatReplAdapter:
                     except ValueError:
                         host.output(
                             Text(
-                                f"     ↳ expected a whole number, got {stripped!r}",
+                                f"     ↳ esperava um número inteiro, recebi {stripped!r}",
                                 style=fmt.warning,
                             ),
                         )
@@ -2576,7 +2583,7 @@ class _SessionsChatReplAdapter:
                     except ValueError:
                         host.output(
                             Text(
-                                f"     ↳ expected a number, got {stripped!r}",
+                                f"     ↳ esperava um número, recebi {stripped!r}",
                                 style=fmt.warning,
                             ),
                         )
@@ -2590,7 +2597,7 @@ class _SessionsChatReplAdapter:
                     if val not in valid:
                         host.output(
                             Text(
-                                f"     ↳ choose one of: {', '.join(str(v) for v in valid)}",
+                                f"     ↳ escolha uma de: {', '.join(str(v) for v in valid)}",
                                 style=fmt.warning,
                             ),
                         )
@@ -2599,7 +2606,7 @@ class _SessionsChatReplAdapter:
                     if val not in enum_vals:
                         host.output(
                             Text(
-                                f"     ↳ choose one of: {', '.join(str(v) for v in enum_vals)}",
+                                f"     ↳ escolha uma de: {', '.join(str(v) for v in enum_vals)}",
                                 style=fmt.warning,
                             ),
                         )
@@ -2921,7 +2928,7 @@ def _render_failed_status_error(
     from omnicraft_client import ErrorBlock
 
     err_message = (
-        event.error.message if event.error is not None and event.error.message else "turn failed"
+        event.error.message if event.error is not None and event.error.message else "turno falhou"
     )
     err_items = list(
         fmt.format_error(
@@ -3060,7 +3067,7 @@ async def run_repl(
     # panel and toolbar so the user knows the overlay exists.
     hints = list(WELCOME_HINTS)
     if debug_events:
-        hints.insert(1, "Ctrl+E events")
+        hints.insert(1, "Ctrl+E eventos")
     host = TerminalHost(
         model_name=ui_name,
         toolbar_hints=hints,
@@ -3092,7 +3099,7 @@ async def run_repl(
     def _toggle_tool_output() -> None:
         fmt.show_tool_output = not fmt.show_tool_output
         # Update the toolbar hint to reflect the new state.
-        new_label = "Ctrl+T hide tools" if fmt.show_tool_output else "Ctrl+T show tools"
+        new_label = "Ctrl+T ocultar ferramentas" if fmt.show_tool_output else "Ctrl+T ferramentas"
         for i, h in enumerate(host._toolbar_hints):
             if h.startswith("Ctrl+T "):
                 host._toolbar_hints[i] = new_label
@@ -3415,7 +3422,7 @@ async def run_repl(
                 approval_state.resolve_verdict(_ApprovalVerdict.APPROVE_ONCE)
                 host.output(
                     Text.from_markup(
-                        f"   [{fmt.muted}]› resolved via approval page[/{fmt.muted}]",
+                        f"   [{fmt.muted}]› resolvido via página de aprovação[/{fmt.muted}]",
                     ),
                 )
             if tape_entry is not None:
@@ -3477,9 +3484,7 @@ async def run_repl(
         )
 
         if isinstance(sdk_ev, _CIP):
-            items_out = [
-                Text.from_markup(f"  [{fmt.muted}]Compacting conversation context…[/{fmt.muted}]")
-            ]
+            items_out = [Text.from_markup(f"  [{fmt.muted}]Compactando o contexto…[/{fmt.muted}]")]
             if tape_entry is not None:
                 _event_tape.update_format(tape_entry, items_out)  # type: ignore[union-attr]
             for item in items_out:
@@ -3491,7 +3496,7 @@ async def run_repl(
             return
 
         if isinstance(sdk_ev, _CC):
-            items_out = [Text.from_markup(f"  [{fmt.muted}]Compaction complete.[/{fmt.muted}]")]
+            items_out = [Text.from_markup(f"  [{fmt.muted}]Compactação concluída.[/{fmt.muted}]")]
             if tape_entry is not None:
                 _event_tape.update_format(tape_entry, items_out)  # type: ignore[union-attr]
             for item in items_out:
@@ -3740,7 +3745,7 @@ async def run_repl(
 
         if isinstance(sdk_ev, _Failed):
             err = sdk_ev.response.error
-            msg = err.message if err else "unknown error"
+            msg = err.message if err else "erro desconhecido"
             from omnicraft_client import BlockContext, ErrorBlock
 
             items_out = list(
@@ -3864,15 +3869,15 @@ async def run_repl(
             if approval_state._url_mode:
                 host.output(
                     Text.from_markup(
-                        f"   [{fmt.muted}]waiting for approval via the URL above[/{fmt.muted}]",
+                        f"   [{fmt.muted}]aguardando aprovação pela URL acima[/{fmt.muted}]",
                     ),
                 )
                 return
             verdict = _parse_approval_input(text)
             verdict_label = {
-                _ApprovalVerdict.APPROVE_ONCE: "approved",
-                _ApprovalVerdict.APPROVE_ALWAYS: "approved always (this session)",
-                _ApprovalVerdict.REFUSE: "refused",
+                _ApprovalVerdict.APPROVE_ONCE: "aprovado",
+                _ApprovalVerdict.APPROVE_ALWAYS: "aprovado sempre (nesta sessão)",
+                _ApprovalVerdict.REFUSE: "recusado",
             }[verdict]
             host.output(
                 Text.from_markup(
@@ -3890,8 +3895,8 @@ async def run_repl(
             if not cmd:
                 host.output(
                     Text.from_markup(
-                        f"   [{fmt.muted}]! <command> runs a shell command · "
-                        f"!! sends a literal ![/{fmt.muted}]",
+                        f"   [{fmt.muted}]! <comando> executa um comando de shell · "
+                        f"!! envia um ! literal[/{fmt.muted}]",
                     ),
                 )
                 return
@@ -3904,14 +3909,14 @@ async def run_repl(
                     host.output(Text.from_markup(f"  [{_BANG_ECHO_MARKUP}]! {escape(cmd)}[/]"))
                     host.output(
                         Text.from_markup(
-                            f"   [{fmt.muted}]now in {escape(cd_target)}[/{fmt.muted}]"
+                            f"   [{fmt.muted}]agora em {escape(cd_target)}[/{fmt.muted}]"
                         ),
                     )
                     _pending_bang_blocks.append(
-                        f"$ {cmd}\n(changed shell directory to: {cd_target})"
+                        f"$ {cmd}\n(diretório do shell alterado para: {cd_target})"
                     )
                 else:
-                    msg = f"cd: not a directory: {escape(cd_target)}"
+                    msg = f"cd: não é um diretório: {escape(cd_target)}"
                     host.output(Text.from_markup(f"   [{fmt.warning}]{msg}[/{fmt.warning}]"))
                 return
             _pending_bang_blocks.append(await _run_bang_command(cmd, host, fmt, cwd=_bang_cwd[0]))
@@ -3945,8 +3950,8 @@ async def run_repl(
         ):
             host.output(
                 Text.from_markup(
-                    f"   [{fmt.muted}]read-only view (closed sub-agent) — press ← to "
-                    f"return to the main session before sending[/{fmt.muted}]",
+                    f"   [{fmt.muted}]visualização somente leitura (sub-agente fechado) — "
+                    f"pressione ← para voltar à sessão principal antes de enviar[/{fmt.muted}]",
                 ),
             )
             return
@@ -4026,7 +4031,7 @@ async def run_repl(
                 await asyncio.shield(session.cancel())
             from rich.text import Text as RText
 
-            host.output(RText.from_markup(f"\n  [{fmt.muted}]cancelled[/{fmt.muted}]"))
+            host.output(RText.from_markup(f"\n  [{fmt.muted}]cancelado[/{fmt.muted}]"))
             raise
         except Exception as exc:  # noqa: BLE001 — REPL UI boundary: any uncaught error here would be swallowed by prompt-toolkit's background runner, leaving the user staring at a silent prompt (see comment below for the concrete incident this guards against)
             # Any non-cancel exception from the server (HTTP 5xx from
@@ -4125,10 +4130,10 @@ async def run_repl(
             trigger="c-o",
             builder=_overview_builder,
             targets_builder=_overview_targets,
-            title=f" Debug overview — {ui_name}",
+            title=f" Visão geral de debug — {ui_name}",
             actions=(
-                OverlayAction(key="O", label="attach", handler=_attach_read_write),
-                OverlayAction(key="R", label="attach (read-only)", handler=_attach_read_only),
+                OverlayAction(key="O", label="anexar", handler=_attach_read_write),
+                OverlayAction(key="R", label="anexar (leitura)", handler=_attach_read_only),
             ),
         ),
     )
@@ -4252,7 +4257,7 @@ async def run_repl(
             )
         except Exception as exc:  # noqa: BLE001 — REPL boundary: render the failure, stay alive
             host.output(
-                Text.from_markup(f"  [bold red]Failed to open {target_id[:16]}…: {exc}[/]")
+                Text.from_markup(f"  [bold red]Falha ao abrir {target_id[:16]}…: {exc}[/]")
             )
             return
         await _attach_to_conversation(
@@ -4269,14 +4274,15 @@ async def run_repl(
         if interactive:
             host.output(
                 Text.from_markup(
-                    f"  [{fmt.muted}]interactive — type to chat with this sub-agent; "
-                    f"← back to main[/{fmt.muted}]"
+                    f"  [{fmt.muted}]interativo — digite para conversar com este sub-agente; "
+                    f"← voltar ao principal[/{fmt.muted}]"
                 )
             )
         elif not returning_to_root:
             host.output(
                 Text.from_markup(
-                    f"  [{fmt.muted}]read-only (closed sub-agent) — ← back to main[/{fmt.muted}]"
+                    f"  [{fmt.muted}]somente leitura (sub-agente fechado) — "
+                    f"← voltar ao principal[/{fmt.muted}]"
                 )
             )
         await _refresh_subagents()
@@ -4302,7 +4308,7 @@ async def run_repl(
             :returns: Rich renderable for the detail panel.
             """
             if target is None:
-                return Text.from_markup("[dim]No events recorded yet.[/dim]")
+                return Text.from_markup("[dim]Nenhum evento registrado ainda.[/dim]")
             return build_tape_detail(
                 _event_tape,
                 target.key,
@@ -4326,7 +4332,7 @@ async def run_repl(
                 trigger="c-e",
                 builder=_tape_builder,
                 targets_builder=_tape_targets,
-                title=" SSE Event Tape",
+                title=" Fita de eventos SSE",
                 sidebar_width=30,
             ),
         )
@@ -4432,7 +4438,7 @@ async def run_repl(
                 _log.exception("Failed to resume conversation %s", resume_conversation_id)
                 host.output(
                     Text.from_markup(
-                        f"  [bold red]Failed to resume {resume_conversation_id[:16]}…: {exc}[/]"
+                        f"  [bold red]Falha ao retomar {resume_conversation_id[:16]}…: {exc}[/]"
                     )
                 )
         # Hold a reference to the auto-send task for the lifetime of
@@ -4540,12 +4546,12 @@ async def _maybe_write_session_log(
         _log.exception("Session log write failed")
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]session log write failed "
+                f"  [{fmt.muted}]falha ao gravar o log da sessão "
                 f"({type(exc).__name__}: {exc})[/{fmt.muted}]"
             )
         )
         return
-    host.output(Text.from_markup(f"  [{fmt.muted}]wrote session log to {path}[/{fmt.muted}]"))
+    host.output(Text.from_markup(f"  [{fmt.muted}]log da sessão gravado em {path}[/{fmt.muted}]"))
 
 
 def _clear_screen() -> None:
@@ -4587,7 +4593,7 @@ def _cmd(
     return _register
 
 
-@_cmd("/help", "Show this help")
+@_cmd("/help", "Mostra esta ajuda")
 async def _cmd_help(
     arg: str,  # noqa: ARG001 — dispatch-contract params (see COMMANDS docstring)
     session: Session,  # noqa: ARG001
@@ -4601,17 +4607,17 @@ async def _cmd_help(
     # wall. Commands not listed in a group still render (under "Other"), so a
     # newly registered command is never silently hidden from /help.
     groups: list[tuple[str, list[str]]] = [
-        ("Chat", ["/new", "/clear", "/switch", "/fork", "/history", "/cancel"]),
-        ("Context", ["/compact", "/context", "/model", "/effort"]),
-        ("Display", ["/theme"]),
-        ("Diagnostics", ["/logs", "/report"]),
-        ("Help", ["/help", "/quit"]),
+        ("Conversa", ["/new", "/clear", "/switch", "/fork", "/history", "/cancel"]),
+        ("Contexto", ["/compact", "/context", "/model", "/effort"]),
+        ("Exibição", ["/theme"]),
+        ("Diagnósticos", ["/logs", "/report"]),
+        ("Ajuda", ["/help", "/quit"]),
     ]
     visible = {n: d for n, (d, _) in COMMANDS.items() if n not in ("/?", "/exit")}
     grouped = {name for _, names in groups for name in names}
     leftover = [n for n in visible if n not in grouped]
     if leftover:
-        groups.append(("Other", leftover))
+        groups.append(("Outros", leftover))
 
     name_width = max((len(n) for n in visible), default=0)
     lines: list[str] = []
@@ -4636,7 +4642,7 @@ COMMANDS["/?"] = COMMANDS["/help"]
 _THEME_CLEAR_ALIASES = {"default", "auto", "reset"}
 
 
-@_cmd("/theme", "Show/set terminal theme; /theme light or /theme dark")
+@_cmd("/theme", "Mostra/define o tema do terminal; /theme light ou /theme dark")
 async def _cmd_theme(
     arg: str,
     session: Session,  # noqa: ARG001 — dispatch-contract params
@@ -4658,11 +4664,11 @@ async def _cmd_theme(
     value = arg.strip().lower()
     if not value:
         current = getattr(host, "theme", LIGHT_THEME).name
-        host.output(Text.from_markup(f"  [{fmt.muted}]theme: {current}[/{fmt.muted}]"))
+        host.output(Text.from_markup(f"  [{fmt.muted}]tema: {current}[/{fmt.muted}]"))
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]usage: /theme light · /theme dark · "
-                f"/theme default to reset[/{fmt.muted}]"
+                f"  [{fmt.muted}]uso: /theme light · /theme dark · "
+                f"/theme default para restaurar[/{fmt.muted}]"
             )
         )
         return
@@ -4672,7 +4678,7 @@ async def _cmd_theme(
         selected = DARK_THEME
     else:
         host.output(
-            Text.from_markup("  [bold red]Invalid theme: expected light, dark, or default[/]")
+            Text.from_markup("  [bold red]Tema inválido: esperado light, dark ou default[/]")
         )
         return
 
@@ -4716,7 +4722,7 @@ async def _set_session_reasoning_effort(
         await result
 
 
-@_cmd("/effort", "Show/set reasoning effort; /effort lists options")
+@_cmd("/effort", "Mostra/define o esforço de raciocínio; /effort lista as opções")
 async def _cmd_effort(
     arg: str,
     session: Session,
@@ -4731,22 +4737,27 @@ async def _cmd_effort(
     if not value:
         current = getattr(session, "reasoning_effort", None)
         selected = current or "default"
-        label = "reasoning effort: default" if current is None else f"reasoning effort: {current}"
+        label = (
+            "esforço de raciocínio: default"
+            if current is None
+            else f"esforço de raciocínio: {current}"
+        )
         rendered_values = ", ".join(
             f"[{opt}]" if opt == selected else opt for opt in _EFFORT_VALUES
         )
         rendered_default = "[default]" if selected == "default" else "default"
         rendered_options = f"{rendered_values} {rendered_default}"
         host.output(Text.from_markup(f"  [{fmt.muted}]{label}[/{fmt.muted}]"))
-        host.output(Text.from_markup(f"  [{fmt.muted}]options: {rendered_options}[/{fmt.muted}]"))
+        host.output(Text.from_markup(f"  [{fmt.muted}]opções: {rendered_options}[/{fmt.muted}]"))
         return
 
     if value in _EFFORT_CLEAR_ALIASES:
         await _set_session_reasoning_effort(session, None)
-        suffix = " (current response unchanged)" if session.is_streaming else ""
+        suffix = " (resposta atual inalterada)" if session.is_streaming else ""
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]reasoning effort reset to agent default{suffix}[/{fmt.muted}]"
+                f"  [{fmt.muted}]esforço de raciocínio restaurado para o "
+                f"padrão do agente{suffix}[/{fmt.muted}]"
             )
         )
         return
@@ -4754,18 +4765,18 @@ async def _cmd_effort(
     if value not in _EFFORT_VALUES:
         host.output(
             Text.from_markup(
-                "  [bold red]Invalid effort: "
-                f"{value} · expected none, minimal, low, medium, high, xhigh, max, or default[/]"
+                "  [bold red]Esforço inválido: "
+                f"{value} · esperado none, minimal, low, medium, high, xhigh, max ou default[/]"
             )
         )
         return
 
     await _set_session_reasoning_effort(session, value)
-    suffix = " (current response unchanged)" if session.is_streaming else ""
+    suffix = " (resposta atual inalterada)" if session.is_streaming else ""
     host.output(
         Text.from_markup(
-            f"  [{fmt.muted}]reasoning effort set to {value} "
-            f"for future responses{suffix}[/{fmt.muted}]"
+            f"  [{fmt.muted}]esforço de raciocínio definido como {value} "
+            f"para respostas futuras{suffix}[/{fmt.muted}]"
         )
     )
 
@@ -4883,13 +4894,14 @@ def _build_model_readout_lines(
         # override is still shown (it's real), but its provider is
         # unresolved until one is configured.
         if model_override is not None:
-            lines.append(f"Active:  {model_override}  ·  (provider unresolved)")
+            lines.append(f"Ativo:  {model_override}  ·  (provedor não resolvido)")
         else:
-            lines.append("Active:  None  ·  None")
+            lines.append("Ativo:  Nenhum  ·  Nenhum")
             lines.append(
-                "no model configured — run `omnicraft setup --no-internal-beta` to add one"
+                "nenhum modelo configurado — rode `omnicraft setup --no-internal-beta` "
+                "para adicionar um"
             )
-        lines.append("usage: /model <name> · /model default | off | reset to clear")
+        lines.append("uso: /model <nome> · /model default | off | reset para limpar")
         return lines
 
     # One clean "Active" line: <model> · <glyph friendly-provider> · <source>.
@@ -4900,17 +4912,17 @@ def _build_model_readout_lines(
     if cred.model:
         model_label = cred.model
     elif cred.kind == "databricks":
-        model_label = "(Databricks profile picks the model — pin one with /model <name>)"
+        model_label = "(o perfil Databricks escolhe o modelo — fixe um com /model <nome>)"
     elif cred.kind == "subscription":
-        model_label = "(CLI login picks the model — pin one with /model <name>)"
+        model_label = "(o login do CLI escolhe o modelo — fixe um com /model <nome>)"
     else:
-        model_label = "(no model pinned — set one with /model <name>)"
+        model_label = "(nenhum modelo fixado — defina um com /model <nome>)"
     glyph = kind_glyph(cred.kind)
     # credential_label is the single source of truth shared with `configure
     # harnesses` — a subscription reads "Subscription" (not the brand name
     # "Claude"), a key names the vendor + "API Key", Databricks names itself.
     provider_label = f"{glyph} {credential_label(cred.kind, cred.provider_name)}".strip()
-    lines.append(f"Active:  {model_label}  ·  {provider_label}  ·  {cred.source}")
+    lines.append(f"Ativo:  {model_label}  ·  {provider_label}  ·  {cred.source}")
 
     # List the OTHER configured providers that serve THIS harness's family,
     # so the user only sees relevant alternatives (a Codex run shouldn't list
@@ -4933,13 +4945,13 @@ def _build_model_readout_lines(
             ).strip()
             for n, e in others
         ]
-        lines.append("Also configured:  " + "  ·  ".join(items))
+        lines.append("Também configurado:  " + "  ·  ".join(items))
         # Honest guidance: `/model` only changes the model within the active
         # provider; switching the active provider mid-session is not wired,
         # so it goes through `configure harnesses` + a restart.
         lines.append(
-            "  /model <name> changes the model. "
-            "To switch provider: omnicraft setup (then restart)."
+            "  /model <nome> altera o modelo. "
+            "Para trocar de provedor: omnicraft setup (depois reinicie)."
         )
     return lines
 
@@ -5028,16 +5040,20 @@ def _model_validation_warning(model: str) -> str | None:
         # A non-catalog prefix is normal for gateway / OSS models (e.g.
         # ``qwen/qwen3.7-plus`` via OpenRouter) — the gateway, not our
         # catalog, owns the naming. Inform, don't alarm.
-        return f"{model!r} isn't a catalog model — fine for gateway / OSS models; using it as-is."
+        return (
+            f"{model!r} não é um modelo do catálogo — tudo bem para modelos de "
+            f"gateway / OSS; usando assim mesmo."
+        )
     catalog_models = {m.name for m in get_chat_models(routed.provider)}
     if catalog_models and routed.model not in catalog_models:
         return (
-            f"{model!r} isn't in the local model catalog (may lag new releases); using it as-is."
+            f"{model!r} não está no catálogo local de modelos "
+            f"(pode não ter versões recentes); usando assim mesmo."
         )
     return None
 
 
-@_cmd("/model", "Show/set the LLM model for this session")
+@_cmd("/model", "Mostra/define o modelo LLM desta sessão")
 async def _cmd_model(
     arg: str,
     session: Session,
@@ -5078,9 +5094,11 @@ async def _cmd_model(
         result = session.set_model_override(None)
         if inspect.isawaitable(result):
             await result
-        suffix = " (current response unchanged)" if session.is_streaming else ""
+        suffix = " (resposta atual inalterada)" if session.is_streaming else ""
         host.output(
-            Text.from_markup(f"  [{fmt.muted}]model reset to agent default{suffix}[/{fmt.muted}]")
+            Text.from_markup(
+                f"  [{fmt.muted}]modelo restaurado para o padrão do agente{suffix}[/{fmt.muted}]"
+            )
         )
         return
 
@@ -5114,15 +5132,16 @@ async def _cmd_model(
         target_label = f"{provider_display_name(matched)}"
         host.output(
             Text.from_markup(
-                "  [bold red]Switching the active provider isn't supported mid-session.[/]"
+                "  [bold red]Trocar o provedor ativo não é suportado durante a sessão.[/]"
             )
         )
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]Active provider: {active_label}. To use {target_label}, run "
-                f"`omnicraft setup --no-internal-beta` and select it as the "
-                f"default, then restart. "
-                f"(You can still change the model within {active_label}: /model <model-name>.)"
+                f"  [{fmt.muted}]Provedor ativo: {active_label}. Para usar {target_label}, rode "
+                f"`omnicraft setup --no-internal-beta` e selecione-o como "
+                f"padrão, depois reinicie. "
+                f"(Você ainda pode alterar o modelo dentro de {active_label}: "
+                f"/model <nome-do-modelo>.)"
                 f"[/{fmt.muted}]"
             )
         )
@@ -5136,15 +5155,15 @@ async def _cmd_model(
             # databricks / subscription pick their own model — nothing to set.
             host.output(
                 Text.from_markup(
-                    f"  [{fmt.muted}]{provider_display_name(matched)} picks the model itself; "
-                    f"pass a specific one: /model <model-name>.[/{fmt.muted}]"
+                    f"  [{fmt.muted}]{provider_display_name(matched)} escolhe o modelo sozinho; "
+                    f"passe um específico: /model <nome-do-modelo>.[/{fmt.muted}]"
                 )
             )
             return
         target = resolved
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]resolved provider {value!r} → {target}[/{fmt.muted}]"
+                f"  [{fmt.muted}]provedor resolvido {value!r} → {target}[/{fmt.muted}]"
             )
         )
 
@@ -5154,7 +5173,7 @@ async def _cmd_model(
     if "/" in target:
         warning = _model_validation_warning(target)
         if warning is not None:
-            host.output(Text.from_markup(f"  [dim]note: {warning}[/dim]"))
+            host.output(Text.from_markup(f"  [dim]nota: {warning}[/dim]"))
 
     # set_model_override raises ValueError on empty-after-trim;
     # surface inline rather than letting it crash the REPL.
@@ -5163,13 +5182,14 @@ async def _cmd_model(
         if inspect.isawaitable(result):
             await result
     except ValueError as exc:
-        host.output(Text.from_markup(f"  [bold red]Invalid model: {exc}[/]"))
+        host.output(Text.from_markup(f"  [bold red]Modelo inválido: {exc}[/]"))
         return
 
-    suffix = " (current response unchanged)" if session.is_streaming else ""
+    suffix = " (resposta atual inalterada)" if session.is_streaming else ""
     host.output(
         Text.from_markup(
-            f"  [{fmt.muted}]model set to {target} for future responses{suffix}[/{fmt.muted}]"
+            f"  [{fmt.muted}]modelo definido como {target} "
+            f"para respostas futuras{suffix}[/{fmt.muted}]"
         )
     )
 
@@ -5192,7 +5212,7 @@ async def _start_new_conversation(
             await starter()
         except Exception as exc:  # noqa: BLE001 — REPL boundary
             _log.exception("New conversation failed")
-            host.output(Text.from_markup(f"  [bold red]New conversation failed: {exc}[/]"))
+            host.output(Text.from_markup(f"  [bold red]Falha ao iniciar nova conversa: {exc}[/]"))
             return False
     else:
         session.reset()
@@ -5202,7 +5222,7 @@ async def _start_new_conversation(
     return True
 
 
-@_cmd("/new", "Start a new conversation (keeps scrollback)")
+@_cmd("/new", "Inicia uma nova conversa (mantém o histórico visível)")
 async def _cmd_new(
     arg: str,  # noqa: ARG001 — dispatch-contract params
     session: Session,
@@ -5219,10 +5239,10 @@ async def _cmd_new(
     # ``run_repl`` welcome (avoids a ``resume_test`` / ``resume test``
     # mismatch).
     host.output(fmt.welcome(_humanize_agent_name(session.model), hints=WELCOME_HINTS))
-    host.output(Text.from_markup(f"\n  [{fmt.muted}]New conversation.[/{fmt.muted}]"))
+    host.output(Text.from_markup(f"\n  [{fmt.muted}]Nova conversa.[/{fmt.muted}]"))
 
 
-@_cmd("/clear", "Clear the screen and start a new conversation")
+@_cmd("/clear", "Limpa a tela e inicia uma nova conversa")
 async def _cmd_clear(
     arg: str,  # noqa: ARG001 — dispatch-contract params
     session: Session,
@@ -5241,10 +5261,10 @@ async def _cmd_clear(
         return
     _clear_screen()
     host.output(fmt.welcome(_humanize_agent_name(session.model), hints=WELCOME_HINTS))
-    host.output(Text.from_markup(f"\n  [{fmt.muted}]New conversation.[/{fmt.muted}]"))
+    host.output(Text.from_markup(f"\n  [{fmt.muted}]Nova conversa.[/{fmt.muted}]"))
 
 
-@_cmd("/switch", "List or switch conversations")
+@_cmd("/switch", "Lista ou troca de conversas")
 async def _cmd_switch(
     arg: str,
     session: Session,
@@ -5260,21 +5280,21 @@ async def _cmd_switch(
     if not arg:
         sessions_list = await client.sessions.list(limit=20)
         if sessions_list:
-            table = Table(title="Switch to…")
+            table = Table(title="Trocar para…")
             table.add_column("#", style="bold " + fmt.accent)
             table.add_column("ID", style="dim")
-            table.add_column("Title")
+            table.add_column("Título")
             table.add_column("Status", style="dim")
-            table.add_column("Created", style="dim")
+            table.add_column("Criado em", style="dim")
             for i, s in enumerate(sessions_list, 1):
                 when = datetime.fromtimestamp(s.created_at).strftime("%b %d %H:%M")
-                table.add_row(str(i), s.id, s.title or "(untitled)", s.status, when)
+                table.add_row(str(i), s.id, s.title or "(sem título)", s.status, when)
             host.output(table)
             host.output(
-                Text.from_markup(f"  [{fmt.muted}]/switch <#> or <id> to resume[/{fmt.muted}]")
+                Text.from_markup(f"  [{fmt.muted}]/switch <#> ou <id> para retomar[/{fmt.muted}]")
             )
         else:
-            host.output(Text.from_markup(f"  [{fmt.muted}]No sessions.[/{fmt.muted}]"))
+            host.output(Text.from_markup(f"  [{fmt.muted}]Nenhuma sessão.[/{fmt.muted}]"))
     else:
         if arg.isdigit():
             sessions_list = await client.sessions.list(limit=20)
@@ -5282,9 +5302,9 @@ async def _cmd_switch(
             if index < 0 or index >= len(sessions_list):
                 host.output(
                     Text.from_markup(
-                        f"  [bold red]No session #{arg} "
-                        f"({len(sessions_list)} listed). Run /switch with no "
-                        f"argument to see the table.[/]"
+                        f"  [bold red]Sessão #{arg} inexistente "
+                        f"({len(sessions_list)} listadas). Rode /switch sem "
+                        f"argumento para ver a tabela.[/]"
                     )
                 )
                 return
@@ -5315,7 +5335,7 @@ async def _cmd_switch(
                 redraw_screen=True,
             )
         except Exception as exc:  # noqa: BLE001 — REPL UI boundary: render network/server errors as inline text so the REPL stays responsive instead of crashing
-            host.output(Text.from_markup(f"  [bold red]Error: {exc}[/]"))
+            host.output(Text.from_markup(f"  [bold red]Erro: {exc}[/]"))
 
 
 async def _attach_to_conversation(
@@ -5423,7 +5443,7 @@ async def _attach_to_conversation(
         host.output(fmt.welcome(ui_name, hints=WELCOME_HINTS))
     host.output(
         Text.from_markup(
-            f"  [{fmt.muted}]Resumed conversation {conversation_id[:16]}…[/{fmt.muted}]\n"
+            f"  [{fmt.muted}]Conversa retomada {conversation_id[:16]}…[/{fmt.muted}]\n"
         )
     )
 
@@ -5465,7 +5485,7 @@ async def _attach_to_conversation(
         host.update_context_usage(tokens, cw)
 
 
-@_cmd("/fork", "Fork the current conversation into a new session")
+@_cmd("/fork", "Bifurca a conversa atual em uma nova sessão")
 async def _cmd_fork(
     arg: str,
     session: Session,
@@ -5499,7 +5519,7 @@ async def _cmd_fork(
     if current_id is None:
         host.output(
             Text.from_markup(
-                "  [bold red]/fork requires the sessions API (not available in legacy mode).[/]"
+                "  [bold red]/fork requer a Sessions API (indisponível no modo legado).[/]"
             )
         )
         return
@@ -5508,7 +5528,7 @@ async def _cmd_fork(
     try:
         result = await client.sessions.fork(current_id, title=title)
     except Exception as exc:  # noqa: BLE001 — REPL UI boundary: render server errors inline
-        host.output(Text.from_markup(f"  [bold red]Fork failed: {exc}[/]"))
+        host.output(Text.from_markup(f"  [bold red]Falha na bifurcação: {exc}[/]"))
         return
 
     new_id = result["id"]
@@ -5520,13 +5540,13 @@ async def _cmd_fork(
 
     host.output(
         Text.from_markup(
-            f"  [{fmt.muted}]Conversation forked. "
-            f"To return to the previous conversation, run /switch {current_id}[/{fmt.muted}]"
+            f"  [{fmt.muted}]Conversa bifurcada. "
+            f"Para voltar à conversa anterior, rode /switch {current_id}[/{fmt.muted}]"
         )
     )
 
 
-@_cmd("/history", "Show current conversation history")
+@_cmd("/history", "Mostra o histórico da conversa atual")
 async def _cmd_history(
     arg: str,  # noqa: ARG001 — dispatch-contract params
     session: Session,
@@ -5555,11 +5575,11 @@ async def _cmd_history(
                     call_id_to_tool_metadata=call_id_to_tool_metadata,
                 )
         except Exception as exc:  # noqa: BLE001 — REPL UI boundary: surface server errors inline
-            host.output(Text.from_markup(f"  [bold red]Error: {exc}[/]"))
+            host.output(Text.from_markup(f"  [bold red]Erro: {exc}[/]"))
         return
 
     if not session.current_response_id:
-        host.output(Text.from_markup(f"  [{fmt.muted}]No active conversation.[/{fmt.muted}]"))
+        host.output(Text.from_markup(f"  [{fmt.muted}]Nenhuma conversa ativa.[/{fmt.muted}]"))
         return
     try:
         resp = await client.responses.get(session.current_response_id)
@@ -5574,9 +5594,9 @@ async def _cmd_history(
                     call_id_to_tool_metadata=call_id_to_tool_metadata,
                 )
         else:
-            host.output(Text.from_markup(f"  [{fmt.muted}]No conversation.[/{fmt.muted}]"))
+            host.output(Text.from_markup(f"  [{fmt.muted}]Nenhuma conversa.[/{fmt.muted}]"))
     except Exception as exc:  # noqa: BLE001 — REPL UI boundary: render network/server errors as inline text so the REPL stays responsive instead of crashing
-        host.output(Text.from_markup(f"  [bold red]Error: {exc}[/]"))
+        host.output(Text.from_markup(f"  [bold red]Erro: {exc}[/]"))
 
 
 # Coin bar rendering constants for /context.
@@ -5741,7 +5761,7 @@ async def _refresh_session_metadata(
         host.set_model_name(_humanize_agent_name(new_name))
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]Agent switched: {_humanize_agent_name(old_name)} → "
+                f"  [{fmt.muted}]Agente trocado: {_humanize_agent_name(old_name)} → "
                 f"{_humanize_agent_name(new_name)}[/{fmt.muted}]"
             )
         )
@@ -5825,18 +5845,18 @@ def _render_context_tree(
     else:
         header_label = f"[{fmt.accent}]{display_name}[/{fmt.accent}]"
 
-    tree = Tree(Text.from_markup(f"Context Usage · {header_label}"))
+    tree = Tree(Text.from_markup(f"Uso de contexto · {header_label}"))
 
     if context_window is None:
         tree.add(
             Text.from_markup(
-                f"[{fmt.muted}]Context window size unknown — "
-                f"will be detected on first overflow[/{fmt.muted}]"
+                f"[{fmt.muted}]Tamanho da janela de contexto desconhecido — "
+                f"será detectado no primeiro estouro[/{fmt.muted}]"
             )
         )
         tree.add(
             Text.from_markup(
-                f"[{fmt.accent}]Messages[/{fmt.accent}]"
+                f"[{fmt.accent}]Mensagens[/{fmt.accent}]"
                 f"  [{fmt.muted}]{message_tokens:,} tokens[/{fmt.muted}]"
             )
         )
@@ -5874,27 +5894,27 @@ def _render_context_tree(
     )
     tree.add(
         Text.from_markup(
-            f"{_CONTEXT_COIN_USED} [{fmt.accent}]Messages[/{fmt.accent}]"
+            f"{_CONTEXT_COIN_USED} [{fmt.accent}]Mensagens[/{fmt.accent}]"
             f"  [{fmt.muted}]{message_tokens:,} tokens ({used_pct:.0f}%)[/{fmt.muted}]"
         )
     )
     tree.add(
         Text.from_markup(
-            f"{_CONTEXT_COIN_FREE} [{fmt.muted}]Free space[/{fmt.muted}]"
+            f"{_CONTEXT_COIN_FREE} [{fmt.muted}]Espaço livre[/{fmt.muted}]"
             f"  [{fmt.muted}]{free_tokens:,} tokens"
             f" ({max(0.0, (1.0 - used_frac - buf_frac)) * 100:.0f}%)[/{fmt.muted}]"
         )
     )
     tree.add(
         Text.from_markup(
-            f"{_CONTEXT_COIN_BUF} [{fmt.muted}]Compaction buffer[/{fmt.muted}]"
+            f"{_CONTEXT_COIN_BUF} [{fmt.muted}]Buffer de compactação[/{fmt.muted}]"
             f"  [{fmt.muted}]{buf_tokens:,} tokens ({buf_frac * 100:.0f}%)[/{fmt.muted}]"
         )
     )
     host.output(tree)
 
 
-@_cmd("/compact", "Compact conversation context now")
+@_cmd("/compact", "Compacta o contexto da conversa agora")
 async def _cmd_compact(
     arg: str,  # noqa: ARG001 — dispatch-contract params
     session: Session,
@@ -5908,17 +5928,15 @@ async def _cmd_compact(
     if session.is_streaming:
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]Cannot compact while a response is running; "
-                f"use /cancel or wait for it to finish.[/{fmt.muted}]"
+                f"  [{fmt.muted}]Não é possível compactar enquanto uma resposta está em "
+                f"execução; use /cancel ou aguarde ela terminar.[/{fmt.muted}]"
             )
         )
         return
     compact = getattr(session, "compact", None)
     if not callable(compact):
         host.output(
-            Text.from_markup(
-                f"  [{fmt.muted}]This connection does not support /compact.[/{fmt.muted}]"
-            )
+            Text.from_markup(f"  [{fmt.muted}]Esta conexão não suporta /compact.[/{fmt.muted}]")
         )
         return
     # Progress messages ("Compacting…" / "Compaction complete.") arrive
@@ -5930,10 +5948,10 @@ async def _cmd_compact(
         if inspect.isawaitable(result):
             await result
     except Exception as exc:  # noqa: BLE001 — REPL boundary: keep prompt alive
-        host.output(Text.from_markup(f"  [bold red]Compaction failed: {exc}[/]"))
+        host.output(Text.from_markup(f"  [bold red]Falha na compactação: {exc}[/]"))
 
 
-@_cmd("/context", "Show context window usage")
+@_cmd("/context", "Mostra o uso da janela de contexto")
 async def _cmd_context(
     arg: str,  # noqa: ARG001 — dispatch-contract params
     session: Session,
@@ -5985,7 +6003,9 @@ async def _cmd_context(
     else:
         result = await _fetch_context_items(session, client)
         if result.error is not None:
-            host.output(Text.from_markup(f"  [bold red]Error fetching history: {result.error}[/]"))
+            host.output(
+                Text.from_markup(f"  [bold red]Erro ao buscar o histórico: {result.error}[/]")
+            )
             return
         # count_tokens falls back to cl100k_base when agent_name isn't a
         # recognised LLM identifier — good enough for an estimate.
@@ -5997,7 +6017,7 @@ async def _cmd_context(
     _render_context_tree(agent_name, llm_model, message_tokens, context_window, host, fmt)
 
 
-@_cmd("/cancel", "Cancel the current response")
+@_cmd("/cancel", "Cancela a resposta atual")
 async def _cmd_cancel(
     arg: str,  # noqa: ARG001 — dispatch-contract params
     session: Session,
@@ -6009,7 +6029,7 @@ async def _cmd_cancel(
 
     resp = await session.cancel()
     if resp:
-        host.output(Text.from_markup(f"  [{fmt.warning}]Cancelled {resp.id}[/{fmt.warning}]"))
+        host.output(Text.from_markup(f"  [{fmt.warning}]Cancelado {resp.id}[/{fmt.warning}]"))
 
 
 def _build_github_issue_url(
@@ -6072,7 +6092,7 @@ def _build_github_issue_url(
     )
 
 
-@_cmd("/logs", "Collect current session logs into a zip")
+@_cmd("/logs", "Junta os logs da sessão atual em um zip")
 async def _cmd_logs(
     arg: str,
     session: Session,
@@ -6121,23 +6141,23 @@ async def _cmd_logs(
             _log.exception("Session transcript write failed for /logs")
             host.output(
                 Text.from_markup(
-                    f"  [{fmt.muted}]Could not write session transcript "
-                    f"({type(exc).__name__}: {exc}); bundling available logs.[/{fmt.muted}]"
+                    f"  [{fmt.muted}]Não foi possível gravar a transcrição da sessão "
+                    f"({type(exc).__name__}: {exc}); empacotando os logs.[/{fmt.muted}]"
                 )
             )
 
     path, count = write_logs_zip(output_path, log_paths=log_paths, session_id=session_id)
-    conversation_label = session_id or "(none yet)"
+    conversation_label = session_id or "(nenhuma ainda)"
     host.output(
         Text.from_markup(
-            f"  [{fmt.muted}]Collected {count} current-session log file"
-            f"{'s' if count != 1 else ''} into {path}\n"
-            f"  Conversation ID: {conversation_label}[/{fmt.muted}]"
+            f"  [{fmt.muted}]Coletado(s) {count} arquivo(s) de log da sessão atual "
+            f"em {path}\n"
+            f"  ID da conversa: {conversation_label}[/{fmt.muted}]"
         )
     )
 
 
-@_cmd("/report", "Open a pre-filled GitHub issue for this session")
+@_cmd("/report", "Abre uma issue no GitHub pré-preenchida para esta sessão")
 async def _cmd_report(
     arg: str,
     session: Session,
@@ -6171,19 +6191,19 @@ async def _cmd_report(
     opened = webbrowser.open(url)
     if opened:
         host.output(
-            Text.from_markup(f"  [{fmt.muted}]Opening GitHub issue in browser…[/{fmt.muted}]")
+            Text.from_markup(f"  [{fmt.muted}]Abrindo a issue no navegador…[/{fmt.muted}]")
         )
     else:
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]Could not open browser. "
-                f"Copy this URL to file an issue:[/{fmt.muted}]"
+                f"  [{fmt.muted}]Não foi possível abrir o navegador. "
+                f"Copie esta URL para abrir uma issue:[/{fmt.muted}]"
             )
         )
         host.output(Text(f"  {url}"))
 
 
-@_cmd("/quit", "Exit")
+@_cmd("/quit", "Sai")
 async def _cmd_quit(
     arg: str,  # noqa: ARG001 — dispatch-contract params
     session: Session,  # noqa: ARG001
@@ -6854,10 +6874,10 @@ async def _open_terminal_in_tmux(
         import sys as _sys
 
         print(
-            "\nCan't open attach: not running inside tmux. "
-            "Copy the Attach command from the panel and run it "
-            "in a separate terminal, or start your REPL inside "
-            "tmux to enable the O / R hotkeys.\n",
+            "\nNão é possível abrir o attach: não está rodando dentro do tmux. "
+            "Copie o comando Attach do painel e rode-o "
+            "em um terminal separado, ou inicie o REPL dentro "
+            "do tmux para habilitar as teclas O / R.\n",
             file=_sys.stderr,
         )
         return
@@ -6875,7 +6895,7 @@ async def _open_terminal_in_tmux(
         import sys as _sys
 
         print(
-            f"\nCan't open attach for {target.label}: items fetch failed.\n",
+            f"\nNão é possível abrir o attach para {target.label}: falha ao buscar os itens.\n",
             file=_sys.stderr,
         )
         return
@@ -6889,8 +6909,8 @@ async def _open_terminal_in_tmux(
         import sys as _sys
 
         print(
-            f"\nCan't open attach for {target.label}: terminal is no longer "
-            f"live (closed since the sidebar was built).\n",
+            f"\nNão é possível abrir o attach para {target.label}: o terminal não está "
+            f"mais ativo (fechado desde que a barra lateral foi montada).\n",
             file=_sys.stderr,
         )
         return
@@ -6907,12 +6927,12 @@ async def _open_terminal_in_tmux(
     # opens just to error and close).
     if not _tmux_session_alive(info.socket, info.target):
         print(
-            f"\nCan't open attach for {target.label}: tmux session is gone "
-            f"(user likely exited the shell on a previous attach, killing "
-            f"the agent's pane → window → session → tmux server). The "
-            f"sidebar still shows it as live because no sys_terminal_close "
-            f"tool call was recorded. Ask the agent to launch a new "
-            f"terminal, or close + relaunch the conversation.\n",
+            f"\nNão é possível abrir o attach para {target.label}: a sessão tmux "
+            f"não existe mais (o usuário provavelmente saiu do shell em um attach "
+            f"anterior, encerrando o painel → janela → sessão → servidor tmux do "
+            f"agente). A barra lateral ainda a mostra como ativa porque nenhuma "
+            f"chamada sys_terminal_close foi registrada. Peça ao agente para abrir "
+            f"um novo terminal, ou feche + reabra a conversa.\n",
             file=_sys.stderr,
         )
         return
@@ -6935,8 +6955,8 @@ async def _open_terminal_in_tmux(
         )
     except (FileNotFoundError, _subprocess.CalledProcessError, _subprocess.TimeoutExpired):
         print(
-            f"\nCan't open attach for {target.label}: tmux new-window failed. "
-            f"Run manually: {inner}\n",
+            f"\nNão é possível abrir o attach para {target.label}: o tmux new-window "
+            f"falhou. Rode manualmente: {inner}\n",
             file=_sys.stderr,
         )
 
@@ -7012,7 +7032,7 @@ async def _build_terminal_overview(
     parts.append(Text.from_markup(f"[bold]Terminal: {target.label}[/bold]"))
     parts.append(
         Text.from_markup(
-            f"  [{fmt.muted}]Owner conversation[/{fmt.muted}]: {conv_id}",
+            f"  [{fmt.muted}]Conversa dona[/{fmt.muted}]: {conv_id}",
         ),
     )
 
@@ -7030,7 +7050,7 @@ async def _build_terminal_overview(
     except Exception as exc:  # noqa: BLE001 — overlay content builder: any items-fetch error surfaces as a diagnostic line; the panel still renders
         parts.append(
             Text.from_markup(
-                f"  [{fmt.error}]Failed to fetch conversation items: "
+                f"  [{fmt.error}]Falha ao buscar os itens da conversa: "
                 f"{type(exc).__name__}: {exc}[/{fmt.error}]",
             ),
         )
@@ -7049,15 +7069,15 @@ async def _build_terminal_overview(
         parts.append(
             Text.from_markup(
                 f"  [{fmt.muted}]Status[/{fmt.muted}]: "
-                f"[{fmt.error}]not found in conversation history[/{fmt.error}]",
+                f"[{fmt.error}]não encontrado no histórico da conversa[/{fmt.error}]",
             ),
         )
         parts.append(Text(""))
         parts.append(
             Text.from_markup(
-                f"[{fmt.muted}]The terminal may have been closed, or this "
-                f"sidebar entry is stale. Reopen the overlay (Esc, then "
-                f"Ctrl+O) to refresh.[/{fmt.muted}]",
+                f"[{fmt.muted}]O terminal pode ter sido fechado, ou este "
+                f"item da barra lateral está desatualizado. Reabra a sobreposição "
+                f"(Esc, depois Ctrl+O) para atualizar.[/{fmt.muted}]",
             ),
         )
         return Group(*parts)
@@ -7075,9 +7095,9 @@ async def _build_terminal_overview(
     # not the agent's last-known state.
     is_alive = _tmux_session_alive(info.socket, info.target)
     if is_alive:
-        status_markup = f"[{fmt.success}]live[/{fmt.success}]"
+        status_markup = f"[{fmt.success}]ativo[/{fmt.success}]"
     else:
-        status_markup = f"[{fmt.error}]dead[/{fmt.error}]"
+        status_markup = f"[{fmt.error}]inativo[/{fmt.error}]"
     parts.append(
         Text.from_markup(
             f"  [{fmt.muted}]Status[/{fmt.muted}]: {status_markup}",
@@ -7097,17 +7117,17 @@ async def _build_terminal_overview(
     parts.append(Text(""))
     if is_alive:
         snapshot = _tmux_pane_snapshot(info.socket, info.target)
-        parts.append(Text.from_markup(f"[{fmt.muted}]Screen snapshot[/{fmt.muted}]:"))
+        parts.append(Text.from_markup(f"[{fmt.muted}]Captura da tela[/{fmt.muted}]:"))
         if snapshot is None:
             parts.append(
                 Text.from_markup(
-                    f"  [{fmt.error}]unavailable (tmux capture-pane failed)[/{fmt.error}]",
+                    f"  [{fmt.error}]indisponível (tmux capture-pane falhou)[/{fmt.error}]",
                 ),
             )
         elif not snapshot.strip():
             parts.append(
                 Text.from_markup(
-                    f"  [{fmt.muted}](empty terminal screen)[/{fmt.muted}]",
+                    f"  [{fmt.muted}](tela do terminal vazia)[/{fmt.muted}]",
                 ),
             )
         else:
@@ -7116,23 +7136,23 @@ async def _build_terminal_overview(
         parts.append(Text(""))
         parts.append(
             Text.from_markup(
-                f"[{fmt.muted}]Press [/{fmt.muted}]"
+                f"[{fmt.muted}]Pressione [/{fmt.muted}]"
                 f"[{fmt.accent}]O[/{fmt.accent}]"
-                f"[{fmt.muted}] to attach in a new tmux window, "
-                f"or [/{fmt.muted}]"
+                f"[{fmt.muted}] para anexar em uma nova janela tmux, "
+                f"ou [/{fmt.muted}]"
                 f"[{fmt.accent}]R[/{fmt.accent}]"
-                f"[{fmt.muted}] to attach read-only. You can also "
-                f"copy the Attach command above and run it manually.[/{fmt.muted}]",
+                f"[{fmt.muted}] para anexar em somente leitura. Você também pode "
+                f"copiar o comando Attach acima e rodá-lo manualmente.[/{fmt.muted}]",
             ),
         )
     else:
         parts.append(
             Text.from_markup(
-                f"[{fmt.muted}]The agent's tmux session is gone (e.g. the "
-                f"shell exited on a previous attach, killing the pane). The "
-                f"agent doesn't know — no ``sys_terminal_close`` was "
-                f"recorded — so the sidebar still shows the row. Ask the "
-                f"agent to launch a new terminal to recover.[/{fmt.muted}]",
+                f"[{fmt.muted}]A sessão tmux do agente não existe mais (ex.: o "
+                f"shell foi encerrado em um attach anterior, matando o painel). O "
+                f"agente não sabe — nenhum ``sys_terminal_close`` foi "
+                f"registrado — então a barra lateral ainda mostra a linha. Peça ao "
+                f"agente para abrir um novo terminal para recuperar.[/{fmt.muted}]",
             ),
         )
     return Group(*parts)
@@ -7385,57 +7405,57 @@ async def _build_debug_overview(
 
     parts: list[RenderableType] = []
     header = target.label if target is not None else "main"
-    parts.append(Text.from_markup(f"[bold]Session: {header}[/bold]"))
+    parts.append(Text.from_markup(f"[bold]Sessão: {header}[/bold]"))
     parts.append(
         Text.from_markup(
-            f"  [{fmt.muted}]Session ID[/{fmt.muted}]: {conv_id or '(no conversation yet)'}",
+            f"  [{fmt.muted}]ID da sessão[/{fmt.muted}]: {conv_id or '(nenhuma conversa ainda)'}",
         ),
     )
     if is_main:
         parts.append(
             Text.from_markup(
-                f"  [{fmt.muted}]Agent[/{fmt.muted}]: {agent_name}",
+                f"  [{fmt.muted}]Agente[/{fmt.muted}]: {agent_name}",
             ),
         )
         parts.append(
             Text.from_markup(
-                f"  [{fmt.muted}]Model[/{fmt.muted}]: {session.model}",
+                f"  [{fmt.muted}]Modelo[/{fmt.muted}]: {session.model}",
             ),
         )
         parts.append(
             Text.from_markup(
-                f"  [{fmt.muted}]Response[/{fmt.muted}]: {response_id or '(none yet)'}",
+                f"  [{fmt.muted}]Resposta[/{fmt.muted}]: {response_id or '(nenhuma ainda)'}",
             ),
         )
         if server_log_path is not None:
             parts.append(
                 Text.from_markup(
-                    f"  [{fmt.muted}]Server log[/{fmt.muted}]: {server_log_path}",
+                    f"  [{fmt.muted}]Log do servidor[/{fmt.muted}]: {server_log_path}",
                 ),
             )
         if runner_log_path is not None:
             parts.append(
                 Text.from_markup(
-                    f"  [{fmt.muted}]Runner log[/{fmt.muted}]: {runner_log_path}",
+                    f"  [{fmt.muted}]Log do runner[/{fmt.muted}]: {runner_log_path}",
                 ),
             )
         if event_log_path is not None:
             parts.append(
                 Text.from_markup(
-                    f"  [{fmt.muted}]Event log[/{fmt.muted}]: {event_log_path}",
+                    f"  [{fmt.muted}]Log de eventos[/{fmt.muted}]: {event_log_path}",
                 ),
             )
         if cli_log_path is not None:
             parts.append(
                 Text.from_markup(
-                    f"  [{fmt.muted}]CLI log[/{fmt.muted}]: {cli_log_path}",
+                    f"  [{fmt.muted}]Log do CLI[/{fmt.muted}]: {cli_log_path}",
                 ),
             )
 
     if resolve_error is not None:
         parts.append(
             Text.from_markup(
-                f"  [{fmt.error}]Failed to resolve conversation: {resolve_error}[/{fmt.error}]",
+                f"  [{fmt.error}]Falha ao resolver a conversa: {resolve_error}[/{fmt.error}]",
             ),
         )
 
@@ -7443,7 +7463,8 @@ async def _build_debug_overview(
         parts.append(Text(""))
         parts.append(
             Text.from_markup(
-                f"[{fmt.muted}]No conversation yet. Send a message to start one.[/{fmt.muted}]",
+                f"[{fmt.muted}]Nenhuma conversa ainda. Envie uma mensagem "
+                f"para iniciar uma.[/{fmt.muted}]",
             ),
         )
         return Group(*parts)
@@ -7473,7 +7494,7 @@ async def _build_debug_overview(
     if items_error is not None:
         parts.append(
             Text.from_markup(
-                f"\n[{fmt.error}]Failed to fetch conversation items: {items_error}[/{fmt.error}]",
+                f"\n[{fmt.error}]Falha ao buscar itens da conversa: {items_error}[/{fmt.error}]",
             ),
         )
         return Group(*parts)
@@ -7486,19 +7507,21 @@ async def _build_debug_overview(
     if labels_error is not None:
         parts.append(
             Text.from_markup(
-                f"  [{fmt.error}]Labels fetch failed: {labels_error}[/{fmt.error}]",
+                f"  [{fmt.error}]Falha ao buscar os rótulos: {labels_error}[/{fmt.error}]",
             ),
         )
     else:
-        rendered = ", ".join(f"{k}={v}" for k, v in sorted(labels.items())) if labels else "(none)"
-        parts.append(Text.from_markup(f"  [{fmt.muted}]Labels[/{fmt.muted}]: {rendered}"))
-    parts.append(Text.from_markup(f"  [{fmt.muted}]Messages[/{fmt.muted}]: {len(items)}"))
+        rendered = (
+            ", ".join(f"{k}={v}" for k, v in sorted(labels.items())) if labels else "(nenhum)"
+        )
+        parts.append(Text.from_markup(f"  [{fmt.muted}]Rótulos[/{fmt.muted}]: {rendered}"))
+    parts.append(Text.from_markup(f"  [{fmt.muted}]Mensagens[/{fmt.muted}]: {len(items)}"))
     parts.append(Text(""))
 
     if not items:
         parts.append(
             Text.from_markup(
-                f"[{fmt.muted}](no messages yet)[/{fmt.muted}]",
+                f"[{fmt.muted}](nenhuma mensagem ainda)[/{fmt.muted}]",
             ),
         )
         return Group(*parts)
@@ -7573,7 +7596,7 @@ def _render_overview_event(
             # A missing name means the item is malformed; render
             # the event so scroll context isn't lost, but flag
             # the missing field explicitly.
-            name = "(missing name)"
+            name = "(nome ausente)"
         lines: list[RenderableType] = [
             Text.from_markup(
                 f"[{fmt.accent}][{idx}][/{fmt.accent}] "
@@ -7592,9 +7615,9 @@ def _render_overview_event(
         # that case — ``(missing call_id)`` tells the reader the
         # item couldn't be correlated to its request.
         if isinstance(call_id, str):
-            name = call_id_to_name.get(call_id) or "(unknown)"
+            name = call_id_to_name.get(call_id) or "(desconhecido)"
         else:
-            name = "(missing call_id)"
+            name = "(call_id ausente)"
         lines = [
             Text.from_markup(
                 f"[{fmt.accent}][{idx}][/{fmt.accent}] "
@@ -7635,7 +7658,7 @@ def _render_overview_event(
         return lines
     # Unknown item type — surface it rather than silently dropping,
     # so new server-side types become visible instead of invisible.
-    label = itype if isinstance(itype, str) and itype else "(unknown)"
+    label = itype if isinstance(itype, str) and itype else "(desconhecido)"
     return [
         Text.from_markup(
             f"[{fmt.accent}][{idx}][/{fmt.accent}] [bold]type[/bold]={label}",
@@ -8233,15 +8256,16 @@ def register_skill_commands(skills: list[SkillSpec]) -> list[str]:
             ) -> None:
                 send_skill = getattr(session, "send_skill_slash_command", None)
                 if not callable(send_skill):
-                    raise RuntimeError("Skill slash commands require the sessions API adapter")
+                    raise RuntimeError(
+                        "Comandos de barra de skill requerem o adaptador da Sessions API"
+                    )
                 if arg:
                     host.output(Text.from_markup(f"  [{fmt.muted}]/{sk.name}[/{fmt.muted}]"))
                     host.output(Text.from_markup(""))
                     host.output(fmt.user_message(arg))
                 else:
-                    host.output(
-                        Text.from_markup(f"  [{fmt.muted}]Loading skill {sk.name}…[/{fmt.muted}]")
-                    )
+                    _loading = f"  [{fmt.muted}]Carregando skill {sk.name}…[/{fmt.muted}]"
+                    host.output(Text.from_markup(_loading))
                 host.start_timer()
                 await asyncio.sleep(0)
                 async for _ in send_skill(sk.name, arg):
@@ -8492,7 +8516,7 @@ async def _run_bang_command(
     except OSError as exc:
         host.output(
             _RText.from_markup(
-                f"   [{fmt.warning}]! could not run: {escape(str(exc))}[/{fmt.warning}]"
+                f"   [{fmt.warning}]! não pôde executar: {escape(str(exc))}[/{fmt.warning}]"
             ),
         )
         return f"$ {cmd}\n(command could not be started: {exc})"
@@ -8520,7 +8544,7 @@ async def _run_bang_command(
     if overflow_path:
         host.output(
             _RText.from_markup(
-                f"   [{fmt.muted}]full output: {escape(overflow_path)}[/{fmt.muted}]"
+                f"   [{fmt.muted}]saída completa: {escape(overflow_path)}[/{fmt.muted}]"
             )
         )
 
@@ -8528,13 +8552,13 @@ async def _run_bang_command(
         secs = int(_BANG_TIMEOUT_S)
         host.output(
             _RText.from_markup(
-                f"   [{fmt.warning}]⏱ killed after {secs}s (timeout)[/{fmt.warning}]"
+                f"   [{fmt.warning}]⏱ encerrado após {secs}s (timeout)[/{fmt.warning}]"
             )
         )
         status = f"timed out and was killed after {secs}s"
     else:
         style = fmt.muted if code == 0 else fmt.warning
-        host.output(_RText.from_markup(f"   [{style}]exit {code} · {elapsed:.1f}s[/{style}]"))
+        host.output(_RText.from_markup(f"   [{style}]saída {code} · {elapsed:.1f}s[/{style}]"))
         status = f"exit: {code}"
     return _build_bang_context(cmd, stdout, stderr, status, overflow_path)
 
@@ -8572,10 +8596,10 @@ async def handle_slash_command(
             # render failures inline instead of letting asyncio log an
             # unretrieved task exception.
             _log.exception("Slash command failed: %s", cmd)
-            host.output(Text(f"  Error: {exc}", style="bold red"))
+            host.output(Text(f"  Erro: {exc}", style="bold red"))
     else:
         host.output(
             Text.from_markup(
-                f"  [{fmt.muted}]Unknown command: {cmd} · /help for list[/{fmt.muted}]"
+                f"  [{fmt.muted}]Comando desconhecido: {cmd} · /help para a lista[/{fmt.muted}]"
             )
         )

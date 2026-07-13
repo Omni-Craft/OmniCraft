@@ -158,7 +158,7 @@ async def test_context_no_model_override_shows_fallback(
     )
     output = host.text
     # Fallback hint must be present — tells the user why no bar is shown.
-    assert "Context window size unknown" in output
+    assert "Tamanho da janela de contexto desconhecido" in output
     # A token count must still appear even on the fallback path.
     assert "tokens" in output
     # Coin bar characters must NOT appear — no bar without a known window.
@@ -202,9 +202,9 @@ async def test_context_coin_bar_low_usage(monkeypatch: pytest.MonkeyPatch) -> No
     assert "100k" in output
     assert "10%" in output
     # Per-category breakdown rows
-    assert "Messages" in output
-    assert "Free space" in output
-    assert "Compaction buffer" in output
+    assert "Mensagens" in output
+    assert "Espaço livre" in output
+    assert "Buffer de compactação" in output
 
 
 @pytest.mark.asyncio

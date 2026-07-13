@@ -62,26 +62,26 @@ def test_build_preview_respects_width() -> None:
 def test_render_theme_picker_contains_menu_items() -> None:
     """Rendered picker shows both dark and light options."""
     rendered = _render_theme_picker(0, width=60)
-    assert "dark mode" in rendered
-    assert "light mode" in rendered
+    assert "modo escuro" in rendered
+    assert "modo claro" in rendered
 
 
 def test_render_theme_picker_highlights_selected_dark() -> None:
     """When dark (index 0) is selected, its indicator is present."""
     rendered = _render_theme_picker(0, width=60)
-    assert "❯ dark mode" in rendered
+    assert "❯ modo escuro" in rendered
 
 
 def test_render_theme_picker_highlights_selected_light() -> None:
     """When light (index 1) is selected, its indicator is present."""
     rendered = _render_theme_picker(1, width=60)
-    assert "❯ light mode" in rendered
+    assert "❯ modo claro" in rendered
 
 
 def test_render_theme_picker_shows_footer_hints() -> None:
     """Footer shows navigation hints."""
     rendered = _render_theme_picker(0, width=60)
-    assert "navigate" in rendered
+    assert "navegar" in rendered
     assert "Enter" in rendered
 
 
@@ -90,9 +90,9 @@ def test_render_theme_picker_shows_preview_for_selected_only() -> None:
     rendered_dark = _render_theme_picker(0, width=60)
     rendered_light = _render_theme_picker(1, width=60)
     # Dark selection shows "dark preview"
-    assert "dark" in rendered_dark.lower()
+    assert "escuro" in rendered_dark.lower()
     # Light selection shows "light preview"
-    assert "light" in rendered_light.lower()
+    assert "claro" in rendered_light.lower()
 
 
 # ── OSC 11 parsing ────────────────────────────────────────────
@@ -169,7 +169,7 @@ def test_build_theme_confirmation_dark() -> None:
     text = build_theme_confirmation(DARK_THEME)
     plain = text.plain
     assert "dark" in plain
-    assert "mode (saved)" in plain
+    assert "modo (salvo)" in plain
 
 
 def test_build_theme_confirmation_light() -> None:
@@ -177,7 +177,7 @@ def test_build_theme_confirmation_light() -> None:
     text = build_theme_confirmation(LIGHT_THEME)
     plain = text.plain
     assert "light" in plain
-    assert "mode (saved)" in plain
+    assert "modo (salvo)" in plain
 
 
 # ── Startup picker (non-tty fallback) ────────────────────────

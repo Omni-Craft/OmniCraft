@@ -306,7 +306,7 @@ class EventTape:
             produced nothing.
         """
         if not items:
-            entry.formatter_result = "[] empty"
+            entry.formatter_result = "[] vazio"
             entry.formatted_items = []
         else:
             summaries = [_summarize_formatted_item(it) for it in items]
@@ -424,7 +424,7 @@ def build_tape_detail(
         idx = int(target_key)
         entry = entries[idx]
     except (ValueError, IndexError):
-        parts.append(Text.from_markup("[dim]No event selected.[/dim]"))
+        parts.append(Text.from_markup("[dim]Nenhum evento selecionado.[/dim]"))
         return Group(*parts)
 
     # ── 1. Header ───────────────────────────────────────────────
@@ -435,7 +435,7 @@ def build_tape_detail(
 
     parts.append(
         Text.from_markup(
-            f"[bold]Event [{idx + 1}][/bold]  [{color}]{entry.raw_event_type}[/{color}]"
+            f"[bold]Evento [{idx + 1}][/bold]  [{color}]{entry.raw_event_type}[/{color}]"
         )
     )
     parts.append(Text(""))
@@ -443,15 +443,15 @@ def build_tape_detail(
     # ── 2. Pipeline journey ─────────────────────────────────────
     delta_str = f"+{entry.delta_ms:.1f}ms" if entry.delta_ms > 0 else "+0ms"
     gap_flag = "  ⚠ GAP" if entry.delta_ms >= _GAP_THRESHOLD_MS else ""
-    parts.append(Text.from_markup(f"  [{muted}]Time[/{muted}]: {wall}  {delta_str}{gap_flag}"))
-    parts.append(Text.from_markup(f"  [{muted}]Path[/{muted}]: {entry.path}"))
+    parts.append(Text.from_markup(f"  [{muted}]Hora[/{muted}]: {wall}  {delta_str}{gap_flag}"))
+    parts.append(Text.from_markup(f"  [{muted}]Caminho[/{muted}]: {entry.path}"))
     parts.append(
-        Text.from_markup(f"  [{muted}]Stage[/{muted}]: [{color}]{entry.stage_reached}[/{color}]")
+        Text.from_markup(f"  [{muted}]Estágio[/{muted}]: [{color}]{entry.stage_reached}[/{color}]")
     )
     parts.append(Text(""))
 
     # Translation
-    parts.append(Text.from_markup(f"  [{accent}]Translation[/{accent}]"))
+    parts.append(Text.from_markup(f"  [{accent}]Tradução[/{accent}]"))
     if entry.sdk_translation is not None:
         tx_color = "red" if entry.sdk_translation == "None (dropped)" else "green"
         parts.append(
@@ -460,15 +460,15 @@ def build_tape_detail(
             )
         )
     else:
-        parts.append(Text.from_markup(f"    [{muted}](not yet translated)[/{muted}]"))
+        parts.append(Text.from_markup(f"    [{muted}](ainda não traduzido)[/{muted}]"))
     parts.append(Text(""))
 
     # Formatter summary
-    parts.append(Text.from_markup(f"  [{accent}]Formatter Output[/{accent}]"))
+    parts.append(Text.from_markup(f"  [{accent}]Saída do formatador[/{accent}]"))
     if entry.formatter_result is not None:
         parts.append(Text.from_markup(f"    {entry.formatter_result}"))
     else:
-        parts.append(Text.from_markup(f"    [{muted}](no output)[/{muted}]"))
+        parts.append(Text.from_markup(f"    [{muted}](sem saída)[/{muted}]"))
     parts.append(Text(""))
 
     # Rendered output — show what the TUI actually displays.
@@ -476,32 +476,32 @@ def build_tape_detail(
     # Console capture so the user sees the same output the REPL
     # would produce. This is the primary debugging surface for
     # "why does this event look wrong on screen?"
-    parts.append(Text.from_markup(f"  [{accent}]Rendered As[/{accent}]"))
+    parts.append(Text.from_markup(f"  [{accent}]Renderizado como[/{accent}]"))
     if entry.formatted_items:
         rendered_preview = _render_formatted_items(entry.formatted_items)
         if rendered_preview:
             for rl in rendered_preview.splitlines():
                 parts.append(Text.from_markup(f"    [{muted}]│[/{muted}] {_escape_markup(rl)}"))
         else:
-            parts.append(Text.from_markup(f"    [{muted}](empty render)[/{muted}]"))
+            parts.append(Text.from_markup(f"    [{muted}](renderização vazia)[/{muted}]"))
     elif entry.stage_reached == Stage.RENDERED:
         # Rendered via _render_history_item (no formatter items stored).
         parts.append(
             Text.from_markup(
-                f"    [{muted}](rendered via _render_history_item — "
-                f"no formatter capture)[/{muted}]"
+                f"    [{muted}](renderizado via _render_history_item — "
+                f"sem captura do formatador)[/{muted}]"
             )
         )
     else:
         if entry.sdk_translation == "None (dropped)":
-            reason = "dropped at translation"
+            reason = "descartado na tradução"
         else:
-            reason = "formatter produced nothing"
-        parts.append(Text.from_markup(f"    [red]✗ not rendered — {reason}[/red]"))
+            reason = "formatador não produziu nada"
+        parts.append(Text.from_markup(f"    [red]✗ não renderizado — {reason}[/red]"))
     parts.append(Text(""))
 
     # ── 3. Raw JSON payload ─────────────────────────────────────
-    parts.append(Text.from_markup(f"  [{accent}]Raw Event Payload[/{accent}]"))
+    parts.append(Text.from_markup(f"  [{accent}]Payload bruto do evento[/{accent}]"))
     if entry.raw_payload is not None:
         # Use generous limits for the detail panel — this is the
         # primary inspection surface.
@@ -509,14 +509,14 @@ def build_tape_detail(
         for pl_line in payload_str.splitlines():
             parts.append(Text.from_markup(f"    [{muted}]{_escape_markup(pl_line)}[/{muted}]"))
     else:
-        parts.append(Text.from_markup(f"    [{muted}](payload not captured)[/{muted}]"))
+        parts.append(Text.from_markup(f"    [{muted}](payload não capturado)[/{muted}]"))
     parts.append(Text(""))
 
     # ── 4. Summary footer ───────────────────────────────────────
     counters = tape.counters
     parts.append(
         Text.from_markup(
-            f"  [{muted}]Pipeline totals: "
+            f"  [{muted}]Totais do pipeline: "
             f"ev:{counters.raw} tx:{counters.translated} "
             f"fmt:{counters.formatted} out:{counters.rendered}[/{muted}]"
         )
@@ -573,7 +573,7 @@ def _render_formatted_items(items: list[object]) -> str:
             if rendered.strip():
                 lines.append(rendered)
         except Exception:  # noqa: BLE001 — best-effort preview
-            lines.append(f"<{type(item).__name__}: render failed>")
+            lines.append(f"<{type(item).__name__}: falha na renderização>")
 
     return "\n".join(lines)
 
@@ -610,7 +610,7 @@ def _format_payload_detail(payload: dict[str, object]) -> str:
     lines = raw.splitlines()
     if len(lines) > _DETAIL_PAYLOAD_MAX_LINES:
         overflow = len(lines) - _DETAIL_PAYLOAD_MAX_LINES
-        lines = [*lines[:_DETAIL_PAYLOAD_MAX_LINES], f"  ... ({overflow} more lines)"]
+        lines = [*lines[:_DETAIL_PAYLOAD_MAX_LINES], f"  ... ({overflow} mais linhas)"]
     return "\n".join(lines)
 
 
@@ -693,7 +693,7 @@ def _format_payload(payload: dict[str, object]) -> str:
     lines = raw.splitlines()
     if len(lines) > _PAYLOAD_MAX_LINES:
         overflow = len(lines) - _PAYLOAD_MAX_LINES
-        lines = [*lines[:_PAYLOAD_MAX_LINES], f"  ... ({overflow} more lines)"]
+        lines = [*lines[:_PAYLOAD_MAX_LINES], f"  ... ({overflow} mais linhas)"]
     return "\n".join(lines)
 
 

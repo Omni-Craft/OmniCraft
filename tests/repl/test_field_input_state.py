@@ -243,14 +243,14 @@ def test_prompt_required_empty_reprompts_then_accepts() -> None:
     schema = {"properties": {"name": {"type": "string"}}, "required": ["name"]}
     result, host = _run(_drive_prompt(schema, ["", "bob"]))
     assert result == {"name": "bob"}
-    assert "required" in _outputs_text(host)
+    assert "obrigatório" in _outputs_text(host)
 
 
 def test_prompt_invalid_integer_reprompts() -> None:
     schema = {"properties": {"age": {"type": "integer"}}, "required": ["age"]}
     result, host = _run(_drive_prompt(schema, ["abc", "7"]))
     assert result == {"age": 7}
-    assert "whole number" in _outputs_text(host)
+    assert "número inteiro" in _outputs_text(host)
 
 
 def test_prompt_enum_rejects_then_accepts() -> None:
@@ -260,7 +260,7 @@ def test_prompt_enum_rejects_then_accepts() -> None:
     }
     result, host = _run(_drive_prompt(schema, ["maybe", "yes"]))
     assert result == {"choice": "yes"}
-    assert "choose one of" in _outputs_text(host)
+    assert "escolha uma de" in _outputs_text(host)
 
 
 def test_prompt_one_of_const_rejects_then_accepts() -> None:

@@ -296,7 +296,7 @@ def test_update_format_empty_list() -> None:
 
     tape.update_format(entry, [])
 
-    assert entry.formatter_result == "[] empty"
+    assert entry.formatter_result == "[] vazio"
     # Stage must NOT advance past TRANSLATED for empty output.
     assert entry.stage_reached == Stage.TRANSLATED
     assert tape.counters.formatted == 0, (
@@ -462,7 +462,7 @@ def test_build_tape_detail_shows_pipeline_journey() -> None:
     assert "_FakeStreamingText(2 chars)" in text
     # "Rendered As" section should show the actual text content
     # that host.output() received — "hi" from the StreamingText.
-    assert "Rendered As" in text
+    assert "Renderizado como" in text
     assert "hi" in text
 
 
@@ -513,7 +513,7 @@ def test_build_tape_detail_dropped_event() -> None:
     # Should show the dropped translation.
     assert "None (dropped)" in text
     # Should show the "not rendered" status.
-    assert "not rendered" in text
+    assert "não renderizado" in text
 
 
 def test_build_tape_detail_invalid_key() -> None:
@@ -528,7 +528,7 @@ def test_build_tape_detail_invalid_key() -> None:
     with console.capture() as capture:
         console.print(renderable)
     text = capture.get()
-    assert "No event selected" in text
+    assert "Nenhum evento selecionado" in text
 
 
 # ── open_event_log ─────────────────────────────────────────────────────
@@ -767,7 +767,7 @@ def test_format_payload_caps_line_count() -> None:
     lines = result.splitlines()
     # Should be capped (12 lines + 1 "... more lines" line = 13).
     assert len(lines) <= 14, f"Expected <= 14 lines after capping, got {len(lines)}."
-    assert "more lines" in lines[-1]
+    assert "mais linhas" in lines[-1]
 
 
 # ── record_raw captures payload ────────────────────────────────────────
@@ -813,7 +813,7 @@ def test_build_tape_detail_shows_payload() -> None:
         f"Expected the event's JSON payload to appear in the detail panel. Got: {text[:300]}"
     )
     # The "Raw Event Payload" section header should be present.
-    assert "Raw Event Payload" in text
+    assert "Payload bruto do evento" in text
 
 
 # ── JSONL log includes payload ─────────────────────────────────────────

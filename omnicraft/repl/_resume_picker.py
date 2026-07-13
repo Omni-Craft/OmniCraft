@@ -685,11 +685,11 @@ def _append_prompt_toolkit_header(
     last_index = page_start + page_len
     fragments.extend(
         [
-            ("class:accent", "Resume"),
+            ("class:accent", "Retomar"),
             ("class:muted", "  ·  "),
             ("class:title", state.agent_name),
-            ("class:muted", f"  · page {page_no}/{page_count}, "),
-            ("class:muted", f"showing {page_start + 1}-{last_index} of {total}\n"),
+            ("class:muted", f"  · página {page_no}/{page_count}, "),
+            ("class:muted", f"exibindo {page_start + 1}-{last_index} de {total}\n"),
         ]
     )
 
@@ -728,7 +728,7 @@ def _append_prompt_toolkit_item(
             [
                 ("class:accent-bold", "> "),
                 ("class:accent-bold", f"{absolute_index + 1}. "),
-                (title_style, conv.title or "(untitled)"),
+                (title_style, conv.title or "(sem título)"),
                 ("", "\n"),
             ]
         )
@@ -738,7 +738,7 @@ def _append_prompt_toolkit_item(
             [
                 ("", "  "),
                 ("class:muted", f"{absolute_index + 1}. "),
-                (title_style, conv.title or "(untitled)"),
+                (title_style, conv.title or "(sem título)"),
                 ("", "\n"),
             ]
         )
@@ -837,21 +837,21 @@ def _append_prompt_toolkit_footer(fragments: list[tuple[str, str]]) -> None:
     """
     fragments.extend(
         [
-            ("class:muted", "  Keys:  "),
+            ("class:muted", "  Teclas:  "),
             ("class:accent-bold", "↑"),
             ("class:muted", "/"),
             ("class:accent-bold", "↓"),
-            ("class:muted", " move  ·  "),
+            ("class:muted", " mover  ·  "),
             ("class:accent-bold", "Enter"),
-            ("class:muted", " resume  ·  "),
+            ("class:muted", " retomar  ·  "),
             ("class:accent-bold", "n"),
             ("class:muted", "/"),
             ("class:accent-bold", "p"),
-            ("class:muted", " page  ·  "),
+            ("class:muted", " página  ·  "),
             ("class:accent-bold", "q"),
             ("class:muted", "/"),
             ("class:accent-bold", "Esc"),
-            ("class:muted", " cancel\n"),
+            ("class:muted", " cancelar\n"),
         ]
     )
 
@@ -961,7 +961,7 @@ async def pick_conversation_cross_agent_from_sdk(
     # empty string.
     return pick_conversation(
         convos,
-        agent_name="all runtimes",
+        agent_name="todos os runtimes",
         previews=previews,
         show_runtime=True,
         out=out,
@@ -1091,9 +1091,9 @@ def _page_header_text(
     page_count = max(1, (total + _PAGE_SIZE - 1) // _PAGE_SIZE)
     last_index = page_start + page_len
     return Text.from_markup(
-        f"[{_ACCENT}]Resume[/]  [{_MUTED}]·[/]  [bold]{_escape_for_markup(agent_name)}[/]"
-        f"  [{_MUTED}]· page {page_no}/{page_count}, "
-        f"showing {page_start + 1}-{last_index} of {total}[/]"
+        f"[{_ACCENT}]Retomar[/]  [{_MUTED}]·[/]  [bold]{_escape_for_markup(agent_name)}[/]"
+        f"  [{_MUTED}]· página {page_no}/{page_count}, "
+        f"exibindo {page_start + 1}-{last_index} de {total}[/]"
     )
 
 
@@ -1151,12 +1151,12 @@ def _list_item_title(conv: _ConversationRow, *, absolute_index: int, selected: b
         text.append("> ", style=f"bold {_ACCENT}")
         text.append(f"{absolute_index + 1}. ", style=f"bold {_ACCENT}")
         title_style = f"bold {_ACCENT}" if conv.title else f"bold {_MUTED}"
-        text.append(conv.title or "(untitled)", style=title_style)
+        text.append(conv.title or "(sem título)", style=title_style)
         return text
 
     text.append("  ")
     text.append(f"{absolute_index + 1}. ", style=_MUTED)
-    text.append(conv.title or "(untitled)", style=None if conv.title else _MUTED)
+    text.append(conv.title or "(sem título)", style=None if conv.title else _MUTED)
     return text
 
 
@@ -1233,14 +1233,14 @@ def _print_page_footer(console: Any) -> None:
 
     console.print(
         Text.from_markup(
-            f"  [{_MUTED}]Keys:[/]  "
-            f"[bold {_ACCENT}]↑[/]/[bold {_ACCENT}]↓[/] move  "
+            f"  [{_MUTED}]Teclas:[/]  "
+            f"[bold {_ACCENT}]↑[/]/[bold {_ACCENT}]↓[/] mover  "
             f"[{_MUTED}]·[/]  "
-            f"[bold {_ACCENT}]Enter[/] resume  "
+            f"[bold {_ACCENT}]Enter[/] retomar  "
             f"[{_MUTED}]·[/]  "
-            f"[bold {_ACCENT}]n[/]/[bold {_ACCENT}]p[/] page  "
+            f"[bold {_ACCENT}]n[/]/[bold {_ACCENT}]p[/] página  "
             f"[{_MUTED}]·[/]  "
-            f"[bold {_ACCENT}]q[/]/[bold {_ACCENT}]Esc[/] cancel"
+            f"[bold {_ACCENT}]q[/]/[bold {_ACCENT}]Esc[/] cancelar"
         )
     )
     console.print()
@@ -1264,7 +1264,8 @@ def _print_empty(agent_name: str, out: IO[str]) -> None:
     console = _make_console(out)
     console.print(
         Text.from_markup(
-            f"  [{_MUTED}]No prior conversations for agent[/] [bold]{agent_name}[/][{_MUTED}].[/]"
+            f"  [{_MUTED}]Nenhuma conversa anterior para o agente[/] "
+            f"[bold]{agent_name}[/][{_MUTED}].[/]"
         )
     )
 
@@ -1281,7 +1282,9 @@ def _print_invalid(out: IO[str]) -> None:
     from rich.text import Text
 
     console = _make_console(out)
-    console.print(Text.from_markup(f"  [{_ACCENT}]Invalid selection.[/]  [{_MUTED}]Try again.[/]"))
+    console.print(
+        Text.from_markup(f"  [{_ACCENT}]Seleção inválida.[/]  [{_MUTED}]Tente de novo.[/]")
+    )
 
 
 def _make_console(out: IO[str]) -> Any:
@@ -1635,13 +1638,13 @@ def _format_when(created_at: int) -> str:
     now = int(time.time())
     delta = now - created_at
     if delta < 60:
-        return "just now"
+        return "agora"
     if delta < 3600:
-        return f"{delta // 60}m ago"
+        return f"há {delta // 60}min"
     if delta < 86400:
-        return f"{delta // 3600}h ago"
+        return f"há {delta // 3600}h"
     if delta < 7 * 86400:
-        return f"{delta // 86400}d ago"
+        return f"há {delta // 86400}d"
     return datetime.fromtimestamp(created_at).strftime("%b %d %H:%M")
 
 

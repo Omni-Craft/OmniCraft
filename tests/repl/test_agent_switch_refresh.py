@@ -177,7 +177,7 @@ async def test_refresh_updates_name_toolbar_and_metadata_on_switch() -> None:
     assert len(host.outputs) == 1
     notice = host.outputs[0]
     assert isinstance(notice, Text)
-    assert "Agent switched: nessie → claude native ui" in notice.plain
+    assert "Agente trocado: nessie → claude native ui" in notice.plain
     # The rest of the snapshot hydrated too — the context ring resizes
     # from nessie's window to claude-native's 200k.
     assert adapter.context_window == 200_000

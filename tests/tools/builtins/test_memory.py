@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -17,6 +18,10 @@ def _isolate(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
 
 def _ctx(agent_id: str) -> ToolContext:
     return ToolContext(task_id="t", agent_id=agent_id, conversation_id="c1")
+
+
+def _ws_ctx(agent_id: str, workspace: Path) -> ToolContext:
+    return ToolContext(task_id="t", agent_id=agent_id, conversation_id="c1", workspace=workspace)
 
 
 def test_remember_and_recall() -> None:
@@ -84,3 +89,41 @@ def test_memory_is_scoped_per_project(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime, "get_conversation_store", lambda: _FakeStore("proj-a"))
     out = rec.invoke("{}", _ctx("ag_chat"))
     assert "projeto A" in out and "projeto B" not in out
+
+
+def test_memory_uses_project_folder_when_workspace_set(tmp_path: Path) -> None:
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    rem, rec = MemoryRememberTool(), MemoryRecallTool()
+    ctx = _ws_ctx("ag_code", ws)
+    rem.invoke('{"text": "fato no projeto"}', ctx)
+    # Memory lands in the project's .omnicraft/ folder, not the global store.
+    assert (ws / ".omnicraft" / "memory" / "memory.json").exists()
+    assert (ws / ".omnicraft" / "README.md").exists()
+    assert "fato no projeto" in rec.invoke("{}", ctx)
+
+
+def test_project_memory_is_isolated_per_workspace(tmp_path: Path) -> None:
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    rem, rec = MemoryRememberTool(), MemoryRecallTool()
+    rem.invoke('{"text": "só no A"}', _ws_ctx("ag_code", a))
+    assert rec.invoke("{}", _ws_ctx("ag_code", b)) == "Nenhuma memória encontrada."
+    assert "só no A" in rec.invoke("{}", _ws_ctx("ag_code", a))
+
+
+def test_project_store_migrates_the_global_bank(tmp_path: Path) -> None:
+    rem, rec = MemoryRememberTool(), MemoryRecallTool()
+    # A fact saved earlier with no workspace goes to the global store.
+    rem.invoke('{"text": "memória antiga global"}', _ctx("ag_code"))
+    # The same agent now runs in a workspace: recall still sees it (fallback),
+    # and the first project write migrates it into the project folder.
+    ws = tmp_path / "proj"
+    ws.mkdir()
+    ws_ctx = _ws_ctx("ag_code", ws)
+    assert "memória antiga global" in rec.invoke("{}", ws_ctx)
+    rem.invoke('{"text": "memória nova do projeto"}', ws_ctx)
+    out = rec.invoke("{}", ws_ctx)
+    assert "memória antiga global" in out and "memória nova do projeto" in out
+    assert (ws / ".omnicraft" / "memory" / "memory.json").exists()

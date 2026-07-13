@@ -1,8 +1,11 @@
 """Built-in local long-term memory — no external service, no API key.
 
-A tiny file-backed memory the conversational Chat agent uses to remember durable
-facts across sessions. Memories are keyed by the agent id (so every run of the
-same agent shares one bank), stored as JSON under the OmniCraft config home. No
+A tiny file-backed memory an agent uses to remember durable facts across
+sessions. When the agent runs in a workspace (Code/Craftwork), memory lives in
+a **project** folder — ``<workspace>/.omnicraft/memory/memory.json`` — so it
+travels with the repo (portable, versionable, shareable). When there is no
+filesystem workspace (the no-FS Chat agent, tests), it falls back to a global
+store under the OmniCraft config home, keyed per agent and project. No
 dependency and no key, so it boots clean — unlike the Hindsight builtins.
 """
 
@@ -23,55 +26,45 @@ from omnicraft.tools.base import Tool, ToolContext
 
 _lock = threading.Lock()
 _MAX_PER_BANK = 500
+_PROJECT_LABEL = "omni_project"
+
+_README = """\
+# .omnicraft/
+
+Pasta de projeto do OmniCraft (análoga ao `.claude/`). Guarda dados que devem
+viajar com este repositório.
+
+- `memory/memory.json` — memória de longo prazo dos agentes que trabalham neste
+  projeto. Versione junto com o código para compartilhar com o time, ou
+  adicione ao `.gitignore` se preferir mantê-la pessoal.
+"""
 
 
-def _path() -> Path:
+def _global_path() -> Path:
     override = os.environ.get("OMNICRAFT_CONFIG_HOME")
     base = Path(override) if override else Path.home() / ".omnicraft"
     base.mkdir(parents=True, exist_ok=True)
     return base / "agent_memory.json"
 
 
-def _load() -> dict[str, list[dict[str, Any]]]:
+def _project_file(ctx: ToolContext) -> Path | None:
+    """The project's ``.omnicraft/memory/memory.json`` path, or ``None`` when
+    there is no usable filesystem workspace (the no-FS Chat agent, tests)."""
+    ws = getattr(ctx, "workspace", None)
+    if not ws:
+        return None
     try:
-        with _path().open(encoding="utf-8") as fh:
-            data = json.load(fh)
-        if isinstance(data, dict):
-            return {k: v for k, v in data.items() if isinstance(v, list)}
-    except (FileNotFoundError, json.JSONDecodeError, OSError):
-        pass
-    return {}
-
-
-def _save(data: dict[str, list[dict[str, Any]]]) -> None:
-    # Write-then-rename so a crash mid-write never corrupts the store.
-    path = _path()
-    with tempfile.NamedTemporaryFile(
-        "w", encoding="utf-8", dir=path.parent, suffix=".tmp", delete=False
-    ) as fh:
-        json.dump(data, fh)
-        tmp = fh.name
-    os.replace(tmp, path)
-
-
-@contextmanager
-def _file_lock():
-    """OS-level lock so concurrent server/runner processes don't lose writes."""
-    lock_path = Path(f"{_path()}.lock")
-    with lock_path.open("a") as fh:
-        fcntl.flock(fh, fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(fh, fcntl.LOCK_UN)
-
-
-_PROJECT_LABEL = "omni_project"
+        base = Path(ws)
+    except (TypeError, ValueError):
+        return None
+    if not base.is_dir():
+        return None
+    return base / ".omnicraft" / "memory" / "memory.json"
 
 
 def _bank_key(ctx: ToolContext) -> str:
-    """Memory bank key: per-agent, further scoped by project when the session
-    is filed under one (so each project keeps its own memory)."""
+    """Global-store bank key: per-agent, further scoped by project label when the
+    session is filed under one (so each project keeps its own memory)."""
     base = ctx.agent_id or ctx.conversation_id or "default"
     project = None
     if ctx.conversation_id:
@@ -86,20 +79,89 @@ def _bank_key(ctx: ToolContext) -> str:
     return f"{base}::{project}" if project else base
 
 
+def _project_key(ctx: ToolContext) -> str:
+    """Bank key WITHIN a project store — the file is already project-scoped, so
+    only the agent id is needed (multiple agents keep separate banks)."""
+    return ctx.agent_id or ctx.conversation_id or "default"
+
+
+def _load(path: Path) -> dict[str, list[dict[str, Any]]]:
+    try:
+        with path.open(encoding="utf-8") as fh:
+            data = json.load(fh)
+        if isinstance(data, dict):
+            return {k: v for k, v in data.items() if isinstance(v, list)}
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass
+    return {}
+
+
+def _save(path: Path, data: dict[str, list[dict[str, Any]]]) -> None:
+    # Write-then-rename so a crash mid-write never corrupts the store.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        "w", encoding="utf-8", dir=path.parent, suffix=".tmp", delete=False
+    ) as fh:
+        json.dump(data, fh)
+        tmp = fh.name
+    os.replace(tmp, path)
+
+
+@contextmanager
+def _file_lock(path: Path):
+    """OS-level lock so concurrent server/runner processes don't lose writes."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = Path(f"{path}.lock")
+    with lock_path.open("a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
+def _seed_project_from_global(ctx: ToolContext, proj_file: Path) -> None:
+    """First time a project store is written, migrate the matching global bank
+    into it so existing memory isn't lost. Copies (leaves the global as a
+    backup); once the project file exists it becomes the source of truth."""
+    if proj_file.exists():
+        return
+    with _file_lock(_global_path()):
+        seed = list(_load(_global_path()).get(_bank_key(ctx), []))
+    proj_file.parent.mkdir(parents=True, exist_ok=True)
+    (proj_file.parent.parent / "README.md").write_text(_README, encoding="utf-8")
+    with _file_lock(proj_file):
+        if not proj_file.exists():
+            _save(proj_file, {_project_key(ctx): seed} if seed else {})
+
+
 def remember(ctx: ToolContext, text: str) -> dict[str, Any]:
     entry = {"id": secrets.token_hex(6), "at": int(time.time()), "text": text.strip()}
-    with _lock, _file_lock():
-        data = _load()
-        bank = data.setdefault(_bank_key(ctx), [])
+    proj = _project_file(ctx)
+    if proj is not None:
+        _seed_project_from_global(ctx, proj)
+        path, key = proj, _project_key(ctx)
+    else:
+        path, key = _global_path(), _bank_key(ctx)
+    with _lock, _file_lock(path):
+        data = _load(path)
+        bank = data.setdefault(key, [])
         bank.append(entry)
         del bank[:-_MAX_PER_BANK]
-        _save(data)
+        _save(path, data)
     return entry
 
 
 def recall(ctx: ToolContext, query: str | None, limit: int) -> list[dict[str, Any]]:
-    with _lock, _file_lock():
-        bank = list(_load().get(_bank_key(ctx), []))
+    proj = _project_file(ctx)
+    if proj is not None and proj.exists():
+        path, key = proj, _project_key(ctx)
+    else:
+        # No project store yet (or no workspace): read the global bank so recall
+        # works before the first project write migrates it.
+        path, key = _global_path(), _bank_key(ctx)
+    with _lock, _file_lock(path):
+        bank = list(_load(path).get(key, []))
     if query:
         q = query.lower()
         bank = [m for m in bank if q in str(m.get("text", "")).lower()]

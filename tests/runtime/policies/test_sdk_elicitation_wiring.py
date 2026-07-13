@@ -753,7 +753,7 @@ async def test_repl_always_caches_and_auto_approves() -> None:
     assert state.pending is True
     # Find the banner in the first-elicitation outputs.
     first_texts = [getattr(o, "plain", str(o)) for o in host.outputs]
-    assert any("approval required" in t for t in first_texts), (
+    assert any("aprovação necessária" in t for t in first_texts), (
         "First elicitation must render the banner"
     )
     outputs_before_always = len(host.outputs)
@@ -785,10 +785,10 @@ async def test_repl_always_caches_and_auto_approves() -> None:
     # second elicitation.
     second_outputs = host.outputs[outputs_before_always:]
     second_texts = [getattr(o, "plain", str(o)) for o in second_outputs]
-    assert all("approval required" not in t for t in second_texts), (
+    assert all("aprovação necessária" not in t for t in second_texts), (
         f"Second elicitation rendered a banner despite auto-approval cache:\n{second_texts}"
     )
-    assert any("auto-approved" in t for t in second_texts), (
+    assert any("aprovado automaticamente" in t for t in second_texts), (
         f"Auto-approve path must print an audit line:\n{second_texts}"
     )
 

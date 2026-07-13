@@ -20,6 +20,65 @@ from omnicraft.stores import ArtifactStore, FileStore
 
 _logger = logging.getLogger(__name__)
 
+# Attached images are downscaled/recompressed before being inlined: providers
+# resize to ~1568px on the long edge anyway, so extra pixels buy nothing —
+# while the raw base64 of a multi-MB screenshot costs MILLIONS of tokens in
+# any layer that counts it as text (observed live: one 3.4MB reference JPEG
+# pushed a request to ~4.3M tokens and the turn was rejected).
+_IMAGE_MAX_EDGE_PX = 1568
+_IMAGE_SHRINK_THRESHOLD_BYTES = 250 * 1024
+_IMAGE_JPEG_QUALITY = 85
+# Formats we never touch: animated/vector content would lose semantics.
+_IMAGE_SHRINK_SKIP_TYPES: frozenset[str] = frozenset({"image/gif", "image/svg+xml"})
+
+
+def _shrink_image_for_model(content_bytes: bytes, content_type: str) -> tuple[bytes, str]:
+    """
+    Downscale/recompress an attached image for prompt inlining.
+
+    Returns the (possibly original) bytes and their content type. The
+    original passes through untouched when the image is already small,
+    when the format is animated/vector, when Pillow is unavailable, or
+    when re-encoding fails or doesn't actually shrink it.
+
+    :param content_bytes: Raw image bytes as uploaded, e.g. a 3.4MB JPEG.
+    :param content_type: The stored MIME type, e.g. ``"image/jpeg"``.
+    :returns: Tuple of ``(bytes, content_type)`` — recompressed JPEG when
+        shrinking helped, otherwise the originals.
+    """
+    if content_type in _IMAGE_SHRINK_SKIP_TYPES:
+        return content_bytes, content_type
+    if len(content_bytes) <= _IMAGE_SHRINK_THRESHOLD_BYTES:
+        return content_bytes, content_type
+    try:
+        import io
+
+        from PIL import Image
+    except ImportError:
+        return content_bytes, content_type
+    try:
+        with Image.open(io.BytesIO(content_bytes)) as img:
+            img.load()
+            # JPEG has no alpha; flatten transparency onto white.
+            if img.mode not in ("RGB", "L"):
+                img = img.convert("RGB")
+            if max(img.size) > _IMAGE_MAX_EDGE_PX:
+                img.thumbnail((_IMAGE_MAX_EDGE_PX, _IMAGE_MAX_EDGE_PX))
+            out = io.BytesIO()
+            img.save(out, format="JPEG", quality=_IMAGE_JPEG_QUALITY, optimize=True)
+    except Exception:
+        return content_bytes, content_type
+    shrunk = out.getvalue()
+    if len(shrunk) >= len(content_bytes):
+        return content_bytes, content_type
+    _logger.info(
+        "attachment image downscaled for prompt inlining: %d -> %d bytes",
+        len(content_bytes),
+        len(shrunk),
+    )
+    return shrunk, "image/jpeg"
+
+
 # Extensions that Python's mimetypes module doesn't always know,
 # depending on the platform and Python version. Used as a fallback
 # when the stored content_type is missing or generic. LLM providers
@@ -437,23 +496,37 @@ def _resolve_file_id_block(
             f"it may have been deleted after the request was accepted"
         )
 
+    content_type = _resolve_content_type(file_meta.content_type, file_meta.filename)
+    block_type = block.get("type")
+
     # Use cached base64 if available; otherwise fetch, encode, and cache.
+    # Images are downscaled/recompressed before encoding (see
+    # :func:`_shrink_image_for_model`); when that changes the media type,
+    # the override rides the cache under ``"<file_id>:media"`` so a cache
+    # hit rebuilds the same data URI.
     if cache is not None and file_id in cache:
         encoded = cache[file_id]
+        media_override = cache.get(f"{file_id}:media")
     else:
         content_bytes = artifact_store.get(file_id)
+        media_override = None
+        if block_type == "input_image":
+            shrunk_bytes, shrunk_type = _shrink_image_for_model(content_bytes, content_type)
+            if shrunk_bytes is not content_bytes:
+                content_bytes = shrunk_bytes
+                if shrunk_type != content_type:
+                    media_override = shrunk_type
         encoded = base64.b64encode(content_bytes).decode("ascii")
         if cache is not None:
             cache[file_id] = encoded
+            if media_override is not None:
+                cache[f"{file_id}:media"] = media_override
 
     # Copy all fields except file_id.
     resolved: dict[str, Any] = {k: v for k, v in block.items() if k != "file_id"}
 
-    content_type = _resolve_content_type(file_meta.content_type, file_meta.filename)
-
-    block_type = block.get("type")
     if block_type == "input_image":
-        resolved["image_url"] = f"data:{content_type};base64,{encoded}"
+        resolved["image_url"] = f"data:{media_override or content_type};base64,{encoded}"
     else:
         # input_file and any future type: inline as file_data.
         # Uses a data: URI so providers (OpenAI, etc.) can parse

@@ -41,6 +41,10 @@ dependencies = [
     # bytes; pin below 15 until upstream fixes the regression (see issue #1514).
     "websockets>=10.4,<15",
     "httpx>=0.27,<1",
+    # Downscale/recompress attached images before inlining them into model
+    # prompts (omnicraft/runtime/content_resolver.py) — a raw multi-MB
+    # screenshot otherwise costs millions of tokens.
+    "pillow>=10,<13",
     # Web Push (VAPID) delivery for closed-app approval notifications.
     "pywebpush>=1.14,<3",
     "ftfy>=6.0",

@@ -1071,3 +1071,53 @@ def test_client_server_attachment_extension_parity() -> None:
         if not server_accepts(f"file{ext}", mime)
     ]
     assert not rejected, f"client accepts but server would 415: {rejected}"
+
+
+def test_large_image_is_downscaled_before_inlining(file_store, artifact_store) -> None:
+    """A multi-MB attachment must not be inlined verbatim.
+
+    Regression: a 3.4MB reference JPEG entered the prompt as raw base64 and
+    the request blew past the model's token limit ("Prompt is too long",
+    ~1.15M tokens for that one image). Large images are downscaled to the
+    provider's effective ceiling (~1568px) and recompressed before encoding.
+    """
+    pytest.importorskip("PIL")
+    import io
+    import os as _os
+
+    from PIL import Image
+
+    # Noise doesn't compress — guarantees a multi-MB source like a real photo.
+    big = Image.frombytes("RGB", (1800, 2400), _os.urandom(1800 * 2400 * 3))
+    buf = io.BytesIO()
+    big.save(buf, format="PNG")
+    raw = buf.getvalue()
+    assert len(raw) > 250 * 1024  # above the shrink threshold
+
+    file_store.files["file_big"] = StoredFile(
+        id="file_big",
+        filename="ref.png",
+        content_type="image/png",
+        bytes=0,
+        created_at=1000,
+    )
+    artifact_store.blobs["file_big"] = raw
+
+    item = _make_conversation_item([{"type": "input_image", "file_id": "file_big"}])
+    (resolved,) = resolve_content_references([item], file_store, artifact_store, None)
+    url = resolved.data.content[0]["image_url"]
+    assert url.startswith("data:image/jpeg;base64,")
+    payload = url.split(",", 1)[1]
+    shrunk = base64.b64decode(payload)
+    assert len(shrunk) < len(raw) // 4  # dramatically smaller
+    with Image.open(io.BytesIO(shrunk)) as img:
+        assert max(img.size) <= 1568
+
+
+def test_small_image_passes_through_untouched(file_store, artifact_store) -> None:
+    """Small images are inlined verbatim — no recompression, type preserved."""
+    item = _make_conversation_item([{"type": "input_image", "file_id": "file_img"}])
+    (resolved,) = resolve_content_references([item], file_store, artifact_store, None)
+    url = resolved.data.content[0]["image_url"]
+    expected = base64.b64encode(PNG_BYTES).decode("ascii")
+    assert url == f"data:image/png;base64,{expected}"

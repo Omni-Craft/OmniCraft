@@ -43,6 +43,30 @@ def test_recall_query_filters() -> None:
     assert rec.invoke('{"query": "swift"}', ctx) == "- trabalha com Swift"
 
 
+def test_recall_matches_loose_multiword_queries() -> None:
+    """An LLM queries with several loose keywords that never appear verbatim.
+
+    Regression: whole-substring matching made "rodar testes test command" miss
+    "Os testes deste projeto rodam com make check" — recall must match on ANY
+    token instead.
+    """
+    rem, rec = MemoryRememberTool(), MemoryRecallTool()
+    ctx = _ctx("ag_fucho")
+    rem.invoke('{"text": "Os testes deste projeto rodam com make check"}', ctx)
+    rem.invoke('{"text": "gosta de café"}', ctx)
+    out = rec.invoke('{"query": "rodar testes test command"}', ctx)
+    assert "make check" in out
+    assert "café" not in out
+    # Cross-language drift: an English query still hits via the 4-char stem
+    # ("tests" → "test" ⊂ "testes").
+    out_en = rec.invoke('{"query": "how to run tests"}', ctx)
+    assert "make check" in out_en
+    # A query matching nothing falls back to recent memories instead of an
+    # authoritative-sounding empty result.
+    out_none = rec.invoke('{"query": "zzz qqq www"}', ctx)
+    assert "make check" in out_none and "café" in out_none
+
+
 def test_bank_is_per_agent() -> None:
     rem, rec = MemoryRememberTool(), MemoryRecallTool()
     rem.invoke('{"text": "só do agente A"}', _ctx("ag_a"))
@@ -100,6 +124,10 @@ def test_memory_uses_project_folder_when_workspace_set(tmp_path: Path) -> None:
     # Memory lands in the project's .omnicraft/ folder, not the global store.
     assert (ws / ".omnicraft" / "memory" / "memory.json").exists()
     assert (ws / ".omnicraft" / "README.md").exists()
+    # Lock/tmp artifacts must never reach a commit — a sub-agent `git add -A`
+    # would sweep them into a PR without this gitignore.
+    gi = (ws / ".omnicraft" / "memory" / ".gitignore").read_text(encoding="utf-8")
+    assert "*.lock" in gi and "*.tmp" in gi
     assert "fato no projeto" in rec.invoke("{}", ctx)
 
 

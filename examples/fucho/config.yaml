@@ -260,6 +260,24 @@ prompt: |
   - Do not infer success from git status alone — read the sub-agent's reported
     result and run the test / lint / typecheck gates yourself.
 
+  ## Project memory
+
+  You have long-term memory scoped to the project folder via `memory_recall` /
+  `memory_remember` (stored in `<workspace>/.omnicraft/memory/`, travels with
+  the repo). This is PROJECT memory, not personal-preference memory:
+
+  - At the START of a task in a repo you may have seen before, call
+    `memory_recall` once — prior conventions, decisions, and known pitfalls
+    change how you brief sub-agents.
+  - Remember durable PROJECT facts: build/test commands that work here, coding
+    conventions the review keeps enforcing, architecture decisions the human
+    made, which workers proved unavailable on this machine, and issues
+    cross-review already rejected once (so no sub-agent reintroduces them).
+  - Do NOT remember secrets, transient state (branch names, in-flight task
+    ids), or anything already written in the repo's own docs.
+  - Never commit `.omnicraft/memory/*.lock` — lock/tmp files are gitignored;
+    if a sub-agent's `git add -A` sweeps them in, strip them from the PR.
+
 async: true
 cancellable: true
 timers: true
@@ -295,6 +313,12 @@ terminals:
         type: none
 
 tools:
+  # Local long-term memory, scoped to the project folder when a workspace
+  # exists (<workspace>/.omnicraft/memory/) — conventions, decisions, and
+  # pitfalls that should survive across sessions in the same repo.
+  builtins:
+    - name: memory_remember
+    - name: memory_recall
   # Coding sub-agents — see agents/<name>/. claude_code, codex, opencode,
   # cursor, and hermes are real CLI coding harnesses; pi is a headless
   # multi-model worker. Each implements, reviews (cross-vendor), and explores.

@@ -14,6 +14,7 @@ from __future__ import annotations
 import fcntl
 import json
 import os
+import re
 import secrets
 import tempfile
 import threading
@@ -36,8 +37,20 @@ viajar com este repositório.
 
 - `memory/memory.json` — memória de longo prazo dos agentes que trabalham neste
   projeto. Versione junto com o código para compartilhar com o time, ou
-  adicione ao `.gitignore` se preferir mantê-la pessoal.
+  adicione ao `.gitignore` se preferir mantê-la pessoal. Arquivos de lock e
+  temporários são ignorados via `memory/.gitignore` e nunca devem ser
+  commitados.
+
+Nota: a memória por projeto vale quando o servidor OmniCraft enxerga esta
+pasta (setup local, servidor e host na mesma máquina). Num servidor remoto o
+caminho do workspace não existe lá e a memória cai no armazenamento global
+(`~/.omnicraft/agent_memory.json`) — comportamento seguro, porém sem esta
+pasta.
 """
+
+# Lock/tmp são artefatos de escrita concorrente — nunca devem entrar num commit
+# (um `git add -A` de um sub-agente implementador varreria o .lock para o PR).
+_MEMORY_GITIGNORE = "*.lock\n*.tmp\n"
 
 
 def _global_path() -> Path:
@@ -130,6 +143,7 @@ def _seed_project_from_global(ctx: ToolContext, proj_file: Path) -> None:
         seed = list(_load(_global_path()).get(_bank_key(ctx), []))
     proj_file.parent.mkdir(parents=True, exist_ok=True)
     (proj_file.parent.parent / "README.md").write_text(_README, encoding="utf-8")
+    (proj_file.parent / ".gitignore").write_text(_MEMORY_GITIGNORE, encoding="utf-8")
     with _file_lock(proj_file):
         if not proj_file.exists():
             _save(proj_file, {_project_key(ctx): seed} if seed else {})
@@ -163,9 +177,25 @@ def recall(ctx: ToolContext, query: str | None, limit: int) -> list[dict[str, An
     with _lock, _file_lock(path):
         bank = list(_load(path).get(key, []))
     if query:
-        q = query.lower()
-        bank = [m for m in bank if q in str(m.get("text", "")).lower()]
-    return bank[-limit:][::-1]  # most recent first
+        # Token match, not whole-substring: an LLM queries with several loose
+        # keywords ("rodar testes test command") that never appear verbatim in
+        # any stored fact. A token hits if it appears in the text OR its 4-char
+        # stem does ("tests"→"test" ⊂ "testes"), which absorbs plural/language
+        # drift. Rank by hits; recency breaks ties. If NOTHING matches, fall
+        # back to the recent memories unfiltered — the bank is small and an
+        # authoritative-sounding "nothing found" hides facts the model needs.
+        tokens = [t for t in re.split(r"\W+", query.lower()) if len(t) >= 3]
+        if tokens:
+            scored = []
+            for i, m in enumerate(bank):
+                text = str(m.get("text", "")).lower()
+                score = sum(1 for t in tokens if t in text or t[:4] in text)
+                if score > 0:
+                    scored.append((score, i, m))
+            if scored:
+                scored.sort(key=lambda s: (s[0], s[1]))  # weakest/oldest first
+                bank = [m for _, _, m in scored]
+    return bank[-limit:][::-1]  # best/most recent first
 
 
 class MemoryRememberTool(Tool):

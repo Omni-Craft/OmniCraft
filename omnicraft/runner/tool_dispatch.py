@@ -267,6 +267,12 @@ _WEB_SEARCH_TOOLS = frozenset({"web_search"})
 # falls through to the harness, which has no such tool, and silently no-ops.
 _HINDSIGHT_TOOLS = frozenset({"hindsight_retain", "hindsight_recall", "hindsight_reflect"})
 
+# Local (file-backed) long-term memory builtins. Runner-local like Hindsight,
+# with one extra: the runner threads the session workspace into the ToolContext
+# so memory lands in the project's ``<workspace>/.omnicraft/memory/`` folder
+# (falling back to the global store when there is no workspace).
+_LOCAL_MEMORY_TOOLS = frozenset({"memory_remember", "memory_recall"})
+
 # Priority 5f.2: sys_list_models — runner-local because provider resolution
 # reads the runner host's config/credentials, same as the spawn paths.
 _LIST_MODELS_TOOLS = frozenset({"sys_list_models"})
@@ -347,6 +353,7 @@ _NATIVE_RELAY_BUILTIN_TOOLS = (
     # Memory builtins are relayed to native harnesses too — unlike web_search,
     # native harnesses have no built-in long-term memory of their own.
     | _HINDSIGHT_TOOLS
+    | _LOCAL_MEMORY_TOOLS
 )
 
 
@@ -478,6 +485,7 @@ _ALL_LOCAL_TOOLS = (
     | _WEB_FETCH_TOOLS
     | _WEB_SEARCH_TOOLS
     | _HINDSIGHT_TOOLS
+    | _LOCAL_MEMORY_TOOLS
     | _TIMER_TOOLS
     | _TASK_LIFECYCLE_TOOLS
     | _SKILL_TOOLS
@@ -2636,6 +2644,48 @@ async def _execute_hindsight_tool(
     return await asyncio.to_thread(tool.invoke, json.dumps(args), ctx)
 
 
+async def _execute_local_memory_tool(
+    args: dict[str, Any],
+    *,
+    tool_name: str,
+    conversation_id: str | None = None,
+    task_id: str | None = None,
+    agent_id: str | None = None,
+    runner_workspace: Path | None = None,
+) -> str:
+    """
+    Dispatch a local memory tool call (``memory_remember`` / ``memory_recall``).
+
+    Mirrors :func:`_execute_hindsight_tool`, plus the session workspace: with
+    ``ctx.workspace`` set, memory lives in the project's
+    ``<workspace>/.omnicraft/memory/`` folder (portable, travels with the
+    repo); without one it falls back to the global store.
+
+    :param args: Parsed LLM arguments (``text`` for remember, ``query``/``limit``
+        for recall).
+    :param tool_name: The memory tool name being dispatched.
+    :param conversation_id: Parent session id, threaded into the context.
+    :param task_id: Calling task id, threaded into the context.
+    :param agent_id: Calling agent id — the memory bank key.
+    :param runner_workspace: The session's workspace folder, e.g.
+        ``Path("/Users/alice/myrepo")``. ``None`` falls back to global memory.
+    :returns: The tool's string result, or an error string.
+    """
+    from omnicraft.tools.base import ToolContext
+    from omnicraft.tools.builtins import get_builtin_tool
+
+    tool = get_builtin_tool(tool_name, {})
+    if tool is None:
+        return f"Memory tool {tool_name!r} is not available."
+    ctx = ToolContext(
+        task_id=task_id or tool_name,
+        agent_id=agent_id or tool_name,
+        workspace=runner_workspace,
+        conversation_id=conversation_id,
+    )
+    return await asyncio.to_thread(tool.invoke, json.dumps(args), ctx)
+
+
 def _has_subagent(
     sub_agent_name: str,
     agent_spec: Any | None,
@@ -4457,6 +4507,15 @@ async def execute_tool(
                 conversation_id=conversation_id,
                 task_id=task_id,
                 agent_id=agent_id,
+            )
+        elif tool_name in _LOCAL_MEMORY_TOOLS:
+            output = await _execute_local_memory_tool(
+                args,
+                tool_name=tool_name,
+                conversation_id=conversation_id,
+                task_id=task_id,
+                agent_id=agent_id,
+                runner_workspace=runner_workspace,
             )
         elif tool_name in _TIMER_TOOLS:
             if tool_name == "sys_timer_set":

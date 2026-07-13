@@ -1818,7 +1818,7 @@ def test_cli_accounts_login_happy_path_stores_token(
     )
 
     assert result.exit_code == 0, result.output
-    assert "Logged in as alice" in result.output
+    assert "Login feito como alice" in result.output
     # The store_token side effect lands in ~/.omnicraft/auth_tokens.json.
     assert cli_auth.load_token("http://localhost:8000") == "fake.jwt.token"
 
@@ -1869,7 +1869,7 @@ def test_cli_accounts_login_wrong_password_surfaces_clean_error(
     )
 
     assert result.exit_code != 0
-    assert "Invalid username or password" in result.output
+    assert "Usuário ou senha inválidos" in result.output
     # Generic message — no enumeration leak about whether the
     # username exists.
     assert "username" not in result.output.lower() or "invalid" in result.output.lower()
@@ -1919,7 +1919,7 @@ def test_cli_accounts_login_network_failure_surfaces_clean_error(
     )
 
     assert result.exit_code != 0
-    assert "Could not reach" in result.output
+    assert "Não foi possível acessar" in result.output
 
 
 # ── First-run web setup: POST /auth/setup (first-admin claim) ─────

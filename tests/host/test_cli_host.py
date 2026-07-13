@@ -324,7 +324,7 @@ def test_host_rejects_positional_and_server_option_together(
 
     # Usage errors exit non-zero; the daemon loop must never start.
     assert result.exit_code != 0, f"Expected a usage error, got success. Output: {result.output}"
-    assert "not both" in result.output, (
+    assert "não ambos" in result.output, (
         f"Expected the conflict message mentioning 'not both', got: {result.output}"
     )
     assert runs == [], "run_host_process must not run when the args are rejected"

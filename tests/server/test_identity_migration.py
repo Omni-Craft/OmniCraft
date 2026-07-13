@@ -266,7 +266,7 @@ def test_cli_dry_run_by_default(db_uri: str) -> None:
     assert "alice  ->  alice@example.com" in result.output
     # Surfaces the IdP-email-mismatch reminder so the operator verifies
     # the targets match what their IdP returns before committing.
-    assert "must match the email your IdP returns" in result.output
+    assert "deve corresponder ao email que seu IdP retorna" in result.output
     # No --commit → unchanged.
     assert account_store.get_user("alice") is not None
     assert account_store.get_user("alice@example.com") is None
@@ -283,7 +283,7 @@ def test_cli_commit_applies(db_uri: str) -> None:
     )
 
     assert result.exit_code == 0, result.output
-    assert "COMMITTED" in result.output
+    assert "COMMITADO" in result.output
     assert account_store.get_user("alice") is None
     assert account_store.get_user("alice@example.com") is not None
 
@@ -292,7 +292,7 @@ def test_cli_requires_a_mapping(db_uri: str) -> None:
     """With neither --domain nor --map, the command errors (nothing to do)."""
     result = CliRunner().invoke(cli, ["debug", "migrate-accounts-to-oidc", db_uri])
     assert result.exit_code != 0
-    assert "nothing to migrate" in result.output
+    assert "nada para migrar" in result.output
 
 
 def test_cli_map_overrides_domain(db_uri: str) -> None:

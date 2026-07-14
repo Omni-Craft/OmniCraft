@@ -75,8 +75,25 @@ _SDK_HARNESSES: frozenset[str] = frozenset(
 # ``omnicraft.onboarding.gemini_auth.gemini_login_detected`` and have the patch
 # take effect without this dict caching the old function object.
 _FAMILY_CREDENTIAL_CHECK: dict[str, Callable[[], bool]] = {
-    GEMINI_FAMILY: lambda: _gemini_auth.gemini_login_detected(),
+    GEMINI_FAMILY: lambda: _gemini_credential_present(),
 }
+
+
+def _gemini_credential_present() -> bool:
+    """Return whether agy has a usable Google login on this machine.
+
+    The fast path reads the known credential files. agy ≥ 1.1 stores its
+    OAuth token outside those files (macOS keychain), so when no file
+    carries a token, fall back to the CLI's own status check
+    (``agy models``) — the same live probe onboarding uses — instead of
+    falsely reporting a logged-in machine as unconfigured.
+    """
+    if _gemini_auth.gemini_login_detected():
+        return True
+    from omnicraft.onboarding.harness_install import harness_cli_logged_in
+
+    return harness_cli_logged_in(GEMINI_FAMILY)
+
 
 # CLI-wrapping pi harnesses. Both the bare ``pi`` surface and the native
 # ``pi-native`` wrapper launch the same ``pi`` binary (``canonicalize_harness``

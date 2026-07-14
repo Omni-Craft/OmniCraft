@@ -276,6 +276,27 @@ def test_configured_harness_map_all_true_with_clis(
     assert all(result.values())
 
 
+def test_antigravity_native_falls_back_to_cli_status_check(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A keychain-era agy login (no credential file) still reads configured.
+
+    agy ≥ 1.1 stores its OAuth token outside the known credential files, so
+    when the file check misses, readiness must fall back to the CLI's own
+    ``agy models`` status check instead of reporting a logged-in machine as
+    unconfigured.
+    """
+    import omnicraft.onboarding.gemini_auth as _ga
+
+    _all_clis_installed(monkeypatch)
+    monkeypatch.setattr(_ga, "gemini_login_detected", lambda: False)
+    monkeypatch.setattr(hi, "harness_cli_logged_in", lambda key: key == "gemini")
+    assert harness_is_configured("antigravity-native") is True
+    # And when the CLI also reports no login, it stays gated.
+    monkeypatch.setattr(hi, "harness_cli_logged_in", lambda key: False)
+    assert harness_is_configured("antigravity-native") is False
+
+
 def test_kimi_readiness_keys_off_binary(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

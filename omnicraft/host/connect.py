@@ -13,8 +13,10 @@ import contextlib
 import json
 import logging
 import os
+import signal
 import subprocess
 import sys
+import time
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,6 +26,7 @@ from websockets.exceptions import InvalidStatus, InvalidURI
 
 from omnicraft._platform import WINDOWS_ENV_PASSTHROUGH
 from omnicraft.env_credentials import env_names_with_omnicraft_prefix
+from omnicraft.host import runner_registry
 from omnicraft.host.frames import (
     HARNESS_NOT_CONFIGURED_ERROR_CODE,
     HostCreateDirFrame,
@@ -79,6 +82,7 @@ from omnicraft.onboarding.harness_readiness import (
     harness_is_configured,
 )
 from omnicraft.runner.identity import (
+    RUNNER_ADOPT_SIGNAL,
     RUNNER_ID_ENV_VAR,
     RUNNER_PARENT_PID_ENV_VAR,
     RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR,
@@ -611,18 +615,75 @@ def _paginate_list_dir(
     )
 
 
+class _AdoptedRunner:
+    """Popen-shaped handle for a runner re-adopted after a host restart.
+
+    An adopted runner is NOT a child of this process (its parent host
+    died), so there is no ``Popen`` to poll — liveness is probed with
+    ``os.kill(pid, 0)`` and signals are sent directly. The exit code of
+    an adopted runner is unknowable (init reaps it), so ``poll()``
+    reports ``None`` while alive and ``-1`` once gone; the exit report
+    falls back to the log tail for the cause.
+
+    :param pid: The adopted runner's OS pid.
+    """
+
+    def __init__(self, pid: int) -> None:
+        self.pid = pid
+        self.returncode: int | None = None
+
+    def poll(self) -> int | None:
+        """Return ``None`` while the process is alive, else ``-1``."""
+        if self.returncode is not None:
+            return self.returncode
+        try:
+            os.kill(self.pid, 0)
+        except ProcessLookupError:
+            self.returncode = -1
+            return self.returncode
+        except PermissionError:
+            return None  # alive (EPERM proves existence)
+        return None
+
+    def terminate(self) -> None:
+        """Send SIGTERM; a vanished process is a no-op."""
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(self.pid, signal.SIGTERM)
+
+    def kill(self) -> None:
+        """Send SIGKILL; a vanished process is a no-op."""
+        with contextlib.suppress(ProcessLookupError, PermissionError):
+            os.kill(self.pid, signal.SIGKILL)
+
+    def wait(self, timeout: float | None = None) -> int:
+        """Poll until the process exits or *timeout* elapses.
+
+        :param timeout: Seconds to wait; ``None`` waits indefinitely.
+        :returns: The (synthetic) exit code, ``-1``.
+        :raises subprocess.TimeoutExpired: When still alive at deadline.
+        """
+        deadline = None if timeout is None else time.monotonic() + timeout
+        while self.poll() is None:
+            if deadline is not None and time.monotonic() >= deadline:
+                raise subprocess.TimeoutExpired(cmd=f"adopted-runner-{self.pid}", timeout=timeout)
+            time.sleep(0.2)
+        return self.returncode if self.returncode is not None else -1
+
+
 @dataclass
 class _RunnerHandle:
     """A spawned runner subprocess and where its output lands.
 
-    :param proc: The runner subprocess handle.
+    :param proc: The runner subprocess handle — a real ``Popen`` for
+        runners this host spawned, or an :class:`_AdoptedRunner` for
+        runners re-adopted from a previous host process.
     :param log_path: File capturing the runner's stdout/stderr, e.g.
         ``Path("~/.omnicraft/logs/host-runner/runner-ab12.log")``.
         Read back for diagnostics when the runner dies before
         connecting its tunnel.
     """
 
-    proc: subprocess.Popen[bytes]
+    proc: subprocess.Popen[bytes] | _AdoptedRunner
     log_path: Path
 
 
@@ -873,6 +934,7 @@ class HostProcess:
         dead = [rid for rid, handle in self._runners.items() if handle.proc.poll() is not None]
         for rid in dead:
             self._runners.pop(rid)
+            runner_registry.remove_record(rid)
         return list(self._runners.keys())
 
     def _tunnel_url(self) -> str:
@@ -1133,6 +1195,9 @@ class HostProcess:
             )
 
         self._runners[runner_id] = _RunnerHandle(proc=proc, log_path=log_path)
+        # Persist so a restarted host re-adopts this runner instead of
+        # losing track of it (the runner's own server tunnel survives us).
+        runner_registry.add_record(runner_id, proc.pid, log_path)
         watcher = asyncio.create_task(self._watch_runner(runner_id))
         self._watcher_tasks.add(watcher)
         watcher.add_done_callback(self._watcher_tasks.discard)
@@ -1183,6 +1248,7 @@ class HostProcess:
             except subprocess.TimeoutExpired:
                 handle.proc.kill()
                 handle.proc.wait()
+        runner_registry.remove_record(frame.runner_id)
         _logger.info("Stopped runner %s", frame.runner_id)
         print(
             f"  ↓ Runner stopped: {frame.runner_id}",
@@ -1220,6 +1286,7 @@ class HostProcess:
             # an intentional termination, not a crash to report.
             return
         error = _runner_exit_error(handle.proc.returncode, handle.log_path)
+        runner_registry.remove_record(runner_id)
         _logger.warning("Runner %s died unexpectedly: %s", runner_id, error)
         await self._report_runner_exit(runner_id, error)
 
@@ -1796,6 +1863,18 @@ class HostProcess:
         # OOM the box on a long-blocked run (#1782).
         if _install_child_subreaper():
             _logger.debug("installed PR_SET_CHILD_SUBREAPER; host will reap orphans")
+        # SIGTERM (service manager stop, `pkill`) must run the shutdown
+        # path below — without a handler Python dies mid-flight and the
+        # runners never get the adopt signal, so a routine host restart
+        # would tear down every in-flight session. Cancel the main task
+        # instead; the finally block does the graceful hand-off.
+        main_task = asyncio.current_task()
+        if main_task is not None:
+            with contextlib.suppress(NotImplementedError, RuntimeError, ValueError):
+                asyncio.get_running_loop().add_signal_handler(signal.SIGTERM, main_task.cancel)
+        # Re-adopt runners a previous host process left running: they hold
+        # their own server tunnels, so a host restart must not orphan them.
+        self._adopt_persisted_runners()
         self._reaper_task = asyncio.create_task(
             self._orphan_reaper_loop(), name="host-orphan-reaper"
         )
@@ -1873,27 +1952,64 @@ class HostProcess:
             if self._reaper_task is not None:
                 self._reaper_task.cancel()
                 self._reaper_task = None
-            self._cleanup_runners()
-            # Final drain: _cleanup_runners has just reaped the tracked
-            # runners via Popen, so any of their still-orphaned tool
-            # grandchildren are now reapable and no tracked pid can be stolen.
+            # Runners are deliberately LEFT RUNNING: they hold their own
+            # server tunnels, so sessions survive a host restart. Each gets
+            # the adopt signal (SIGUSR1) so its parent-death watchdog stands
+            # down instead of tearing the runner down when this process
+            # exits. The registry keeps their pids for re-adoption by the
+            # next host; the server's idle reaper bounds any real leak. (A
+            # host that dies WITHOUT running this — SIGKILL, crash — leaves
+            # the watchdog armed, so those runners still exit: the
+            # anti-leak backstop stays intact for ungraceful deaths.)
+            alive = self._alive_runner_ids()
+            if alive:
+                for rid in alive:
+                    handle = self._runners.get(rid)
+                    if handle is not None and RUNNER_ADOPT_SIGNAL is not None:
+                        with contextlib.suppress(ProcessLookupError, PermissionError):
+                            os.kill(handle.proc.pid, RUNNER_ADOPT_SIGNAL)
+                # Give the runners' event loops a beat to process the adopt
+                # signal before our exit makes their watchdogs see a dead
+                # parent (the watchdog re-checks the adopted flag, but only
+                # a processed signal sets it).
+                time.sleep(1.0)
+                _logger.info(
+                    "Host shutting down; leaving %d runner(s) running for re-adoption: %s",
+                    len(alive),
+                    ", ".join(alive),
+                )
+            self._runners.clear()
+            # Final drain of any already-dead orphaned tool grandchildren.
             self._reap_orphans_once()
 
-    def _cleanup_runners(self) -> None:
-        """Terminate all live runners on shutdown.
+    def _adopt_persisted_runners(self) -> None:
+        """Re-adopt still-live runners recorded by a previous host process.
+
+        For each registry entry whose pid is alive and verifiably still an
+        OmniCraft runner (pid-reuse guard), track it under an
+        :class:`_AdoptedRunner` handle and start the usual exit watcher.
+        Dead or reused pids are pruned from the registry.
 
         :returns: None.
         """
-        for runner_id, handle in self._runners.items():
-            if handle.proc.poll() is None:
-                _logger.info("Terminating runner %s on shutdown", runner_id)
-                handle.proc.terminate()
-        for handle in self._runners.values():
-            try:
-                handle.proc.wait(timeout=5.0)
-            except subprocess.TimeoutExpired:
-                handle.proc.kill()
-        self._runners.clear()
+        for runner_id, record in runner_registry.load_records().items():
+            if runner_id in self._runners:
+                continue
+            if not runner_registry.pid_is_live_runner(record.pid):
+                runner_registry.remove_record(runner_id)
+                continue
+            self._runners[runner_id] = _RunnerHandle(
+                proc=_AdoptedRunner(record.pid),
+                log_path=Path(record.log_path),
+            )
+            watcher = asyncio.create_task(self._watch_runner(runner_id))
+            self._watcher_tasks.add(watcher)
+            watcher.add_done_callback(self._watcher_tasks.discard)
+            _logger.info("Re-adopted runner %s (pid=%d)", runner_id, record.pid)
+            print(
+                f"  ↺ Runner re-adopted: {runner_id} (pid={record.pid})",
+                flush=True,
+            )
 
     async def _connect_and_serve(self) -> None:
         """Single connection attempt: connect, hello, serve.

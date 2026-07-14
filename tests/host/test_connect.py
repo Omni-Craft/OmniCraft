@@ -14,9 +14,11 @@ from websockets.datastructures import Headers
 from websockets.exceptions import ConnectionClosedError, InvalidStatus, InvalidURI
 from websockets.http11 import Response
 
+from omnicraft.host import runner_registry
 from omnicraft.host.connect import (
     HostConnectError,
     HostProcess,
+    _AdoptedRunner,
     _build_runner_env,
     _RunnerHandle,
     run_host_process,
@@ -49,6 +51,22 @@ from omnicraft.runner.identity import (
 pytestmark = pytest.mark.asyncio
 
 
+@pytest.fixture(autouse=True)
+def _isolate_runner_registry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """Point the persistent runner registry at a throwaway file.
+
+    Launch/stop/alive-cleanup all write the registry as a side effect,
+    so without this every test would touch the developer's real
+    ``~/.omnicraft/host-runners.json``.
+    """
+    registry_dir = tmp_path_factory.mktemp("runner-registry")
+    monkeypatch.setattr(
+        runner_registry, "_registry_path", lambda: registry_dir / "host-runners.json"
+    )
+
+
 def _make_host_process() -> HostProcess:
     """Create a HostProcess with a test identity.
 
@@ -67,14 +85,22 @@ def _make_host_process() -> HostProcess:
 def _cleanup_host(host: HostProcess) -> None:
     """Terminate a test host's spawned runners and exit watchers.
 
-    ``_cleanup_runners`` pops every handle before terminating, so the
-    watcher tasks see an intentional stop and never report; cancelling
-    them afterwards just avoids "task was destroyed but pending"
-    warnings at loop teardown.
+    Pops every handle before terminating, so the watcher tasks see an
+    intentional stop and never report; cancelling them afterwards just
+    avoids "task was destroyed but pending" warnings at loop teardown.
+    (The production shutdown path deliberately leaves runners running —
+    tests must not leak real processes, so this kills them explicitly.)
 
     :param host: The host process under test.
     """
-    host._cleanup_runners()
+    for runner_id in list(host._runners):
+        handle = host._runners.pop(runner_id)
+        if handle.proc.poll() is None:
+            handle.proc.terminate()
+            try:
+                handle.proc.wait(timeout=5.0)
+            except subprocess.TimeoutExpired:
+                handle.proc.kill()
     for task in host._watcher_tasks:
         task.cancel()
 
@@ -785,31 +811,102 @@ def test_alive_runner_ids_cleans_dead(tmp_path: Path) -> None:
     alive_proc.wait()
 
 
-def test_cleanup_runners_terminates_all(tmp_path: Path) -> None:
-    """
-    Verify that _cleanup_runners terminates every tracked runner.
+def test_adopted_runner_polls_and_signals_by_pid(tmp_path: Path) -> None:
+    """An _AdoptedRunner tracks a non-child process by pid.
 
-    This is the graceful shutdown path (Ctrl-C / finally block).
-    If any runner survives, the host leaves orphaned processes.
+    Alive → poll() None; after termination → poll() -1 (exit code is
+    unknowable for a non-child, so the sentinel is reported and the
+    exit error falls back to the log tail).
     """
+    proc = subprocess.Popen(
+        ["sleep", "60"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    adopted = _AdoptedRunner(proc.pid)
+    try:
+        assert adopted.poll() is None, "live process should poll as alive"
+        adopted.terminate()
+        proc.wait(timeout=5)  # reap the real child so the pid vanishes
+        deadline = time.time() + 5
+        while adopted.poll() is None and time.time() < deadline:
+            time.sleep(0.05)
+        assert adopted.poll() == -1, "dead process should poll as -1"
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+            proc.wait()
+
+
+def test_shutdown_leaves_runners_running_and_registry_intact(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The host shutdown path must NOT terminate runners.
+
+    Runners hold their own server tunnels, so sessions survive a host
+    restart; a shutdown that killed them (the old behaviour) dropped
+    every in-flight agent whenever the host was restarted for
+    maintenance or an update.
+    """
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
     host = _make_host_process()
-    procs = []
-    for name in ("runner_a", "runner_b", "runner_c"):
-        proc = subprocess.Popen(
-            ["sleep", "60"],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
+    proc = subprocess.Popen(
+        ["sleep", "60"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        host._runners["runner_live"] = _RunnerHandle(proc=proc, log_path=tmp_path / "r.log")
+        runner_registry.add_record("runner_live", proc.pid, tmp_path / "r.log")
+
+        # Simulate the run() finally block's runner handling.
+        alive = host._alive_runner_ids()
+        host._runners.clear()
+
+        assert alive == ["runner_live"]
+        assert proc.poll() is None, "shutdown must leave the runner process running"
+        assert "runner_live" in runner_registry.load_records(), (
+            "registry entry must survive shutdown for re-adoption"
         )
-        host._runners[name] = _RunnerHandle(proc=proc, log_path=tmp_path / f"{name}.log")
-        procs.append(proc)
+    finally:
+        proc.terminate()
+        proc.wait()
 
-    host._cleanup_runners()
 
-    # All processes should be terminated.
-    for proc in procs:
-        assert proc.poll() is not None, f"Runner pid={proc.pid} should be dead after cleanup"
-    # Tracking dict should be empty.
-    assert host._runners == {}
+async def test_adopt_persisted_runners_readopts_live_and_prunes_dead(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Boot-time adoption re-tracks live registry pids and prunes dead ones.
+
+    The pid-reuse guard is exercised via ``pid_is_live_runner``: the live
+    entry is forced True and the dead entry False, so adoption keys off
+    the guard's verdict, not just pid liveness.
+    """
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    proc = subprocess.Popen(
+        ["sleep", "60"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    try:
+        runner_registry.add_record("runner_live", proc.pid, tmp_path / "live.log")
+        runner_registry.add_record("runner_dead", 99999999, tmp_path / "dead.log")
+        monkeypatch.setattr(runner_registry, "pid_is_live_runner", lambda pid: pid == proc.pid)
+
+        host = _make_host_process()
+        host._adopt_persisted_runners()
+
+        assert "runner_live" in host._runners, "live registry pid must be re-adopted"
+        assert isinstance(host._runners["runner_live"].proc, _AdoptedRunner)
+        assert "runner_dead" not in host._runners
+        assert "runner_dead" not in runner_registry.load_records(), (
+            "dead registry entry must be pruned"
+        )
+        _cleanup_host(host)
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            proc.wait()
 
 
 def test_reap_orphans_reaps_orphaned_children(tmp_path: Path) -> None:

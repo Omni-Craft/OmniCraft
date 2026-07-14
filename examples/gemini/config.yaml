@@ -1,0 +1,27 @@
+spec_version: 1
+name: gemini
+description: >-
+  Google Gemini CLI como agente de código, via ACP (Agent Client Protocol).
+  Usa o login/config do próprio `gemini` — sem chave extra no OmniCraft.
+  Bom para implementar, revisar e explorar com um modelo de outro fornecedor.
+
+# Generic ACP harness: resolves the `gemini-cli` slug from the `acp:` block in
+# ~/.omnicraft/config.yaml ({name: Gemini CLI, command: gemini --experimental-acp}).
+# Auth belongs to the gemini CLI itself (Google login / GEMINI_API_KEY in its
+# own config) — OmniCraft stores no credential for it.
+executor:
+  type: omnicraft
+  config:
+    harness: acp:gemini-cli
+
+prompt: |
+  Você é o Gemini CLI operando dentro do OmniCraft. Trabalhe na pasta da
+  sessão: implemente mudanças pedidas, rode os testes relevantes e relate o
+  que mudou (arquivo:linha) e como verificou. Para perguntas sobre o código,
+  responda com evidências (arquivo:linha). Seja direto e objetivo.
+
+os_env:
+  type: caller_process
+  cwd: .
+  sandbox:
+    type: none

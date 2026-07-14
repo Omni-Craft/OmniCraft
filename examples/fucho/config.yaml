@@ -288,8 +288,17 @@ prompt: |
   com SDXL (imagens) e Hunyuan3D 2.1 (malhas 3D). Para sites e jogos que
   precisam de assets:
 
-  - **Imagem**: gere via MCP `comfyui` (SDXL, 512x512 — resoluções maiores
-    derrubam o ComfyUI nesta máquina por RAM).
+  - **Imagem para sites** (heros, cards, banners): use o pipeline pronto em
+    `~/ComfyUI-Installs/workflows/omnicraft-imagem-site-api.json`. Fluxo:
+    leia o JSON, remova `_meta`, troque o texto do nó `"2"` (prompt) e as
+    dimensões do nó `"4"` se preciso — hero 640x384, card 512x512, mobile
+    384x640; NUNCA acima de ~260 mil pixels (derruba o ComfyUI por RAM) — e
+    faça `POST http://127.0.0.1:8188/prompt` com
+    `{"prompt": <json>, "client_id": "<worker>"}`. A imagem sai em ~1 min em
+    `~/ComfyUI-Installs/ComfyUI/ComfyUI/output/site/`; copie-a para o
+    projeto do site (ex.: `assets/`) em vez de referenciar o output.
+    QUALQUER worker (claude, codex, gemini, antigravity…) consegue: é HTTP
+    local + arquivos, sem dependência de MCP.
   - **Asset 3D (prompt → GLB)**: use o pipeline pronto em
     `~/ComfyUI-Installs/workflows/omnicraft-asset3d-api.json`. Fluxo: leia o
     JSON, remova a chave `_meta`, troque o texto do nó `"2"` pelo asset

@@ -282,6 +282,28 @@ prompt: |
   - Never commit `.omnicraft/memory/*.lock` — lock/tmp files are gitignored;
     if a sub-agent's `git add -A` sweeps them in, strip them from the PR.
 
+  ## Assets visuais (imagens e 3D) — ComfyUI local
+
+  Um ComfyUI roda em `http://127.0.0.1:8188` (MCP `comfyui`, ou HTTP direto)
+  com SDXL (imagens) e Hunyuan3D 2.1 (malhas 3D). Para sites e jogos que
+  precisam de assets:
+
+  - **Imagem**: gere via MCP `comfyui` (SDXL, 512x512 — resoluções maiores
+    derrubam o ComfyUI nesta máquina por RAM).
+  - **Asset 3D (prompt → GLB)**: use o pipeline pronto em
+    `~/ComfyUI-Installs/workflows/omnicraft-asset3d-api.json`. Fluxo: leia o
+    JSON, remova a chave `_meta`, troque o texto do nó `"2"` pelo asset
+    desejado (SEMPRE termine com "centered, plain white background, 3d
+    render" — não há remoção de fundo), e faça
+    `POST http://127.0.0.1:8188/prompt` com corpo
+    `{"prompt": <json>, "client_id": "fucho"}`. Acompanhe em
+    `GET /history/<prompt_id>`; o GLB sai em
+    `~/ComfyUI-Installs/ComfyUI/ComfyUI/output/3d/`.
+  - **Restrições**: UM job por vez (fila local, minutos por asset — a malha
+    3D pode levar 10–40 min); não dispare em paralelo nem re-envie por
+    impaciência. Se `GET /system_stats` parar de responder, o ComfyUI caiu:
+    reporte ao usuário em vez de reiniciar serviços por conta própria.
+
 async: true
 cancellable: true
 timers: true

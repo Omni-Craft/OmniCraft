@@ -880,6 +880,64 @@ function cascadeIfCovering(win) {
  *   never persisted to settings.
  * @returns {BrowserWindow}
  */
+/**
+ * Boot the local stack for a saved loopback server so the app "just works"
+ * on launch: start (or reuse) the local `omnicraft server`, re-point the
+ * window at it if the first load raced the boot and fell back to the setup
+ * page, then connect this machine as a host through the SAME consent dialog
+ * the host menu uses ("Always Allow" persists, so it prompts at most once).
+ *
+ * Scope is deliberately loopback-only: a remote server never auto-enrolls
+ * this machine — that stays an explicit host-menu action.
+ *
+ * @param {BrowserWindow} win The startup window.
+ */
+async function autoStartLocalStack(win) {
+  const saved = loadSettings().server_url;
+  const cliPath = resolvedCliPath();
+  if (!cliPath || typeof saved !== "string" || !omnicraftCli.isLoopbackServer(saved)) return;
+  const savedOrigin = originOf(saved);
+  if (!savedOrigin) return;
+  try {
+    const res = await serverManager.startLocalServer(cliPath);
+    if (!res || res.ok === false) return;
+  } catch {
+    return; // server didn't come up — the setup page's error stays accurate
+  }
+  if (!win || win.isDestroyed()) return;
+  // The window's first load may have raced a cold server boot, failed with
+  // connection-refused, and fallen back to the setup page (unpinning the
+  // window). Now that the server is up, point it back.
+  if (windows.get(win)?.origin !== savedOrigin) {
+    pinWindow(win, savedOrigin);
+    const state = windows.get(win);
+    if (state) state.serverUrl = saved;
+    try {
+      await win.loadURL(saved);
+    } catch {
+      return; // did-fail-load falls back to the setup page with the error
+    }
+  }
+  // Wait until the visible page IS the pinned server before asking for host
+  // enrollment — confirmHostEnrollment only honors a persisted grant (and
+  // only offers "Always Allow") on the pinned server's own page.
+  const deadline = Date.now() + 20000;
+  while (Date.now() < deadline) {
+    if (win.isDestroyed()) return;
+    if (originOf(win.webContents.getURL()) === savedOrigin && !win.webContents.isLoading()) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  if (win.isDestroyed()) return;
+  try {
+    if (!(await confirmHostEnrollment(win))) return;
+    await serverManager.ensureHostConnected(cliPath, saved);
+  } catch {
+    // Host connect failures surface through the host menu's status; launch
+    // must never crash over them.
+  }
+  broadcastHostStatus();
+}
+
 function createWindow(targetUrl, opts = {}) {
   const ephemeral = opts.ephemeral === true;
   const savedBounds = loadSavedWindowBounds();
@@ -1003,8 +1061,10 @@ function createWindow(targetUrl, opts = {}) {
   // registerWorkspaceChromeHide, which wires the inject-on-did-finish-load.
   registerWorkspaceChromeHide(win.webContents);
 
-  // The desktop never auto-connects this machine as a runner — on launch or on
-  // connect. Connecting is an explicit action from the host menu.
+  // Remote servers never auto-connect this machine as a runner — that is an
+  // explicit action from the host menu. A saved LOCAL server is the one
+  // exception: launch auto-starts it and offers host enrollment through the
+  // same consent dialog (see autoStartLocalStack).
 
   win.on("closed", () => {
     // Destroy this window's embedded-browser views, else they leak webContents.
@@ -2268,7 +2328,10 @@ if (!gotLock) {
     // instant (primes the in-memory cache in resolvedCliPath); also lets the
     // setup page / Local CLI settings pre-fill the resolved path immediately.
     resolvedCliPath();
-    createWindow();
+    const startupWindow = createWindow();
+    // Saved LOCAL server → boot the whole stack (server + host) so opening
+    // the app is enough for the harnesses to work; no manual terminals.
+    void autoStartLocalStack(startupWindow);
 
     app.on("activate", () => {
       // macOS: re-create the window when the dock icon is clicked and none open.

@@ -23,6 +23,23 @@ _LOCAL_USER = "local"
 # The coding-harness CLIs the orchestrators route work to.
 _WORKER_CLIS = ["claude", "codex", "opencode", "cursor-agent", "hermes", "pi"]
 
+# Host-reported harness keys -> the CLI binary each one probes for. Used by
+# the PATH-discrepancy check (4b): "server sees it, host daemon doesn't".
+_HARNESS_BINARIES = {
+    "codex": "codex",
+    "opencode": "opencode",
+    "pi": "pi",
+    "pi-native": "pi",
+    "native-pi": "pi",
+    "hermes": "hermes",
+    "native-hermes": "hermes",
+    "cursor": "cursor-agent",
+    "goose": "goose",
+    "agy": "agy",
+    "qwen": "qwen",
+    "kimi": "kimi",
+}
+
 
 def _check(
     check_id: str, label: str, ok: bool, detail: str, hint: str | None = None
@@ -97,6 +114,51 @@ def create_doctor_router(
                     f"Faltando: {', '.join(missing)} — instale os que quiser usar."
                     if missing
                     else None
+                ),
+            )
+        )
+
+        # 4b. PATH discrepancy: a CLI the server finds but the HOST daemon
+        # reported as binary-missing means the tool is installed in the
+        # user's shell (nvm/brew) yet invisible to the daemon's PATH --
+        # workers won't boot, and "install it" advice would be wrong.
+        host_store = getattr(request.app.state, "host_store", None)
+        shadowed: list[str] = []
+        if host_store is not None:
+            try:
+                hosts = host_store.list_hosts(user_id)
+            except Exception:  # noqa: BLE001 -- a store hiccup reads as "no hosts"
+                hosts = []
+            for host in hosts:
+                for harness, availability in (host.configured_harnesses or {}).items():
+                    binary = _HARNESS_BINARIES.get(harness)
+                    if (
+                        binary is not None
+                        and str(availability) == "binary-missing"
+                        and shutil.which(binary)
+                        and binary not in shadowed
+                    ):
+                        shadowed.append(binary)
+        checks.append(
+            _check(
+                "host_path",
+                "PATH do host enxerga as CLIs",
+                not shadowed,
+                (
+                    "nenhuma discrepância entre o shell e o host"
+                    if not shadowed
+                    else "instaladas no shell mas invisíveis ao host: " + ", ".join(shadowed)
+                ),
+                (
+                    None
+                    if not shadowed
+                    else (
+                        "O daemon do host não tem o PATH do seu shell (nvm/brew). "
+                        'Corrija com: ln -sf "$(command -v '
+                        + shadowed[0]
+                        + ')" ~/.local/bin/ (e o node, se for CLI npm) -- ou '
+                        "reinicie o host após atualizar o OmniCraft."
+                    )
                 ),
             )
         )

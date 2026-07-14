@@ -2150,6 +2150,16 @@ def run_host_process(
         (auth / authorization / outdated server). The
         actionable cause is printed to stderr first.
     """
+    # A host spawned outside a terminal (desktop app, launchd) inherits the
+    # bare GUI PATH — no nvm/brew — so worker CLIs the user installed from a
+    # shell probe as "binary-missing". Adopt the login shell's real PATH
+    # before ANY probe or runner spawn reads the environment. This is the
+    # single choke point: both `omnicraft host` (foreground daemon) and
+    # host._daemon_entry funnel through here.
+    from omnicraft.host.shell_env import augment_path_from_login_shell
+
+    augment_path_from_login_shell()
+
     # Initialize tracing so the host daemon exports its own spans
     # (e.g. handling launch_runner / stat / list_dir frames) into the
     # same distributed trace as the server that requested them. The

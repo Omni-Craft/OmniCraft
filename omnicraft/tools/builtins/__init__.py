@@ -151,6 +151,17 @@ def _create_memory_remember(config: dict[str, str]) -> Tool:
     return MemoryRememberTool()
 
 
+def _create_browser_tool(cls_name: str):
+    """Factory-of-factories for the embedded-browser tools (no config)."""
+
+    def _create(config: dict[str, str]) -> Tool:
+        from omnicraft.tools.builtins import browser
+
+        return getattr(browser, cls_name)()
+
+    return _create
+
+
 def _create_memory_recall(config: dict[str, str]) -> Tool:
     """Lazy factory for MemoryRecallTool (local, no config)."""
     from omnicraft.tools.builtins.memory import MemoryRecallTool
@@ -268,6 +279,13 @@ _BUILTIN_REGISTRY: dict[str, _BuiltinFactory | None] = {
     # Hindsight). Keyed by agent id so runs of the same agent share a bank.
     "memory_remember": _create_memory_remember,
     "memory_recall": _create_memory_recall,
+    # Embedded-browser tools — drive the desktop app's Navegador pane via the
+    # web relay. Runner-local dispatch; these entries provide names + schemas.
+    "browser_navigate": _create_browser_tool("BrowserNavigateTool"),
+    "browser_snapshot": _create_browser_tool("BrowserSnapshotTool"),
+    "browser_screenshot": _create_browser_tool("BrowserScreenshotTool"),
+    "browser_click": _create_browser_tool("BrowserClickTool"),
+    "browser_type": _create_browser_tool("BrowserTypeTool"),
     # Hindsight long-term memory (optional ``memory`` extra). Each factory
     # probes for ``hindsight-client`` and fails with an install hint if absent.
     "hindsight_retain": _create_hindsight_retain,

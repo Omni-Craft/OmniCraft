@@ -319,6 +319,15 @@ tools:
   builtins:
     - name: memory_remember
     - name: memory_recall
+    # Embedded-browser control: drive the conversation's Navegador pane in
+    # the desktop app (navigate/snapshot/click/type/screenshot). Requires
+    # the app open on this conversation; for headless browsing the
+    # playwright MCP (installed via the MCP page) is the fallback.
+    - name: browser_navigate
+    - name: browser_snapshot
+    - name: browser_screenshot
+    - name: browser_click
+    - name: browser_type
   # Coding sub-agents — see agents/<name>/. claude_code, codex, opencode,
   # cursor, and hermes are real CLI coding harnesses; pi is a headless
   # multi-model worker. Each implements, reviews (cross-vendor), and explores.

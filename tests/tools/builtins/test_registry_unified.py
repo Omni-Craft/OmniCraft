@@ -124,6 +124,13 @@ def test_builtin_names_size_matches_registry() -> None:
                 # per-project JSON banks under ~/.omnicraft).
                 "memory_remember",
                 "memory_recall",
+                # Embedded-browser tools (drive the desktop Navegador pane
+                # via the web relay; runner-local dispatch).
+                "browser_navigate",
+                "browser_snapshot",
+                "browser_screenshot",
+                "browser_click",
+                "browser_type",
                 # Hindsight long-term memory tools (optional `hindsight`
                 # extra; factories probe for hindsight-client).
                 "hindsight_retain",

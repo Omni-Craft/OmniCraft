@@ -274,6 +274,20 @@ _HINDSIGHT_TOOLS = frozenset({"hindsight_retain", "hindsight_recall", "hindsight
 # (falling back to the global store when there is no workspace).
 _LOCAL_MEMORY_TOOLS = frozenset({"memory_remember", "memory_recall"})
 
+# Embedded-browser tools: runner-local — the runner POSTs the action to the
+# server's browser bridge, and the desktop app's relay drives the actual
+# WebContentsView (web/src/hooks/useBrowserAgentRelay.ts). No renderer open
+# on the conversation → the bridge times out with an actionable error.
+_EMBEDDED_BROWSER_TOOLS = frozenset(
+    {
+        "browser_navigate",
+        "browser_snapshot",
+        "browser_screenshot",
+        "browser_click",
+        "browser_type",
+    }
+)
+
 # Priority 5f.2: sys_list_models — runner-local because provider resolution
 # reads the runner host's config/credentials, same as the spawn paths.
 _LIST_MODELS_TOOLS = frozenset({"sys_list_models"})
@@ -355,6 +369,7 @@ _NATIVE_RELAY_BUILTIN_TOOLS = (
     # native harnesses have no built-in long-term memory of their own.
     | _HINDSIGHT_TOOLS
     | _LOCAL_MEMORY_TOOLS
+    | _EMBEDDED_BROWSER_TOOLS
 )
 
 
@@ -487,6 +502,7 @@ _ALL_LOCAL_TOOLS = (
     | _WEB_SEARCH_TOOLS
     | _HINDSIGHT_TOOLS
     | _LOCAL_MEMORY_TOOLS
+    | _EMBEDDED_BROWSER_TOOLS
     | _TIMER_TOOLS
     | _TASK_LIFECYCLE_TOOLS
     | _SKILL_TOOLS
@@ -2845,6 +2861,73 @@ async def _execute_local_memory_tool(
     return await asyncio.to_thread(tool.invoke, json.dumps(args), ctx)
 
 
+async def _execute_embedded_browser_tool(
+    args: dict[str, Any],
+    *,
+    tool_name: str,
+    server_client: httpx.AsyncClient | None,
+    conversation_id: str | None,
+    runner_workspace: Path | None,
+) -> str:
+    """
+    Run an embedded-browser action through the server's browser bridge.
+
+    POSTs ``{action, args}`` to ``/v1/sessions/{id}/browser/actions`` and
+    formats the relay's result for the LLM. Screenshots come back as a
+    base64 data URL — decoded and SAVED to the workspace instead of being
+    returned inline (a raw data URL in a tool result costs hundreds of
+    thousands of tokens; see the attachment-inlining incident).
+
+    :param args: Parsed LLM arguments, e.g. ``{"url": "http://..."}``.
+    :param tool_name: The ``browser_*`` tool being dispatched.
+    :param server_client: HTTP client pointed at the OmniCraft server.
+    :param conversation_id: The session whose browser pane is targeted.
+    :param runner_workspace: Session workspace — screenshot save location.
+    :returns: A compact string result for the model.
+    """
+    if server_client is None or conversation_id is None:
+        return "Error: browser tools require a live session (no server client)"
+    action = tool_name.removeprefix("browser_")
+    try:
+        resp = await server_client.post(
+            f"/v1/sessions/{conversation_id}/browser/actions",
+            json={"action": action, "args": args},
+            timeout=45.0,
+        )
+    except httpx.HTTPError as exc:
+        return f"Error: browser bridge unreachable: {type(exc).__name__}: {exc}"
+    if resp.status_code >= 400:
+        return f"Error: browser bridge returned {resp.status_code}: {resp.text[:200]}"
+    result = resp.json()
+    if not result.get("ok"):
+        return f"Error: {result.get('error') or 'browser action failed'}"
+    if action == "screenshot":
+        data_url = str(result.get("data_url") or "")
+        header, _, payload = data_url.partition(",")
+        if not payload:
+            return "Error: screenshot returned no image data"
+        import base64 as _b64
+
+        ext = ".png" if "png" in header else ".jpg"
+        out_dir = (runner_workspace or Path.cwd()) / ".omnicraft" / "browser"
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"screenshot-{int(time.time())}{ext}"
+        out_path.write_bytes(_b64.b64decode(payload))
+        return f"Screenshot saved: {out_path} — read this file to view it."
+    data = result.get("data") or {}
+    if action == "snapshot":
+        tree = str(data.get("tree") or "")
+        if len(tree) > 20_000:
+            tree = tree[:20_000] + "\n… (snapshot truncado)"
+        return (
+            f"snapshot_id: {data.get('snapshot_id')}\n"
+            f"url: {data.get('url')}\ntitle: {data.get('title')}\n{tree}"
+        )
+    if data:
+        return json.dumps({"ok": True, **data}, ensure_ascii=False)
+    return "ok"
+
+
 def _has_subagent(
     sub_agent_name: str,
     agent_spec: Any | None,
@@ -4674,6 +4757,14 @@ async def execute_tool(
                 conversation_id=conversation_id,
                 task_id=task_id,
                 agent_id=agent_id,
+                runner_workspace=runner_workspace,
+            )
+        elif tool_name in _EMBEDDED_BROWSER_TOOLS:
+            output = await _execute_embedded_browser_tool(
+                args,
+                tool_name=tool_name,
+                server_client=server_client,
+                conversation_id=conversation_id,
                 runner_workspace=runner_workspace,
             )
         elif tool_name in _TIMER_TOOLS:

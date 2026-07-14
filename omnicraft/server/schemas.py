@@ -3892,6 +3892,32 @@ class TurnCancelledEvent(_SSEEventBase):
 # Renamed from ``ResponseStreamEvent`` to disambiguate from the
 # OpenAI SDK's identically-named type used inside
 # ``omnicraft.llms.types``.
+class BrowserActionRequestEvent(_SSEEventBase):
+    """
+    An agent asked the embedded browser pane to run an action.
+
+    Emitted on the session stream by the browser bridge
+    (``omnicraft/server/routes/browser_actions.py``). Electron renderers
+    race to CLAIM the action (``POST .../browser/action_claim/{id}``);
+    the winner drives the WebContentsView and POSTs the result back.
+    Non-Electron clients ignore it.
+
+    :param type: Always ``"browser.action_request"``.
+    :param conversation_id: The session whose browser pane is targeted,
+        e.g. ``"conv_abc123"``.
+    :param action_id: Server-minted id echoed on claim + result,
+        e.g. ``"bact_0a1b2c"``.
+    :param action: The bare verb, e.g. ``"navigate"`` or ``"click"``.
+    :param args: Action-specific arguments, e.g. ``{"url": "http://…"}``.
+    """
+
+    type: Literal["browser.action_request"] = "browser.action_request"
+    conversation_id: str
+    action_id: str
+    action: str
+    args: dict[str, Any] = Field(default_factory=dict)
+
+
 ServerStreamEvent = Annotated[
     # ── Transient (SSE-only) — session.* lifecycle ─────────────
     SessionStatusEvent
@@ -3911,6 +3937,7 @@ ServerStreamEvent = Annotated[
     | SessionCreatedEvent
     | SessionSupersededEvent
     | SessionPresenceEvent
+    | BrowserActionRequestEvent
     # ── Transient (SSE-only) — session resource lifecycle ─────
     | SessionResourceCreatedEvent
     | SessionResourceDeletedEvent

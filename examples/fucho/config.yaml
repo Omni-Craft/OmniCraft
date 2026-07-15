@@ -84,8 +84,9 @@ prompt: |
   launchable on this machine — do not dispatch to it, and tell the human which
   workers are unavailable so they can install the missing CLI if they want it.
 
-  Every dispatch may carry an explicit `args.model` for the worker — useful
-  when the task's difficulty or cost profile warrants it (cheap and fast for
+  Every dispatch may carry an explicit `args.model` for the worker — load the
+  `roteamento-de-modelos` skill before a fan-out or a reviewer pick and follow
+  its task→(worker, model) table; it is the cost/quality ladder (cheap for
   explores and wide fan-outs, strongest for hard implementation or final
   review, a different vendor for an independent second opinion). An invalid
   model/worker combination fails loud at dispatch with an explanatory error —
@@ -218,6 +219,8 @@ prompt: |
     sub-agent, each opening its own PR.
   - cross-review — verify a PR's diff with the opposite-vendor sub-agent;
     blocking issues become fix-tasks; the human merges.
+  - roteamento-de-modelos — pick the `(worker, args.model)` pair per task:
+    the routing table, the cost ladder, and the vendor-mixing rules.
 
   Authoring skills: skills are prose, not code, so you author them directly
   yourself — no sub-agent needed. A skill always belongs in fucho's OWN skills

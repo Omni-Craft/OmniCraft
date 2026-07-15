@@ -75,6 +75,9 @@ _LLM_TASK_TOKENS = ("chat", "completion")
 
 # Subscription CLIs expose no listing API: curated ids matching the bundled
 # catalog pin (claude) and the codex ids the codebase already references.
+# The codex ids are the current 5.6 tiers (Sol / Terra / Luna) plus the
+# older ones an un-upgraded CLI may still serve; all verified against a
+# real logged-in CLI rather than taken from docs.
 _SUBSCRIPTION_STATIC_MODELS: dict[str, tuple[str, ...]] = {
     "claude": (
         "claude-fable-5",
@@ -83,7 +86,29 @@ _SUBSCRIPTION_STATIC_MODELS: dict[str, tuple[str, ...]] = {
         "claude-sonnet-4-6",
         "claude-haiku-4-5",
     ),
-    "codex": ("gpt-5.5", "gpt-5.4", "gpt-5.4-mini"),
+    "codex": (
+        "gpt-5.6-sol",
+        "gpt-5.6-terra",
+        "gpt-5.6-luna",
+        "gpt-5.5",
+        "gpt-5.4",
+        "gpt-5.4-mini",
+    ),
+}
+
+# Harnesses that own their auth entirely (the CLI logs itself in; OmniCraft
+# stores no provider entry for them), so provider resolution reports
+# ``kind="none"`` and the worker would otherwise list zero models. These
+# curated ids let ``sys_list_models`` — and therefore an orchestrator's
+# per-dispatch model choice — see what the CLI can actually run.
+#
+# Gemini's Pro tiers are deliberately absent: the ``gemini`` CLI's own
+# bundle names ``gemini-3.1-pro`` / ``gemini-3-pro``, but the API rejects
+# them with ModelNotFound on a consumer login — the 3.x Pro tiers (and the
+# 2M-token context) are reached through the Antigravity harness instead.
+_CLI_OWNED_AUTH_STATIC_MODELS: dict[str, tuple[str, ...]] = {
+    "acp:gemini-cli": ("gemini-3.5-flash", "gemini-2.5-pro", "gemini-2.5-flash"),
+    "antigravity": ("gemini-3.5-flash", "gemini-3.1-pro"),
 }
 
 # Harness spellings -> the workflow harness whose provider resolution they
@@ -132,6 +157,23 @@ _KEY_AUTH_FAMILY: dict[str, str] = {
 
 # Multi-family providers (pi): anthropic first, matching _apply_provider_to_pi.
 _FAMILY_PREFERENCE = (ANTHROPIC_FAMILY, OPENAI_FAMILY)
+
+
+def _cli_owned_auth_static_models(harness: str) -> tuple[str, ...]:
+    """Return curated ids for a CLI-owned-auth harness, or ``()``.
+
+    :param harness: Harness id from a worker spec, e.g.
+        ``"acp:gemini-cli"`` or ``"antigravity-native"``.
+    :returns: Curated model ids, or ``()`` when the harness owns no
+        curated list (the caller keeps its ``kind="none"`` row).
+    """
+    direct = _CLI_OWNED_AUTH_STATIC_MODELS.get(harness)
+    if direct is not None:
+        return direct
+    resolution = _PROVIDER_RESOLUTION_HARNESS.get(harness)
+    if resolution is not None:
+        return _CLI_OWNED_AUTH_STATIC_MODELS.get(resolution, ())
+    return ()
 
 
 @dataclass(frozen=True)
@@ -592,6 +634,24 @@ def list_models_for_worker(
     listing = _listing_for_provider(provider, transport=transport)
     if harness is None:
         return listing
+    if not listing.models:
+        # No provider entry (the CLI owns its own login), so nothing was
+        # resolved. Fall back to the curated ids for that CLI rather than
+        # reporting a model-less worker — an empty row reads as "cannot
+        # take a model override", which would silently exclude the worker
+        # from an orchestrator's routing choices.
+        curated = _cli_owned_auth_static_models(harness)
+        if curated:
+            listing = ModelListing(
+                source="static",
+                verified=False,
+                models=tuple(ModelEntry(id=i, family=model_family_token(i)) for i in curated),
+                note=(
+                    f"curated ids for the {harness!r} CLI (it owns its own login, so "
+                    "OmniCraft resolves no provider for it); availability depends on "
+                    "the account the CLI is signed in to"
+                ),
+            )
     filtered = tuple(m for m in listing.models if model_family_mismatch(harness, m.id) is None)
     return replace(listing, models=filtered)
 

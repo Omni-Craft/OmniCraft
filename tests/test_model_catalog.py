@@ -734,6 +734,50 @@ def test_subscription_listing_is_static_and_unverified(
     assert "CLI login" in listing.note
 
 
+def test_codex_static_listing_carries_the_5_6_tiers(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The codex curated list leads with the current 5.6 tiers.
+
+    Sol / Terra / Luna are what a logged-in codex CLI actually serves;
+    a stale list would make an orchestrator route to superseded ids.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Per-test temp dir.
+    """
+    _isolate_config(
+        monkeypatch,
+        tmp_path,
+        "providers:\n  codex:\n    kind: subscription\n    cli: codex\n    default: true\n",
+    )
+    listing = list_models_for_worker(_worker_spec("codex-native"), "codex-native")
+    assert listing.source == "static"
+    ids = [m.id for m in listing.models]
+    assert ids[:3] == ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
+    assert "gpt-5.5" in ids  # older CLIs still serve it
+
+
+def test_gemini_acp_worker_lists_curated_ids_without_a_provider(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A CLI-owned-auth worker still reports the models it can run.
+
+    The gemini CLI logs itself in, so OmniCraft resolves no provider for
+    it. Without the curated fallback the worker would report zero models
+    and an orchestrator would never route a model to it. The Pro tiers
+    stay out: the consumer API rejects them (Antigravity serves those).
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Per-test temp dir.
+    """
+    _isolate_config(monkeypatch, tmp_path, "providers: {}\n")
+    listing = list_models_for_worker(_worker_spec("acp:gemini-cli"), "acp:gemini-cli")
+    ids = [m.id for m in listing.models]
+    assert "gemini-3.5-flash" in ids
+    assert "gemini-3.1-pro" not in ids
+    assert listing.verified is False
+
+
 def test_none_listing_explains_dead_worker(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

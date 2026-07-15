@@ -5028,6 +5028,36 @@ def _is_runner_owned_antigravity_terminal(
     )
 
 
+def _spec_permission_mode_args(
+    agent_spec: object,
+    session_launch_args: list[str] | None,
+) -> tuple[str, ...]:
+    """Claude CLI flags carrying the spec's ``permission_mode`` to the TUI.
+
+    The spec's ``executor.config.permission_mode`` historically reached
+    only the SDK harness (``HARNESS_CLAUDE_SDK_PERMISSION_MODE``), so a
+    claude-native worker spawned by an orchestrator launched with Claude's
+    default interactive approvals — and a headless overnight run stalled
+    forever on an Edit prompt nobody was watching, until the idle reaper
+    killed it. ``auto`` (the SDK's approve-without-prompting) maps to
+    ``bypassPermissions`` — the spec author asked for no prompts at all.
+
+    :param agent_spec: The session's resolved agent spec (or ``None``).
+    :param session_launch_args: User pass-through args persisted on the
+        session; an explicit ``--permission-mode`` /
+        ``--dangerously-skip-permissions`` there always wins.
+    :returns: ``("--permission-mode", <mode>)`` or ``()``.
+    """
+    exec_cfg = getattr(getattr(agent_spec, "executor", None), "config", None)
+    spec_perm = exec_cfg.get("permission_mode") if isinstance(exec_cfg, dict) else None
+    if not isinstance(spec_perm, str) or not spec_perm:
+        return ()
+    existing = session_launch_args or []
+    if "--permission-mode" in existing or "--dangerously-skip-permissions" in existing:
+        return ()
+    return ("--permission-mode", {"auto": "bypassPermissions"}.get(spec_perm, spec_perm))
+
+
 def _build_claude_native_base_args(
     *,
     reasoning_effort: str | None,
@@ -5700,6 +5730,11 @@ async def _auto_create_claude_terminal(
         terminal_launch_args=session_launch_args,
         resume_external_session_id=resume_external_session_id,
     )
+
+    base_claude_args = [
+        *base_claude_args,
+        *_spec_permission_mode_args(agent_spec, session_launch_args),
+    ]
 
     # Pass ``ap_server_url`` so ``build_hook_settings`` registers the
     # claude-native ``PermissionRequest`` command hook and writes

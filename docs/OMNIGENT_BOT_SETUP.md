@@ -7,14 +7,26 @@ conflate them:
 
 | Identity | Used for | Why this identity |
 | --- | --- | --- |
-| `omnicraft <noreply@omnicraft.ai>` | Co-author trailer on commits authored by **fucho's coding sub-agents** | These commits are produced by `git commit` in a worker's local worktree — they are **not** GitHub Actions runs, so a plain org co-author is the honest attribution. No GitHub App user is involved. |
+| `OmniCraft <305612714+Omnicraft-bot@users.noreply.github.com>` | Co-author trailer on commits authored by the coding sub-agents | These commits are produced by `git commit` in a worker's local worktree — they are **not** GitHub Actions runs, so the App bot would be a lie. The address is the GitHub noreply of the `Omnicraft-bot` **user** account, which is what makes GitHub resolve the trailer and show OmniCraft under Contributors. |
 | `omnicraft-ci[bot]` (GitHub App) | **CI automation**: lockfile-regen commits/PRs **and** automated PR-review comments | These actions genuinely run inside GitHub Actions, where the App's private key lives and a short-lived installation token is minted per run. The App is an org-owned, least-privilege identity. |
 
 > **Why two identities and not one?** An earlier draft of this work tried to use
 > `omnicraft-ci[bot]` everywhere, including the sub-agent commit trailer. That was
-> corrected: fucho's workers don't run in Actions and never touch the App key, so
+> corrected: the workers don't run in Actions and never touch the App key, so
 > attributing their commits to the Actions-minted bot user was misleading. Local
-> work → plain org co-author; Actions-minted work → the App bot.
+> work → the `Omnicraft-bot` user; Actions-minted work → the App bot.
+
+> **Why a real account and not a bare address?** The trailer used to read
+> `omnicraft <noreply@omnicraft.ai>` — an address owned by no GitHub account.
+> GitHub resolves a co-author only when the email matches an account's verified
+> one, so that trailer credited nobody: OmniCraft never appeared under
+> Contributors anywhere, in any repo, for anyone. The `Omnicraft-bot` noreply
+> fixes exactly that and nothing else.
+
+> **Never put a human's personal address in these trailers.** They ship to every
+> OmniCraft user, so a personal email here would co-author strangers' commits to
+> that person's account — crediting them for work they never saw. Personal
+> attribution belongs in the user's own machine/repo config, never in the product.
 
 ---
 
@@ -107,7 +119,7 @@ fucho never commits directly; its coding sub-agents (`claude_code`, `codex`,
 ends with a co-author trailer attributing it to the org:
 
 ```
-Co-authored-by: omnicraft <noreply@omnicraft.ai>
+Co-authored-by: OmniCraft <305612714+Omnicraft-bot@users.noreply.github.com>
 ```
 
 This requirement lives in the worker IMPLEMENT instructions:
@@ -184,7 +196,7 @@ token and posts the review **as `omnicraft-ci[bot]`**:
 
 | Surface | Identity on the artifact | Where it's wired |
 | --- | --- | --- |
-| fucho sub-agent commits | `omnicraft <noreply@omnicraft.ai>` (co-author trailer) | `examples/fucho/agents/*/config.yaml` |
+| fucho sub-agent commits | `OmniCraft <305612714+Omnicraft-bot@users.noreply.github.com>` (co-author trailer) | `examples/fucho/agents/*/config.yaml` |
 | Lockfile-regen commits/PRs | `omnicraft-ci[bot]` | `oss-regenerate-and-smoke.yml`, `oss-regen-on-comment.yml` |
 | Automated PR review comments | `omnicraft-ci[bot]` (fallback `github-actions[bot]`) | `fucho-review.yml` |
 

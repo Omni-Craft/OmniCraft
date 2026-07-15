@@ -21,7 +21,7 @@ dependency).
    work only inside `.worktrees/<task_id>`. The worker drives the task to green
    and opens its OWN PR for the branch. Every commit the worker authors must
    end with a blank line followed by the exact co-sign trailer as its final
-   line — `Co-authored-by: omnicraft <noreply@omnicraft.ai>`.
+   line — `Co-authored-by: OmniCraft <305612714+Omnicraft-bot@users.noreply.github.com>`.
    Record each handle's `conversation_id`
    in the registry. Emit the worktree + `sys_session_send` tool calls in THIS
    turn — never end a turn having only said you will dispatch; the dispatch

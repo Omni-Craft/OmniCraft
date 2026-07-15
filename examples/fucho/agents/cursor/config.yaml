@@ -25,7 +25,7 @@ prompt: |
     typecheck for the code you touched.
   - Co-sign every commit you author: end each commit message with a blank line
     followed by this exact trailer as its final line —
-    `Co-authored-by: omnicraft <noreply@omnicraft.ai>`
+    `Co-authored-by: OmniCraft <305612714+Omnicraft-bot@users.noreply.github.com>`
   - When green, push your task branch and open a PR with `gh pr create` (clear
     title, what changed, how you verified). Never push to a protected branch
     (e.g. main) or force-push — open a PR and let it be reviewed/merged.

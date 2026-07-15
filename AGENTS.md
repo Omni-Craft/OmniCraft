@@ -9,6 +9,25 @@ Run the `pre-commit` hook before committing (`pre-commit run --all-files`, or
 let it run on staged files via `git commit`). Fix any issues it reports so the
 commit lands clean — CI runs the same checks.
 
+### Authorship
+
+**Never override the author identity** with `-c user.email=...`. The repo's git
+config already carries the human's real, GitHub-verified email; overriding it
+with a made-up address (e.g. `local@omnicraft`) silently strips the human's
+attribution — GitHub links a commit to an account only when the email matches a
+verified one, so an invented address makes the work belong to nobody.
+
+Credit OmniCraft as co-author on every commit an agent writes:
+
+```
+Co-Authored-By: OmniCraft <305612714+Omnicraft-bot@users.noreply.github.com>
+```
+
+That address is the `Omnicraft-bot` account's GitHub noreply, so the commit
+lands under its avatar in the repo's Contributors. A model may add its own
+trailer alongside it; multiple `Co-Authored-By` lines are valid and each is
+resolved independently.
+
 ## Pull requests
 
 When you open a pull request, fill in the repo's PR template at

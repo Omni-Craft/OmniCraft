@@ -25,7 +25,7 @@ describe("ApprovalCard — binary approve/reject", () => {
       />,
     );
 
-    expect(screen.getByRole("button", { name: /aprovar/i })).toBeDefined();
+    expect(screen.getByRole("button", { name: /^aprovar$/i })).toBeDefined();
     expect(screen.getByRole("button", { name: /rejeitar/i })).toBeDefined();
     expect(screen.queryByTestId("approval-card-options")).toBeNull();
   });
@@ -68,7 +68,7 @@ describe("ApprovalCard — binary approve/reject", () => {
     expect(screen.queryByText(/commandActions/)).toBeNull();
     expect(screen.queryByText(/\*\*\/bin\/zsh/)).toBeNull();
     expect(screen.getByTestId("codex-command-actions")).toBeDefined();
-    expect(screen.getByRole("button", { name: /aprovar/i })).toBeDefined();
+    expect(screen.getByRole("button", { name: /^aprovar$/i })).toBeDefined();
     expect(screen.getByRole("button", { name: /rejeitar/i })).toBeDefined();
   });
 
@@ -105,6 +105,36 @@ describe("ApprovalCard — binary approve/reject", () => {
     expect(submitSpy).toHaveBeenCalledWith("elic_cmd_policy", "accept", {
       execpolicy_amendment: [".venv/bin/python", "-m", "pytest"],
     });
+  });
+});
+
+describe("ApprovalCard — aprovar tudo nesta sessão", () => {
+  beforeEach(() => {
+    useChatStore.setState({ conversationId: "conv_abc", blocks: [] });
+  });
+
+  it("submits accept with auto_session so the server flips the session switch", () => {
+    const submitSpy = vi.fn().mockResolvedValue(undefined);
+    useChatStore.setState({ submitApproval: submitSpy } as Partial<
+      ReturnType<typeof useChatStore.getState>
+    >);
+    render(
+      <ApprovalCard
+        elicitationId="elic_auto"
+        message="Claude wants to call Bash"
+        phase="pre_tool_use"
+        policyName="claude_native_permission"
+        contentPreview=""
+        requestedSchema={{}}
+        status="pending"
+        response={null}
+      />,
+    );
+
+    const autoButton = screen.getByRole("button", { name: /aprovar tudo nesta sessão/i });
+    fireEvent.click(autoButton);
+
+    expect(submitSpy).toHaveBeenCalledWith("elic_auto", "accept", { auto_session: true });
   });
 });
 

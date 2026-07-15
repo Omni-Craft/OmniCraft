@@ -1455,6 +1455,65 @@ def _structured_ask_user_question(
     return {"questions": questions}
 
 
+# Session-scoped auto-approval switch, flippable MID-SESSION via
+# ``PATCH /v1/sessions/{id}`` with ``labels: {"omnicraft.approvals": "auto"}``
+# (any other value — or removing the label — goes back to asking). When set,
+# harness PERMISSION prompts (claude / codex / cursor / antigravity tool
+# approvals) are answered "accept" server-side without rendering a card.
+# Genuine questions (AskUserQuestion, request_user_input, MCP form
+# elicitations) still reach the user: only binary pre-tool approvals with no
+# form schema are eligible.
+AUTO_APPROVALS_LABEL_KEY = "omnicraft.approvals"
+AUTO_APPROVALS_VALUE = "auto"
+_AUTO_APPROVABLE_PHASES = frozenset(
+    {
+        "pre_tool_use",  # claude-native, cursor-native, generic native_permission
+        "agy_permission",
+        "codex_command_approval",
+        "codex_file_change_approval",
+        "codex_permissions_approval",
+        "codex_apply_patch_approval",
+    }
+)
+
+
+async def _auto_approve_verdict(
+    conversation_store: ConversationStore | None,
+    session_id: str,
+    params: ElicitationRequestParams,
+) -> ElicitationResult | None:
+    """Return an ``accept`` verdict when this session auto-approves *params*.
+
+    Eligibility is deliberately narrow: the prompt must be a binary
+    permission approval (phase in :data:`_AUTO_APPROVABLE_PHASES`, no
+    ``requestedSchema`` form, no ``ask_user_question`` payload) AND the
+    session must carry the :data:`AUTO_APPROVALS_LABEL_KEY` label set to
+    ``"auto"``. Anything else returns ``None`` and asks the user normally.
+
+    :param conversation_store: Store used to read the session's labels.
+    :param session_id: The prompting session, e.g. ``"conv_abc123"``.
+    :param params: The elicitation about to be published.
+    :returns: ``ElicitationResult(action="accept")`` to short-circuit the
+        card, or ``None`` to publish it as usual.
+    """
+    if conversation_store is None:
+        return None
+    if getattr(params, "phase", None) not in _AUTO_APPROVABLE_PHASES:
+        return None
+    if getattr(params, "requestedSchema", None) is not None:
+        return None
+    if "ask_user_question" in (getattr(params, "model_extra", None) or {}):
+        return None
+    try:
+        conv = await asyncio.to_thread(conversation_store.get_conversation, session_id)
+    except Exception:  # noqa: BLE001 — label lookup must never break the ask path
+        return None
+    labels = getattr(conv, "labels", None) or {}
+    if labels.get(AUTO_APPROVALS_LABEL_KEY) != AUTO_APPROVALS_VALUE:
+        return None
+    return ElicitationResult(action="accept")
+
+
 async def _publish_and_wait_for_harness_elicitation(
     request: Request,
     *,
@@ -1511,6 +1570,9 @@ async def _publish_and_wait_for_harness_elicitation(
     :returns: Web verdict, or ``None`` on terminal-side resolution,
         timeout, or disconnect.
     """
+    auto_verdict = await _auto_approve_verdict(conversation_store, session_id, params)
+    if auto_verdict is not None:
+        return auto_verdict
     if elicitation_id is None:
         elicitation_id = f"elicit_{secrets.token_hex(16)}"
     future: asyncio.Future[ElicitationResult] = asyncio.get_running_loop().create_future()
@@ -4047,6 +4109,25 @@ async def _resolve_elicitation(
     # matches, no resolved event published) rather than 500-ing the
     # client — the runner forward still fires so the runner can reject.
     elicitation_id = data.get("elicitation_id", "")
+    # "Approve everything in this session": the card's persistent-approval
+    # affordance sets the session-scoped auto-approvals label, so every
+    # FUTURE permission prompt (any harness) is answered server-side
+    # without a card — see _auto_approve_verdict. Flippable back any time
+    # via PATCH labels. Only an explicit accept may flip it.
+    if (
+        data.get("action") == "accept"
+        and isinstance(data.get("content"), dict)
+        and data["content"].get("auto_session") is True
+        and conversation_store is not None
+    ):
+        try:
+            await asyncio.to_thread(
+                conversation_store.set_labels,
+                session_id,
+                {AUTO_APPROVALS_LABEL_KEY: AUTO_APPROVALS_VALUE},
+            )
+        except Exception:  # noqa: BLE001 — label write must not block the verdict
+            _logger.warning("Could not set auto-approvals label on %s", session_id, exc_info=True)
     harness_future = _harness_elicitation_registry.get(elicitation_id)
     if harness_future is not None and not harness_future.done():
         # Only the session that owns this elicitation

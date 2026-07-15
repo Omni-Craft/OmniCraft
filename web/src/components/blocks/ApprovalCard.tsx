@@ -206,6 +206,15 @@ export function ApprovalCard({
     // mode" action — same flag, server picks the mode).
     submit(elicitationId, "accept", { allow_all_edits: true });
   };
+  const submitAutoSession = () => {
+    // Accept AND flip the session's auto-approvals switch: the server
+    // reads ``content.auto_session`` and sets the session label
+    // ``omnicraft.approvals=auto``, after which every future PERMISSION
+    // prompt in this session (any harness — claude, codex, cursor,
+    // antigravity) is answered server-side without a card. Genuine
+    // questions (AskUserQuestion / forms) still reach the user.
+    submit(elicitationId, "accept", { auto_session: true });
+  };
   const submitRemember = () => {
     // Accept AND ask the server to install a session-scoped allow rule
     // so the same scope stops prompting. The server reads
@@ -308,6 +317,16 @@ export function ApprovalCard({
           Aprovar e não perguntar novamente para {rememberTarget}
         </Button>
       )}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={submitAutoSession}
+        title="Aprova esta e TODAS as próximas permissões desta sessão (perguntas de verdade continuam chegando). Reversível nos rótulos da sessão."
+        data-testid="approval-card-auto-session"
+      >
+        <CheckIcon className="mr-1 size-3.5" />
+        Aprovar tudo nesta sessão
+      </Button>
       <Button size="sm" variant="outline" onClick={() => submitBinary("decline")}>
         <XIcon className="mr-1 size-3.5" />
         Rejeitar
@@ -319,6 +338,15 @@ export function ApprovalCard({
       <Button size="sm" onClick={() => submitBinary("accept")}>
         <CheckIcon className="mr-1 size-3.5" />
         Aprovar
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={submitAutoSession}
+        title="Aprova esta e TODAS as próximas permissões desta sessão (perguntas de verdade continuam chegando). Reversível nos rótulos da sessão."
+      >
+        <CheckIcon className="mr-1 size-3.5" />
+        Aprovar tudo nesta sessão
       </Button>
       {execPolicyAmendment && (
         <Button

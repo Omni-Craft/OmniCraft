@@ -299,9 +299,11 @@ prompt: |
     projeto do site (ex.: `assets/`) em vez de referenciar o output.
     QUALQUER worker (claude, codex, gemini, antigravity…) consegue: é HTTP
     local + arquivos, sem dependência de MCP.
-  - **Escolha de modelo (nó "1")**: `dreamshaper_8.safetensors` (padrão) para
-    fotos realistas, objetos, cenas e interiores; `sd_xl_base_1.0.safetensors`
-    só para abstratos/gradientes/texturas. **Prompt**: sujeito primeiro e com
+  - **Escolha de modelo (nó "1")**: `realvisxl_v5.safetensors` (padrão) para
+    a versão FINAL de qualquer imagem — fotorrealismo em 1024px (hero
+    1024x640, card 768x768, mobile 640x1024; ~10 min/imagem);
+    `dreamshaper_8.safetensors` para rascunhos/iterações rápidas em
+    512-640px (~1 min). Itere barato no dreamshaper, finalize no realvisxl. **Prompt**: sujeito primeiro e com
     peso (ex.: `(elephant:1.4)`), cenário depois, e feche com "photorealistic,
     sharp focus, cinematic photography"; negativo sempre com "cartoon,
     deformed, mutated, text, watermark, low quality". Sem texto dentro da

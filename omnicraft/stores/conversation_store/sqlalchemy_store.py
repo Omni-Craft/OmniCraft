@@ -2445,12 +2445,15 @@ class SqlAlchemyConversationStore(ConversationStore):
         with self._session() as session:
             # True only when, at the instant this statement evaluates the
             # row, host_id is still NULL (first bind) AND archived_reason
-            # still carries the sweep's marker — both read from the row's
-            # pre-update state within this one UPDATE, not from a
-            # separate SELECT a concurrent writer could invalidate.
+            # still carries the sweep's marker. The predicate deliberately
+            # does NOT test archived: the marker implies sweep archival, and
+            # on MySQL the SET clauses see values already assigned earlier
+            # in the same statement — a predicate reading a column that
+            # another CASE here rewrites would see the new value. Only
+            # columns assigned later (host_id) or by the reading CASE
+            # itself (pre-assignment value) are safe to reference.
             may_auto_unarchive = and_(
                 SqlConversation.host_id.is_(None),
-                SqlConversation.archived.is_(True),
                 SqlConversation.archived_reason == UNBOUND_SWEEP_ARCHIVE_REASON,
             )
             # MySQL evaluates SET left-to-right against values already

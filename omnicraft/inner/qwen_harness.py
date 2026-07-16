@@ -68,6 +68,7 @@ _ENV_OS_ENV = "HARNESS_QWEN_OS_ENV"
 # vars the qwen CLI reads. See docs/QWEN_FOLLOWUPS.md.
 _ENV_GATEWAY_BASE_URL = "HARNESS_QWEN_GATEWAY_BASE_URL"
 _ENV_GATEWAY_AUTH_COMMAND = "HARNESS_QWEN_GATEWAY_AUTH_COMMAND"
+_ENV_PERMISSION_MODE = "HARNESS_QWEN_PERMISSION_MODE"
 
 
 def _resolve_os_env() -> OSEnvSpec:
@@ -138,6 +139,7 @@ def _build_qwen_executor() -> Executor:
     qwen_path = qwen_path_raw or None
     gateway_base_url = os.environ.get(_ENV_GATEWAY_BASE_URL, "").strip() or None
     gateway_auth_command = os.environ.get(_ENV_GATEWAY_AUTH_COMMAND, "").strip() or None
+    permission_mode = os.environ.get(_ENV_PERMISSION_MODE, "").strip() or None
 
     return QwenExecutor(
         cwd=cwd,
@@ -146,6 +148,7 @@ def _build_qwen_executor() -> Executor:
         qwen_path=qwen_path,
         gateway_base_url=gateway_base_url,
         gateway_auth_command=gateway_auth_command,
+        permission_mode=permission_mode,
     )
 
 

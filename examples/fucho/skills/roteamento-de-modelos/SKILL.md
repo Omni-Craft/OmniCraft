@@ -69,6 +69,25 @@ tarefa mecânica.
 - **Vendor diverso > vendor forte** para achar bug: dois vendedores diferentes
   em tier médio pegam mais que um vendedor forte sozinho.
 
+## Quota do gemini — não apoiar volume nele
+
+O `gemini` (acp:gemini-cli) roda com uma cota diária que estoura fácil sob
+fan-out: quando a cota acaba, o worker morre com `runner_error` \"You have
+exhausted your daily quota on this model\" — e a mesma conta derruba TODOS os
+gemini seguintes no dia. Consequências práticas:
+
+- NÃO use gemini como executor de VOLUME (fan-out amplo, classificação/extração
+  em massa). Prefira `pi` ou `codex` + `gpt-5.6-luna` para volume; deixe o
+  gemini para o caso pontual em que o edge de contexto/multimodal dele importa.
+- Quando escolher gemini, tenha um vendor de fallback pronto: um
+  `runner_error` de quota NÃO é bug de código nem falha de boot — é o
+  fornecedor. Re-despachar no MESMO dia na mesma conta bate no mesmo muro;
+  troque de vendor em vez de repetir.
+- Distinga do crash de permissão headless (que aparece como
+  `runner_disconnected`, corrigido com `permission_mode: bypassPermissions`):
+  quota é `runner_error`/exhausted, disconnect é travamento. Só o primeiro é
+  motivo para baixar o peso do gemini aqui.
+
 ## Procedimento
 
 1. Antes de um fan-out (ou de escolher o revisor), classifique cada tarefa

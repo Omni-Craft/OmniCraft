@@ -224,6 +224,7 @@ class AcpExecutor(Executor):
         config: AcpAgentConfig,
         cwd: str | None = None,
         os_env: OSEnvSpec | None = None,
+        permission_mode: str | None = None,
     ) -> None:
         """Initialize the generic ACP executor.
 
@@ -233,10 +234,20 @@ class AcpExecutor(Executor):
         :param os_env: Environment / sandbox spec. When its ``sandbox`` is not
             ``"none"``, the whole agent process tree is wrapped in the platform
             sandbox (bwrap/seatbelt) at spawn — see :meth:`_sandbox_launch_path`.
+        :param permission_mode: OmniCraft permission mode, mirroring the
+            claude-sdk executor. ``"bypassPermissions"`` marks an unattended /
+            headless run (a fucho worker with no human on the elicitation
+            channel): the human-consent elicitation is skipped so a mid-turn
+            ``session/request_permission`` never parks forever. The TOOL_CALL
+            policy still runs, so a DENY still denies. ``None`` / any other value
+            keeps the interactive path (ASK → elicit).
         """
         self._config = config
         self._cwd = cwd or os.getcwd()
         self._os_env = os_env
+        # Headless bypass: no human to answer an approval card, so an ASK must
+        # auto-resolve instead of parking on elicitation. See _decide_permission.
+        self._bypass_human_consent = permission_mode == "bypassPermissions"
         # Advertise ``clientCapabilities.fs`` so the agent delegates file
         # reads/writes back to us (executed through the OmniCraft OSEnvironment,
         # which enforces the spec's sandbox read/write roots). Enabled only when
@@ -679,10 +690,17 @@ class AcpExecutor(Executor):
         When neither bridge is wired (standalone / unit tests), falls back to
         allow so direct use of the executor isn't blocked. In normal runner
         operation the adapter installs both, so destructive actions are gated.
+
+        Under headless bypass (:attr:`_bypass_human_consent`) the human-consent
+        elicitation is skipped: a DENY still denies, but an ASK / no-policy case
+        auto-allows instead of parking on an approval card no one can answer.
         """
         tool_name, tool_input = self._extract_tool_call(params)
         handler = getattr(self, "_elicitation_handler", None)
         policy_eval = getattr(self, "_policy_evaluator", None)
+        # A headless worker has no elicitation channel, so treat "ask a human"
+        # as auto-allow. DENY is decided by the policy below, before this.
+        bypass = self._bypass_human_consent
 
         if policy_eval is not None:
             action: str | None
@@ -698,6 +716,9 @@ class AcpExecutor(Executor):
                 logger.info("acp permission denied by policy: tool=%s", tool_name)
                 return False
             if action == "POLICY_ACTION_ASK":
+                if bypass:
+                    logger.info("acp headless: auto-allowing policy ASK: tool=%s", tool_name)
+                    return True
                 if handler is None:
                     logger.warning(
                         "acp TOOL_CALL policy ASK with no elicitation handler; denying tool=%s",
@@ -713,7 +734,7 @@ class AcpExecutor(Executor):
                 return allowed
             # ALLOW / UNSPECIFIED / unknown → fall through to elicitation.
 
-        if handler is not None:
+        if handler is not None and not bypass:
             allowed = bool(await handler(tool_name, tool_input))
             logger.info(
                 "acp permission %s by user: tool=%s",
@@ -722,7 +743,9 @@ class AcpExecutor(Executor):
             )
             return allowed
 
-        logger.debug("acp permission allowed (no policy/elicitation wired): tool=%s", tool_name)
+        logger.debug(
+            "acp permission allowed (headless bypass / no gate wired): tool=%s", tool_name
+        )
         return True
 
     @staticmethod
@@ -1053,6 +1076,11 @@ class AcpExecutor(Executor):
                     yield ExecutorError(message=f"ACP process error: {exc}", retryable=True)
                     return
                 if "error" in response:
+                    # A provider-side terminal error (e.g. gemini's "You have
+                    # exhausted your daily quota on this model.") arrives here as
+                    # a well-formed session/prompt error — the agent answered, so
+                    # this is a runner_error, NOT a runner_disconnected. Only a
+                    # dead subprocess / idle-watchdog timeout is a disconnect.
                     error_msg = response["error"].get("message", "Unknown ACP error")
                     if "Session not found" in error_msg:
                         self._session_id = None
@@ -1081,8 +1109,12 @@ class AcpExecutor(Executor):
                         accumulated_text.append(event.text)
                     yield event
             elif notification.get("id") is not None and notification.get("method"):
-                # Server-initiated request (session/request_permission / fs/*):
-                # routes through policy + elicitation. Blocks while the human decides.
+                # Server-initiated request (session/request_permission / fs/*).
+                # The ACP CLI decides WHICH tool calls raise a permission
+                # request; each one routes through policy + elicitation. An
+                # attended run blocks while the human decides; a headless run
+                # auto-resolves (see _decide_permission) so a received request
+                # never stalls waiting for nobody.
                 await self._respond_to_agent_request(notification)
 
             # Inbound message = progress; reset the idle deadline.

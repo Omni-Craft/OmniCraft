@@ -1851,6 +1851,92 @@ async def test_runner_publishes_terminal_failed_when_harness_stream_fails(
         assert _STREAM_FAILURE_MESSAGE in error["message"]
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("case", "frames"),
+    [
+        # Harness died after opening the response, before any terminal event.
+        pytest.param("after_created", [_SSE_RESPONSE_CREATED], id="eof-after-created"),
+        # Harness returned 200 then died before ``response.created`` — the
+        # stream is empty. The fail decision must not hinge on a response id.
+        pytest.param("before_created", [], id="eof-before-created"),
+    ],
+)
+async def test_runner_publishes_failed_when_harness_stream_truncated(
+    case: str,
+    frames: list[str],
+) -> None:
+    """A harness stream that ends with no terminal event fails the turn.
+
+    When the harness subprocess dies mid-turn (idle-reaped or crashed), its SSE
+    stream can simply end — no ``response.completed`` / ``response.failed`` — so
+    ``aiter_text`` finishes without raising. Before the fix the runner reported
+    a clean ``idle`` (or, with a dispatch task still awaiting the dead harness,
+    blocked forever on the terminal bookkeeping, leaving the session pinned to
+    ``running`` — the reported zombie). The truncated stream must instead
+    publish a terminal ``failed`` with an error payload, and the background turn
+    task must finish promptly (no hang) — including when the death precedes
+    ``response.created`` and there is no response id to key on.
+
+    The fake stream returns EOF immediately, standing in for the real transport
+    EOF: a reaped/crashed harness closes its UDS socket (the reaper closes the
+    httpx client before SIGTERM; a crash closes the socket outright), so the
+    proxy stream's ``aiter_text`` ends within seconds, not on a read timeout.
+    """
+    conv = f"conv_stream_truncated_{case}"
+
+    async def _spec_resolver(agent_id: str, session_id: str | None = None) -> AgentSpec:
+        """
+        Return a minimal subprocess-harness spec.
+
+        :param agent_id: Agent id (unused).
+        :param session_id: Session id (unused).
+        :returns: A minimal spec for the test harness.
+        """
+        del agent_id, session_id
+        return AgentSpec(
+            spec_version=1,
+            name="stream-truncated-agent",
+            executor=ExecutorSpec(type="omnicraft", config={"harness": _TEST_HARNESS_NAME}),
+        )
+
+    app = create_runner_app(
+        process_manager=cast(
+            HarnessProcessManager,
+            _FakeProcessManager(_FakeHarnessClient(frames)),
+        ),
+        spec_resolver=_spec_resolver,
+        server_client=NullServerClient(),  # type: ignore[arg-type]
+    )
+
+    async with _runner_test_client(app) as http:
+        response = await http.post(
+            f"/v1/sessions/{conv}/events",
+            json={
+                "type": "message",
+                "role": "user",
+                "agent_id": "ag_stream_truncated",
+                "model": "x",
+                "content": [{"role": "user", "content": "hi"}],
+            },
+        )
+        assert response.status_code == 202
+        # A short timeout proves no hang: an unfixed runner would block the turn
+        # task on the terminal bookkeeping and this await would time out.
+        await _await_bg_turn_task(conv, timeout=5.0)
+        failed_event = await _drain_failed_status_event(conv, timeout=2.0)
+
+    assert failed_event is not None, (
+        "a truncated harness stream must publish a terminal 'failed' status, "
+        "not leave the session pinned to 'running'"
+    )
+    error = failed_event.get("error")
+    assert isinstance(error, dict)
+    # The terminal failed edge carries the truncation message so the client
+    # renders a real error instead of a bare spinner-clear.
+    assert "Harness stream ended unexpectedly." in error.get("message", "")
+
+
 # ── Runner-local OS env dispatch ────────────────────────
 
 

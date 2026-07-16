@@ -959,6 +959,28 @@ def test_wrap_gateway_env_absent_leaves_executor_ungated(
     assert executor._gateway_auth_command is None
 
 
+def test_wrap_reads_permission_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HARNESS_QWEN_PERMISSION_MODE reaches the executor as the bypass flag."""
+    from omnicraft.inner import qwen_harness
+
+    monkeypatch.setenv("HARNESS_QWEN_PERMISSION_MODE", "bypassPermissions")
+    executor = qwen_harness._build_qwen_executor()
+    assert isinstance(executor, QwenExecutor)
+    assert executor._bypass_human_consent is True
+
+
+def test_wrap_permission_mode_absent_keeps_interactive(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without the env var, the executor keeps the interactive ASK→elicit path."""
+    from omnicraft.inner import qwen_harness
+
+    monkeypatch.delenv("HARNESS_QWEN_PERMISSION_MODE", raising=False)
+    executor = qwen_harness._build_qwen_executor()
+    assert isinstance(executor, QwenExecutor)
+    assert executor._bypass_human_consent is False
+
+
 # ---------------------------------------------------------------------------
 # close_session is a no-op (sessions are per-process)
 # ---------------------------------------------------------------------------
@@ -1553,6 +1575,53 @@ async def test_respond_to_permission_elicitation_allow_and_deny() -> None:
     deny_exec._send = AsyncMock(side_effect=lambda m: sent_d.append(m))  # type: ignore[method-assign]
     await deny_exec._respond_to_agent_request(_perm_request())
     assert sent_d[0]["result"]["outcome"] == {"outcome": "selected", "optionId": "cancel"}
+
+
+# ---------------------------------------------------------------------------
+# Headless bypass (permission_mode="bypassPermissions"): no human on the
+# elicitation channel, so an ASK auto-resolves instead of parking forever.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_decide_permission_headless_ask_auto_allows_without_eliciting() -> None:
+    executor = QwenExecutor(permission_mode="bypassPermissions")
+    executor._policy_evaluator = AsyncMock(  # type: ignore[attr-defined]
+        return_value=MagicMock(action="POLICY_ACTION_ASK")
+    )
+    executor._elicitation_handler = AsyncMock(return_value=True)  # type: ignore[attr-defined]
+    assert await executor._decide_permission(_perm_request()["params"]) is True
+    executor._elicitation_handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_decide_permission_headless_no_policy_auto_allows_without_eliciting() -> None:
+    executor = QwenExecutor(permission_mode="bypassPermissions")
+    executor._elicitation_handler = AsyncMock(return_value=True)  # type: ignore[attr-defined]
+    assert await executor._decide_permission(_perm_request()["params"]) is True
+    executor._elicitation_handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_decide_permission_headless_deny_still_denies() -> None:
+    executor = QwenExecutor(permission_mode="bypassPermissions")
+    executor._policy_evaluator = AsyncMock(  # type: ignore[attr-defined]
+        return_value=MagicMock(action="POLICY_ACTION_DENY")
+    )
+    executor._elicitation_handler = AsyncMock(return_value=True)  # type: ignore[attr-defined]
+    assert await executor._decide_permission(_perm_request()["params"]) is False
+
+
+@pytest.mark.asyncio
+async def test_decide_permission_interactive_ask_still_elicits() -> None:
+    # No bypass → attended run keeps the human-consent gate.
+    executor = QwenExecutor()
+    executor._policy_evaluator = AsyncMock(  # type: ignore[attr-defined]
+        return_value=MagicMock(action="POLICY_ACTION_ASK")
+    )
+    executor._elicitation_handler = AsyncMock(return_value=False)  # type: ignore[attr-defined]
+    assert await executor._decide_permission(_perm_request()["params"]) is False
+    executor._elicitation_handler.assert_awaited_once()
 
 
 @pytest.mark.asyncio

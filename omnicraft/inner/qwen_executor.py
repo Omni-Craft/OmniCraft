@@ -176,6 +176,7 @@ class QwenExecutor(Executor):
         qwen_path: str | None = None,
         gateway_base_url: str | None = None,
         gateway_auth_command: str | None = None,
+        permission_mode: str | None = None,
     ) -> None:
         """Initialize the Qwen executor.
 
@@ -199,9 +200,17 @@ class QwenExecutor(Executor):
         :param gateway_auth_command: Shell command that prints a bearer token to
             stdout (from ``HARNESS_QWEN_GATEWAY_AUTH_COMMAND``); run once at
             process start to snapshot ``OPENAI_API_KEY``.
+        :param permission_mode: OmniCraft permission mode, mirroring the
+            claude-sdk executor. ``"bypassPermissions"`` marks an unattended /
+            headless run (no human on the elicitation channel): the human-consent
+            elicitation is skipped so a ``session/request_permission`` never parks
+            forever. The TOOL_CALL policy still runs, so a DENY still denies.
         """
         self._cwd = cwd or os.getcwd()
         self._os_env = os_env
+        # Headless bypass: no human to answer an approval card, so an ASK must
+        # auto-resolve instead of parking on elicitation. See _decide_permission.
+        self._bypass_human_consent = permission_mode == "bypassPermissions"
         # Whether to advertise ``clientCapabilities.fs`` so qwen delegates file
         # reads/writes back to us (executed through the OmniCraft OSEnvironment,
         # which enforces the spec's sandbox read/write roots) instead of using
@@ -803,12 +812,19 @@ class QwenExecutor(Executor):
         operation the adapter always installs both, so destructive actions are
         gated rather than blindly approved.
 
+        Under headless bypass (:attr:`_bypass_human_consent`) the human-consent
+        elicitation is skipped: a DENY still denies, but an ASK / no-policy case
+        auto-allows instead of parking on an approval card no one can answer.
+
         :param params: The ``session/request_permission`` params.
         :returns: ``True`` to allow the tool call, ``False`` to deny it.
         """
         tool_name, tool_input = self._extract_tool_call(params)
         handler = getattr(self, "_elicitation_handler", None)
         policy_eval = getattr(self, "_policy_evaluator", None)
+        # A headless worker has no elicitation channel, so treat "ask a human"
+        # as auto-allow. DENY is decided by the policy below, before this.
+        bypass = self._bypass_human_consent
 
         if policy_eval is not None:
             action: str | None
@@ -824,6 +840,9 @@ class QwenExecutor(Executor):
                 logger.info("qwen permission denied by policy: tool=%s", tool_name)
                 return False
             if action == "POLICY_ACTION_ASK":
+                if bypass:
+                    logger.info("qwen headless: auto-allowing policy ASK: tool=%s", tool_name)
+                    return True
                 if handler is None:
                     logger.warning(
                         "qwen TOOL_CALL policy ASK with no elicitation handler; denying tool=%s",
@@ -839,7 +858,7 @@ class QwenExecutor(Executor):
                 return allowed
             # ALLOW / UNSPECIFIED / unknown → fall through to elicitation.
 
-        if handler is not None:
+        if handler is not None and not bypass:
             allowed = bool(await handler(tool_name, tool_input))
             logger.info(
                 "qwen permission %s by user: tool=%s",
@@ -848,8 +867,10 @@ class QwenExecutor(Executor):
             )
             return allowed
 
-        # No gates wired (standalone / tests) — allow.
-        logger.debug("qwen permission allowed (no policy/elicitation wired): tool=%s", tool_name)
+        # Headless bypass or no gates wired (standalone / tests) — allow.
+        logger.debug(
+            "qwen permission allowed (headless bypass / no gate wired): tool=%s", tool_name
+        )
         return True
 
     @staticmethod

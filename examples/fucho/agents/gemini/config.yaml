@@ -9,6 +9,11 @@ executor:
   type: omnicraft
   config:
     harness: acp:gemini-cli
+    # Headless worker: no human on the elicitation channel. bypassPermissions
+    # auto-resolves an ASK permission request instead of parking on an approval
+    # card no one can answer (which would idle-timeout into runner_disconnected).
+    # The TOOL_CALL policy still runs, so blast_radius DENYs still deny.
+    permission_mode: bypassPermissions
 
 prompt: |
   You are Gemini, a coding sub-agent dispatched by the fucho

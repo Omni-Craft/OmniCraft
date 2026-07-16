@@ -764,6 +764,92 @@ async def test_idle_reaper_spares_turn_started_during_pass(tmp_path: Path) -> No
             await reaper
 
 
+async def test_idle_reaper_skips_conversation_with_active_turn(tmp_path: Path) -> None:
+    """A conversation the activity probe reports active is never idle-reaped.
+
+    ``_in_flight_response_ids`` only covers the ``response.created``..terminal
+    streaming window. An orchestrator parked on a background result is alive
+    but registers no streamed response, so that guard is empty and its
+    ``last_used_at`` stays frozen at start-of-turn — the reaper would SIGTERM
+    it mid-turn. The activity probe (wired by the runner to ``_active_turns``)
+    reports the conversation active so the entry is spared; once the turn ends
+    and the probe reports idle, a later pass reclaims it.
+    """
+    mgr = HarnessProcessManager(idle_timeout_s=0.5, reaper_interval_s=0.1, tmp_parent=tmp_path)
+    entry = _SubprocessEntry(_FakeReapProc(), _SlowCloseClient(0.0), _FakeEndpoint(), "h")  # type: ignore[arg-type]
+    entry.last_used_at = time.monotonic() - 100.0
+    mgr._entries = {"conv_active": entry}
+
+    active = {"conv_active"}
+    mgr.set_activity_probe(lambda conv_id: conv_id in active)
+
+    reaper = asyncio.create_task(mgr._idle_reaper_loop())
+    try:
+        # Hold well past the 0.5 s idle window across many passes; an unguarded
+        # reaper would SIGTERM this stale-looking entry. The probe keeps it alive.
+        await asyncio.sleep(1.5)
+        assert not entry.process.killed, "reaper reaped a conversation with an active turn"
+        assert "conv_active" in mgr._entries
+
+        # Turn ends: the probe now reports idle, so a later pass reclaims the
+        # now-genuinely-idle entry (sparing is a deferral, not an exemption).
+        active.discard("conv_active")
+        deadline = time.monotonic() + 3.0
+        while not entry.process.killed:
+            assert time.monotonic() < deadline, "idle entry never reaped after turn ended"
+            await asyncio.sleep(0.05)
+    finally:
+        reaper.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reaper
+
+
+async def test_release_idle_cutoff_spares_probe_active_conversation(tmp_path: Path) -> None:
+    """``release(only_if_idle_cutoff=...)`` re-checks the probe before teardown.
+
+    The reaper snapshots stale entries then releases them outside the lock, so a
+    turn can start on a snapshotted conversation during the pass. The probe is
+    re-consulted under the registry lock immediately before teardown, so an
+    entry reported active is spared even though it looks idle by ``last_used_at``.
+    """
+    mgr = HarnessProcessManager(idle_timeout_s=1.0, reaper_interval_s=60.0, tmp_parent=tmp_path)
+    entry = _SubprocessEntry(_FakeReapProc(), _SlowCloseClient(0.0), _FakeEndpoint(), "h")  # type: ignore[arg-type]
+    entry.last_used_at = time.monotonic() - 100.0
+    mgr._entries = {"conv_x": entry}
+
+    mgr.set_activity_probe(lambda conv_id: True)
+    await mgr.release("conv_x", only_if_idle_cutoff=time.monotonic() - 1.0)
+    assert not entry.process.killed, "conditional release tore down a probe-active conversation"
+    assert "conv_x" in mgr._entries
+
+    # Probe now idle → the same conditional release tears it down.
+    mgr.set_activity_probe(lambda conv_id: False)
+    await mgr.release("conv_x", only_if_idle_cutoff=time.monotonic() - 1.0)
+    assert entry.process.killed
+    assert "conv_x" not in mgr._entries
+
+
+async def test_activity_probe_exception_treated_as_active(tmp_path: Path) -> None:
+    """A probe that raises must not let the reaper kill a possibly-live turn."""
+    mgr = HarnessProcessManager(idle_timeout_s=0.5, reaper_interval_s=0.1, tmp_parent=tmp_path)
+    entry = _SubprocessEntry(_FakeReapProc(), _SlowCloseClient(0.0), _FakeEndpoint(), "h")  # type: ignore[arg-type]
+    entry.last_used_at = time.monotonic() - 100.0
+    mgr._entries = {"conv_boom": entry}
+
+    def _boom(conv_id: str) -> bool:
+        raise RuntimeError("probe fault")
+
+    mgr.set_activity_probe(_boom)
+    reaper = asyncio.create_task(mgr._idle_reaper_loop())
+    try:
+        await asyncio.sleep(0.8)
+        assert not entry.process.killed, "a raising probe must be treated as active, not reaped"
+    finally:
+        reaper.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reaper
+
+
 async def test_idle_reaper_disabled_when_timeout_zero(
     register_test_harness: None,
     short_tmp_parent: Path,

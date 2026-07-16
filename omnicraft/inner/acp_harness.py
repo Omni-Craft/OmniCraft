@@ -50,6 +50,7 @@ _ENV_SESSION_ID_MODE = "HARNESS_ACP_SESSION_ID_MODE"
 _ENV_SEND_MODEL = "HARNESS_ACP_SEND_MODEL"
 _ENV_CWD = "HARNESS_ACP_CWD"
 _ENV_OS_ENV = "HARNESS_ACP_OS_ENV"
+_ENV_PERMISSION_MODE = "HARNESS_ACP_PERMISSION_MODE"
 
 
 def _resolve_os_env() -> OSEnvSpec:
@@ -99,6 +100,7 @@ def _build_acp_executor() -> Executor:
     session_id_mode = os.environ.get(_ENV_SESSION_ID_MODE, "").strip() or "server"
     send_model = os.environ.get(_ENV_SEND_MODEL, "").strip() in ("1", "true", "yes")
     cwd = os.environ.get(_ENV_CWD) or os.environ.get("OMNICRAFT_RUNNER_WORKSPACE") or None
+    permission_mode = os.environ.get(_ENV_PERMISSION_MODE, "").strip() or None
 
     config = AcpAgentConfig(
         command=command,
@@ -107,7 +109,9 @@ def _build_acp_executor() -> Executor:
         session_id_mode=session_id_mode,
         send_model_in_session_new=send_model,
     )
-    return AcpExecutor(config=config, cwd=cwd, os_env=_resolve_os_env())
+    return AcpExecutor(
+        config=config, cwd=cwd, os_env=_resolve_os_env(), permission_mode=permission_mode
+    )
 
 
 def create_app() -> FastAPI:

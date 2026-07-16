@@ -1422,6 +1422,13 @@ def _build_qwen_spawn_env(
     os_env_payload = _serialize_os_env(spec.os_env)
     if os_env_payload is not None:
         env["HARNESS_QWEN_OS_ENV"] = os_env_payload
+    # ``bypassPermissions`` marks a headless/unattended run so the executor
+    # auto-resolves an ASK instead of parking on elicitation; omitted keeps
+    # the interactive ASK→elicit path. See :func:`_build_acp_spawn_env`.
+    cfg = getattr(spec.executor, "config", None)
+    permission_mode = cfg.get("permission_mode") if isinstance(cfg, dict) else None
+    if permission_mode:
+        env["HARNESS_QWEN_PERMISSION_MODE"] = str(permission_mode)
     return env
 
 
@@ -1514,6 +1521,13 @@ def _build_acp_spawn_env(
     os_env_payload = _serialize_os_env(spec.os_env)
     if os_env_payload is not None:
         env["HARNESS_ACP_OS_ENV"] = os_env_payload
+    # Permission mode: ``bypassPermissions`` marks a headless/unattended run
+    # (a fucho worker with no human to answer an approval card) so the executor
+    # auto-resolves an ASK instead of parking on elicitation. Omitted → the
+    # harness keeps the interactive ASK→elicit path.
+    permission_mode = cfg.get("permission_mode") if isinstance(cfg, dict) else None
+    if permission_mode:
+        env["HARNESS_ACP_PERMISSION_MODE"] = str(permission_mode)
     return env
 
 

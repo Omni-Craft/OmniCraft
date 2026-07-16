@@ -266,6 +266,61 @@ async def test_decide_permission_ask_without_handler_fails_closed() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Headless bypass (permission_mode="bypassPermissions"): no human on the
+# elicitation channel, so an ASK auto-resolves instead of parking forever.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_decide_permission_headless_ask_auto_allows_without_eliciting() -> None:
+    ex = AcpExecutor(AcpAgentConfig(command="x"), permission_mode="bypassPermissions")
+
+    class _V:
+        action = "POLICY_ACTION_ASK"
+
+    ex._policy_evaluator = AsyncMock(return_value=_V())
+    ex._elicitation_handler = AsyncMock(return_value=True)
+    assert await ex._decide_permission({"toolCall": {"title": "shell"}}) is True
+    # The whole point: no elicitation, so a headless run never blocks on it.
+    ex._elicitation_handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_decide_permission_headless_no_policy_auto_allows_without_eliciting() -> None:
+    ex = AcpExecutor(AcpAgentConfig(command="x"), permission_mode="bypassPermissions")
+    ex._elicitation_handler = AsyncMock(return_value=True)
+    # No policy wired → the fall-through elicit path; headless must skip it.
+    assert await ex._decide_permission({"toolCall": {"title": "shell"}}) is True
+    ex._elicitation_handler.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_decide_permission_headless_deny_still_denies() -> None:
+    ex = AcpExecutor(AcpAgentConfig(command="x"), permission_mode="bypassPermissions")
+
+    class _V:
+        action = "POLICY_ACTION_DENY"
+
+    ex._policy_evaluator = AsyncMock(return_value=_V())
+    ex._elicitation_handler = AsyncMock(return_value=True)
+    assert await ex._decide_permission({"toolCall": {"title": "shell"}}) is False
+
+
+@pytest.mark.asyncio
+async def test_decide_permission_interactive_ask_still_elicits() -> None:
+    # No bypass → attended run keeps the human-consent gate.
+    ex = AcpExecutor(AcpAgentConfig(command="x"))
+
+    class _V:
+        action = "POLICY_ACTION_ASK"
+
+    ex._policy_evaluator = AsyncMock(return_value=_V())
+    ex._elicitation_handler = AsyncMock(return_value=False)
+    assert await ex._decide_permission({"toolCall": {"title": "shell"}}) is False
+    ex._elicitation_handler.assert_awaited_once()
+
+
+# ---------------------------------------------------------------------------
 # interrupt → session/cancel
 # ---------------------------------------------------------------------------
 
@@ -315,6 +370,19 @@ def test_harness_wrap_builds_executor(monkeypatch: pytest.MonkeyPatch) -> None:
     assert ex._config.session_id_mode == "client"
     assert ex._config.send_model_in_session_new is True
     assert ex._config.model == "gpt-5.3"
+    # No permission mode env → interactive default (elicit stays).
+    assert ex._bypass_human_consent is False
+
+
+def test_harness_wrap_reads_permission_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """HARNESS_ACP_PERMISSION_MODE reaches the executor as the bypass flag."""
+    from omnicraft.inner import acp_harness
+
+    monkeypatch.setenv("HARNESS_ACP_COMMAND", "gemini --experimental-acp")
+    monkeypatch.setenv("HARNESS_ACP_PERMISSION_MODE", "bypassPermissions")
+    ex = acp_harness._build_acp_executor()
+    assert isinstance(ex, AcpExecutor)
+    assert ex._bypass_human_consent is True
 
 
 # ---------------------------------------------------------------------------

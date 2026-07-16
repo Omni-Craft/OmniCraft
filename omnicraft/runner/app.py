@@ -6396,6 +6396,18 @@ async def _session_labels_for_runner_spawn(
 # marker.
 _RUNNER_DISPATCHED_FIELD = "omnicraft_runner_dispatched"
 
+# Turn-lifecycle events that terminate a harness response stream. A stream
+# that ends with none of these was truncated — the harness subprocess died
+# mid-turn — and proxy_stream fails the turn rather than reporting a clean end.
+_TERMINAL_STREAM_EVENT_TYPES = frozenset(
+    {
+        "response.completed",
+        "response.failed",
+        "response.cancelled",
+        "response.incomplete",
+    }
+)
+
 
 def _encode_sse_event(event: dict[str, Any]) -> bytes:
     """Re-encode an SSE event as a single ``data:`` frame."""
@@ -8051,6 +8063,17 @@ def create_runner_app(
         return any(process_manager.has_active_turn(session_id) for session_id in session_ids)
 
     app.state.has_active_work = _has_active_work
+
+    if process_manager is not None:
+        # Let the harness idle reaper consult the runner's authoritative
+        # per-conversation turn state. A turn parked awaiting background work
+        # (an orchestrator on a sub-agent result) registers no streamed
+        # response, so the in-flight-only guard misses it; membership in
+        # ``_active_turns`` keeps its subprocess from being SIGTERM'd mid-turn.
+        # Test doubles may not implement the hook.
+        _register_activity_probe = getattr(process_manager, "set_activity_probe", None)
+        if callable(_register_activity_probe):
+            _register_activity_probe(lambda conv_id: conv_id in _active_turns)
 
     def _publish_event(session_id: str, event: dict[str, Any]) -> None:
         """Put an event on the session's queue for GET /stream.
@@ -14281,6 +14304,9 @@ def create_runner_app(
 
             event_body = _wrap_as_message_event(body)
             _inject_mcp_schemas(event_body, _mcp_schemas)
+            # Hoisted above the try so the exception handler can cancel any
+            # in-flight local tool dispatch when the harness stream breaks.
+            _dispatch_tasks: list[_asyncio.Task[str]] = []
             try:
                 async with client.stream(
                     "POST",
@@ -14321,7 +14347,6 @@ def create_runner_app(
                     _response_id: str | None = None
                     _omnicraft_task_id: str | None = body.get("task_id")
                     _buffer = ""
-                    _dispatch_tasks: list[_asyncio.Task[str]] = []
                     _text_acc: list[str] = []
                     # Last failure seen in the harness stream. Threaded into
                     # _on_proxy_stream_end so a turn that ends after a
@@ -14330,6 +14355,10 @@ def create_runner_app(
                     # there (the app-server forwarder owns it), so without
                     # this the client's working indicator never clears.
                     _stream_failed_error: dict[str, Any] | None = None
+                    # Whether a terminal lifecycle event was seen. A stream that
+                    # ends without one was truncated by a harness subprocess
+                    # death; the turn is failed rather than reported idle.
+                    _saw_terminal = False
                     async for chunk in harness_resp.aiter_text():
                         _buffer += chunk
                         while "\n\n" in _buffer:
@@ -14382,6 +14411,8 @@ def create_runner_app(
                                 # SSE events: text deltas, tool
                                 # calls, and tool results.
                                 _evt_type = event.get("type")
+                                if _evt_type in _TERMINAL_STREAM_EVENT_TYPES:
+                                    _saw_terminal = True
                                 if _evt_type == "injection.consumed":
                                     # Runner-internal exactly-once marker
                                     # (RUNNER_MESSAGE_INGEST.md Part B): the
@@ -14685,6 +14716,29 @@ def create_runner_app(
                             else:
                                 yield raw_sse_bytes
 
+                    # The harness stream ended cleanly (no exception) but never
+                    # emitted a terminal lifecycle event: the subprocess died
+                    # mid-turn (e.g. an idle-reaped or crashed harness). Fail the
+                    # turn instead of reporting a silent idle, and cancel dispatch
+                    # tasks still awaiting the dead harness so terminal
+                    # bookkeeping can't hang on a result that never arrives —
+                    # the running-zombie failure mode. Not gated on _response_id:
+                    # a death before ``response.created`` also ends terminal-less
+                    # and must fail, not report idle.
+                    if not _saw_terminal and _stream_failed_error is None:
+                        _stream_failed_error = {
+                            "code": "connection_error",
+                            "message": "Harness stream ended unexpectedly.",
+                            "type": "HarnessStreamTruncated",
+                        }
+                        for _task in _dispatch_tasks:
+                            if not _task.done():
+                                _task.cancel()
+                        _publish_event(
+                            conv_id,
+                            {"type": "response.failed", "error": _stream_failed_error},
+                        )
+
                     if _dispatch_tasks:
                         await _asyncio.gather(*_dispatch_tasks, return_exceptions=True)
 
@@ -14719,6 +14773,11 @@ def create_runner_app(
                     "response": {"status": "failed", "error": _error},
                     "error": _error,
                 }
+                # Cancel any local dispatch still awaiting the dead harness so no
+                # task keeps running after the turn failed (mirrors the EOF branch).
+                for _task in _dispatch_tasks:
+                    if not _task.done():
+                        _task.cancel()
                 _publish_event(conv_id, _http_fail)
                 _on_proxy_stream_end(conv_id, error=_error)
                 yield _response_failed_event(_error)

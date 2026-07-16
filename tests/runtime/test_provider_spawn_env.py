@@ -96,6 +96,7 @@ def _make_spec(
     profile: str | None = None,
     auth: ApiKeyAuth | DatabricksAuth | ProviderAuth | None = None,
     os_env: object | None = None,
+    permission_mode: str | None = None,
 ) -> AgentSpec:
     """
     Build a minimal :class:`AgentSpec` for a given harness.
@@ -114,6 +115,8 @@ def _make_spec(
         config["model"] = model
     if profile is not None:
         config["profile"] = profile
+    if permission_mode is not None:
+        config["permission_mode"] = permission_mode
     return AgentSpec(
         spec_version=1,
         name=f"test-{harness}",
@@ -714,6 +717,26 @@ def test_qwen_uses_openai_global_default(config_home: Path) -> None:
     assert env["HARNESS_QWEN_GATEWAY_AUTH_COMMAND"] == "printf %s sk-oai-secret"
     # Model comes from provider's default_model
     assert env["HARNESS_QWEN_MODEL"] == "gpt-default-model"
+
+
+def test_qwen_spawn_env_forwards_permission_mode(config_home: Path) -> None:
+    """A headless worker's ``permission_mode`` reaches the qwen harness env."""
+    _write_config(config_home, _openai_default_config())
+    spec = _make_spec(harness="qwen", permission_mode="bypassPermissions")
+
+    env = _build_qwen_spawn_env(spec, workdir=None)
+
+    assert env["HARNESS_QWEN_PERMISSION_MODE"] == "bypassPermissions"
+
+
+def test_qwen_spawn_env_omits_permission_mode_when_unset(config_home: Path) -> None:
+    """Interactive default: no permission_mode → no env var → ASK→elicit stays."""
+    _write_config(config_home, _openai_default_config())
+    spec = _make_spec(harness="qwen")
+
+    env = _build_qwen_spawn_env(spec, workdir=None)
+
+    assert "HARNESS_QWEN_PERMISSION_MODE" not in env
 
 
 def test_goose_spawn_env_forwards_model_and_no_gateway(config_home: Path) -> None:

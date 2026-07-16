@@ -31,6 +31,7 @@ import sys
 import tempfile
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -563,6 +564,15 @@ class HarnessProcessManager:
         # and the idle reaper skips any conversation present here so an
         # actively-streaming turn is never reaped mid-flight.
         self._in_flight_response_ids: dict[str, str] = {}
+        # Optional predicate the idle reaper consults before teardown, set by
+        # the runner via :meth:`set_activity_probe`. The ``_in_flight`` map only
+        # covers the ``response.created``..terminal streaming window; an
+        # orchestrator parked on a background result is alive but registers no
+        # streamed response, so the runner's authoritative per-conversation turn
+        # state (``_active_turns``) is the signal that keeps such a turn from
+        # being SIGTERM'd mid-flight. ``None`` (no probe wired) preserves the
+        # in-flight-only behavior.
+        self._activity_probe: Callable[[str], bool] | None = None
         # Per-conversation spawn lock — see §Process management:
         # Spawn lock. The lock guards the lazy-init window in
         # ``get_client``; uncontested after the first spawn for a
@@ -867,6 +877,48 @@ class HarnessProcessManager:
         """
         return conversation_id in self._in_flight_response_ids
 
+    def set_activity_probe(self, probe: Callable[[str], bool] | None) -> None:
+        """
+        Register a predicate the idle reaper honors as live-turn state.
+
+        The runner owns the authoritative "this conversation has a logically
+        active turn" signal (its ``_active_turns`` map), which spans the whole
+        turn — tool dispatch and awaiting background work included — not just
+        the ``response.created``..terminal streaming window the in-flight map
+        tracks. An orchestrator awaiting a background result is alive but has
+        no streamed response registered; without this probe the reaper would
+        SIGTERM its subprocess mid-turn. A conversation the probe reports
+        active is never idle-reaped.
+
+        :param probe: Callable mapping a conversation id to whether it has an
+            active turn, or ``None`` to clear (in-flight-only reaping).
+        """
+        self._activity_probe = probe
+
+    def _conversation_active(self, conversation_id: str) -> bool:
+        """
+        Whether the registered activity probe reports *conversation_id* active.
+
+        A probe fault must not let the reaper kill a possibly-live turn, so an
+        exception is treated as active (skip reaping) and logged; a genuinely
+        idle entry is reclaimed on a later pass once the probe recovers.
+
+        :param conversation_id: AP-allocated conversation id.
+        :returns: ``True`` if the probe reports the conversation active (or
+            raised); ``False`` when no probe is wired or it reports idle.
+        """
+        probe = self._activity_probe
+        if probe is None:
+            return False
+        try:
+            return probe(conversation_id)
+        except Exception:
+            _logger.exception(
+                "activity probe raised for conversation %s; treating as active",
+                conversation_id,
+            )
+            return True
+
     def mark_in_flight(self, conversation_id: str, response_id: str) -> None:
         """
         Record that *conversation_id* has a live harness turn.
@@ -912,7 +964,8 @@ class HarnessProcessManager:
 
         ``only_if_idle_cutoff`` (the idle reaper's pass cutoff) makes the
         release conditional: the entry is torn down only if it is still
-        idle — untouched since the cutoff and with no turn in flight.
+        idle — untouched since the cutoff, with no turn in flight, and not
+        reported active by the runner's turn-state probe.
         The check happens under the registry lock, atomically with the
         unregister, so a turn that starts while an earlier entry in the
         same reaper pass tears down can never be killed mid-flight
@@ -940,6 +993,7 @@ class HarnessProcessManager:
                     current is None
                     or current.last_used_at > only_if_idle_cutoff
                     or conversation_id in self._in_flight_response_ids
+                    or self._conversation_active(conversation_id)
                 ):
                     _logger.info(
                         "skipping idle reap for conversation %s: entry became "
@@ -1159,8 +1213,11 @@ class HarnessProcessManager:
         Background task: periodically reap idle subprocesses.
 
         Iterates the registry, releasing any entry whose
-        ``last_used_at`` is older than ``idle_timeout_s`` AND
-        has no in-flight response on the harness. Sleeps for
+        ``last_used_at`` is older than ``idle_timeout_s``, has no
+        in-flight response on the harness, AND is not reported active
+        by the runner's turn-state probe (see
+        :meth:`set_activity_probe` — covers turns awaiting background
+        work, which register no streamed response). Sleeps for
         ``reaper_interval_s`` between passes. Terminates on
         :class:`asyncio.CancelledError` from :meth:`shutdown`. A
         non-positive ``idle_timeout_s`` (e.g.
@@ -1214,6 +1271,11 @@ class HarnessProcessManager:
                     if entry.last_used_at > cutoff:
                         continue
                     if conv_id in self._in_flight_response_ids:
+                        continue
+                    # A turn awaiting background work registers no streamed
+                    # response, so ``_in_flight`` misses it; the runner's
+                    # activity probe reports it active so it is not reaped.
+                    if self._conversation_active(conv_id):
                         continue
                     stale.append(conv_id)
             for conv_id in stale:

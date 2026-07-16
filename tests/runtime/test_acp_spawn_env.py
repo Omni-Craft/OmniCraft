@@ -39,10 +39,14 @@ def _write_acp_config(tmp_path: Path, agents: list[dict] | None = None) -> None:
     )
 
 
-def _make_spec(*, harness: str, model: str | None = None) -> AgentSpec:
+def _make_spec(
+    *, harness: str, model: str | None = None, permission_mode: str | None = None
+) -> AgentSpec:
     config: dict[str, object] = {"harness": harness}
     if model is not None:
         config["model"] = model
+    if permission_mode is not None:
+        config["permission_mode"] = permission_mode
     return AgentSpec(
         spec_version=1,
         name="test-acp",
@@ -93,6 +97,22 @@ def test_spec_model_overrides_agent_model(_isolate_config: Path) -> None:
     _write_acp_config(_isolate_config)
     env = _build_acp_spawn_env(_make_spec(harness="acp:goose", model="claude-sonnet-4-6"))
     assert env["HARNESS_ACP_MODEL"] == "claude-sonnet-4-6"
+
+
+def test_permission_mode_forwarded_for_headless_worker(_isolate_config: Path) -> None:
+    """A headless worker's ``permission_mode`` reaches the harness env."""
+    _write_acp_config(_isolate_config)
+    env = _build_acp_spawn_env(
+        _make_spec(harness="acp:gemini-cli", permission_mode="bypassPermissions")
+    )
+    assert env["HARNESS_ACP_PERMISSION_MODE"] == "bypassPermissions"
+
+
+def test_permission_mode_omitted_when_unset(_isolate_config: Path) -> None:
+    """Interactive default: no permission_mode → no env var → ASK→elicit stays."""
+    _write_acp_config(_isolate_config)
+    env = _build_acp_spawn_env(_make_spec(harness="acp:gemini-cli"))
+    assert "HARNESS_ACP_PERMISSION_MODE" not in env
 
 
 def test_databricks_model_dropped_agent_model_used(_isolate_config: Path) -> None:

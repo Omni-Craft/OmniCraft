@@ -1548,6 +1548,139 @@ async def test_message_to_host_bound_offline_session_503_keeps_generic_message(
     assert error["message"] == "No runner bound for session", error["message"]
 
 
+async def test_session_create_writes_durable_host_type_marker(
+    client: httpx.AsyncClient,
+    db_uri: str,
+) -> None:
+    """Session create writes the durable ``HOST_TYPE_LABEL_KEY`` label.
+
+    This is what makes a managed session detectable after a restart
+    even when it never gets a workspace: the marker is written up
+    front, before any background provisioning, from the request's own
+    ``host_type`` field.
+    """
+    from omnicraft.server.managed_hosts import HOST_TYPE_LABEL_KEY
+
+    agent = await create_test_agent(client)
+    resp = await client.post("/v1/sessions", json={"agent_id": agent["id"]})
+    assert resp.status_code == 201, resp.text
+    session_id = resp.json()["id"]
+
+    conv = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert conv is not None
+    assert conv.labels.get(HOST_TYPE_LABEL_KEY) == "external"
+
+
+async def test_patch_late_bind_backfills_host_type_marker_for_legacy_session(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Late host-bind backfills the marker on a pre-marker legacy session.
+
+    A session created before ``HOST_TYPE_LABEL_KEY`` existed has no
+    marker at all. Binding it via the late host-bind path is the one
+    place it can pick one up, so it doesn't stay unmarked forever.
+    """
+    from omnicraft.runtime import set_runner_client
+    from omnicraft.server.managed_hosts import HOST_TYPE_LABEL_KEY
+    from omnicraft.server.routes import sessions as sessions_module
+
+    monkeypatch.setattr(sessions_module, "_HOST_BOUND_RUNNER_CONNECT_GRACE_S", 0.0)
+
+    comm = await _connect_host(app)
+    session_id = await _create_unbound_session(client)
+    store = SqlAlchemyConversationStore(db_uri)
+    store.delete_label(session_id, HOST_TYPE_LABEL_KEY)
+    assert store.get_conversation(session_id).labels.get(HOST_TYPE_LABEL_KEY) is None
+
+    stat_responder = asyncio.create_task(_serve_one_stat(comm))
+    patch_resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": _WORKSPACE},
+    )
+    await stat_responder
+
+    assert patch_resp.status_code == 200, patch_resp.text
+    conv = store.get_conversation(session_id)
+    assert conv is not None
+    assert conv.labels.get(HOST_TYPE_LABEL_KEY) == "external"
+    set_runner_client(None)
+
+
+async def test_patch_host_bind_rejects_orphaned_managed_session_marker_only(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+) -> None:
+    """A managed session orphaned by a restart, with no workspace, rejects late host-bind.
+
+    Acceptance case: a managed session whose background provisioning
+    was interrupted by a server restart before it ever got a
+    workspace — so no ``MANAGED_REPO_LABEL_KEY`` — and whose in-memory
+    launch tracker entry was wiped by the restart. Neither pre-existing
+    signal covers this session; only the durable ``HOST_TYPE_LABEL_KEY``
+    marker (written at create) does.
+    """
+    from omnicraft.server.managed_hosts import HOST_TYPE_LABEL_KEY
+
+    session_id = await _create_unbound_session(client)
+    store = SqlAlchemyConversationStore(db_uri)
+    # Simulate a real managed create's marker surviving a restart, with
+    # no tracker entry (wiped) and no repo label (no workspace).
+    store.set_labels(session_id, {HOST_TYPE_LABEL_KEY: "managed"})
+    assert app.state.managed_launches.get(session_id) is None
+
+    resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": _WORKSPACE},
+    )
+
+    assert resp.status_code == 400, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "invalid_input"
+    assert "managed sessions cannot be host-bound" in error["message"], error["message"]
+
+    conv = store.get_conversation(session_id)
+    assert conv is not None
+    assert conv.host_id is None
+
+
+async def test_message_to_orphaned_managed_session_503_names_recreate(
+    client: httpx.AsyncClient,
+    db_uri: str,
+) -> None:
+    """A message to a restart-orphaned managed session gets an actionable 503.
+
+    Same orphan scenario as the PATCH-rejection test above, but hit via
+    the message-post path (``post_event``): the 503 must name the real
+    cause (interrupted managed provisioning) and the real recovery
+    (delete and recreate), not the generic "bind one via PATCH" message
+    — PATCH would just reject it too.
+    """
+    from omnicraft.runtime import set_runner_client
+    from omnicraft.server.managed_hosts import HOST_TYPE_LABEL_KEY
+
+    session_id = await _create_unbound_session(client)
+    SqlAlchemyConversationStore(db_uri).set_labels(session_id, {HOST_TYPE_LABEL_KEY: "managed"})
+
+    set_runner_client(None)
+    resp = await client.post(
+        f"/v1/sessions/{session_id}/events",
+        json={
+            "type": "message",
+            "data": {"role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+        },
+    )
+
+    assert resp.status_code == 503, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "runner_unavailable"
+    assert "managed sandbox never finished provisioning" in error["message"], error["message"]
+    assert "delete and recreate" in error["message"], error["message"]
+
+
 async def _create_unbound_session(client: httpx.AsyncClient) -> str:
     """Create a session with no host and return its id.
 
@@ -1682,9 +1815,15 @@ async def test_patch_host_bind_rejects_managed_session_via_tracker(
     provisioning runs — the null-binding check alone would let an
     external host bind and race the managed launch. The in-memory
     managed-launch tracker (the same signal post_event uses) closes
-    that window.
+    that window. The durable ``HOST_TYPE_LABEL_KEY`` marker is stripped
+    to simulate a session created before that marker existed — with it
+    present (the normal case), the marker itself would already answer
+    the managed check.
     """
+    from omnicraft.server.managed_hosts import HOST_TYPE_LABEL_KEY
+
     session_id = await _create_unbound_session(client)
+    SqlAlchemyConversationStore(db_uri).delete_label(session_id, HOST_TYPE_LABEL_KEY)
     # Simulate the provisioning window: an in-flight managed launch.
     app.state.managed_launches.begin(session_id)
 
@@ -1712,14 +1851,17 @@ async def test_patch_host_bind_rejects_managed_session_via_repo_label(
 
     Covers the restart case for repo-workspace managed sessions: the
     in-memory tracker is gone, but the persisted ``omnicraft.sandbox.repo``
-    label still marks the session managed.
+    label still marks the session managed. The durable
+    ``HOST_TYPE_LABEL_KEY`` marker is stripped to simulate a session
+    created before that marker existed — with it present (the normal
+    case), the marker itself would already answer the managed check.
     """
-    from omnicraft.server.managed_hosts import MANAGED_REPO_LABEL_KEY
+    from omnicraft.server.managed_hosts import HOST_TYPE_LABEL_KEY, MANAGED_REPO_LABEL_KEY
 
     session_id = await _create_unbound_session(client)
-    SqlAlchemyConversationStore(db_uri).set_labels(
-        session_id, {MANAGED_REPO_LABEL_KEY: "https://github.com/org/repo#main"}
-    )
+    store = SqlAlchemyConversationStore(db_uri)
+    store.delete_label(session_id, HOST_TYPE_LABEL_KEY)
+    store.set_labels(session_id, {MANAGED_REPO_LABEL_KEY: "https://github.com/org/repo#main"})
 
     resp = await client.patch(
         f"/v1/sessions/{session_id}",

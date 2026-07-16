@@ -228,6 +228,15 @@ MANAGED_LAUNCH_RENDEZVOUS_TIMEOUT_S = MANAGED_HOST_ONLINE_TIMEOUT_S + 120
 # to re-clone the repository into the fresh generation's workspace.
 MANAGED_REPO_LABEL_KEY = "omnicraft.sandbox.repo"
 
+# Durable marker recording the session's ``host_type`` request field
+# (``"external"`` or ``"managed"``) as a label, so a managed session
+# is still detectable after a server restart even when it has no
+# workspace (and thus no MANAGED_REPO_LABEL_KEY) and no in-memory
+# launch-tracker entry. Written at create and, as a backfill for
+# sessions created before this marker existed, at the late host-bind
+# path.
+HOST_TYPE_LABEL_KEY = "omnicraft.host.type"
+
 
 @dataclass
 class ManagedLaunch:
@@ -322,6 +331,33 @@ class ManagedLaunchTracker:
             return
         entry.error = error
         entry.settled.set()
+
+
+def is_session_managed(
+    labels: dict[str, str], tracker: ManagedLaunchTracker | None, session_id: str
+) -> bool:
+    """
+    Whether *session_id* is a ``host_type="managed"`` session.
+
+    Prefers the durable :data:`HOST_TYPE_LABEL_KEY` marker. Sessions
+    created before that marker existed fall back to the in-memory
+    launch tracker (covers the live/failed provisioning window) and
+    the repo-workspace label (covers repo-workspace managed sessions
+    across a restart) — the same two signals callers checked before
+    this helper existed.
+
+    :param labels: The session's current label map.
+    :param tracker: The app's :class:`ManagedLaunchTracker`, or
+        ``None`` when managed hosts aren't configured.
+    :param session_id: Session/conversation identifier.
+    :returns: ``True`` if the session is managed.
+    """
+    marker = labels.get(HOST_TYPE_LABEL_KEY)
+    if marker is not None:
+        return marker == "managed"
+    if tracker is not None and tracker.get(session_id) is not None:
+        return True
+    return MANAGED_REPO_LABEL_KEY in labels
 
 
 @dataclass

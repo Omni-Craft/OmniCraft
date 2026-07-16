@@ -17,12 +17,16 @@ from omnicraft.server.app import create_app
 from omnicraft.server.managed_hosts import (
     BOXLITE_MANAGED_TOKEN_TTL_S,
     DAYTONA_MANAGED_TOKEN_TTL_S,
+    HOST_TYPE_LABEL_KEY,
     ISLO_MANAGED_TOKEN_TTL_S,
     KUBERNETES_MANAGED_TOKEN_TTL_S,
+    MANAGED_REPO_LABEL_KEY,
     MODAL_MANAGED_TOKEN_TTL_S,
     OPENSHELL_MANAGED_TOKEN_TTL_S,
+    ManagedLaunchTracker,
     ManagedSandboxConfig,
     RepoWorkspace,
+    is_session_managed,
     launch_managed_host,
     parse_repo_workspace,
     parse_sandbox_config,
@@ -749,6 +753,61 @@ def test_parse_invalid_config_fails_loud(raw: object, expected_fragment: str) ->
     with pytest.raises(ValueError, match="") as exc:
         parse_sandbox_config(raw)
     assert expected_fragment in str(exc.value)
+
+
+# ── is_session_managed ──────────────────────────────────────
+
+
+def test_is_session_managed_prefers_durable_marker_true() -> None:
+    """The durable ``host_type=managed`` marker alone is sufficient.
+
+    This is the restart-orphan case: a managed session that never got a
+    workspace (no ``MANAGED_REPO_LABEL_KEY``) and whose in-memory launch
+    tracker was wiped by a server restart is still detected as managed
+    through the durable label.
+    """
+    labels = {HOST_TYPE_LABEL_KEY: "managed"}
+    assert is_session_managed(labels, tracker=None, session_id="conv_x") is True
+
+
+def test_is_session_managed_prefers_durable_marker_false() -> None:
+    """The durable ``host_type=external`` marker short-circuits to False.
+
+    Even if a stale tracker entry or repo label happens to be present
+    (which should not occur in practice for an external session), the
+    marker is authoritative once written.
+    """
+    labels = {HOST_TYPE_LABEL_KEY: "external", MANAGED_REPO_LABEL_KEY: "https://x/y"}
+    tracker = ManagedLaunchTracker()
+    tracker.begin("conv_x")
+    assert is_session_managed(labels, tracker=tracker, session_id="conv_x") is False
+
+
+def test_is_session_managed_falls_back_to_tracker_when_marker_absent() -> None:
+    """No marker (a pre-marker legacy session) falls back to the tracker.
+
+    Covers the live/failed provisioning window for sessions created
+    before the durable marker existed.
+    """
+    tracker = ManagedLaunchTracker()
+    tracker.begin("conv_x")
+    assert is_session_managed({}, tracker=tracker, session_id="conv_x") is True
+    assert is_session_managed({}, tracker=tracker, session_id="conv_other") is False
+
+
+def test_is_session_managed_falls_back_to_repo_label_when_marker_absent() -> None:
+    """No marker and no tracker entry falls back to the repo-workspace label.
+
+    Covers a pre-marker legacy repo-workspace managed session across a
+    restart (in-memory tracker gone, but the durable repo label lives on).
+    """
+    labels = {MANAGED_REPO_LABEL_KEY: "https://github.com/org/repo#main"}
+    assert is_session_managed(labels, tracker=None, session_id="conv_x") is True
+
+
+def test_is_session_managed_false_when_no_signal_present() -> None:
+    """No marker, no tracker entry, no repo label: an ordinary external session."""
+    assert is_session_managed({}, tracker=ManagedLaunchTracker(), session_id="conv_x") is False
 
 
 # ── parse_repo_workspace ────────────────────────────────────

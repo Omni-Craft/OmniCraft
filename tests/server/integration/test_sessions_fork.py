@@ -180,6 +180,8 @@ async def test_fork_preserves_labels(
     """
     Forking inherits the source session's labels.
     """
+    from omnicraft.server.managed_hosts import HOST_TYPE_LABEL_KEY
+
     agent = await create_test_agent(client)
     session = await _create_session(
         client,
@@ -198,8 +200,9 @@ async def test_fork_preserves_labels(
     )
 
     # Labels should be inherited from source — fork_conversation
-    # copies labels in its transaction.
-    assert fork["labels"] == {"env": "prod", "team": "ml"}, (
+    # copies labels in its transaction. The source also carries the
+    # durable host_type marker written at create (HOST_TYPE_LABEL_KEY).
+    assert fork["labels"] == {"env": "prod", "team": "ml", HOST_TYPE_LABEL_KEY: "external"}, (
         f"Fork labels should match source labels, "
         f"got {fork['labels']!r}. If empty, fork_conversation is "
         "not copying labels from the source."

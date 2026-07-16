@@ -159,12 +159,14 @@ from omnicraft.server.auth import (
 from omnicraft.server.bundles import bundle_location, validate_agent_bundle
 from omnicraft.server.host_registry import HostConnection, HostRegistry, RunnerExitReports
 from omnicraft.server.managed_hosts import (
+    HOST_TYPE_LABEL_KEY,
     ManagedHostLaunch,
     ManagedLaunch,
     ManagedLaunchTracker,
     ManagedSandboxConfig,
     RepoWorkspace,
     host_resume_supported,
+    is_session_managed,
 )
 from omnicraft.server.mcp_pool import ServerMcpPool
 from omnicraft.server.permissions import check_session_access
@@ -14262,6 +14264,17 @@ def create_sessions_router(
         # multipart path above for the rationale).
         _announce_session_added(user_id, resp.id)
 
+        # Durable host_type marker: written for every session,
+        # regardless of host_type, so a managed session stays
+        # detectable by is_session_managed() after a server restart
+        # even when it never got a workspace (and thus no
+        # MANAGED_REPO_LABEL_KEY) or an in-memory tracker entry.
+        await asyncio.to_thread(
+            conversation_store.set_labels,
+            resp.id,
+            {HOST_TYPE_LABEL_KEY: body.host_type},
+        )
+
         # Managed host: schedule a BACKGROUND sandbox provision bound
         # to this session and return immediately — provisioning takes
         # tens of seconds and must not block the create POST. The
@@ -15731,19 +15744,13 @@ def create_sessions_router(
                 )
             # A managed session is hostless+runnerless only while its
             # background provisioning runs; binding an external host now
-            # would race that task onto a second location. The in-memory
-            # tracker (the signal post_event uses) covers the live/failed
-            # window; the durable repo label covers repo-workspace managed
-            # sessions across a restart. A workspace-less managed session
-            # orphaned by a restart is uncovered — no durable host_type
-            # marker exists to key on.
-            from omnicraft.server.managed_hosts import MANAGED_REPO_LABEL_KEY
-
+            # would race that task onto a second location. is_session_managed
+            # prefers the durable HOST_TYPE_LABEL_KEY marker (covers a
+            # workspace-less managed session across a restart too), falling
+            # back to the in-memory tracker and the repo label for sessions
+            # created before that marker existed.
             _managed_tracker = getattr(request.app.state, "managed_launches", None)
-            _session_is_managed = (
-                _managed_tracker is not None and _managed_tracker.get(session_id) is not None
-            ) or MANAGED_REPO_LABEL_KEY in conv_for_host.labels
-            if _session_is_managed:
+            if is_session_managed(conv_for_host.labels, _managed_tracker, session_id):
                 raise OmniCraftError(
                     "managed sessions cannot be host-bound via PATCH",
                     code=ErrorCode.INVALID_INPUT,
@@ -15776,6 +15783,16 @@ def create_sessions_router(
                     "Session not found",
                     code=ErrorCode.NOT_FOUND,
                 ) from exc
+            # Backfill the durable marker: only an external session
+            # reaches this point (managed is rejected above), so a
+            # session created before HOST_TYPE_LABEL_KEY existed picks
+            # it up here instead of staying unmarked forever.
+            if conv_for_host.labels.get(HOST_TYPE_LABEL_KEY) is None:
+                await asyncio.to_thread(
+                    conversation_store.set_labels,
+                    session_id,
+                    {HOST_TYPE_LABEL_KEY: "external"},
+                )
 
         if body.runner_id is not None:
             # Empty string is the clear sentinel (None = leave unchanged);
@@ -20135,6 +20152,21 @@ def create_sessions_router(
             # host-bind; a bound host means the runner is merely offline,
             # so a retry/relaunch can still win and it keeps the original.
             if conv.host_id is None:
+                # A managed session that never got host-bound (e.g. its
+                # background provisioning was interrupted by a server
+                # restart before the tracker entry survived) cannot use
+                # the late host-bind path — PATCH rejects it. Detect via
+                # is_session_managed (durable marker, tracker, repo label)
+                # so this points at the right recovery instead of one that
+                # would just 400.
+                _managed_tracker_for_error = getattr(request.app.state, "managed_launches", None)
+                if is_session_managed(conv.labels, _managed_tracker_for_error, session_id):
+                    raise OmniCraftError(
+                        "session's managed sandbox never finished provisioning "
+                        "(likely interrupted by a server restart) and cannot be "
+                        "host-bound via PATCH; delete and recreate the session",
+                        code=ErrorCode.RUNNER_UNAVAILABLE,
+                    )
                 raise OmniCraftError(
                     "session has no host bound; bind one via "
                     "PATCH /v1/sessions/{id} with host_id + workspace "

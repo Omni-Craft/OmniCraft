@@ -2288,6 +2288,8 @@ async def test_get_session_labels_returns_labels_only(
     :param client: Test HTTP client backed by the real server routes.
     :returns: None.
     """
+    from omnicraft.server.managed_hosts import HOST_TYPE_LABEL_KEY
+
     agent = await create_test_agent(client)
     session = await _create_session(
         client,
@@ -2299,9 +2301,11 @@ async def test_get_session_labels_returns_labels_only(
 
     assert resp.status_code == 200
     assert resp.headers["cache-control"] == "no-store"
+    # Create also writes the durable host_type marker label alongside
+    # the caller-supplied ones (see HOST_TYPE_LABEL_KEY).
     assert resp.json() == {
         "id": session["id"],
-        "labels": {"mode": "debug", "team": "infra"},
+        "labels": {"mode": "debug", "team": "infra", HOST_TYPE_LABEL_KEY: "external"},
     }
 
 

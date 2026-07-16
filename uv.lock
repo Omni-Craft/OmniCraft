@@ -2801,7 +2801,7 @@ wheels = [
 
 [[package]]
 name = "omnicraft"
-version = "0.5.0a2"
+version = "0.5.0a3"
 source = { editable = "." }
 dependencies = [
     { name = "alembic" },
@@ -3017,7 +3017,7 @@ provides-extras = ["claude-sdk", "openai-agents", "all", "bedrock", "s3", "verte
 
 [[package]]
 name = "omnicraft-client"
-version = "0.5.0a2"
+version = "0.5.0a3"
 source = { editable = "sdks/python-client" }
 dependencies = [
     { name = "httpx" },
@@ -3034,7 +3034,7 @@ requires-dist = [
 
 [[package]]
 name = "omnicraft-ui-sdk"
-version = "0.5.0a2"
+version = "0.5.0a3"
 source = { editable = "sdks/ui" }
 dependencies = [
     { name = "omnicraft-client" },
@@ -3045,7 +3045,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "omnicraft-client", specifier = "==0.5.0a2" },
+    { name = "omnicraft-client", specifier = "==0.5.0a3" },
     { name = "prompt-toolkit", specifier = ">=3" },
     { name = "pyyaml", specifier = ">=6.0,<7" },
     { name = "rich", specifier = ">=13" },

@@ -3,9 +3,9 @@
 fucho is the standalone multi-agent coding orchestrator (successor to the
 deleted nessie example, whose deep structural pins were folded in here).
 Loads the bundle and asserts the distinctive wiring stays intact: the
-claude-sdk orchestrator brain, the six cross-vendor coding sub-agents
-(claude_code / codex / opencode / cursor / hermes / pi, which implement, review,
-and explore),
+claude-sdk orchestrator brain, the seven cross-vendor coding sub-agents
+(claude_code / codex / opencode / cursor / hermes / pi / gemini, which
+implement, review, and explore),
 the three spine skills, and the bounds/blast-radius guardrails. Pure spec-load
 — no LLM, no credentials.
 
@@ -69,34 +69,32 @@ def test_orchestrator_executor(fucho_spec: AgentSpec) -> None:
 
 def test_coding_subagents(fucho_spec: AgentSpec) -> None:
     """
-    The bundle has exactly six coding sub-agents: ``claude_code`` (claude-native),
-    ``codex`` (codex-native), ``opencode`` (opencode-native), ``cursor``
-    (cursor-native), and ``hermes`` (hermes-native) on the native terminal
-    harnesses, plus ``pi`` (pi) as the headless multi-model worker. All
-    implement, review, and explore. The native harnesses render terminal-first
-    (Chat / Terminal pill) so the human can watch or take over.
+    The bundle has exactly seven coding sub-agents: ``claude_code``
+    (claude-native), ``codex`` (codex-native), ``opencode`` (opencode-native),
+    ``cursor`` (cursor-native), and ``hermes`` (hermes-native) on the native
+    terminal harnesses, ``pi`` (pi) as the headless multi-model worker, and
+    ``gemini`` (acp:gemini-cli) as the Google-vendor ACP worker. All implement,
+    review, and explore. The native harnesses render terminal-first (Chat /
+    Terminal pill) so the human can watch or take over.
 
     A missing/renamed agent means fewer implementers, and same-vendor harnesses
     would break cross-vendor review — fucho's differentiator.
     """
     fam = {a.name: a.executor.config.get("harness") for a in fucho_spec.sub_agents}
-    assert sorted(fucho_spec.tools.agents) == [
-        "claude_code",
-        "codex",
-        "cursor",
-        "hermes",
-        "opencode",
-        "pi",
-    ]
-    assert fam["claude_code"] == "claude-native"
-    assert fam["codex"] == "codex-native"
-    assert fam["opencode"] == "opencode-native"
-    assert fam["cursor"] == "cursor-native"
-    assert fam["hermes"] == "hermes-native"
-    assert fam["pi"] == "pi"
-    # Six distinct vendors → any implementer's diff is reviewable by another.
-    assert len(set(fam.values())) == 6
-    for name in ("claude_code", "codex", "opencode", "cursor", "hermes", "pi"):
+    expected = {
+        "claude_code": "claude-native",
+        "codex": "codex-native",
+        "opencode": "opencode-native",
+        "cursor": "cursor-native",
+        "hermes": "hermes-native",
+        "pi": "pi",
+        "gemini": "acp:gemini-cli",
+    }
+    assert sorted(fucho_spec.tools.agents) == sorted(expected)
+    assert fam == expected
+    # Seven distinct vendors → any implementer's diff is reviewable by another.
+    assert len(set(fam.values())) == len(expected)
+    for name in expected:
         prompt = (_FUCHO_BUNDLE / "agents" / name / "config.yaml").read_text(encoding="utf-8")
         assert "IMPLEMENT — write real product code" in prompt
         assert "REVIEW — verify another agent's diff" in prompt
@@ -132,6 +130,7 @@ def test_spine_skills_present(fucho_spec: AgentSpec) -> None:
         "cross-review",
         "fanout",
         "investigate",
+        "roteamento-de-modelos",
     ]
 
 
@@ -367,7 +366,7 @@ def test_orchestrator_guardrails(fucho_spec: AgentSpec) -> None:
 def test_subagent_guardrails(fucho_spec: AgentSpec) -> None:
     """Each sub-agent carries the blast_radius gate (push/destructive)."""
     by_name = {a.name: a for a in fucho_spec.sub_agents}
-    for name in ("claude_code", "codex", "opencode", "cursor", "hermes", "pi"):
+    for name in ("claude_code", "codex", "opencode", "cursor", "hermes", "pi", "gemini"):
         guardrails = by_name[name].guardrails
         assert guardrails is not None, name
         assert [p.name for p in guardrails.policies] == ["blast_radius"], name
@@ -400,6 +399,6 @@ def test_function_policies_have_nonempty_arguments(fucho_spec: AgentSpec) -> Non
             )
             checked += 1
     # orchestrator: blast_radius + spawn_bounds + headless_subagent_purpose_guard
-    # = 3; sub-agents: blast_radius x6 (claude_code, codex, opencode, cursor,
-    # hermes, pi) = 6 -> 9 total. Fewer = a policy dropped.
-    assert checked == 9, f"expected 9 function policies in the bundle, inspected {checked}"
+    # = 3; sub-agents: blast_radius x7 (claude_code, codex, opencode, cursor,
+    # hermes, pi, gemini) = 7 -> 10 total. Fewer = a policy dropped.
+    assert checked == 10, f"expected 10 function policies in the bundle, inspected {checked}"

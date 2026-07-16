@@ -1973,6 +1973,7 @@ def test_materialize_directory_bundle_with_override_keeps_nested_harness_unpinne
                 "cursor": "cursor-native",
                 "hermes": "hermes-native",
                 "pi": "pi",
+                "gemini": "acp:gemini-cli",
             },
         ),
         ("lilo", {"claude": "claude-sdk", "gpt": "codex"}),

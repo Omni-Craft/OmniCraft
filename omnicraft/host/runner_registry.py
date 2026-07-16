@@ -122,6 +122,77 @@ def remove_record(runner_id: str) -> None:
         _save_records(records)
 
 
+def _cmdline_from_proc(pid: int) -> str | None:
+    """Return *pid*'s argv read from ``/proc``, or ``None`` when unusable.
+
+    Preferred over ``ps`` because a plain file read cannot fail the ways
+    spawning a helper can: no fork/exec, so no PATH lookup to miss the
+    binary, no timeout to blow under load, and no subprocess to pay for
+    on a path that runs once per registry entry.
+
+    ``/proc`` is absent on macOS/BSD, and the read comes back empty for
+    kernel threads and zombies. Both cases yield ``None`` so the caller
+    falls back to ``ps``.
+
+    :param pid: The process to inspect.
+    :returns: The argv joined by spaces, or ``None`` if ``/proc`` gave
+        nothing to match against.
+    """
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    return raw.decode("utf-8", "replace").replace("\0", " ")
+
+
+def _cmdline_from_ps(pid: int) -> str:
+    """Return *pid*'s command line via ``ps``, or ``""`` when unavailable.
+
+    The portable fallback for platforms without ``/proc``.
+
+    Fail-closed: only a ``ps`` that exited cleanly is trusted. Output
+    from a failed one could still contain the marker (an error echoing
+    the command line, a partial listing) and adopting on it would let a
+    later stop request SIGTERM whatever now holds a reused pid.
+
+    Every failure degrades to "not a runner", which is indistinguishable
+    from a genuinely reused pid — so each one is logged rather than
+    swallowed. Without that, a runner silently fails to be re-adopted and
+    the only evidence of why is gone.
+
+    :param pid: The process to inspect.
+    :returns: The ``ps`` command column, or ``""`` on any failure.
+    """
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "command="],
+            check=False,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        _logger.warning("ps probe for pid %s failed; treating as not-a-runner", pid, exc_info=True)
+        return ""
+    if result.returncode == 0:
+        return result.stdout
+    stderr = result.stderr.strip()
+    # rc=1 is both ps's ordinary "no such process" — the common case for a
+    # dead runner — and its generic error code, so the exit alone cannot
+    # tell them apart. A silent rc=1 is the ordinary absence; anything
+    # that came with a complaint is a real failure worth surfacing.
+    if result.returncode != 1 or stderr:
+        _logger.warning(
+            "ps probe for pid %s exited %s: %s",
+            pid,
+            result.returncode,
+            stderr or "<no stderr>",
+        )
+    return ""
+
+
 def pid_is_live_runner(pid: int) -> bool:
     """Return whether *pid* is alive AND still an OmniCraft runner process.
 
@@ -141,14 +212,7 @@ def pid_is_live_runner(pid: int) -> bool:
         # Alive but not ours — a runner spawned by this user is always
         # signalable, so a foreign pid means reuse.
         return False
-    try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return _RUNNER_CMDLINE_MARKER in result.stdout
+    cmdline = _cmdline_from_proc(pid)
+    if cmdline is None:
+        cmdline = _cmdline_from_ps(pid)
+    return _RUNNER_CMDLINE_MARKER in cmdline

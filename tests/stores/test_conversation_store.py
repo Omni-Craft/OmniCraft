@@ -2545,8 +2545,10 @@ def test_set_host_id_clears_archived_on_first_bind_of_sweep_archived_row(
     )
     # The real sweep write, not a manual archive — a cutoff far in the
     # future guarantees the row's real updated_at is "stale" for it,
-    # with no need to freeze the clock.
-    archived = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=9_999_999_999)
+    # with no need to freeze the clock. Kept within int32: the cutoff is
+    # bound against the Integer updated_at column and Postgres/MySQL
+    # reject out-of-range parameters.
+    archived = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=2_000_000_000)
     assert archived is True
     assert conversation_store.get_conversation(conv.id).archived is True
 

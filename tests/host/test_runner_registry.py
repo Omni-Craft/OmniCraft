@@ -66,7 +66,8 @@ def _fake_runner(tmp_path: Path) -> Iterator[subprocess.Popen[bytes]]:
     exposed to this: adoption reads pids off disk, long after the process
     started, while asserting straight after ``Popen`` would not.
     """
-    # UNCONFIRMED hypothesis for the CI-only flake: a fork->exec window where cmdline reads empty.
+    # A long argv puts the marker deep in the line, which is what caught ps
+    # cutting to display width in CI (probable cause: COLUMNS set there).
     ready = tmp_path / "runner-ready"
     proc = subprocess.Popen(
         [
@@ -106,6 +107,32 @@ def test_pid_is_live_runner_accepts_via_ps_fallback(
         assert runner_registry.pid_is_live_runner(proc.pid) is True
     # The pid-reuse guard must survive the fallback path as well.
     assert runner_registry.pid_is_live_runner(os.getpid()) is False
+
+
+def test_cmdline_from_ps_asks_for_unlimited_width(monkeypatch: pytest.MonkeyPatch) -> None:
+    # ps cuts a long argv to the display width, which drops the marker and
+    # makes a live runner read as reused. BSD ps ignores COLUMNS when not on
+    # a terminal, so losing either defence is invisible on macOS and only
+    # bites on Linux — assert the invocation instead of the output.
+    captured: dict[str, object] = {}
+
+    def fake_run(args: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["args"] = args
+        captured["env"] = kwargs.get("env")
+        return subprocess.CompletedProcess(args=args, returncode=0, stdout="", stderr="")
+
+    monkeypatch.setenv("COLUMNS", "80")
+    monkeypatch.setattr(runner_registry.subprocess, "run", fake_run)
+    runner_registry._cmdline_from_ps(4242)
+
+    args = captured["args"]
+    assert isinstance(args, list)
+    # Both procps and BSD document a repeated -w as "unlimited width".
+    assert args.count("-w") == 2, args
+    env = captured["env"]
+    assert isinstance(env, dict)
+    assert "COLUMNS" not in env, "COLUMNS reached ps and would cap the argv"
+    assert env.get("PATH") == os.environ["PATH"], "ps must still be findable"
 
 
 def test_cmdline_from_ps_logs_and_degrades_when_ps_cannot_run(

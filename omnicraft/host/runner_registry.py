@@ -125,10 +125,11 @@ def remove_record(runner_id: str) -> None:
 def _cmdline_from_proc(pid: int) -> str | None:
     """Return *pid*'s argv read from ``/proc``, or ``None`` when unusable.
 
-    Preferred over ``ps`` because a plain file read cannot fail the ways
+    The primary path on Linux. A plain file read cannot fail the ways
     spawning a helper can: no fork/exec, so no PATH lookup to miss the
-    binary, no timeout to blow under load, and no subprocess to pay for
-    on a path that runs once per registry entry.
+    binary, no timeout to blow under load, no subprocess to pay for, and
+    no display-width setting able to cut the argv short (see
+    :func:`_cmdline_from_ps`).
 
     ``/proc`` is absent on macOS/BSD, and the read comes back empty for
     kernel threads and zombies. Both cases yield ``None`` so the caller
@@ -150,7 +151,18 @@ def _cmdline_from_proc(pid: int) -> str | None:
 def _cmdline_from_ps(pid: int) -> str:
     """Return *pid*'s command line via ``ps``, or ``""`` when unavailable.
 
-    The portable fallback for platforms without ``/proc``.
+    The fallback for platforms without ``/proc``, and the only path on
+    macOS/BSD.
+
+    procps documents the width of piped output as undefined — "it may be
+    80, unlimited, determined by the TERM variable, and so on" — so a
+    default-width read is unreliable by contract, and the marker sits far
+    enough into a runner's argv for a narrow line to cut it. ``-w -w``
+    (unlimited per both manuals) and dropping ``COLUMNS`` (procps:
+    "override default display width") pin the width down instead. That
+    this is what cut the argv in CI is suspected, not confirmed; the
+    defence is free and holds either way. BSD/macOS documents unlimited
+    width off-terminal and measured intact at ``COLUMNS=80``.
 
     Fail-closed: only a ``ps`` that exited cleanly is trusted. Output
     from a failed one could still contain the marker (an error echoing
@@ -165,13 +177,15 @@ def _cmdline_from_ps(pid: int) -> str:
     :param pid: The process to inspect.
     :returns: The ``ps`` command column, or ``""`` on any failure.
     """
+    env = {k: v for k, v in os.environ.items() if k != "COLUMNS"}
     try:
         result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "command="],
+            ["ps", "-w", "-w", "-p", str(pid), "-o", "command="],
             check=False,
             capture_output=True,
             text=True,
             timeout=5,
+            env=env,
         )
     except (OSError, subprocess.TimeoutExpired):
         _logger.warning("ps probe for pid %s failed; treating as not-a-runner", pid, exc_info=True)

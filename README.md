@@ -148,9 +148,9 @@ uv tool install --force --editable .
 
 ## 🤖 Galeria de agentes: times prontos
 
-**10 agentes instaláveis com um clique** — de assistentes simples a
+**11 agentes instaláveis com um clique** — de assistentes simples a
 orquestradores multi-agente que coordenam times de especialistas, somando
-**20 sub-agentes** e **20 skills**:
+**21 sub-agentes** e **21 skills**:
 
 <p align="center">
   <img src="docs/images/agent-gallery.png" alt="A galeria de agentes com cards mostrando descrição, chips de sub-agentes e skills de cada agente" width="860" />
@@ -158,7 +158,8 @@ orquestradores multi-agente que coordenam times de especialistas, somando
 
 | Agente | O que é | Sub-agentes | Skills |
 |---|---|---:|---:|
-| **fucho** | Orquestradora multi-agente de código (Claude Code · Codex · Cursor · OpenCode · Hermes · Pi) com revisão de outro fornecedor | 6 | 3 |
+| **fucho** | Orquestradora multi-agente de código (Claude Code · Codex · Gemini · Cursor · OpenCode · Hermes · Pi) com revisão de outro fornecedor | 7 | 4 |
+| **gemini** | O Gemini CLI do Google como agente, via ACP — usa o login do próprio CLI | — | — |
 | **maestro** | Testes/QA: escreve testes, delega execução, revisa o design da suíte | 2 | 3 |
 | **atlas** | Planejamento/arquitetura: produz planos, nunca escreve código | 2 | 3 |
 | **polyglot** | Localização/i18n com revisão de fluência cross-vendor | 2 | 3 |
@@ -381,11 +382,14 @@ que não existem no upstream:
 | **Superfícies** | Abas **Início/Code** com históricos separados; **Chat sem filesystem** (garantia no servidor); **Craftwork** in-place estilo Cowork com frequência |
 | **Chat** | Memória local por projeto (sem chave), painel de **Artifacts** com "→ Code", "Discutir no Chat" no caminho inverso, mascote nadando 🐟 |
 | **Automação** | Agendador com cron+fuso+templates, **webhooks com templating** `{{...}}`, **resultado por push**, alerta de falhas, no-overlap, escopo por dono |
-| **Agentes** | Galeria instalável com 10 agentes: a orquestradora **fucho**, maestro/atlas/polyglot/sculptor/scribe/sentinel, o **lilo** (debate cross-vendor), o **remy** (memória) e o chat |
+| **Agentes** | Galeria instalável com 11 agentes: a orquestradora **fucho** (7 workers), maestro/atlas/polyglot/sculptor/scribe/sentinel, o **lilo** (debate cross-vendor), o **remy** (memória) e o chat |
+| **Fornecedores** | **Três misturáveis num run**: Claude, Codex e Google — **Gemini CLI** (via ACP) e **Antigravity** somados aos harnesses do upstream. Skill de **roteamento** com tabela tarefa→(worker, modelo) e a regra que importa: quem julga nunca é quem construiu |
+| **Assets locais** | **ComfyUI** ligado aos agentes: imagens de site (RealVisXL em 1024px + upscale 2x por IA) e **3D texto→GLB** (Hunyuan3D) — sem nuvem, sem chave |
+| **Desktop** | Abrir o app **sobe o stack local sozinho** (servidor + host); instaladores **Windows (.exe)** e **macOS (.dmg)**; navegador embutido dirigível pelo agente (`browser_*`) |
 | **MCP** | Página de gestão para agentes template, **catálogo de um clique**, **teste de conexão real** |
 | **Cockpit** | Dashboard pessoal do Code (streaks, heatmap, modelo favorito), custos ao vivo, avaliações/regressão, **Diagnóstico** |
 | **Integrações** | GitHub (issues/PRs → sessão semeada), menu **`/`** de skills, onboarding de primeiro uso |
-| **Confiabilidade** | Auditoria completa em 4 frentes com **26 correções** — validação estrita do scheduler, escrita atômica dos stores, locks multi-processo, DST, tema claro |
+| **Confiabilidade** | **Runners sobrevivem ao reinício do host** (registro + readoção), **watchdog** para sub-agente que morre calado, **aprovação automática por sessão** (alternável em pleno voo), PATH do shell de login no daemon, e uma auditoria de **26 correções** (scheduler, escrita atômica, locks, DST) |
 
 ---
 

@@ -1,282 +1,290 @@
-# Deploying OmniCraft
+# Publicando o OmniCraft
 
-OmniCraft ships several ways to deploy the server, organized by
-target platform. Pick the one that matches your environment.
+O OmniCraft traz vários jeitos de publicar o servidor, organizados por
+plataforma de destino. Escolha o que combina com o seu ambiente.
 
-Deploying buys you a stable URL: sessions become reachable from any device,
-including your phone (the web UI is built for mobile), and teammates can
-join. The server is the coordination point; your code and model keys stay on
-the machines that register as hosts (see [Execution model](#execution-model)).
+Publicar te dá uma URL estável: as sessões passam a ser acessíveis de qualquer
+dispositivo, inclusive do celular (a web UI foi feita para mobile), e colegas
+podem entrar. O servidor é o ponto de coordenação; o seu código e as suas
+chaves de modelo ficam nas máquinas que se registram como hosts (veja
+[Modelo de execução](#modelo-de-execução)).
 
-## Deploy in one click
+## Publicar em um clique
 
-No local tooling needed. Pick a platform, click the button, and your
-OmniCraft server is live with HTTPS in a few minutes.
+Sem nenhuma ferramenta local. Escolha uma plataforma, clique no botão, e o seu
+servidor OmniCraft está no ar com HTTPS em poucos minutos.
 
-| Platform | Button | Docs |
+| Plataforma | Botão | Documentação |
 |---|---|---|
 | **Render** | [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/omnicraft-ai/omnicraft) | [`render/README.md`](render/README.md) |
-| **Railway** | *(button pending; see below)* | [`railway/README.md`](railway/README.md) |
+| **Railway** | *(botão pendente; veja abaixo)* | [`railway/README.md`](railway/README.md) |
 
-<!-- TODO(oss-release): publish the Railway template at railway.com/new/template
-     once the repo is public, then replace the Railway row above with:
+<!-- TODO(oss-release): publicar o template do Railway em railway.com/new/template
+     quando o repositório for público, e então trocar a linha do Railway acima por:
      [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/<template-id>)
-     Steps: railway.com/new/template → point at public repo → add Postgres plugin
-     → publish → copy the deploy URL → update this file and deploy/railway/README.md. -->
+     Passos: railway.com/new/template → apontar para o repo público → adicionar o
+     plugin de Postgres → publicar → copiar a URL de deploy → atualizar este
+     arquivo e o deploy/railway/README.md. -->
 
-Both provision a managed Postgres database automatically and default to the
-built-in `accounts` auth provider, so a fresh deploy is multi-user with no
-external IdP. First boot auto-creates an admin (password in the service
-logs); invite teammates from the web UI. Prefer your own IdP? Switch to OIDC
-after deploy by setting the `OMNICRAFT_OIDC_*` vars (auth stays enabled; the
-issuer is what flips the mode); see the platform README for both
-walkthroughs.
+As duas provisionam um banco Postgres gerenciado automaticamente e usam por
+padrão o provedor de autenticação embutido `accounts`, então um deploy novo já
+nasce multiusuário, sem IdP externo. No primeiro boot um admin é criado
+automaticamente (a senha aparece nos logs do serviço); convide seus colegas
+pela web UI. Prefere o seu próprio IdP? Troque para OIDC depois do deploy
+definindo as variáveis `OMNICRAFT_OIDC_*` (a autenticação continua ligada; é o
+issuer que vira a chave); veja o README da plataforma para os dois caminhos.
 
-**Three more platforms** are supported with a little more setup (not a single
-button): **Fly.io** (`fly deploy`, or its web-UI Launch), **Hugging Face
-Spaces** (a demo-grade Docker Space), and **Modal** (`modal deploy`, an
-always-on web server with a durable artifact Volume). See the menu below.
-Fly and HF Spaces can run on the **SQLite lite tier** with no database to
-provision (see [Database: Postgres or SQLite](#database-postgres-or-sqlite));
-Modal needs a bring-your-own Postgres.
+**Mais três plataformas** são suportadas com um pouco mais de configuração (não
+é um botão só): **Fly.io** (`fly deploy`, ou o Launch da web UI dele),
+**Hugging Face Spaces** (um Docker Space no nível de demo) e **Modal**
+(`modal deploy`, um servidor web sempre no ar com um Volume durável para
+artefatos). Veja o menu abaixo. Fly e HF Spaces podem rodar no **nível leve com
+SQLite**, sem banco nenhum para provisionar (veja
+[Banco de dados: Postgres ou SQLite](#banco-de-dados-postgres-ou-sqlite)); o
+Modal precisa de um Postgres seu.
 
 ---
 
 ```
 deploy/
-├── README.md          ← (this file) the menu
+├── README.md          ← (este arquivo) o menu
 │
-├── render/            ← Render 1-click deploy
+├── render/            ← deploy de 1 clique na Render
 │   └── README.md
 │
-├── railway/           ← Railway 1-click deploy
+├── railway/           ← deploy de 1 clique na Railway
 │   └── README.md
 │
-├── fly/               ← Fly.io (CLI `fly deploy`, or web-UI Launch)
+├── fly/               ← Fly.io (CLI `fly deploy`, ou o Launch da web UI)
 │   ├── fly.toml
 │   └── README.md
 │
-├── hf-spaces/         ← Hugging Face Spaces (demo-grade Docker Space)
+├── hf-spaces/         ← Hugging Face Spaces (Docker Space, nível de demo)
 │   ├── Dockerfile
 │   └── README.md
 │
-├── modal/             ← Modal (`modal deploy`, always-on, durable Volume)
+├── modal/             ← Modal (`modal deploy`, sempre no ar, Volume durável)
 │   ├── modal_app.py
 │   └── README.md
 │
-├── cloudflare/        ← Cloudflare Containers + D1 + R2 (serverless, scale-to-zero)
-│   ├── Dockerfile        server image + D1 dialect
-│   ├── src/index.js      the Worker that fronts the container
+├── cloudflare/        ← Cloudflare Containers + D1 + R2 (serverless, escala a zero)
+│   ├── Dockerfile        imagem do servidor + dialeto D1
+│   ├── src/index.js      o Worker que fica na frente do container
 │   ├── wrangler.jsonc
 │   └── README.md
 │
-├── trycloudflare/     ← Cloudflare quick tunnel (public URL for a LOCAL server)
+├── trycloudflare/     ← túnel rápido da Cloudflare (URL pública para um servidor LOCAL)
 │   └── README.md
 │
-├── tailscale/         ← Tailscale (private access from phone/tablet/laptop
-│   └── README.md         via tailnet; Funnel for cloud sandbox dial-back)
+├── tailscale/         ← Tailscale (acesso privado do celular/tablet/notebook
+│   └── README.md         pela tailnet; Funnel para o retorno de sandboxes na nuvem)
 │
-├── daytona/           ← Daytona sandbox-provider guide + the Cloudflare
-│   ├── wrangler.toml     Worker egress relay for its free tier; NOT a
-│   ├── src/index.js      server deploy target. See its README.md.
+├── daytona/           ← guia do provedor de sandbox Daytona + o relay de saída
+│   ├── wrangler.toml     em Cloudflare Worker para o nível gratuito dele; NÃO é
+│   ├── src/index.js      um destino de deploy do servidor. Veja o README.md dele.
 │   └── README.md
 │
-├── islo/              ← Islo sandbox-provider guide (gateway credential
-│   └── README.md         injection); NOT a server deploy target.
+├── islo/              ← guia do provedor de sandbox Islo (injeção de credencial
+│   └── README.md         pelo gateway); NÃO é um destino de deploy do servidor.
 │
-├── e2b/               ← E2B sandbox-provider guide (boots from a pre-built
-│   └── README.md         E2B template); NOT a server deploy target.
+├── e2b/               ← guia do provedor de sandbox E2B (sobe a partir de um
+│   └── README.md         template E2B pré-construído); NÃO é destino de deploy.
 │
-├── openshell/         ← NVIDIA OpenShell sandbox-provider guide (self-hosted
-│   └── README.md         gRPC gateway, on-prem/air-gapped); NOT a server target.
+├── openshell/         ← guia do provedor de sandbox NVIDIA OpenShell (gateway
+│   └── README.md         gRPC auto-hospedado, on-prem/isolado); NÃO é destino.
 │
 ├── databricks/        ← Databricks Apps (Lakebase + UC Volumes)
-│   ├── databricks.yml     bundle declarative config
-│   ├── deploy.py          build + `bundle deploy`/`run` orchestrator
-│   ├── src/app.py         app entrypoint (Lakebase + UC Volumes)
+│   ├── databricks.yml     configuração declarativa do bundle
+│   ├── deploy.py          orquestrador de build + `bundle deploy`/`run`
+│   ├── src/app.py         entrypoint do app (Lakebase + UC Volumes)
 │   └── README.md
 │
-└── docker/            ← common Docker image + compose stack
-    ├── Dockerfile         multi-stage slim image (node web build → python builder → runtime)
-    ├── docker-compose.yaml   omnicraft + postgres for any Docker host
+└── docker/            ← imagem Docker comum + stack do compose
+    ├── Dockerfile         imagem slim multi-estágio (build web em node → builder python → runtime)
+    ├── docker-compose.yaml   omnicraft + postgres para qualquer host Docker
     ├── entrypoint.py
     ├── .env.example
     ├── README.md
     └── SKILL.md
 ```
 
-## Pick your target
+## Escolha o seu destino
 
-| If you want to … | Use | Where to look |
+| Se você quer … | Use | Onde olhar |
 |---|---|---|
-| **Deploy from a browser (no local tools)** | **Render or Railway** | Buttons above: [Render](render/README.md) · [Railway](railway/README.md) |
-| Try the server on your laptop | Docker compose | [`docker/README.md`](docker/README.md): `./bootstrap.sh` to mint the `.env` secrets, then `docker compose up -d` |
-| Run on any host you already have (VPS, home server, on-prem) | Docker compose | [`docker/README.md`](docker/README.md): copy the compose stack, `./bootstrap.sh`, then `docker compose up -d` |
-| Deploy to Fly.io | Fly | [`fly/README.md`](fly/README.md): `fly deploy`, SQLite on a volume |
-| Deploy to Modal (durable artifact Volume) | Modal | [`modal/README.md`](modal/README.md): `modal deploy`, BYO Neon Postgres |
-| Deploy serverless (scale-to-zero, no VM/Postgres to manage) | Cloudflare Containers + D1 + R2 | [`cloudflare/README.md`](cloudflare/README.md): `wrangler deploy` |
-| Stand up a quick demo (no DB to provision) | HF Spaces | [`hf-spaces/README.md`](hf-spaces/README.md): Docker Space, SQLite |
-| Share a server running on your **laptop**: demo it to teammates, or let remote runners & cloud sandboxes connect back to it (nothing to deploy) | Cloudflare quick tunnel | `cloudflared tunnel --url http://localhost:6767` |
-| Access your server privately from **your phone, tablet, or other personal devices** without exposing it to the internet | Tailscale | [`tailscale/README.md`](tailscale/README.md): `tailscale serve https / http://localhost:8000` |
-| Cloud Run / Kubernetes / other | Docker image | [`docker/README.md`](docker/README.md), then point your platform at the image |
-| Deploy on a Databricks workspace (Lakebase + UC Volumes), self-managed | Databricks Apps | [`databricks/README.md`](databricks/README.md): uses Asset Bundles |
+| **Publicar pelo navegador (sem ferramenta local)** | **Render ou Railway** | Botões acima: [Render](render/README.md) · [Railway](railway/README.md) |
+| Experimentar o servidor no seu notebook | Docker compose | [`docker/README.md`](docker/README.md): `./bootstrap.sh` para gerar os segredos do `.env`, depois `docker compose up -d` |
+| Rodar num host que você já tem (VPS, servidor de casa, on-prem) | Docker compose | [`docker/README.md`](docker/README.md): copie a stack do compose, `./bootstrap.sh`, depois `docker compose up -d` |
+| Publicar na Fly.io | Fly | [`fly/README.md`](fly/README.md): `fly deploy`, SQLite num volume |
+| Publicar na Modal (Volume durável para artefatos) | Modal | [`modal/README.md`](modal/README.md): `modal deploy`, com um Neon Postgres seu |
+| Publicar serverless (escala a zero, sem VM/Postgres para administrar) | Cloudflare Containers + D1 + R2 | [`cloudflare/README.md`](cloudflare/README.md): `wrangler deploy` |
+| Montar uma demo rápida (sem banco para provisionar) | HF Spaces | [`hf-spaces/README.md`](hf-spaces/README.md): Docker Space, SQLite |
+| Compartilhar um servidor que roda no seu **notebook**: mostrar para colegas, ou deixar runners remotos e sandboxes na nuvem se conectarem de volta (sem publicar nada) | túnel rápido da Cloudflare | `cloudflared tunnel --url http://localhost:6767` |
+| Acessar seu servidor de forma privada do **celular, tablet ou outros dispositivos pessoais** sem expô-lo à internet | Tailscale | [`tailscale/README.md`](tailscale/README.md): `tailscale serve https / http://localhost:8000` |
+| Cloud Run / Kubernetes / outros | imagem Docker | [`docker/README.md`](docker/README.md), depois aponte sua plataforma para a imagem |
+| Publicar num workspace Databricks (Lakebase + UC Volumes), autogerenciado | Databricks Apps | [`databricks/README.md`](databricks/README.md): usa Asset Bundles |
 
-> **On Databricks?** The fully managed
-> [OmniCraft on Databricks](https://docs.databricks.com/aws/en/omnicraft/)
-> (Beta) is the recommended path: Databricks operates the server for
-> you, wired to workspace identity, Foundation Models, AI Gateway, and
-> MLflow Tracing. Enable the **OmniCraft** preview in your workspace
-> settings. The self-managed Databricks Apps bundle above is for when
-> you need control the managed service does not expose yet.
+> **Está no Databricks?** O
+> [OmniCraft no Databricks](https://docs.databricks.com/aws/en/omnicraft/)
+> totalmente gerenciado (Beta) é o caminho recomendado: o Databricks opera o
+> servidor por você, ligado à identidade do workspace, aos Foundation Models,
+> ao AI Gateway e ao MLflow Tracing. Ative a prévia do **OmniCraft** nas
+> configurações do seu workspace. O bundle autogerenciado de Databricks Apps
+> acima é para quando você precisa de um controle que o serviço gerenciado
+> ainda não expõe.
 
-All non-Databricks deploy paths share the same image (`docker/Dockerfile`): a
-slim Python container running the FastAPI / WebSocket coordinator, with Postgres
-or SQLite as the datastore. The Databricks Apps path uses a separate entrypoint
-(`databricks/src/app.py`) that swaps Postgres for Lakebase (managed PostgreSQL)
-and the artifact store for UC Volumes.
+Todos os caminhos de deploy fora do Databricks compartilham a mesma imagem
+(`docker/Dockerfile`): um container Python slim rodando o coordenador
+FastAPI / WebSocket, com Postgres ou SQLite como armazenamento. O caminho do
+Databricks Apps usa um entrypoint separado (`databricks/src/app.py`) que troca
+o Postgres por Lakebase (PostgreSQL gerenciado) e o armazenamento de artefatos
+por UC Volumes.
 
-## Database: Postgres or SQLite
+## Banco de dados: Postgres ou SQLite
 
-The server supports two database backends, both first-class (same schema, same
-migrations; pick per `DATABASE_URL`):
+O servidor suporta dois backends de banco, ambos de primeira classe (mesmo
+schema, mesmas migrações; escolha pela `DATABASE_URL`):
 
-- **Postgres**: the default and the production answer. Required for more than
-  one server instance. **Managed and auto-provisioned on deploy** on Render and
-  Railway. On platforms without a managed database (HF Spaces, Modal, or Fly
-  if you want Postgres over volume-SQLite), bring your own. The quickest is
-  **Neon**:
-  create one at [pg.new](https://pg.new) and set the connection string as
-  `DATABASE_URL`. Any `postgres://` / `postgresql://` URL works (pooled or
-  direct); the entrypoint normalizes it to the psycopg3 dialect automatically.
-- **SQLite**: a zero-dependency "lite tier" for demos and single-instance
-  deploys, with no database to provision. The `.db` file lives on the
-  platform's persistent disk/volume (Render disk, Fly volume, Railway volume)
-  and survives restarts there; on Hugging Face free Spaces the disk is
-  ephemeral, so SQLite data resets on restart, and on Modal the Volume's
-  eventual-consistency semantics don't suit a live `.db` file, so skip the
-  SQLite tier there. Set
-  `DATABASE_URL=sqlite:////data/artifacts/chat.db`. Tradeoff: single instance
-  only, no managed backups.
+- **Postgres**: o padrão e a resposta para produção. Obrigatório para mais de
+  uma instância do servidor. **Gerenciado e provisionado automaticamente no
+  deploy** na Render e na Railway. Em plataformas sem banco gerenciado (HF
+  Spaces, Modal, ou Fly se você quiser Postgres em vez do SQLite em volume),
+  traga o seu. O mais rápido é o **Neon**: crie um em [pg.new](https://pg.new)
+  e defina a string de conexão como `DATABASE_URL`. Qualquer URL
+  `postgres://` / `postgresql://` funciona (com pool ou direta); o entrypoint
+  normaliza para o dialeto psycopg3 automaticamente.
+- **SQLite**: um "nível leve" sem dependências, para demos e deploys de
+  instância única, sem banco nenhum para provisionar. O arquivo `.db` fica no
+  disco/volume persistente da plataforma (disco da Render, volume da Fly,
+  volume da Railway) e sobrevive a reinícios ali; nos Spaces gratuitos da
+  Hugging Face o disco é efêmero, então os dados do SQLite se perdem no
+  restart, e na Modal a consistência eventual do Volume não combina com um
+  arquivo `.db` vivo, então pule o nível SQLite por lá. Defina
+  `DATABASE_URL=sqlite:////data/artifacts/chat.db`. O preço: só uma instância,
+  e sem backups gerenciados.
 
-**Who provisions the database.** Render and Railway create the Postgres *as part
-of the deploy* (one step; it's owned by your platform account). Platforms
-without a managed DB don't: there you either run on SQLite (zero setup,
-ephemeral on HF) or bring an owned Postgres like Neon (a one-time signup, then
-persistent). A deploy can't auto-provision a *persistent* database for you;
-persistence requires an owned account, and that's the one step that can't be
-automated away.
+**Quem provisiona o banco.** Render e Railway criam o Postgres *como parte do
+deploy* (um passo só; ele pertence à sua conta na plataforma). Plataformas sem
+banco gerenciado não fazem isso: lá você ou roda no SQLite (zero configuração,
+efêmero na HF) ou traz um Postgres seu, como o Neon (um cadastro único, e
+depois persistente). Um deploy não consegue provisionar sozinho um banco
+*persistente* para você; persistência exige uma conta sua, e esse é o único
+passo que não dá para automatizar.
 
-**First boot against a remote Postgres is slow.** Migrations run over the
-network on the first boot (~1 minute on Neon, vs near-instant for local SQLite);
-subsequent boots are fast. Make sure the platform's healthcheck grace tolerates
-it: Render and Railway do by default; on Fly, raise `grace_period` if you use a
-remote DB.
+**O primeiro boot contra um Postgres remoto é lento.** As migrações rodam pela
+rede no primeiro boot (~1 minuto no Neon, contra quase instantâneo no SQLite
+local); os boots seguintes são rápidos. Garanta que a tolerância do healthcheck
+da plataforma aguente: Render e Railway aguentam por padrão; na Fly, aumente o
+`grace_period` se você usar um banco remoto.
 
-**Memory floor:** the server's working set is ~512 MB–1 GB. Render Starter
-(512 MB), Railway (usage-scaled), and HF Spaces clear it automatically; Fly's
-256 MB default does not, so the Fly config pins a 1 GB machine, and the
-Modal app pins `memory=1024` for the same reason.
+**Piso de memória:** o conjunto de trabalho do servidor é ~512 MB–1 GB. Render
+Starter (512 MB), Railway (escala pelo uso) e HF Spaces passam disso
+automaticamente; o padrão de 256 MB da Fly não passa, então a configuração da
+Fly fixa uma máquina de 1 GB, e o app da Modal fixa `memory=1024` pelo mesmo
+motivo.
 
-## Execution model
+## Modelo de execução
 
-OmniCraft runs in two pieces that talk to each other over a
-WebSocket tunnel:
+O OmniCraft roda em duas peças que conversam por um túnel WebSocket:
 
-- **Server**: the FastAPI app you deploy here. Handles HTTP / SSE
-  routes, terminal-attach WebSockets, persistence, web UI.
-- **Runner (host)**: a Python subprocess that runs on the **user's
-  machine** (laptop, dev container, etc.). Dials in to the server
-  via `WS /v1/runner/tunnel`, executes the LLM loop + tools locally,
-  streams events back.
+- **Servidor**: o app FastAPI que você publica aqui. Cuida das rotas
+  HTTP / SSE, dos WebSockets de attach ao terminal, da persistência e da
+  web UI.
+- **Runner (host)**: um subprocesso Python que roda na **máquina do usuário**
+  (notebook, dev container, etc.). Disca para o servidor via
+  `WS /v1/runner/tunnel`, executa o loop do LLM + as ferramentas localmente, e
+  devolve os eventos em streaming.
 
-The deploy options here are all about the server. Runners aren't
-deployed; every user launches one on their own machine with
-`omnicraft run …  --server <url>` or `omnicraft claude  --server <url>`.
+As opções de deploy aqui são todas sobre o servidor. Runners não são
+publicados; cada usuário sobe o seu na própria máquina com
+`omnicraft run …  --server <url>` ou `omnicraft claude  --server <url>`.
 
-This separation is why the server image is small (no `tmux`, no
-harness SDKs, no LLM API keys in the image) and why no agent code
-runs inside it.
+É essa separação que faz a imagem do servidor ser pequena (sem `tmux`, sem
+SDKs de harness, sem chaves de API de LLM na imagem) e que faz nenhum código
+de agente rodar dentro dela.
 
-## Connect your laptop
+## Conecte seu notebook
 
-Once the server is up, sign in from your machine. The token is reused by
-`run`, `attach`, and `host`:
+Com o servidor no ar, entre pela sua máquina. O token é reaproveitado pelo
+`run`, pelo `attach` e pelo `host`:
 
 ```bash
 omnicraft login https://your-host
 ```
 
-`login` detects the server's auth mode automatically. Built-in accounts,
-OIDC, header-auth proxies, and Databricks-hosted servers (a Databricks App
-or a workspace API path) all work with the same command; for Databricks it
-runs `databricks auth login` against the right workspace for you (requires
-the `databricks` extra).
+O `login` detecta o modo de autenticação do servidor automaticamente. Contas
+embutidas, OIDC, proxies de header-auth e servidores hospedados no Databricks
+(um Databricks App ou um caminho de API do workspace) funcionam todos com o
+mesmo comando; no caso do Databricks ele roda o `databricks auth login` no
+workspace certo para você (requer o extra `databricks`).
 
-Then register the machine as a host, so sessions created in the web UI can
-run on it:
+Depois registre a máquina como host, para que as sessões criadas na web UI
+possam rodar nela:
 
 ```bash
 omnicraft host https://your-host
 ```
 
-Or point a one-off run at the server directly:
+Ou aponte uma execução avulsa direto para o servidor:
 
 ```bash
 omnicraft run path/to/agent.yaml --server https://your-host
 ```
 
-## Run hosts in cloud sandboxes
+## Rode hosts em sandboxes na nuvem
 
-Don't want a laptop to be the host? Run the host in a cloud sandbox instead.
+Não quer que um notebook seja o host? Rode o host num sandbox na nuvem.
 
-**From the CLI (Modal, Daytona, Islo, or E2B).** Install the provider extra when
-needed (`pip install 'omnicraft[modal]'`, `'omnicraft[daytona]'`, or
-`'omnicraft[e2b]'`; Islo uses the built-in HTTP client), authenticate
-(`modal token new`, `DAYTONA_API_KEY`, `ISLO_API_KEY`, or `E2B_API_KEY`), then:
+**Pela CLI (Modal, Daytona, Islo ou E2B).** Instale o extra do provedor quando
+necessário (`pip install 'omnicraft[modal]'`, `'omnicraft[daytona]'` ou
+`'omnicraft[e2b]'`; o Islo usa o cliente HTTP embutido), autentique
+(`modal token new`, `DAYTONA_API_KEY`, `ISLO_API_KEY` ou `E2B_API_KEY`), e
+então:
 
 ```bash
-omnicraft sandbox create --provider modal     # or --provider daytona / islo / e2b
+omnicraft sandbox create --provider modal     # ou --provider daytona / islo / e2b
 omnicraft sandbox connect --provider modal --sandbox-id <id> --server https://your-host
 ```
 
 > [!NOTE]
-> Modal caps sandbox lifetime at 24 hours. Re-run `create` + `connect` to
-> roll the host onto a fresh sandbox. Daytona and Islo have no OmniCraft-imposed
-> lifetime cap; Daytona free-tier orgs restrict egress to an allowlist; see
-> [`daytona/README.md`](daytona/README.md) for the relay workaround. E2B
-> shares Modal's 24-hour cap **and** boots from a pre-built E2B *template*
-> rather than a registry image — build it once first; see
-> [`e2b/README.md`](e2b/README.md).
+> A Modal limita a vida do sandbox a 24 horas. Rode `create` + `connect` de
+> novo para levar o host a um sandbox novo. Daytona e Islo não têm limite de
+> vida imposto pelo OmniCraft; organizações no nível gratuito da Daytona
+> restringem a saída a uma allowlist; veja
+> [`daytona/README.md`](daytona/README.md) para a solução com relay. O E2B
+> compartilha o limite de 24 horas da Modal **e** sobe a partir de um
+> *template* E2B pré-construído em vez de uma imagem de registry — construa o
+> template uma vez antes; veja [`e2b/README.md`](e2b/README.md).
 
-**Server-managed (Modal, Daytona, Islo, or E2B).** With *managed hosts*, creating a
-session with `"host_type": "managed"` (e.g.
-`POST /v1/sessions {"agent_id": ..., "host_type": "managed"}`) makes the
-server provision a sandbox, start a host in it, and run the session there.
-No laptop, no CLI steps per session; the sandbox is terminated when the
-session is deleted. Configuration is a `sandbox:` section in the server
-config (`omnicraft server -c config.yaml`, or `<data_dir>/config.yaml`):
+**Gerenciado pelo servidor (Modal, Daytona, Islo ou E2B).** Com os *hosts
+gerenciados*, criar uma sessão com `"host_type": "managed"` (por exemplo,
+`POST /v1/sessions {"agent_id": ..., "host_type": "managed"}`) faz o servidor
+provisionar um sandbox, subir um host nele e rodar a sessão ali. Sem notebook,
+sem passos de CLI por sessão; o sandbox é encerrado quando a sessão é apagada.
+A configuração é uma seção `sandbox:` na configuração do servidor
+(`omnicraft server -c config.yaml`, ou `<data_dir>/config.yaml`):
 
 ```yaml
 sandbox:
   provider: modal
-  server_url: https://your-host        # public URL sandboxes dial back to
+  server_url: https://your-host        # URL pública para onde os sandboxes discam de volta
 ```
 
-Modal credentials come from the server's environment (`MODAL_TOKEN_ID` /
-`MODAL_TOKEN_SECRET`, or a mounted `~/.modal.toml`), not the config file.
-Daytona reads `DAYTONA_API_KEY`; Islo reads `ISLO_API_KEY` (and optional
-`ISLO_BASE_URL`); E2B reads `E2B_API_KEY` from the server environment.
-Each sandbox authenticates back with a server-minted, per-launch token, so
-no user credentials ever enter the sandbox.
+As credenciais da Modal vêm do ambiente do servidor (`MODAL_TOKEN_ID` /
+`MODAL_TOKEN_SECRET`, ou um `~/.modal.toml` montado), não do arquivo de
+configuração. A Daytona lê `DAYTONA_API_KEY`; o Islo lê `ISLO_API_KEY` (e o
+opcional `ISLO_BASE_URL`); o E2B lê `E2B_API_KEY` do ambiente do servidor. Cada
+sandbox se autentica de volta com um token gerado pelo servidor, por
+lançamento, então nenhuma credencial de usuário entra no sandbox.
 
-**The host image.** Sandboxes boot from the official prebaked host image
-(`ghcr.io/omnicraft-ai/omnicraft-host:latest`, published by CI from the `host`
-target of [`docker/Dockerfile`](docker/Dockerfile)), so the host starts in
-seconds instead of installing OmniCraft at boot. The image ships the
-coding-harness CLIs (`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run
-in the sandbox with nothing extra to install. To run sandboxes from your own
-image instead (a fork, or extra tooling baked in), build the same `host`
-target and point the config at it:
+**A imagem do host.** Os sandboxes sobem a partir da imagem oficial pré-pronta
+do host (`ghcr.io/omnicraft-ai/omnicraft-host:latest`, publicada pela CI a
+partir do alvo `host` do [`docker/Dockerfile`](docker/Dockerfile)), então o
+host começa em segundos em vez de instalar o OmniCraft no boot. A imagem já traz
+as CLIs dos harnesses de código (`claude`, `codex`, `pi`, `kiro-cli`), então
+agentes de qualquer harness rodam no sandbox sem nada extra para instalar. Para
+rodar sandboxes a partir da sua própria imagem (um fork, ou ferramentas extras
+embutidas), construa o mesmo alvo `host` e aponte a configuração para ela:
 
 ```bash
 docker build -f docker/Dockerfile --target host \
@@ -292,29 +300,30 @@ sandbox:
     image: docker.io/<you>/omnicraft-host:latest
 ```
 
-For private registries, set `OMNICRAFT_MODAL_REGISTRY_SECRET` on the server
-to the name of a Modal secret holding `REGISTRY_USERNAME` /
-`REGISTRY_PASSWORD`; for CLI-launched sandboxes, `OMNICRAFT_MODAL_HOST_IMAGE`
-(or `OMNICRAFT_DAYTONA_HOST_IMAGE` / `OMNICRAFT_ISLO_HOST_IMAGE`) overrides the
-image ref.
+Para registries privados, defina `OMNICRAFT_MODAL_REGISTRY_SECRET` no servidor
+com o nome de um secret da Modal que guarde `REGISTRY_USERNAME` /
+`REGISTRY_PASSWORD`; para sandboxes lançados pela CLI,
+`OMNICRAFT_MODAL_HOST_IMAGE` (ou `OMNICRAFT_DAYTONA_HOST_IMAGE` /
+`OMNICRAFT_ISLO_HOST_IMAGE`) sobrescreve a referência da imagem.
 
-**LLM credentials for managed sessions.** A fresh sandbox has no API keys.
-Park your provider credentials in a [Modal secret](https://modal.com/secrets)
-and list it in the config. Its env vars are injected into every managed
-sandbox, and the in-sandbox host forwards the standard harness credential
-vars (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
+**Credenciais de LLM para sessões gerenciadas.** Um sandbox novo não tem chave
+de API nenhuma. Guarde as credenciais do seu provedor num
+[secret da Modal](https://modal.com/secrets) e liste-o na configuração. As
+variáveis de ambiente dele são injetadas em todo sandbox gerenciado, e o host
+dentro do sandbox repassa as variáveis padrão de credencial dos harnesses
+(`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL`,
 `CLAUDE_CODE_OAUTH_TOKEN`, `CODEX_ACCESS_TOKEN`, `OPENAI_API_KEY`,
-`OPENAI_BASE_URL`, `GEMINI_API_KEY`, plus their `OMNICRAFT_`-prefixed
-aliases) to its runners:
+`OPENAI_BASE_URL`, `GEMINI_API_KEY`, além dos apelidos com prefixo
+`OMNICRAFT_`) para os runners dele:
 
 ```bash
 modal secret create omnicraft-llm \
   OMNICRAFT_ANTHROPIC_API_KEY=sk-ant-… OPENAI_API_KEY=sk-…
 ```
 
-Prefer `OMNICRAFT_ANTHROPIC_API_KEY` for Claude Code API-key auth. OmniCraft
-resolves it into Claude Code's `apiKeyHelper`, avoiding a raw
-`ANTHROPIC_API_KEY` in the Claude CLI process.
+Prefira `OMNICRAFT_ANTHROPIC_API_KEY` para autenticação do Claude Code por
+chave de API. O OmniCraft a resolve no `apiKeyHelper` do Claude Code, evitando
+uma `ANTHROPIC_API_KEY` crua no processo da CLI do Claude.
 
 ```yaml
 sandbox:
@@ -324,9 +333,9 @@ sandbox:
     secrets: [omnicraft-llm]
 ```
 
-For Daytona and Islo, list server environment variable names under
-`sandbox.daytona.env` or `sandbox.islo.env`; the launcher copies the current
-server env values into each sandbox:
+Para Daytona e Islo, liste os nomes das variáveis de ambiente do servidor em
+`sandbox.daytona.env` ou `sandbox.islo.env`; o lançador copia os valores atuais
+do ambiente do servidor para cada sandbox:
 
 ```yaml
 sandbox:
@@ -336,131 +345,135 @@ sandbox:
     env: [OPENAI_API_KEY, GIT_TOKEN]
 ```
 
-Using a **Claude subscription** instead of an API key? Run
-`claude setup-token` on your own machine and store the resulting long-lived
-token as `CLAUDE_CODE_OAUTH_TOKEN` in the secret. A **ChatGPT
-Business/Enterprise plan** works the same way via a
-[Codex access token](https://developers.openai.com/codex/enterprise/access-tokens)
-stored as `CODEX_ACCESS_TOKEN`. For gateway setups or other env vars beyond
-the standard set, add `OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` to the
-secret to name the extra vars the host should forward to runners.
+Usa uma **assinatura do Claude** em vez de uma chave de API? Rode
+`claude setup-token` na sua máquina e guarde o token de vida longa resultante
+como `CLAUDE_CODE_OAUTH_TOKEN` no secret. Um **plano ChatGPT
+Business/Enterprise** funciona igual, via um
+[token de acesso do Codex](https://developers.openai.com/codex/enterprise/access-tokens)
+guardado como `CODEX_ACCESS_TOKEN`. Para configurações de gateway ou outras
+variáveis além do conjunto padrão, adicione
+`OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` ao secret para nomear as
+variáveis extras que o host deve repassar aos runners.
 
-**Private repositories.** Managed sessions can clone a repository as the
-session workspace; for private ones, store an HTTPS token as `GIT_TOKEN` in
-a Modal secret (GitLab: add `GIT_USERNAME=oauth2`). The host image's git
-credential helper picks it up for the clone and for the agent's later
-fetch/push.
+**Repositórios privados.** Sessões gerenciadas podem clonar um repositório como
+workspace da sessão; para os privados, guarde um token HTTPS como `GIT_TOKEN`
+num secret da Modal (GitLab: adicione `GIT_USERNAME=oauth2`). O helper de
+credencial do git na imagem do host o usa para o clone e para os fetch/push
+posteriores do agente.
 
-The full Modal guide (CLI sandboxes, custom images, LLM and git credentials,
-troubleshooting) lives at [`modal/README.md`](modal/README.md); the Daytona
-guide lives at [`daytona/README.md`](daytona/README.md); the Islo guide
-(including its gateway credential-injection model) lives at
+O guia completo da Modal (sandboxes pela CLI, imagens próprias, credenciais de
+LLM e do git, resolução de problemas) está em [`modal/README.md`](modal/README.md);
+o guia da Daytona está em [`daytona/README.md`](daytona/README.md); o guia do
+Islo (incluindo o modelo de injeção de credencial pelo gateway dele) está em
 [`islo/README.md`](islo/README.md).
 
-## Auth
+## Autenticação
 
-Auth is driven by a single switch, `OMNICRAFT_AUTH_ENABLED`. The framework
-default (a bare local `omnicraft server`) leaves it off: single-user
-`header` mode, no login. The containerized deploys here (Docker / HF / Render /
-Railway / Modal / Fly) set `OMNICRAFT_AUTH_ENABLED=1` by default in their
-entrypoints,
-since a network-exposed instance should be authenticated. With the switch on,
-the mode is chosen by your config: supply the `OMNICRAFT_OIDC_*` vars and you
-get `oidc`, otherwise you get the built-in `accounts` flow.
-`OMNICRAFT_AUTH_PROVIDER` is an explicit escape hatch that pins the mode and
-overrides this auto-selection.
+A autenticação é comandada por uma única chave, `OMNICRAFT_AUTH_ENABLED`. O
+padrão do framework (um `omnicraft server` local e puro) deixa desligado: modo
+`header` de usuário único, sem login. Os deploys em container aqui
+(Docker / HF / Render / Railway / Modal / Fly) definem
+`OMNICRAFT_AUTH_ENABLED=1` por padrão nos entrypoints deles, já que uma
+instância exposta na rede deve ser autenticada. Com a chave ligada, o modo é
+escolhido pela sua configuração: forneça as variáveis `OMNICRAFT_OIDC_*` e você
+tem `oidc`; caso contrário, tem o fluxo embutido `accounts`. O
+`OMNICRAFT_AUTH_PROVIDER` é uma saída de emergência explícita, que fixa o modo
+e sobrescreve essa escolha automática.
 
-| Mode | When to use | What's needed |
+| Modo | Quando usar | O que é preciso |
 |---|---|---|
-| `accounts` (deploy default) | Standalone deploy, no external IdP: built-in username/password with first-user-is-admin bootstrap and UI-based invites. Opt in with `OMNICRAFT_AUTH_ENABLED=1` (and no OIDC vars). | Set `OMNICRAFT_ACCOUNTS_COOKIE_SECRET` (or let `bootstrap.sh` mint it) and `OMNICRAFT_ACCOUNTS_BASE_URL` (public URL). On first boot, set the admin password via the web Create-admin form, the terminal prompt, or `--admin-password` / `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD`. |
-| `oidc` | Standalone deploy with your own IdP: server handles the full login flow | Set `OMNICRAFT_AUTH_ENABLED=1` and the `OMNICRAFT_OIDC_*` env vars; the presence of `OMNICRAFT_OIDC_ISSUER` selects OIDC (or pin `OMNICRAFT_AUTH_PROVIDER=oidc`). Requires HTTPS (the session cookie uses the `__Host-` prefix). |
-| `header` | Behind an existing SSO proxy (oauth2-proxy, AWS ALB OIDC, Cloudflare Access, Tailscale Funnel, …) that injects an identity header | The default when `OMNICRAFT_AUTH_ENABLED` is off; or pin `OMNICRAFT_AUTH_PROVIDER=header`. Reads `X-Forwarded-Email` by default; set `OMNICRAFT_AUTH_HEADER` for proxies that use another name (e.g. `Cf-Access-Authenticated-User-Email`), and `OMNICRAFT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:` for Google IAP. Proxy MUST strip any inbound copy of the header from clients. Missing headers are always rejected. |
+| `accounts` (padrão do deploy) | Deploy autônomo, sem IdP externo: usuário/senha embutidos, com o primeiro usuário virando admin e convites pela UI. Ative com `OMNICRAFT_AUTH_ENABLED=1` (e sem variáveis de OIDC). | Defina `OMNICRAFT_ACCOUNTS_COOKIE_SECRET` (ou deixe o `bootstrap.sh` gerar) e `OMNICRAFT_ACCOUNTS_BASE_URL` (a URL pública). No primeiro boot, defina a senha do admin pelo formulário Create-admin na web, pelo prompt do terminal, ou por `--admin-password` / `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD`. |
+| `oidc` | Deploy autônomo com o seu próprio IdP: o servidor cuida do fluxo de login inteiro | Defina `OMNICRAFT_AUTH_ENABLED=1` e as variáveis `OMNICRAFT_OIDC_*`; a presença de `OMNICRAFT_OIDC_ISSUER` seleciona o OIDC (ou fixe `OMNICRAFT_AUTH_PROVIDER=oidc`). Requer HTTPS (o cookie de sessão usa o prefixo `__Host-`). |
+| `header` | Atrás de um proxy SSO já existente (oauth2-proxy, AWS ALB OIDC, Cloudflare Access, Tailscale Funnel, …) que injeta um header de identidade | O padrão quando `OMNICRAFT_AUTH_ENABLED` está desligado; ou fixe `OMNICRAFT_AUTH_PROVIDER=header`. Lê `X-Forwarded-Email` por padrão; defina `OMNICRAFT_AUTH_HEADER` para proxies que usam outro nome (ex.: `Cf-Access-Authenticated-User-Email`), e `OMNICRAFT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:` para o Google IAP. O proxy PRECISA remover qualquer cópia do header vinda do cliente. Headers ausentes são sempre rejeitados. |
 
 > [!NOTE]
-> **Managed sandboxes need `header`/`oidc` or single-user auth.** Each session's
-> runner dials back with the *user's* identity, which the built-in `accounts` mode
-> (the deploy default above) can't supply over the runner WebSocket — it returns
-> `403` even though the host connects. Framework-level; applies to every sandbox
-> provider (Modal / Daytona / Islo / Kubernetes / …).
+> **Sandboxes gerenciados precisam de `header`/`oidc` ou autenticação de usuário
+> único.** O runner de cada sessão disca de volta com a identidade *do usuário*,
+> que o modo embutido `accounts` (o padrão de deploy acima) não consegue
+> fornecer pelo WebSocket do runner — ele devolve `403` mesmo com o host
+> conectando. É a nível de framework; vale para todo provedor de sandbox
+> (Modal / Daytona / Islo / Kubernetes / …).
 
-### Single sign-on (OIDC)
+### Login único (OIDC)
 
-The built-in `accounts` flow needs no setup beyond the deploy itself. To let
-your team sign in with the accounts they already have (Google, GitHub, Okta,
-Microsoft), point the server at your identity provider. In `docker/.env` (or
-your platform's env settings):
+O fluxo embutido `accounts` não precisa de configuração além do próprio deploy.
+Para deixar seu time entrar com as contas que já tem (Google, GitHub, Okta,
+Microsoft), aponte o servidor para o seu provedor de identidade. No
+`docker/.env` (ou nas configurações de ambiente da sua plataforma):
 
 ```dotenv
-# Auth is already on (OMNICRAFT_AUTH_ENABLED=1) by default in the deploys here.
-# Adding an OIDC issuer flips the mode to single sign-on. No extra flag.
-OMNICRAFT_OIDC_ISSUER=https://accounts.google.com     # or https://github.com / your Okta / Entra URL
-OMNICRAFT_DOMAIN=agents.yourcompany.com               # your server's domain
+# A autenticação já está ligada (OMNICRAFT_AUTH_ENABLED=1) por padrão nos deploys aqui.
+# Adicionar um issuer de OIDC vira a chave para login único. Sem flag extra.
+OMNICRAFT_OIDC_ISSUER=https://accounts.google.com     # ou https://github.com / a URL do seu Okta / Entra
+OMNICRAFT_DOMAIN=agents.yourcompany.com               # o domínio do seu servidor
 OMNICRAFT_OIDC_CLIENT_ID=…
 OMNICRAFT_OIDC_CLIENT_SECRET=…
 ```
 
 ```bash
-docker compose up -d        # restart to apply
+docker compose up -d        # reinicie para aplicar
 ```
 
-Your team signs in with their existing accounts, and there are no passwords
-for you to manage. Nothing else about the app changes.
+Seu time entra com as contas que já tem, e não sobra senha nenhuma para você
+administrar. Nada mais no app muda.
 
 > [!TIP]
-> The only outside step is creating an app with your provider (e.g. Google
-> Cloud Console, or GitHub → Settings → Developer settings) to get the client
-> ID and secret. Set its **callback URL** to `https://<your-domain>/auth/callback`.
+> O único passo de fora é criar um app no seu provedor (por exemplo, no Google
+> Cloud Console, ou em GitHub → Settings → Developer settings) para obter o
+> client ID e o secret. Defina a **URL de callback** dele como
+> `https://<your-domain>/auth/callback`.
 
-**Decide who's allowed in**, in your server config (`/data/config.yaml`):
+**Decida quem pode entrar**, na configuração do seu servidor
+(`/data/config.yaml`):
 
 ```yaml
-allowed_domains: [yourcompany.com]    # only your company's emails can sign in
-admins: [you@yourcompany.com]         # who can manage members
+allowed_domains: [yourcompany.com]    # só emails da sua empresa podem entrar
+admins: [you@yourcompany.com]         # quem pode administrar os membros
 ```
 
 > [!TIP]
-> Need to let in one outsider, say a contractor on a personal account? Set
-> `OMNICRAFT_OIDC_ALLOW_INVITES=1` and send them a one-time invite link,
-> instead of opening up the whole allowlist.
+> Precisa deixar entrar alguém de fora, digamos um terceirizado numa conta
+> pessoal? Defina `OMNICRAFT_OIDC_ALLOW_INVITES=1` e mande um link de convite de
+> uso único, em vez de abrir a allowlist inteira.
 
-**Already have a team on built-in accounts?** One command brings everyone
-across when you switch, so they keep their sessions and admin rights:
+**Já tem um time nas contas embutidas?** Um comando leva todo mundo junto na
+troca, para que mantenham as sessões e os direitos de admin:
 
 ```bash
 omnicraft debug migrate-accounts-to-oidc <database-url> --domain yourcompany.com
 ```
 
-For the provider-specific walkthroughs (GitHub OAuth, Google Workspace,
-generic OIDC), see
+Para os passo a passo específicos de cada provedor (GitHub OAuth, Google
+Workspace, OIDC genérico), veja
 [`docker/README.md#multi-user-mode-oidc`](docker/README.md#multi-user-mode-oidc).
 
-### Header mode (X-Forwarded-Email)
+### Modo header (X-Forwarded-Email)
 
 > [!WARNING]
-> Don't deploy a shared server in header-auth mode unless you run a trusted
-> reverse proxy.
+> Não publique um servidor compartilhado no modo header-auth a menos que você
+> opere um proxy reverso confiável.
 
-`header` mode (`OMNICRAFT_AUTH_PROVIDER=header`) takes the caller's identity
-from a trusted request header — `X-Forwarded-Email` by default. It exists for
-deployments that sit behind an SSO proxy (oauth2-proxy, Cloudflare Access, an
-ALB/OIDC listener, Databricks Apps) that authenticates the user and injects
-that header on every request.
+O modo `header` (`OMNICRAFT_AUTH_PROVIDER=header`) tira a identidade de quem
+chama de um header confiável da requisição — `X-Forwarded-Email` por padrão.
+Ele existe para deploys que ficam atrás de um proxy SSO (oauth2-proxy,
+Cloudflare Access, um listener ALB/OIDC, Databricks Apps) que autentica o
+usuário e injeta esse header em toda requisição.
 
-Proxies that authenticate with a different header name set
-`OMNICRAFT_AUTH_HEADER` to that name instead of standing up an extra hop to
-rename it. For example, behind **Cloudflare Access** (which provides the
-authenticated email in `Cf-Access-Authenticated-User-Email`):
+Proxies que autenticam com outro nome de header definem
+`OMNICRAFT_AUTH_HEADER` com esse nome, em vez de montar mais um salto só para
+renomeá-lo. Por exemplo, atrás do **Cloudflare Access** (que fornece o email
+autenticado em `Cf-Access-Authenticated-User-Email`):
 
 ```dotenv
 OMNICRAFT_AUTH_PROVIDER=header
 OMNICRAFT_AUTH_HEADER=Cf-Access-Authenticated-User-Email
 ```
 
-Some proxies namespace the identity they inject. **Google IAP** forwards the
-email in `X-Goog-Authenticated-User-Email` prefixed with `accounts.google.com:`
-(e.g. `accounts.google.com:user@example.com`). Set
-`OMNICRAFT_AUTH_HEADER_STRIP_PREFIX` to drop that prefix and recover the bare
-email:
+Alguns proxies colocam um prefixo na identidade que injetam. O **Google IAP**
+encaminha o email em `X-Goog-Authenticated-User-Email` prefixado com
+`accounts.google.com:` (ex.: `accounts.google.com:user@example.com`). Defina
+`OMNICRAFT_AUTH_HEADER_STRIP_PREFIX` para remover esse prefixo e recuperar o
+email puro:
 
 ```dotenv
 OMNICRAFT_AUTH_PROVIDER=header
@@ -468,27 +481,28 @@ OMNICRAFT_AUTH_HEADER=X-Goog-Authenticated-User-Email
 OMNICRAFT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:
 ```
 
-In header mode **the server trusts whatever that header says**. If no proxy
-sets it, requests are rejected (`401`) rather than silently sharing one
-identity. But a *misconfigured* proxy is still dangerous: if the proxy
-doesn't **strip** any client-supplied copy of the identity header before
-forwarding, anyone can impersonate anyone by sending the header themselves.
-Getting this wrong exposes every user's sessions, conversation history, tool
-output, and files to every other caller.
+No modo header, **o servidor confia no que aquele header disser**. Se nenhum
+proxy o define, as requisições são rejeitadas (`401`) em vez de silenciosamente
+compartilharem uma identidade só. Mas um proxy *mal configurado* continua sendo
+perigoso: se ele não **remover** qualquer cópia do header de identidade vinda do
+cliente antes de encaminhar, qualquer pessoa pode se passar por qualquer outra
+mandando o header ela mesma. Errar isso expõe as sessões, o histórico de
+conversas, a saída de ferramentas e os arquivos de todo usuário a qualquer
+outro chamador.
 
-**For almost everyone, use built-in `accounts` (the default in these
-deploys) or `oidc`**; both authenticate users at the server with no proxy to
-get right. Only choose `header` when you already operate a proxy you trust
-to set and sanitize the identity header, and read
+**Para quase todo mundo, use as contas embutidas (`accounts`, o padrão nestes
+deploys) ou `oidc`**; os dois autenticam usuários no servidor, sem proxy nenhum
+para acertar. Só escolha `header` quando você já opera um proxy em que confia
+para definir e higienizar o header de identidade, e leia
 [`docker/README.md#header-proxy-mode-for-deploys-behind-an-existing-sso-proxy`](docker/README.md#header-proxy-mode-for-deploys-behind-an-existing-sso-proxy)
-first.
+antes.
 
-## Adding a new deploy target
+## Adicionando um novo destino de deploy
 
-Drop a new subdirectory under `deploy/<target>/` with a `README.md`
-and `SKILL.md`. If the new target uses the existing Docker image,
-your work is mostly platform-specific glue (a `fly.toml`, a Cloud
-Run service.yaml, a Helm chart, an HF Spaces config) plus a README
-that explains how to point that platform at `docker/Dockerfile`.
+Crie um subdiretório novo em `deploy/<target>/` com um `README.md` e um
+`SKILL.md`. Se o novo destino usa a imagem Docker existente, o seu trabalho é
+quase todo cola específica da plataforma (um `fly.toml`, um service.yaml do
+Cloud Run, um Helm chart, uma configuração de HF Spaces) mais um README que
+explique como apontar aquela plataforma para o `docker/Dockerfile`.
 
-Update this top-level README with a row in the table above.
+Atualize este README de topo com uma linha na tabela acima.

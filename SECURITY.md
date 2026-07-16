@@ -1,7 +1,7 @@
 # Política de Segurança
 
 Para relatar uma vulnerabilidade de segurança, use os
-[GitHub private security advisories](https://github.com/editzffaleta/OmniCraft/security/advisories/new).
+[GitHub private security advisories](https://github.com/Omni-Craft/OmniCraft/security/advisories/new).
 
 Por favor, não abra uma issue pública para problemas de segurança, e não inclua
 credenciais ativas, tokens ou dados de clientes em nenhum relato.

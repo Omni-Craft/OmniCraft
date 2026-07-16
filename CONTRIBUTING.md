@@ -36,7 +36,7 @@ Instale primeiro os pré-requisitos locais:
 - Node.js 22 LTS ou mais recente, com `npm`, ao trabalhar em `web/`.
 
 ```bash
-git clone https://github.com/editzffaleta/OmniCraft.git
+git clone https://github.com/Omni-Craft/OmniCraft.git
 cd OmniCraft
 
 uv python install

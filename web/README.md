@@ -1,21 +1,21 @@
 # web
 
-The web UI for `omnicraft server --agent <agent>`. SPA built with Vite + React + TypeScript +
-Tailwind v4 + shadcn/ui. Talks to the current OmniCraft API surface
-(`/v1/agents`, `/v1/sessions`, session-scoped
-`/v1/sessions/{id}/resources/files`).
+A web UI para `omnicraft server --agent <agent>`. SPA construída com Vite +
+React + TypeScript + Tailwind v4 + shadcn/ui. Conversa com a superfície da
+API atual do OmniCraft (`/v1/agents`, `/v1/sessions`,
+`/v1/sessions/{id}/resources/files` por sessão).
 
-## Develop
+## Desenvolver
 
-In one terminal, start the omnicraft server (default port `6767`). Use
-`--agent` to pre-register one or more agents at startup (accepts a YAML file or
-an agent-image directory; can be repeated):
+Num terminal, suba o servidor omnicraft (porta padrão `6767`). Use
+`--agent` para pré-registrar um ou mais agentes na inicialização (aceita um
+arquivo YAML ou um diretório de imagem de agente; pode repetir):
 
 ```bash
 .venv/bin/omnicraft server --agent examples/hello_world.yaml
 ```
 
-In another terminal, start the Vite dev server (port `5173`):
+Em outro terminal, suba o servidor de dev do Vite (porta `5173`):
 
 ```bash
 cd web
@@ -23,39 +23,40 @@ npm install
 npm run dev
 ```
 
-The Vite dev server proxies `/v1` and `/api` to `http://localhost:6767`. Set
-`OMNICRAFT_URL` to override the proxy target:
+O servidor de dev do Vite faz proxy de `/v1` e `/api` para
+`http://localhost:6767`. Defina `OMNICRAFT_URL` para sobrescrever o alvo do
+proxy:
 
 ```bash
 OMNICRAFT_URL=http://localhost:9000 npm run dev
 ```
 
-Additional `omnicraft server` options:
+Opções adicionais do `omnicraft server`:
 
-| Flag                  | Default                | Description                          |
-| --------------------- | ---------------------- | ------------------------------------ |
-| `--host`              | `127.0.0.1`            | Host to bind to                      |
-| `-p` / `--port`       | `6767`                 | Port to listen on                    |
-| `--database-uri`      | `<data-dir>/chat.db`   | Database URI for stores              |
-| `--artifact-location` | `<data-dir>/artifacts` | Path for artifact storage            |
-| `-c` / `--config`     | (none)                 | Path to YAML config file             |
-| `--execution-timeout` | `7200`                 | Max wall-clock seconds per execution |
-| `--agent`             | (none)                 | Pre-register an agent (repeatable)   |
+| Flag                  | Padrão                 | Descrição                                     |
+| --------------------- | ---------------------- | --------------------------------------------- |
+| `--host`              | `127.0.0.1`            | Host para vincular                            |
+| `-p` / `--port`       | `6767`                 | Porta para escutar                            |
+| `--database-uri`      | `<data-dir>/chat.db`   | URI do banco de dados para os stores          |
+| `--artifact-location` | `<data-dir>/artifacts` | Caminho para armazenamento de artefato        |
+| `-c` / `--config`     | (nenhum)               | Caminho do arquivo de config YAML             |
+| `--execution-timeout` | `7200`                 | Máximo de segundos de wall-clock por execução |
+| `--agent`             | (nenhum)               | Pré-registra um agente (repetível)            |
 
-## Build + serve from the OmniCraft server
+## Build + servir pelo servidor OmniCraft
 
 ```bash
 cd web
 npm run build
 ```
 
-Vite writes the bundle to `../omnicraft/server/static/web-ui/` (configured in
-`vite.config.ts`). When that directory exists and contains `index.html`, the
-FastAPI app in `omnicraft/server/app.py` mounts it at `/`. After a build:
+O Vite escreve o bundle em `../omnicraft/server/static/web-ui/` (configurado
+em `vite.config.ts`). Quando esse diretório existe e contém `index.html`, o
+app FastAPI em `omnicraft/server/app.py` o monta em `/`. Depois de um build:
 
 ```bash
 .venv/bin/omnicraft server --agent examples/hello_world.yaml
-# open http://localhost:6767/
+# abra http://localhost:6767/
 ```
 
 ## Lint + format
@@ -68,80 +69,81 @@ npm run format:check  # prettier --check .
 npm run type-check    # tsc -b
 ```
 
-`npm run type-check` runs in CI as part of the `Pre-commit checks`
-job (`.github/workflows/lint.yml`) and gates merge. Run it locally
-before committing any change under `web/`.
+`npm run type-check` roda na CI como parte do job `Pre-commit checks`
+(`.github/workflows/lint.yml`) e bloqueia o merge. Rode localmente antes de
+commitar qualquer mudança em `web/`.
 
-## Test
+## Teste
 
 ```bash
 npm run test          # vitest run
-npm run test:watch    # vitest in watch mode
+npm run test:watch    # vitest em modo watch
 ```
 
-## Reducer parity
+## Paridade do reducer
 
-The TypeScript reducer at `src/lib/blockStream.ts` is a hand-mirror of
-the Python reducer at
-`sdks/python-client/omnicraft_client/_stream.py`. Same for:
+O reducer TypeScript em `src/lib/blockStream.ts` é um espelho manual do
+reducer Python em `sdks/python-client/omnicraft_client/_stream.py`. O mesmo
+vale para:
 
-| TS file                       | Mirrors                                        |
-| ----------------------------- | ---------------------------------------------- |
-| `src/lib/blocks.ts`           | `omnicraft_client/_blocks.py`                  |
-| `src/lib/events.ts`           | `omnicraft_client/_events.py`                  |
-| `src/lib/types.ts`            | minimal subset of `omnicraft_client/_types.py` |
-| `src/lib/sse.ts`              | `omnicraft_client/_sse.py`                     |
-| `src/lib/blockStream.ts`      | `omnicraft_client/_stream.py`                  |
-| `src/lib/blockStream.test.ts` | `tests/frontends/sdk/test_stream.py`           |
+| Arquivo TS                    | Espelha                                            |
+| ----------------------------- | -------------------------------------------------- |
+| `src/lib/blocks.ts`           | `omnicraft_client/_blocks.py`                      |
+| `src/lib/events.ts`           | `omnicraft_client/_events.py`                      |
+| `src/lib/types.ts`            | subconjunto mínimo de `omnicraft_client/_types.py` |
+| `src/lib/sse.ts`              | `omnicraft_client/_sse.py`                         |
+| `src/lib/blockStream.ts`      | `omnicraft_client/_stream.py`                      |
+| `src/lib/blockStream.test.ts` | `tests/frontends/sdk/test_stream.py`               |
 
-There is **no cross-language CI gate** today. When `_stream.py`
-changes for a real bug (e.g. new harness quirk, dedup edge case), the
-TypeScript port can lag — drift surfaces only when someone next runs
-`npm run test` after a behavioral change. Workflow when `_stream.py`
-changes:
+Hoje **não existe gate de CI cross-language**. Quando `_stream.py` muda por
+um bug real (ex.: uma peculiaridade nova de harness, um caso de borda de
+dedup), a porta TypeScript pode ficar defasada — a divergência só aparece
+quando alguém roda `npm run test` depois de uma mudança de comportamento.
+Fluxo de trabalho quando `_stream.py` muda:
 
-1. Read the diff to `_stream.py` (or `_blocks.py` / `_events.py`).
-2. Update `blockStream.ts` (or `blocks.ts` / `events.ts`) to match.
-3. Add or update a case in `blockStream.test.ts` that pins the new
-   behavior — same shape as `test_stream.py`.
-4. `npm run test` → green.
+1. Leia o diff de `_stream.py` (ou `_blocks.py` / `_events.py`).
+2. Atualize `blockStream.ts` (ou `blocks.ts` / `events.ts`) para
+   corresponder.
+3. Adicione ou atualize um caso em `blockStream.test.ts` que fixe o novo
+   comportamento — no mesmo formato de `test_stream.py`.
+4. `npm run test` → verde.
 
-If we ever decide cross-language fixture parity is worth the
-maintenance burden, we'd port the captured-fixture approach used
-for `test_stream.py`.
+Se algum dia decidirmos que a paridade de fixture cross-language vale a
+manutenção, portaríamos a abordagem de fixture capturada usada em
+`test_stream.py`.
 
-### web-only divergences
+### Divergências exclusivas da web
 
-web carries a few constructs the Python SDK doesn't, on purpose.
-They're listed here so a future maintainer doesn't try to "restore
-parity" by mirroring them across.
+A web carrega algumas construções que o SDK Python não tem, de propósito.
+Elas estão listadas aqui para que um futuro mantenedor não tente "restaurar
+a paridade" espelhando-as também.
 
-- `UserMessageBlock` (in `blocks.ts`) — surfaces persisted user
-  message items as blocks so the bubble walker sees a single flat
-  list. The SDK's `BlockStream.stream()` never emits user messages
-  (its consumers receive the user input as the caller's own argument,
-  not back through the stream).
-- `BlockContext.responseId` + `BlockContext.itemId` — populated by the
-  TS reducer from the SSE wire format (`response.created.response.id`
-  and `event.item.id` / `event.item.response_id` on
-  `output_item.done`) so each block knows its server origin. The TS
-  events `ToolCall` / `ToolResult` / `MessageDone` / `NativeToolCall`
-  carry `itemId` + `responseId` to thread the values through.
-- Flat block storage in `chatStore.blocks`, grouped at render time by
-  `buildBubbles` keyed on `ctx.responseId`. The SDK has no equivalent
-  — its consumers iterate the block stream procedurally without a
-  stateful store.
+- `UserMessageBlock` (em `blocks.ts`) — expõe itens de mensagem do usuário
+  persistidos como blocos, para que o walker de bolhas veja uma lista única
+  e plana. O `BlockStream.stream()` do SDK nunca emite mensagens do usuário
+  (os consumidores dele recebem o input do usuário como argumento próprio
+  do chamador, não de volta pelo stream).
+- `BlockContext.responseId` + `BlockContext.itemId` — populados pelo reducer
+  TS a partir do formato de fio SSE (`response.created.response.id` e
+  `event.item.id` / `event.item.response_id` em `output_item.done`) para que
+  cada bloco saiba a sua origem no servidor. Os eventos TS `ToolCall` /
+  `ToolResult` / `MessageDone` / `NativeToolCall` carregam `itemId` +
+  `responseId` para passar os valores adiante.
+- Armazenamento plano de blocos em `chatStore.blocks`, agrupado no momento
+  da renderização por `buildBubbles`, indexado por `ctx.responseId`. O SDK
+  não tem equivalente — os consumidores dele iteram o block stream de forma
+  procedural, sem um store com estado.
 
-When `_stream.py` / `_events.py` / `_blocks.py` change for a
-substantive reason (new event type, new dedup edge case), continue to
-mirror the _behavioral_ changes here; just leave the divergences above
-alone.
+Quando `_stream.py` / `_events.py` / `_blocks.py` mudam por um motivo
+substantivo (tipo de evento novo, caso de borda de dedup novo), continue
+espelhando as mudanças de _comportamento_ aqui; só deixe as divergências
+acima como estão.
 
 ## Stack
 
 - Vite + React 19 + TypeScript
-- Tailwind v4 (`@import "tailwindcss"`, no config file)
-- shadcn/ui (`radix-nova` preset, neutral base, CSS variables)
+- Tailwind v4 (`@import "tailwindcss"`, sem arquivo de config)
+- shadcn/ui (preset `radix-nova`, base neutra, variáveis CSS)
 - TanStack Query, Zustand, React Router v7
 - streamdown (+ `@streamdown/code`, `@streamdown/math`, `@streamdown/mermaid`),
   shiki, framer-motion, cmdk, react-hotkeys-hook, use-stick-to-bottom,

@@ -1,48 +1,49 @@
 # SDKs
 
-Python packages for integrating with omnicraft.
+Pacotes Python para integração com o omnicraft.
 
-## Structure
+## Estrutura
 
 ```
 sdks/
-  python-client/           # Headless HTTP/SSE client
+  python-client/           # Cliente HTTP/SSE headless
     pyproject.toml
     omnicraft_client/    # import omnicraft_client
-  ui/                      # Terminal UI layer (Rich + prompt_toolkit)
+  ui/                      # Camada de UI de terminal (Rich + prompt_toolkit)
     pyproject.toml
     omnicraft_ui_sdk/    # import omnicraft_ui_sdk
       terminal/
 ```
 
-Claude Code skills for SDK development live under `.claude/skills/`.
+As skills do Claude Code para desenvolvimento de SDK ficam em `.claude/skills/`.
 
-## `omnicraft_client` — the headless client
+## `omnicraft_client` — o cliente headless
 
-Pure HTTP/SSE client. No Rich, no prompt_toolkit, no terminal
-dependencies. Use this for:
+Cliente HTTP/SSE puro. Sem Rich, sem prompt_toolkit, sem dependências
+de terminal. Use isto para:
 
-- Scripts that invoke an agent and collect output.
-- Web frontends, Slack bots, test harnesses — anything non-terminal.
-- As the foundation layer for `omnicraft_ui_sdk` below.
+- Scripts que invocam um agente e coletam a saída.
+- Frontends web, bots de Slack, harnesses de teste — qualquer coisa que não seja terminal.
+- Como camada de fundação para o `omnicraft_ui_sdk` abaixo.
 
-Three levels of abstraction are available:
+Três níveis de abstração estão disponíveis:
 
-1. **Raw events** — `session.send()` yields typed wire events
-   (`ResponseCreated`, `TextDelta`, `ToolCallDone`, etc.). 1:1 with SSE.
-2. **Semantic blocks** — `BlockStream` folds events into higher-level
-   units (`TextChunk`, `ToolGroup`, `ReasoningBlock`, …). Frameworks
-   consuming these don't need to reimplement the stream state machine.
-3. **Composable transforms** — `pipe`, `skip_blocks`,
+1. **Eventos brutos** — `session.send()` produz eventos wire tipados
+   (`ResponseCreated`, `TextDelta`, `ToolCallDone`, etc.). 1:1 com o SSE.
+2. **Blocos semânticos** — `BlockStream` agrega os eventos em unidades de
+   nível mais alto (`TextChunk`, `ToolGroup`, `ReasoningBlock`, …). Frameworks
+   que consomem esses blocos não precisam reimplementar a máquina de estados
+   do stream.
+3. **Transformações componíveis** — `pipe`, `skip_blocks`,
    `skip_intermediate_ends`, `merge_text_across_iterations`, `only_agent`.
 
-### Install
+### Instalação
 
 ```bash
 pip install -e sdks/python-client
 ```
 
-### Minimal invocation
+### Invocação mínima
 
 ```python
 import asyncio
@@ -57,7 +58,7 @@ async def main():
 asyncio.run(main())
 ```
 
-### Using semantic blocks (web, Slack, or any custom UI)
+### Usando blocos semânticos (web, Slack, ou qualquer UI própria)
 
 ```python
 from omnicraft_client import (
@@ -82,25 +83,25 @@ async def handle(websocket, session, text):
                 await websocket.send_json({"type": "done", "status": s})
 ```
 
-## `omnicraft_ui_sdk` — the terminal frontend
+## `omnicraft_ui_sdk` — o frontend de terminal
 
-Thin layer on top of `omnicraft_client` for building terminal REPLs.
-Provides:
+Camada leve sobre o `omnicraft_client` para construir REPLs de terminal.
+Fornece:
 
-- **RichBlockFormatter** — converts `StreamBlock` values to Rich
-  renderables. Subclass and override one method to customize.
-- **TerminalHost** — manages prompt_toolkit: pinned input bar,
-  background streaming, Escape to cancel, persistent history.
+- **RichBlockFormatter** — converte valores `StreamBlock` em renderizáveis
+  do Rich. Faça subclasse e sobrescreva um método para customizar.
+- **TerminalHost** — gerencia o prompt_toolkit: barra de entrada fixa,
+  streaming em segundo plano, Escape para cancelar, histórico persistente.
 
-### Install
+### Instalação
 
 ```bash
 pip install -e sdks/ui
 ```
 
-(Pulls in `omnicraft-client` as a dependency.)
+(Traz o `omnicraft-client` como dependência.)
 
-### Minimal REPL
+### REPL mínimo
 
 ```python
 import asyncio
@@ -135,9 +136,9 @@ async def main():
 asyncio.run(main())
 ```
 
-### Customization
+### Customização
 
-Override one formatter method:
+Sobrescreva um método do formatador:
 
 ```python
 class MyFormatter(RichBlockFormatter):
@@ -149,19 +150,19 @@ class MyFormatter(RichBlockFormatter):
         return [tree]
 ```
 
-Use transforms to reshape the block stream:
+Use transformações para remodelar o stream de blocos:
 
 ```python
 from omnicraft_client import pipe, skip_blocks, ReasoningBlock
 
 stream = pipe(
     block_stream.stream(session, text),
-    skip_blocks(ReasoningBlock),  # Hide thinking
+    skip_blocks(ReasoningBlock),  # Esconde o raciocínio
 )
 ```
 
-## Reference Implementation
+## Implementação de referência
 
-The built-in REPL at `omnicraft/repl/` demonstrates all features:
-streaming, tool calls, reasoning, slash commands, conversation
-switching, elapsed timer. See `omnicraft/repl/_repl.py`.
+O REPL embutido em `omnicraft/repl/` demonstra todas as funcionalidades:
+streaming, chamadas de ferramenta, raciocínio, comandos de barra, troca de
+conversa, cronômetro decorrido. Veja `omnicraft/repl/_repl.py`.

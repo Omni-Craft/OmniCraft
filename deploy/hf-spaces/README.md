@@ -1,21 +1,22 @@
-# OmniCraft on Hugging Face Spaces
+# OmniCraft no Hugging Face Spaces
 
-> **Demo-grade target.** On the free tier, Space storage is **ephemeral** —
-> data (and the SQLite DB) reset on restart. Good for kicking the tires, not for
-> keeping state. For persistence, add HF's paid persistent-storage, or point
-> `DATABASE_URL` at an external Postgres.
+> **Alvo de nível demo.** No nível gratuito, o armazenamento do Space é
+> **efêmero** — os dados (e o banco SQLite) são reiniciados a cada restart. Bom
+> para experimentar, não para manter estado. Para persistência, adicione o
+> armazenamento persistente pago da HF, ou aponte `DATABASE_URL` para um
+> Postgres externo.
 
-HF Spaces (Docker SDK) builds a Dockerfile at the Space repo root and runs it.
-The shim here just pulls the prebuilt image. **No external database needed** —
-the server runs on a SQLite file (a first-class backend), so a demo Space is two
-files plus two secrets.
+O HF Spaces (Docker SDK) constrói um Dockerfile na raiz do repositório do Space
+e o executa. O shim aqui só puxa a imagem pré-construída. **Nenhum banco
+externo é necessário** — o servidor roda num arquivo SQLite (um backend de
+primeira classe), então um Space de demo é dois arquivos mais dois secrets.
 
-## Setup
+## Configuração
 
-1. Create a **Docker** Space on Hugging Face.
-2. Add these two files at the Space repo root:
-   - the `Dockerfile` from this directory (pulls the image), and
-   - a `README.md` starting with this front-matter (HF reads it):
+1. Crie um Space **Docker** no Hugging Face.
+2. Adicione estes dois arquivos na raiz do repositório do Space:
+   - o `Dockerfile` deste diretório (puxa a imagem), e
+   - um `README.md` começando com este front-matter (a HF o lê):
      ```yaml
      ---
      title: OmniCraft
@@ -26,37 +27,40 @@ files plus two secrets.
      app_port: 8000
      ---
      ```
-3. In the Space **Settings -> Variables and secrets**, set:
+3. Em **Settings -> Variables and secrets** do Space, defina:
 
-   | Name | Kind | Value |
+   | Nome | Tipo | Valor |
    |---|---|---|
-   | `PORT` | variable | `8000` (pin it so the app and `app_port` agree) |
-   | `HOST` | variable | `0.0.0.0` |
-   | `DATABASE_URL` | variable | `sqlite:////data/artifacts/chat.db` |
-   | `OMNICRAFT_ACCOUNTS_COOKIE_SECRET` | secret | `openssl rand -hex 32` (pin it: ephemeral disk would otherwise drop sessions on restart) |
+   | `PORT` | variável | `8000` (fixe para que o app e o `app_port` concordem) |
+   | `HOST` | variável | `0.0.0.0` |
+   | `DATABASE_URL` | variável | `sqlite:////data/artifacts/chat.db` |
+   | `OMNICRAFT_ACCOUNTS_COOKIE_SECRET` | secret | `openssl rand -hex 32` (fixe: o disco efêmero derrubaria as sessões a cada restart) |
 
-4. The Space builds + boots. Admin password is in the Space **Logs** on first
-   boot. The base URL is auto-detected from `SPACE_HOST`, so it needs no manual
-   set.
-5. **Log in via the direct URL** `https://<user>-<space>.hf.space` in its own
-   tab — not HF's embedded preview. The session cookie is `SameSite=Lax`, which
-   browsers won't send inside HF's cross-origin iframe, so logging in from the
-   embedded view loops back to `/login`. The direct URL is top-level
-   (same-site), so login sticks. Make the Space **Public** so the direct URL
-   isn't gated.
+4. O Space constrói e sobe. A senha do admin está nos **Logs** do Space no
+   primeiro boot. A URL base é detectada automaticamente a partir de
+   `SPACE_HOST`, então não precisa ser definida manualmente.
+5. **Entre pela URL direta** `https://<user>-<space>.hf.space` em sua própria
+   aba — não pela prévia embutida da HF. O cookie de sessão é `SameSite=Lax`,
+   que os navegadores não enviam dentro do iframe cross-origin da HF, então
+   entrar pela visualização embutida faz um loop de volta para `/login`. A URL
+   direta é top-level (same-site), então o login se mantém. Deixe o Space
+   **Public** para que a URL direta não fique bloqueada.
 
-## Want persistence / multi-user later?
+## Quer persistência / multiusuário depois?
 
-SQLite on a free Space is ephemeral (resets on restart). For data that survives,
-swap `DATABASE_URL` for an **owned** external Postgres — the fastest is Neon:
+O SQLite num Space gratuito é efêmero (reinicia a cada restart). Para dados
+que sobrevivem, troque `DATABASE_URL` por um Postgres externo **seu** — o mais
+rápido é o Neon:
 
-1. Go to [pg.new](https://pg.new) and create a free Postgres. **Sign in to keep
-   it** — an unclaimed instant database is throwaway and expires.
-2. Copy the connection string and set it as the `DATABASE_URL` Space secret
-   (replacing the SQLite value). The entrypoint normalizes `postgres://`
-   automatically; the pooled or direct connection string both work.
+1. Vá a [pg.new](https://pg.new) e crie um Postgres gratuito. **Entre com uma
+   conta para mantê-lo** — um banco instantâneo sem dono é descartável e
+   expira.
+2. Copie a string de conexão e defina-a como o secret `DATABASE_URL` do Space
+   (substituindo o valor do SQLite). O entrypoint normaliza `postgres://`
+   automaticamente; tanto a string de conexão com pool quanto a direta
+   funcionam.
 
-That makes data survive restarts and supports more than one instance. Note the
-**first boot takes ~1 minute** while migrations run against the remote database
-(subsequent boots are fast), so don't be alarmed if the Space sits in "Building
-/ Starting" for a bit.
+Isso faz os dados sobreviverem a restarts e suporta mais de uma instância.
+Note que o **primeiro boot leva ~1 minuto** enquanto as migrações rodam contra
+o banco remoto (os boots seguintes são rápidos), então não se assuste se o
+Space ficar em "Building / Starting" por um tempo.

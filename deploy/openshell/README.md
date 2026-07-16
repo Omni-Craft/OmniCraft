@@ -1,129 +1,139 @@
-# OmniCraft on NVIDIA OpenShell
+# OmniCraft no NVIDIA OpenShell
 
-[NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) is a self-hosted sandbox
-provider. OmniCraft connects to an OpenShell **gateway** with the official
-[`openshell`](https://pypi.org/project/openshell/) Python SDK and asks that
-gateway to create, execute in, and delete sandboxes on the gateway's configured
-compute driver.
+O [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) é um provedor de
+sandbox auto-hospedado. O OmniCraft se conecta a um **gateway** OpenShell com
+o SDK Python oficial [`openshell`](https://pypi.org/project/openshell/) e pede
+para esse gateway criar, executar em, e apagar sandboxes no compute driver
+configurado do gateway.
 
-This guide covers the OmniCraft-specific OpenShell setup:
+Este guia cobre a configuração do OpenShell específica do OmniCraft:
 
-- install the `openshell` extra;
-- select a working OpenShell gateway;
-- use an OpenShell-compatible OmniCraft host image;
-- configure CLI-launched or server-managed sandboxes.
+- instalar o extra `openshell`;
+- selecionar um gateway OpenShell funcional;
+- usar uma imagem de host do OmniCraft compatível com o OpenShell;
+- configurar sandboxes lançados pela CLI ou gerenciados pelo servidor.
 
 ```bash
 pip install 'omnicraft[openshell]'
 ```
 
-OmniCraft uses OpenShell two ways:
+O OmniCraft usa o OpenShell de duas formas:
 
-- **CLI-launched**: `omnicraft sandbox create` / `connect` provisions a sandbox
-  from your terminal, ships your local checkout into it, and registers it as a
-  host with your server.
-- **Server-managed**: the server provisions a sandbox automatically when a
-  session is created with `"host_type": "managed"` and terminates it when the
-  session is deleted.
+- **Lançado pela CLI**: `omnicraft sandbox create` / `connect` provisiona um
+  sandbox pelo seu terminal, envia o seu checkout local para dentro dele, e o
+  registra como host no seu servidor.
+- **Gerenciado pelo servidor**: o servidor provisiona um sandbox
+  automaticamente quando uma sessão é criada com `"host_type": "managed"` e o
+  termina quando a sessão é apagada.
 
-This is a sandbox-provider guide, not a server deploy target.
+Este é um guia de provedor de sandbox, não um alvo de deploy do servidor.
 
-Two traits shape the rest of this guide:
+Duas características moldam o resto deste guia:
 
-- **gRPC, and a gateway you select — not an API key.** OmniCraft connects through
-  the OpenShell gateway you've made active with `openshell gateway select`. The
-  SDK's `from_active_cluster()` resolves that gateway's endpoint, TLS material,
-  and OIDC token from `$OPENSHELL_GATEWAY` / `~/.config/openshell/active_gateway`.
-  There is no base-URL or token knob in OmniCraft — gateway setup and auth are an
-  OpenShell concern.
-- **No local port forward.** OpenShell has no sandbox→laptop callback path, so
-  the interactive in-sandbox `omnicraft login` / App OAuth step is skipped
-  automatically (as on Modal, Daytona, and CoreWeave) — fine for token/OIDC-auth
-  servers.
+- **gRPC, e um gateway que você seleciona — não uma chave de API.** O
+  OmniCraft se conecta pelo gateway OpenShell que você ativou com `openshell
+  gateway select`. O `from_active_cluster()` do SDK resolve o endpoint, o
+  material TLS e o token OIDC desse gateway a partir de `$OPENSHELL_GATEWAY` /
+  `~/.config/openshell/active_gateway`. Não existe parâmetro de base-URL ou
+  token no OmniCraft — a configuração do gateway e a autenticação são uma
+  preocupação do OpenShell.
+- **Sem port forward local.** O OpenShell não tem um caminho de callback
+  sandbox→notebook, então o passo interativo `omnicraft login` / App OAuth
+  dentro do sandbox é pulado automaticamente (como na Modal, na Daytona e no
+  CoreWeave) — funciona bem para servidores com autenticação por token/OIDC.
 
-## Prerequisites
+## Pré-requisitos
 
-You need a **running OpenShell gateway** with a compute driver, made active on
-the machine the launcher runs on. Installing and operating the gateway is an
-OpenShell concern — follow the
-[OpenShell docs](https://docs.nvidia.com/openshell). Install the runtime + CLI:
+Você precisa de um **gateway OpenShell rodando** com um compute driver,
+ativado na máquina onde o launcher roda. Instalar e operar o gateway é uma
+preocupação do OpenShell — siga a
+[documentação do OpenShell](https://docs.nvidia.com/openshell). Instale o
+runtime + CLI:
 
 ```bash
 curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh | sh
 ```
 
-(Apple Silicon macOS installs the Homebrew formula; Linux installs the deb/rpm.)
+(No macOS Apple Silicon instala a fórmula do Homebrew; no Linux instala o
+deb/rpm.)
 
 > [!IMPORTANT]
-> **The gateway host must be amd64 Linux.** OpenShell's supervisor
-> (Landlock/seccomp/netns) does not run reliably under emulation — on an arm64
-> host (e.g. Apple Silicon via colima) the sandbox never reaches READY. The
-> official host image now publishes multi-arch (amd64 + arm64), but its arm64
-> variant omits `cel-expr-python` (no linux-arm64 wheel — CEL policies degrade to
-> unavailable there), so the amd64 variant is the one to run with OpenShell. On an
-> Apple-Silicon laptop, point the gateway at a remote **amd64 Linux** box (and the
-> server at that gateway) rather than the local Docker VM.
+> **O host do gateway precisa ser Linux amd64.** O supervisor do OpenShell
+> (Landlock/seccomp/netns) não roda de forma confiável sob emulação — num
+> host arm64 (ex.: Apple Silicon via colima) o sandbox nunca chega a READY. A
+> imagem oficial do host agora publica multi-arch (amd64 + arm64), mas a
+> variante arm64 dela omite o `cel-expr-python` (sem wheel linux-arm64 — as
+> políticas CEL degradam para indisponíveis lá), então a variante amd64 é a
+> que se deve rodar com o OpenShell. Num notebook Apple Silicon, aponte o
+> gateway para uma máquina **Linux amd64** remota (e o servidor para esse
+> gateway) em vez da VM Docker local.
 
-### Minimal local Docker gateway (for trying it out)
+### Gateway Docker local mínimo (para experimentar)
 
-For a quick local test, run one OpenShell gateway backed by your local Docker
-daemon. The gateway needs a signing key so sandbox containers can authenticate
-back to it; the helper script creates that key, writes the gateway config, starts
-the gateway, registers it with the OpenShell CLI, and waits for `openshell status`
-to report `Connected`.
+Para um teste local rápido, rode um gateway OpenShell apoiado no seu daemon
+Docker local. O gateway precisa de uma chave de assinatura para que os
+containers de sandbox consigam se autenticar de volta com ele; o script
+auxiliar cria essa chave, escreve a config do gateway, inicia o gateway, o
+registra na CLI do OpenShell, e espera o `openshell status` reportar
+`Connected`.
 
-Make sure Docker is running first. If you use colima, set `DOCKER_HOST` before
-running the script:
+Garanta que o Docker está rodando primeiro. Se você usa colima, defina
+`DOCKER_HOST` antes de rodar o script:
 
 ```bash
 export DOCKER_HOST=unix://$HOME/.colima/default/docker.sock
 ```
 
-Then start and register the gateway:
+Depois inicie e registre o gateway:
 
 ```bash
 deploy/openshell/start-local-docker-gateway.sh
 ```
 
-The script writes local development state under `~/.openshell-local` and leaves
-gateway logs at `~/.openshell-local/gateway.log`.
+O script escreve o estado de desenvolvimento local em `~/.openshell-local` e
+deixa os logs do gateway em `~/.openshell-local/gateway.log`.
 
-For a real deployment, run the gateway behind TLS with OIDC or mTLS (see the
-OpenShell docs), then `openshell gateway add <https-url>` and `openshell gateway
-login`; the SDK picks up the TLS/OIDC material from the gateway metadata
-automatically — OmniCraft needs no extra configuration.
+Para um deploy de verdade, rode o gateway atrás de TLS com OIDC ou mTLS
+(veja a documentação do OpenShell), depois `openshell gateway add
+<https-url>` e `openshell gateway login`; o SDK pega o material de TLS/OIDC
+dos metadados do gateway automaticamente — o OmniCraft não precisa de
+configuração extra.
 
 > [!WARNING]
-> `allow_unauthenticated_users = true` and `--disable-tls` are local-development
-> conveniences. Don't expose such a gateway on a network.
+> `allow_unauthenticated_users = true` e `--disable-tls` são conveniências
+> de desenvolvimento local. Não exponha um gateway assim numa rede.
 
-## The host image
+## A imagem do host
 
-Sandboxes boot from `ghcr.io/omnicraft-ai/omnicraft-host:latest`, published by CI
-from the `host` target of [`deploy/docker/Dockerfile`](../docker/Dockerfile) with
-OmniCraft and its dependencies preinstalled — including the coding-harness CLIs
-(`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run without an in-sandbox
-install. OpenShell injects its own supervisor as the container entrypoint.
+Os sandboxes inicializam a partir de
+`ghcr.io/omnicraft-ai/omnicraft-host:latest`, publicada pela CI a partir do
+alvo `host` do [`deploy/docker/Dockerfile`](../docker/Dockerfile), com o
+OmniCraft e suas dependências pré-instaladas — incluindo as CLIs dos
+harnesses de código (`claude`, `codex`, `pi`, `kiro-cli`), então agentes de
+qualquer harness rodam sem instalação dentro do sandbox. O OpenShell injeta o
+seu próprio supervisor como entrypoint do container.
 
-The `host` target also carries the two things OpenShell's image contract requires
-(and which are inert for the root-based providers): a non-root **`sandbox`
-user/group** and **`iproute2`/`nftables`** for the per-sandbox network namespace.
-A custom image used with OpenShell must include both, or the supervisor refuses to
-start. (The launcher handles the remaining non-root detail — pinning each exec's
-cwd and `$HOME` to `/home/sandbox` — so the image's `/root` default still works
-for the other providers.)
+O alvo `host` também carrega as duas coisas que o contrato de imagem do
+OpenShell exige (e que são inertes para os providers baseados em root): um
+**usuário/grupo `sandbox`** não-root e **`iproute2`/`nftables`** para o
+namespace de rede por sandbox. Uma imagem customizada usada com o OpenShell
+precisa incluir os dois, ou o supervisor se recusa a iniciar. (O launcher
+cuida do detalhe não-root restante — fixando o cwd e o `$HOME` de cada exec
+em `/home/sandbox` — então o padrão `/root` da imagem continua funcionando
+para os outros providers.)
 
-Before using an image with OpenShell, smoke-test that contract from the same
-Docker daemon the gateway uses:
+Antes de usar uma imagem com o OpenShell, teste esse contrato a partir do
+mesmo daemon Docker que o gateway usa:
 
 ```bash
 docker run --rm --entrypoint sh ghcr.io/omnicraft-ai/omnicraft-host:latest \
   -lc 'id sandbox && command -v ip && command -v nft'
 ```
 
-To use a different image (a fork, or extra tooling baked in), run the build from
-an OmniCraft repository checkout on an amd64 Docker-capable machine, then push it
-where the gateway's driver can pull from:
+Para usar uma imagem diferente (um fork, ou ferramentas extras embutidas),
+rode a build a partir de um checkout do repositório do OmniCraft numa máquina
+amd64 com Docker, depois envie para onde o driver do gateway conseguir
+puxar:
 
 ```bash
 docker build -f deploy/docker/Dockerfile --target host \
@@ -132,25 +142,27 @@ docker build -f deploy/docker/Dockerfile --target host \
 docker push docker.io/<you>/omnicraft-host:latest
 ```
 
-Then point OmniCraft at it with `OMNICRAFT_OPENSHELL_HOST_IMAGE`.
+Depois aponte o OmniCraft para ela com `OMNICRAFT_OPENSHELL_HOST_IMAGE`.
 
 > [!NOTE]
-> **Air-gapped?** Pre-load the host image (and OpenShell's supervisor image) into
-> the registry or host the gateway pulls from — the first launch from an uncached
-> image otherwise waits on a registry pull.
+> **Isolado da internet (air-gapped)?** Pré-carregue a imagem do host (e a
+> imagem do supervisor do OpenShell) no registry ou host de onde o gateway
+> puxa — caso contrário, o primeiro lançamento a partir de uma imagem não
+> cacheada espera por um pull do registry.
 
-## CLI-launched sandboxes
+## Sandboxes lançados pela CLI
 
-With a gateway selected, provision a sandbox and ship your local checkout into
-it:
+Com um gateway selecionado, provisione um sandbox e envie o seu checkout
+local para dentro dele:
 
 ```bash
 omnicraft sandbox create --provider openshell --server https://your-host
 ```
 
-This creates a sandbox from the host image, builds wheels from your local
-checkout, and overlays them on top — so the sandbox runs *your* code, not
-whatever the image was built from. Then register it as a host with your server:
+Isso cria um sandbox a partir da imagem do host, constrói wheels a partir do
+seu checkout local, e as sobrepõe — então o sandbox roda o *seu* código, não
+o que a imagem foi construída a partir de. Depois registre-o como host no seu
+servidor:
 
 ```bash
 omnicraft sandbox connect --provider openshell \
@@ -158,29 +170,30 @@ omnicraft sandbox connect --provider openshell \
   --server https://your-host
 ```
 
-`connect` runs `omnicraft host` inside the sandbox and holds the connection open
-in your terminal — Ctrl-C tears it down (stopping the in-sandbox host). New
-sessions targeting that host now run in the sandbox. Pass a unique `--host-name
-<label>` per sandbox when connecting several to one server (the server keys hosts
-on (owner, name)). Sandboxes are disposable; when your code changes, create a new
-one.
+O `connect` roda `omnicraft host` dentro do sandbox e mantém a conexão aberta
+no seu terminal — Ctrl-C a derruba (parando o host dentro do sandbox).
+Sessões novas apontando para aquele host agora rodam no sandbox. Passe um
+`--host-name <label>` único por sandbox ao conectar vários a um servidor (o
+servidor indexa hosts por (owner, name)). Sandboxes são descartáveis; quando
+seu código muda, crie um novo.
 
-To inject LLM/git credentials into the sandbox, set `OMNICRAFT_OPENSHELL_SANDBOX_ENV`
-in your shell to a comma-separated list of variable names before running
-`create` — the named variables are copied from your environment into the sandbox
-at provision time. A listed name that is **not** set fails the launch loudly (it
-would otherwise surface much later as an opaque harness auth failure inside the
-sandbox):
+Para injetar credenciais de LLM/git no sandbox, defina
+`OMNICRAFT_OPENSHELL_SANDBOX_ENV` no seu shell como uma lista separada por
+vírgulas de nomes de variáveis antes de rodar `create` — as variáveis
+nomeadas são copiadas do seu ambiente para o sandbox no momento do
+provisionamento. Um nome listado que **não** está definido faz o lançamento
+falhar de forma clara (caso contrário isso apareceria bem mais tarde como uma
+falha de autenticação opaca do harness dentro do sandbox):
 
 ```bash
 export OMNICRAFT_OPENSHELL_SANDBOX_ENV=ANTHROPIC_API_KEY,GIT_TOKEN
 omnicraft sandbox create --provider openshell --server https://your-host
 ```
 
-## Server-managed sandboxes
+## Sandboxes gerenciados pelo servidor
 
-Add a `sandbox:` section to the server config (`omnicraft server -c config.yaml`,
-or `<data_dir>/config.yaml`):
+Adicione uma seção `sandbox:` na config do servidor (`omnicraft server -c
+config.yaml`, ou `<data_dir>/config.yaml`):
 
 ```yaml
 sandbox:
@@ -188,13 +201,14 @@ sandbox:
   server_url: https://your-host    # public URL sandboxes dial back to
 ```
 
-`provider` + `server_url` is a complete config. Sessions created with
-`host_type: "managed"` (the API call or the Web UI's New Sandbox option) then run
-on a fresh OpenShell sandbox; the create returns immediately and provisioning
-happens in the background, exactly like the [Modal managed
-flow](../modal/README.md#server-managed-sandboxes). Each managed sandbox
-authenticates back with a server-minted, per-launch token — no user credentials
-enter the sandbox for the server connection.
+`provider` + `server_url` é uma config completa. Sessões criadas com
+`host_type: "managed"` (a chamada de API ou a opção New Sandbox da Web UI)
+então rodam num sandbox OpenShell novo; o create retorna imediatamente e o
+provisionamento acontece em segundo plano, exatamente como o
+[fluxo gerenciado da Modal](../modal/README.md#sandboxes-gerenciados-pelo-servidor).
+Cada sandbox gerenciado se autentica de volta com um token por lançamento
+gerado pelo servidor — nenhuma credencial de usuário entra no sandbox para a
+conexão com o servidor.
 
 ```bash
 curl -X POST https://your-host/v1/sessions \
@@ -202,15 +216,17 @@ curl -X POST https://your-host/v1/sessions \
   -d '{"agent_id": "agent_...", "host_type": "managed"}'
 ```
 
-Unlike the cloud providers, OpenShell needs no API key in the server environment —
-the **server process** must instead have OpenShell gateway access: it connects
-with the same `from_active_cluster()` resolution as the CLI, so select a gateway
-with `openshell gateway select` (or set `OPENSHELL_GATEWAY` /
-`sandbox.openshell.cluster`) where the server runs. `server_url` must be reachable
-**from the sandbox** — and because OpenShell is deny-by-default on egress, that
-reachability is not automatic; see [Network egress policy](#network-egress-policy).
+Diferente dos provedores na nuvem, o OpenShell não precisa de chave de API no
+ambiente do servidor — o **processo do servidor** precisa, em vez disso, de
+acesso ao gateway OpenShell: ele se conecta com a mesma resolução
+`from_active_cluster()` que a CLI, então selecione um gateway com `openshell
+gateway select` (ou defina `OPENSHELL_GATEWAY` / `sandbox.openshell.cluster`)
+onde o servidor roda. `server_url` precisa ser alcançável **a partir do
+sandbox** — e como o OpenShell nega por padrão o egress, essa
+alcançabilidade não é automática; veja
+[Política de saída de rede](#política-de-saída-de-rede).
 
-Optional `openshell:` settings:
+Configurações `openshell:` opcionais:
 
 ```yaml
 sandbox:
@@ -222,31 +238,35 @@ sandbox:
     cluster: my-gateway                                  # default: active gateway
 ```
 
-How the managed dial-back interacts with the server's auth mode is a
-framework-level behavior shared by all providers; see
-[`deploy/cwsandbox/README.md`](../cwsandbox/README.md#managed-hosts-and-server-auth).
+Como o dial-back gerenciado interage com o modo de autenticação do servidor é
+um comportamento a nível de framework compartilhado por todos os providers;
+veja
+[`deploy/cwsandbox/README.md`](../cwsandbox/README.md#hosts-gerenciados-e-autenticação-do-servidor).
 
-## Network egress policy
+## Política de saída de rede
 
-This is the part of an OpenShell deployment most likely to trip you up. OpenShell
-is **deny-by-default**: every sandbox runs in its own network namespace with all
-egress forced through a policy proxy, and anything not explicitly allowed is
-blocked (the in-sandbox `https_proxy` returns `403`). The agent and host run with
-*no* outbound access until the sandbox policy grants it. The policy is resolved
-from `/etc/openshell/policy.yaml` baked into the image, or set per-sandbox; see
-the [OpenShell policy schema](https://docs.nvidia.com/openshell). A managed host
-needs egress to:
+Esta é a parte de um deploy do OpenShell mais provável de te derrubar. O
+OpenShell **nega por padrão**: todo sandbox roda no seu próprio namespace de
+rede com todo o egress forçado por um proxy de política, e qualquer coisa não
+explicitamente permitida é bloqueada (o `https_proxy` dentro do sandbox
+retorna `403`). O agente e o host rodam *sem nenhum* acesso de saída até que
+a política do sandbox conceda. A política é resolvida a partir de
+`/etc/openshell/policy.yaml` embutido na imagem, ou definida por sandbox;
+veja o [schema de política do OpenShell](https://docs.nvidia.com/openshell).
+Um host gerenciado precisa de egress para:
 
-- **the server URL** (`server_url`) — the host and runner dial it back over a
-  WebSocket tunnel; without it the host can connect but the runner never registers;
-- **the LLM provider host** — the agent's model calls originate *inside* the
-  sandbox (e.g. `*.googleapis.com` for Gemini, `api.anthropic.com` for Claude,
-  `api.openai.com` for OpenAI);
-- **tokenizer/asset hosts** some harnesses fetch on first use, e.g.
-  `*.blob.core.windows.net` (the openai-agents harness downloads the `tiktoken`
-  encoding).
+- **a URL do servidor** (`server_url`) — o host e o runner discam de volta
+  por um túnel WebSocket; sem ela o host consegue conectar mas o runner nunca
+  se registra;
+- **o host do provedor de LLM** — as chamadas de modelo do agente se
+  originam *dentro* do sandbox (ex.: `*.googleapis.com` para o Gemini,
+  `api.anthropic.com` para o Claude, `api.openai.com` para o OpenAI);
+- **hosts de tokenizer/asset** que alguns harnesses buscam no primeiro uso,
+  ex.: `*.blob.core.windows.net` (o harness openai-agents baixa o encoding
+  `tiktoken`).
 
-A minimal `network_policies` block (in the image's `policy.yaml`) looks like:
+Um bloco `network_policies` mínimo (no `policy.yaml` da imagem) se parece
+com:
 
 ```yaml
 network_policies:
@@ -259,11 +279,11 @@ network_policies:
 ```
 
 > [!IMPORTANT]
-> **Forward the proxy vars to the runner.** The host inherits the sandbox's
-> `https_proxy`/`http_proxy`, but the runner subprocess it spawns does **not** —
-> so the runner fails with `Temporary failure in name resolution` even though the
-> host connected. Inject `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` naming the proxy vars so
-> the host forwards them:
+> **Repasse as variáveis de proxy para o runner.** O host herda o
+> `https_proxy`/`http_proxy` do sandbox, mas o subprocesso do runner que ele
+> gera **não** herda — então o runner falha com `Temporary failure in name
+> resolution` mesmo com o host conectado. Injete `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`
+> nomeando as variáveis de proxy para que o host as repasse:
 > ```yaml
 > sandbox:
 >   openshell:
@@ -272,124 +292,142 @@ network_policies:
 > ```
 
 > [!TIP]
-> For LLM traffic specifically, OpenShell recommends its **inference routing**
-> over allow-listing the provider host directly, so a stolen key can't be used to
-> reach the provider from inside the sandbox. The allow-list above is the simplest
-> path to get a turn working; inference routing is the hardened one.
+> Para o tráfego de LLM especificamente, o OpenShell recomenda o seu
+> **roteamento de inferência** em vez de colocar o host do provedor
+> diretamente na allow-list, para que uma chave roubada não possa ser usada
+> para alcançar o provedor de dentro do sandbox. A allow-list acima é o
+> caminho mais simples para deixar um turno funcionando; o roteamento de
+> inferência é o caminho hardened.
 
-## Model credentials (LLM keys)
+## Credenciais de modelo (chaves de LLM)
 
-A fresh sandbox has no model credentials. Name the variables to inject in
-`OMNICRAFT_OPENSHELL_SANDBOX_ENV`; the launcher copies the value from your
-environment into the sandbox, and the in-sandbox host forwards the standard
-harness credential vars (`ANTHROPIC_API_KEY`, `CLAUDE_CODE_OAUTH_TOKEN`,
-`OPENAI_API_KEY`, `OPENAI_BASE_URL`, `GEMINI_API_KEY`, …) to its runners.
+Um sandbox novo não tem nenhuma credencial de modelo. Nomeie as variáveis
+para injetar em `OMNICRAFT_OPENSHELL_SANDBOX_ENV`; o launcher copia o valor
+do seu ambiente para o sandbox, e o host dentro do sandbox repassa as
+variáveis padrão de credencial do harness (`ANTHROPIC_API_KEY`,
+`CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, `OPENAI_BASE_URL`,
+`GEMINI_API_KEY`, …) para os seus runners.
 
 ```bash
 export ANTHROPIC_API_KEY=sk-ant-…
 export OMNICRAFT_OPENSHELL_SANDBOX_ENV=ANTHROPIC_API_KEY
 ```
 
-Which variables to inject — providers, gateways, subscriptions — is identical to
-the other providers; see the [Modal variable table and per-plan
-recipes](../modal/README.md#llm-credentials-for-managed-sandboxes). For a Claude
-**subscription**, run `claude setup-token` on your own machine (one-time browser
-auth) and inject the resulting `CLAUDE_CODE_OAUTH_TOKEN`. For env vars beyond the
-standard set, inject `OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
+Quais variáveis injetar — provedores, gateways, assinaturas — é idêntico aos
+outros providers; veja a
+[tabela de variáveis e as receitas por plano da Modal](../modal/README.md#credenciais-de-llm-para-sandboxes-gerenciados).
+Para uma **assinatura** do Claude, rode `claude setup-token` na sua própria
+máquina (autenticação única pelo navegador) e injete o `CLAUDE_CODE_OAUTH_TOKEN`
+resultante. Para variáveis de ambiente além do conjunto padrão, injete
+`OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 
 > [!TIP]
-> OpenShell can also enforce credential and egress policy at the sandbox boundary
-> via its declarative YAML policy (a gateway-side feature, independent of
-> OmniCraft). See the [OpenShell policy docs](https://docs.nvidia.com/openshell).
+> O OpenShell também consegue impor política de credencial e egress na
+> fronteira do sandbox, via sua política declarativa em YAML (um recurso do
+> lado do gateway, independente do OmniCraft). Veja a
+> [documentação de política do OpenShell](https://docs.nvidia.com/openshell).
 
-## Git credentials (private repositories)
+## Credenciais do Git (repositórios privados)
 
-Inject an HTTPS token as `GIT_TOKEN` (GitLab: add `GIT_USERNAME=oauth2`) via
-`OMNICRAFT_OPENSHELL_SANDBOX_ENV`. The host image's git credential helper answers
-HTTPS auth from it for both the launch-time clone and the agent's later `fetch` /
-`push`, writing nothing to disk. Use HTTPS repository URLs. Details by provider
-match the [Modal git guide](../modal/README.md#git-credentials-private-repositories).
+Injete um token HTTPS como `GIT_TOKEN` (GitLab: adicione
+`GIT_USERNAME=oauth2`) via `OMNICRAFT_OPENSHELL_SANDBOX_ENV`. O helper de
+credencial git da imagem do host responde pela autenticação HTTPS tanto para
+o clone no lançamento quanto para o `fetch` / `push` posterior do agente, sem
+escrever nada em disco. Use URLs de repositório HTTPS. Os detalhes por
+provedor combinam com o
+[guia de git da Modal](../modal/README.md#credenciais-do-git-repositórios-privados).
 
-## How it works
+## Como funciona
 
-- **Connection.** `OpenShellSandboxLauncher` builds a `SandboxClient` via
-  `from_active_cluster()` and calls the gateway over gRPC: `CreateSandbox` +
-  `wait_ready` to provision, `ExecSandbox` to run commands, `DeleteSandbox` to
-  terminate.
-- **File shipping.** OpenShell exposes command execution but no upload RPC, so
-  `put` streams the file's bytes to `cat` over the exec channel's stdin (the same
-  approach NVIDIA's own LangChain backend uses). Wheels are shipped this way, then
-  installed with the shared host-image overlay command.
-- **Sandbox identity.** OpenShell assigns each sandbox a petname (e.g.
-  `touched-urial`); that name is the handle OmniCraft prints and reuses. The
-  requested `--name` is advisory.
-- **Non-root execution.** OpenShell runs the agent as the `sandbox` user, so the
-  launcher pins every exec's cwd and `$HOME` to `/home/sandbox` (the image keeps
-  `/root` as its default for the root-based providers).
-- **Long-lived host.** OpenShell terminates an exec's process tree the moment the
-  exec returns, so the in-sandbox host can't be detached with the usual
-  `setsid nohup … &` (it gets reaped instantly). The launcher instead runs it as a
-  foreground exec held open on a daemon thread for the session's lifetime.
+- **Conexão.** O `OpenShellSandboxLauncher` constrói um `SandboxClient` via
+  `from_active_cluster()` e chama o gateway via gRPC: `CreateSandbox` +
+  `wait_ready` para provisionar, `ExecSandbox` para rodar comandos,
+  `DeleteSandbox` para terminar.
+- **Envio de arquivos.** O OpenShell expõe execução de comandos mas nenhuma
+  RPC de upload, então o `put` faz stream dos bytes do arquivo para o `cat`
+  pelo stdin do canal de exec (a mesma abordagem que o próprio backend
+  LangChain da NVIDIA usa). Wheels são enviadas dessa forma, depois
+  instaladas com o comando compartilhado de overlay da imagem do host.
+- **Identidade do sandbox.** O OpenShell atribui a cada sandbox um petname
+  (ex.: `touched-urial`); esse nome é o identificador que o OmniCraft imprime
+  e reusa. O `--name` pedido é apenas uma sugestão.
+- **Execução não-root.** O OpenShell roda o agente como o usuário `sandbox`,
+  então o launcher fixa o cwd e o `$HOME` de cada exec em `/home/sandbox` (a
+  imagem mantém `/root` como padrão dela para os providers baseados em
+  root).
+- **Host de vida longa.** O OpenShell termina a árvore de processos de um
+  exec no momento em que o exec retorna, então o host dentro do sandbox não
+  pode ser destacado com o `setsid nohup … &` de sempre (ele é coletado
+  instantaneamente). O launcher, em vez disso, o roda como um exec em
+  foreground mantido aberto numa daemon thread pela vida da sessão.
 
-## Troubleshooting
+## Resolução de problemas
 
 - **`docker sandboxes require gateway JWT auth; configure [openshell.gateway.gateway_jwt]`**
-  — the Docker driver needs a gateway-minted sandbox JWT. Generate the Ed25519
-  key material and add the `[openshell.gateway.gateway_jwt]` block as shown in
-  [Minimal local Docker gateway](#minimal-local-docker-gateway-for-trying-it-out),
-  then restart the gateway.
+  — o driver do Docker precisa de um sandbox JWT gerado pelo gateway. Gere o
+  material de chave Ed25519 e adicione o bloco
+  `[openshell.gateway.gateway_jwt]` como mostrado em
+  [Gateway Docker local mínimo](#gateway-docker-local-mínimo-para-experimentar),
+  depois reinicie o gateway.
 - **`No OpenShell server configured` / `Could not connect to an OpenShell gateway`**
-  — no gateway is active. Run `openshell gateway select <name>` (or set
-  `OPENSHELL_GATEWAY`), and confirm with `openshell status`.
-- **Sandbox stuck in `Provisioning`** — usually a slow first image pull. Confirm
-  the gateway's Docker daemon can pull the host image (`docker pull <image>` from
-  the same `DOCKER_HOST`); pre-pull it to cache. On colima, make sure the gateway
-  was started with `DOCKER_HOST` pointed at colima's socket — `/var/run/docker.sock`
-  may point at a different (stopped) Docker.
-- **Agent has no credentials** — verify the injected var names match the forwarded
-  set (or are named in `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`), and that each name was
-  actually set in the launching environment.
-- **Host registers but the runner never comes online / runner log shows
-  `Temporary failure in name resolution`** — the runner subprocess isn't getting
-  the sandbox's proxy vars. Forward them with `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`
-  (see [Network egress policy](#network-egress-policy)).
-- **Turn fails reaching the model, or proxy returns `403`** — the destination
-  isn't in the sandbox's egress allow-list. Add the LLM host (and any
-  tokenizer/asset host) to `network_policies` (see
-  [Network egress policy](#network-egress-policy)).
-- **Sandbox container restarts / `sandbox user 'sandbox' not found` or
-  `trusted ip helper not found`** — the image isn't OpenShell-compatible. Use the
-  official host image (or include the `sandbox` user + `iproute2` in your custom
-  one); see [The host image](#the-host-image).
+  — nenhum gateway está ativo. Rode `openshell gateway select <name>` (ou
+  defina `OPENSHELL_GATEWAY`), e confirme com `openshell status`.
+- **Sandbox travado em `Provisioning`** — geralmente um primeiro pull de
+  imagem lento. Confirme que o daemon Docker do gateway consegue puxar a
+  imagem do host (`docker pull <image>` a partir do mesmo `DOCKER_HOST`);
+  pré-puxe para cachear. No colima, garanta que o gateway foi iniciado com
+  `DOCKER_HOST` apontando para o socket do colima — o
+  `/var/run/docker.sock` pode apontar para um Docker diferente (parado).
+- **Agente sem credenciais** — confira se os nomes das variáveis injetadas
+  combinam com o conjunto repassado (ou estão nomeadas em
+  `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`), e que cada nome foi de fato definido
+  no ambiente de lançamento.
+- **O host se registra mas o runner nunca fica online / o log do runner
+  mostra `Temporary failure in name resolution`** — o subprocesso do runner
+  não está recebendo as variáveis de proxy do sandbox. Repasse-as com
+  `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` (veja
+  [Política de saída de rede](#política-de-saída-de-rede)).
+- **O turno falha ao alcançar o modelo, ou o proxy retorna `403`** — o
+  destino não está na allow-list de egress do sandbox. Adicione o host de
+  LLM (e qualquer host de tokenizer/asset) a `network_policies` (veja
+  [Política de saída de rede](#política-de-saída-de-rede)).
+- **Container do sandbox reinicia / `sandbox user 'sandbox' not found` ou
+  `trusted ip helper not found`** — a imagem não é compatível com o
+  OpenShell. Use a imagem oficial do host (ou inclua o usuário `sandbox` +
+  o `iproute2` na sua imagem customizada); veja
+  [A imagem do host](#a-imagem-do-host).
 
-## Environment variable reference
+## Referência de variáveis de ambiente
 
-| Variable | Where it's read | Purpose |
+| Variável | Onde é lida | Propósito |
 |---|---|---|
-| `OPENSHELL_GATEWAY` | CLI machine / server | Gateway name to use; overrides `~/.config/openshell/active_gateway` (read by the SDK). `sandbox.openshell.cluster` takes precedence for managed. |
-| `OMNICRAFT_OPENSHELL_HOST_IMAGE` | CLI machine | Override the host image ref (default `ghcr.io/omnicraft-ai/omnicraft-host:latest`); `sandbox.openshell.image` is the managed equivalent |
-| `OMNICRAFT_OPENSHELL_SANDBOX_ENV` | CLI machine | Comma-separated launcher-side env var names to inject into the sandbox; `sandbox.openshell.env` is the managed equivalent |
-| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
-| `GIT_TOKEN` / `GIT_USERNAME` | inside the sandbox (injected) | HTTPS credentials for private repository clone / fetch / push |
+| `OPENSHELL_GATEWAY` | máquina da CLI / servidor | Nome do gateway a usar; sobrescreve `~/.config/openshell/active_gateway` (lido pelo SDK). `sandbox.openshell.cluster` tem precedência para o gerenciado. |
+| `OMNICRAFT_OPENSHELL_HOST_IMAGE` | máquina da CLI | Sobrescreve a referência da imagem do host (padrão `ghcr.io/omnicraft-ai/omnicraft-host:latest`); `sandbox.openshell.image` é o equivalente gerenciado |
+| `OMNICRAFT_OPENSHELL_SANDBOX_ENV` | máquina da CLI | Nomes de variáveis de ambiente do lado do launcher, separados por vírgula, para injetar no sandbox; `sandbox.openshell.env` é o equivalente gerenciado |
+| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | dentro do sandbox (injetada) | Nomes de variáveis de ambiente extras que o host repassa aos runners |
+| `GIT_TOKEN` / `GIT_USERNAME` | dentro do sandbox (injetadas) | Credenciais HTTPS para clone / fetch / push de repositório privado |
 
-## Validation
+## Validação
 
-Exercised end-to-end against a live OpenShell gateway on an **amd64 Linux** host
-(Docker driver, the official host image):
+Exercitado de ponta a ponta contra um gateway OpenShell ao vivo num host
+**Linux amd64** (driver Docker, a imagem oficial do host):
 
-- **Launcher primitives** — provision → run (`echo` / `uname`) → put (file upload
-  over exec stdin) → verify → terminate, plus `exec_foreground` (the `connect`
-  primitive) streaming output and propagating exit codes; the gateway logs the
-  matching `CreateSandbox` / `ExecSandbox` / `DeleteSandbox` RPCs.
-- **Full server-managed session** — a `host_type:"managed"` session drove the
-  server to provision a sandbox on the gateway, start `omnicraft host` in it (held
-  foreground exec), dial back over the tunnel, register, spawn the runner, and
-  complete a real agent turn (a Gemini model via the openai-agents harness) — the
-  agent's reply came back from inside the sandbox.
+- **Primitivas do launcher** — provisionar → rodar (`echo` / `uname`) → put
+  (upload de arquivo pelo stdin do exec) → verificar → terminar, além do
+  `exec_foreground` (a primitiva do `connect`) fazendo stream da saída e
+  propagando códigos de saída; os logs do gateway mostram as RPCs
+  `CreateSandbox` / `ExecSandbox` / `DeleteSandbox` correspondentes.
+- **Sessão completa gerenciada pelo servidor** — uma sessão
+  `host_type:"managed"` levou o servidor a provisionar um sandbox no
+  gateway, iniciar `omnicraft host` nele (exec em foreground mantido),
+  discar de volta pelo túnel, se registrar, gerar o runner, e completar um
+  turno de agente real (um modelo Gemini via o harness openai-agents) — a
+  resposta do agente voltou de dentro do sandbox.
 
-Unit tests (a faked SDK / launcher, no gateway needed) cover provision, run, file
-upload, foreground streaming, attach, terminate, env passthrough, error handling,
-and the managed-config parsing:
+Testes unitários (um SDK/launcher falso, sem gateway necessário) cobrem
+provisionamento, execução, upload de arquivo, streaming em foreground,
+attach, terminação, passthrough de env, tratamento de erro, e o parsing da
+config gerenciada:
 
 ```bash
 pip install -e '.[openshell,dev]'

@@ -1,66 +1,70 @@
-# OmniCraft on Kubernetes
+# OmniCraft no Kubernetes
 
-Deploy OmniCraft to any Kubernetes cluster using Kustomize. The manifests pull
-the prebuilt image and set up a persistent volume and health checks. They also
-include an Ingress so you can serve the app over HTTPS at a public web address,
-but that part is optional — it only matters when people need to reach the server
-over the internet, and it pulls in two extra add-ons (ingress-nginx and
-cert-manager). For local or dev use, ignore it and connect with `kubectl
-port-forward` (see [Verify the deployment](#verify-the-deployment)).
+Faça o deploy do OmniCraft em qualquer cluster Kubernetes usando Kustomize. Os
+manifests puxam a imagem pré-construída e configuram um volume persistente e
+health checks. Eles também incluem um Ingress para você servir o app via HTTPS
+num endereço web público, mas essa parte é opcional — só importa quando as
+pessoas precisam alcançar o servidor pela internet, e ela traz dois add-ons
+extras (ingress-nginx e cert-manager). Para uso local ou de desenvolvimento,
+ignore isso e conecte com `kubectl port-forward` (veja
+[Verifique o deploy](#verifique-o-deploy)).
 
-## What gets provisioned
+## O que é provisionado
 
-- **Deployment** — single-replica pod running
-  `ghcr.io/omnicraft-ai/omnicraft-server`, served on port 8000.
-- **Service** — ClusterIP on port 80 → 8000.
-- **Ingress** *(optional)* — serves the app over HTTPS at a public web address,
-  using cert-manager for the certificate. Skip it if the server isn't going on
-  the internet.
-- **PVC** — 10 Gi volume at `/data/artifacts` for the artifact store, minted
-  cookie secret, and admin credentials.
-- **ConfigMap + Secret** — environment config and database credentials.
+- **Deployment** — um pod de réplica única rodando
+  `ghcr.io/omnicraft-ai/omnicraft-server`, servido na porta 8000.
+- **Service** — ClusterIP na porta 80 → 8000.
+- **Ingress** *(opcional)* — serve o app via HTTPS num endereço web público,
+  usando o cert-manager para o certificado. Pule se o servidor não vai para a
+  internet.
+- **PVC** — volume de 10 Gi em `/data/artifacts` para o artifact store, o
+  cookie secret gerado e as credenciais de admin.
+- **ConfigMap + Secret** — configuração de ambiente e credenciais do banco de
+  dados.
 
-## Prerequisites
+## Pré-requisitos
 
-- A Kubernetes cluster (1.25+)
-- `kubectl` with Kustomize support (`kubectl kustomize` or standalone `kustomize`)
-- A PostgreSQL database (managed or in-cluster — see below)
-- *Only if you're putting the server on a public web address:* an ingress
-  controller (e.g. ingress-nginx) and cert-manager
+- Um cluster Kubernetes (1.25+)
+- `kubectl` com suporte a Kustomize (`kubectl kustomize` ou o `kustomize`
+  standalone)
+- Um banco PostgreSQL (gerenciado ou no próprio cluster — veja abaixo)
+- *Só se você for colocar o servidor num endereço web público:* um controlador
+  de ingress (ex.: ingress-nginx) e o cert-manager
 
-### Install cluster add-ons for ingress and cert management (optional)
+### Instale os add-ons do cluster para ingress e gerenciamento de certificados (opcional)
 
-Skip this unless you're putting the server on a public web address. (For local
-or dev use you'll reach it with `kubectl port-forward`, or you can let your own
-load balancer or proxy handle HTTPS instead.) Otherwise, if your cluster doesn't
-already have an ingress controller and cert-manager, install them (pin the
-versions to taste):
+Pule isto a menos que você vá colocar o servidor num endereço web público.
+(Para uso local ou de desenvolvimento você vai alcançá-lo com `kubectl
+port-forward`, ou pode deixar seu próprio load balancer ou proxy cuidar do
+HTTPS.) Caso contrário, se o seu cluster ainda não tem um controlador de
+ingress e o cert-manager, instale os dois (fixe as versões a gosto):
 
 ```bash
-# ingress-nginx — use the provider manifest that matches your cluster
-# (this is the kind one; for EKS/GKE/AKS use that provider's manifest or Helm chart):
+# ingress-nginx — use o manifest do provedor que combina com o seu cluster
+# (este é o do kind; para EKS/GKE/AKS use o manifest ou o Helm chart daquele provedor):
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
 
 # cert-manager:
 kubectl apply -f https://github.com/cert-manager/cert-manager/releases/latest/download/cert-manager.yaml
 
-# wait until both are ready:
+# aguarde os dois ficarem prontos:
 kubectl wait -n ingress-nginx --for=condition=Ready pod \
   -l app.kubernetes.io/component=controller --timeout=180s
 kubectl wait -n cert-manager --for=condition=Available deployment --all --timeout=180s
 ```
 
-### Create a cert-manager issuer (optional)
+### Crie um issuer do cert-manager (opcional)
 
-Skip this unless you're using the Ingress. cert-manager fetches the HTTPS
-certificate for the Ingress from a `ClusterIssuer` named `letsencrypt-prod`
-(the `cert-manager.io/cluster-issuer` annotation in `base/ingress.yaml`). That
-issuer is **not** shipped here — create one before deploying, or change the
-annotation to match an issuer you already have. Two common choices:
+Pule isto a menos que você esteja usando o Ingress. O cert-manager busca o
+certificado HTTPS do Ingress a partir de um `ClusterIssuer` chamado
+`letsencrypt-prod` (a anotação `cert-manager.io/cluster-issuer` em
+`base/ingress.yaml`). Esse issuer **não** é entregue aqui — crie um antes de
+fazer o deploy, ou troque a anotação para um issuer que você já tenha. Duas
+escolhas comuns:
 
 ```yaml
-# Production — real certificates from Let's Encrypt
-# (needs a public domain and an Ingress reachable from the internet):
+# Produção — certificados reais do Let's Encrypt
+# (precisa de um domínio público e de um Ingress alcançável pela internet):
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -78,7 +82,7 @@ spec:
 ```
 
 ```yaml
-# Local / dev — self-signed (no public DNS needed; browsers will warn):
+# Local / dev — autoassinado (não precisa de DNS público; navegadores vão avisar):
 apiVersion: cert-manager.io/v1
 kind: ClusterIssuer
 metadata:
@@ -87,15 +91,16 @@ spec:
   selfSigned: {}
 ```
 
-Apply your chosen issuer with `kubectl apply -f <file>`. Without it, cert-manager
-logs `IssuerNotFound` and no certificate is issued (the server still runs — only
-TLS is affected).
+Aplique o issuer escolhido com `kubectl apply -f <file>`. Sem isso, o
+cert-manager registra `IssuerNotFound` e nenhum certificado é emitido (o
+servidor continua rodando — só o TLS é afetado).
 
-## Deploy with an external database
+## Deploy com um banco de dados externo
 
-Use this path when you have a managed Postgres (RDS, Cloud SQL, Neon, etc.).
+Use este caminho quando você tem um Postgres gerenciado (RDS, Cloud SQL, Neon,
+etc.).
 
-1. **Edit the secret** — set your real `DATABASE_URL` and generate a cookie
+1. **Edite o secret** — defina a sua `DATABASE_URL` real e gere um cookie
    secret:
 
    ```bash
@@ -104,30 +109,31 @@ Use this path when you have a managed Postgres (RDS, Cloud SQL, Neon, etc.).
    OMNICRAFT_ACCOUNTS_COOKIE_SECRET: "$(openssl rand -hex 32)"
    ```
 
-2. **Set your domain** *(skip if you're not using the Ingress)* — replace
-   `omnicraft.example.com` in `base/ingress.yaml` with your domain, and make sure
-   the `letsencrypt-prod` ClusterIssuer exists (see
-   [Create a cert-manager issuer](#create-a-cert-manager-issuer)).
+2. **Defina o seu domínio** *(pule se você não estiver usando o Ingress)* —
+   troque `omnicraft.example.com` em `base/ingress.yaml` pelo seu domínio, e
+   garanta que o `ClusterIssuer` `letsencrypt-prod` existe (veja
+   [Crie um issuer do cert-manager](#crie-um-issuer-do-cert-manager-opcional)).
 
-3. **Apply:**
+3. **Aplique:**
 
    ```bash
    kubectl kustomize deploy/kubernetes/base/ | kubectl apply -f -
    ```
 
-4. **Create the first admin.** Open the app (via your Ingress host, or
-   port-forward for a quick check — see
-   [Verify the deployment](#verify-the-deployment)). With the default `accounts`
-   provider the first visitor claims the instance: the Setup screen prompts for
-   a username + password, and whoever finishes it first becomes the admin.
+4. **Crie o primeiro admin.** Abra o app (pelo host do seu Ingress, ou com
+   port-forward para uma checagem rápida — veja
+   [Verifique o deploy](#verifique-o-deploy)). Com o provider `accounts`
+   padrão, o primeiro visitante reivindica a instância: a tela de Setup pede
+   um usuário + senha, e quem terminar primeiro vira o admin.
 
-## Deploy with in-cluster Postgres
+## Deploy com Postgres dentro do cluster
 
-The `overlays/postgres/` overlay adds a single-replica Postgres 16 StatefulSet
-with its own 10 Gi PVC. Good for dev/testing clusters.
+O overlay `overlays/postgres/` adiciona um StatefulSet de Postgres 16 de
+réplica única, com seu próprio PVC de 10 Gi. Bom para clusters de
+dev/teste.
 
-1. **Edit secrets** — in `overlays/postgres/secret-patch.yaml`, replace
-   `changeme` with real passwords:
+1. **Edite os secrets** — em `overlays/postgres/secret-patch.yaml`, troque
+   `changeme` por senhas reais:
 
    ```bash
    POSTGRES_PASSWORD: "<strong-password>"
@@ -135,28 +141,28 @@ with its own 10 Gi PVC. Good for dev/testing clusters.
    OMNICRAFT_ACCOUNTS_COOKIE_SECRET: "$(openssl rand -hex 32)"
    ```
 
-2. **Set your domain** *(skip if you're not using the Ingress)* — edit the
-   hostname in `base/ingress.yaml`, and make sure the `letsencrypt-prod`
-   ClusterIssuer exists (see
-   [Create a cert-manager issuer](#create-a-cert-manager-issuer)).
+2. **Defina o seu domínio** *(pule se você não estiver usando o Ingress)* —
+   edite o hostname em `base/ingress.yaml`, e garanta que o `ClusterIssuer`
+   `letsencrypt-prod` existe (veja
+   [Crie um issuer do cert-manager](#crie-um-issuer-do-cert-manager-opcional)).
 
-3. **Apply:**
+3. **Aplique:**
 
    ```bash
    kubectl kustomize deploy/kubernetes/overlays/postgres/ | kubectl apply -f -
    ```
 
-## Deploy with OpenShell sandboxes
+## Deploy com sandboxes OpenShell
 
-The `overlays/openshell/` overlay configures the server to provision
-[NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) sandboxes for managed
-sessions, and includes RBAC for the
+O overlay `overlays/openshell/` configura o servidor para provisionar
+sandboxes do [NVIDIA OpenShell](https://github.com/NVIDIA/OpenShell) para
+sessões gerenciadas, e inclui o RBAC para a CRD
 [kubernetes-sigs/agent-sandbox](https://github.com/kubernetes-sigs/agent-sandbox)
-CRD when the gateway uses a Kubernetes compute driver.
+quando o gateway usa um compute driver Kubernetes.
 
-1. **Edit the configmap patch** — set `OMNICRAFT_SANDBOX_SERVER_URL` to the
-   public URL sandboxes will dial back to, and optionally set `OPENSHELL_GATEWAY`
-   to a specific gateway name:
+1. **Edite o patch do configmap** — defina `OMNICRAFT_SANDBOX_SERVER_URL` como
+   a URL pública para a qual os sandboxes vão discar de volta, e, opcionalmente,
+   defina `OPENSHELL_GATEWAY` como o nome de um gateway específico:
 
    ```bash
    # deploy/kubernetes/overlays/openshell/configmap-patch.yaml
@@ -164,8 +170,9 @@ CRD when the gateway uses a Kubernetes compute driver.
    OPENSHELL_GATEWAY: "my-gateway"
    ```
 
-2. **Edit secrets** — in `overlays/openshell/secret-patch.yaml`, set the
-   database URL, cookie secret, and the LLM API keys your harness needs:
+2. **Edite os secrets** — em `overlays/openshell/secret-patch.yaml`, defina a
+   URL do banco de dados, o cookie secret e as chaves de API de LLM que o seu
+   harness precisa:
 
    ```bash
    DATABASE_URL: "postgresql+psycopg://omnicraft:<password>@your-db-host:5432/omnicraft"
@@ -173,144 +180,154 @@ CRD when the gateway uses a Kubernetes compute driver.
    ANTHROPIC_API_KEY: "sk-ant-..."
    ```
 
-3. **Gateway access** — the server pod needs to reach the OpenShell gateway's
-   gRPC endpoint. If the gateway runs in-cluster, make sure the NetworkPolicy
-   allows it (the included policy allows all egress on 443 — tighten to taste).
-   If the gateway stores its config/TLS material in a Secret, create
-   `openshell-gateway-config` in the `omnicraft` namespace and the deployment
-   mounts it at `~/.config/openshell`.
+3. **Acesso ao gateway** — o pod do servidor precisa alcançar o endpoint gRPC
+   do gateway OpenShell. Se o gateway roda dentro do cluster, garanta que o
+   NetworkPolicy permite isso (a política incluída permite todo o egress na
+   443 — restrinja a gosto). Se o gateway guarda a config/material TLS num
+   Secret, crie `openshell-gateway-config` no namespace `omnicraft`, e o
+   deployment monta ele em `~/.config/openshell`.
 
-4. **Install the agent-sandbox CRD** *(optional)* — if the OpenShell gateway
-   delegates to the kubernetes-sigs/agent-sandbox controller:
+4. **Instale a CRD agent-sandbox** *(opcional)* — se o gateway OpenShell
+   delega ao controller kubernetes-sigs/agent-sandbox:
 
    ```bash
    kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/agent-sandbox/main/config/crd/bases/sandbox.agent.k8s.io_agentsandboxes.yaml
    ```
 
-   The overlay's RBAC already grants the server's ServiceAccount permission to
-   manage `AgentSandbox` resources.
+   O RBAC do overlay já concede à ServiceAccount do servidor permissão para
+   gerenciar recursos `AgentSandbox`.
 
-5. **Apply:**
+5. **Aplique:**
 
    ```bash
    kubectl kustomize deploy/kubernetes/overlays/openshell/ | kubectl apply -f -
    ```
 
-For OpenShell + in-cluster Postgres, layer the postgres overlay on top (compose
-both bases in a new kustomization, or apply the postgres StatefulSet separately).
-See [Network egress policy](../openshell/README.md#network-egress-policy) for
-the sandbox-side egress allow-list (server URL + LLM provider hosts).
+Para OpenShell + Postgres dentro do cluster, empilhe o overlay do postgres por
+cima (componha as duas bases numa kustomization nova, ou aplique o StatefulSet
+do postgres separadamente). Veja
+[Política de saída de rede](../openshell/README.md#política-de-saída-de-rede)
+para a allow-list de egress do lado do sandbox (URL do servidor + hosts do
+provedor de LLM).
 
-## Building a UBI image (Red Hat / OpenShift)
+## Construindo uma imagem UBI (Red Hat / OpenShift)
 
-For RHEL and OpenShift environments that require UBI-compliant containers, use
-the UBI variant of the Dockerfile. It uses Red Hat Universal Base Image 9
-(`ubi9/python-312`, `ubi9/nodejs-20`) and runs the server as non-root (UID 1001)
-by default — compatible with OpenShift's `restricted-v2` SCC out of the box.
+Para ambientes RHEL e OpenShift que exigem containers compatíveis com UBI, use
+a variante UBI do Dockerfile. Ela usa a Red Hat Universal Base Image 9
+(`ubi9/python-312`, `ubi9/nodejs-20`) e roda o servidor como não-root (UID
+1001) por padrão — compatível de cara com a SCC `restricted-v2` do OpenShift.
 
 ```bash
-# from the repo root
+# a partir da raiz do repositório
 docker build -t omnicraft-server:ubi -f deploy/docker/Dockerfile.ubi .
 ```
 
-Then reference the image in the OpenShift overlay by patching the Deployment
-or pointing your image stream at it.
+Depois referencie a imagem no overlay do OpenShift, aplicando um patch no
+Deployment ou apontando seu image stream para ela.
 
-## Deploy on Red Hat OpenShift
+## Deploy no Red Hat OpenShift
 
-The `overlays/openshift/` overlay replaces the Ingress with an OpenShift Route
-(edge TLS, managed by the platform) and adds a `restricted-v2`-compatible
-SecurityContext. No ingress controller or cert-manager add-ons needed.
+O overlay `overlays/openshift/` substitui o Ingress por uma Route do
+OpenShift (TLS de borda, gerenciado pela plataforma) e adiciona um
+SecurityContext compatível com `restricted-v2`. Não precisa de controlador de
+ingress nem dos add-ons do cert-manager.
 
-1. **Edit the secret** in `base/secret.yaml` (same as the external-database
-   path above).
+1. **Edite o secret** em `base/secret.yaml` (igual ao caminho do banco de
+   dados externo acima).
 
-2. **Set your route hostname** — replace `omnicraft.apps.example.com` in
-   `overlays/openshift/route.yaml` with your cluster's apps domain.
+2. **Defina o hostname da sua route** — troque
+   `omnicraft.apps.example.com` em `overlays/openshift/route.yaml` pelo
+   domínio de apps do seu cluster.
 
-3. **Apply:**
+3. **Aplique:**
 
    ```bash
    kubectl kustomize deploy/kubernetes/overlays/openshift/ | oc apply -f -
    ```
 
-For in-cluster Postgres on OpenShift, use `overlays/openshift-postgres/`
-instead — it combines the Postgres StatefulSet, OpenShift Route, and restricted
-security contexts:
+Para Postgres dentro do cluster no OpenShift, use `overlays/openshift-postgres/`
+em vez disso — ele combina o StatefulSet do Postgres, a Route do OpenShift e os
+security contexts restritos:
 
 ```bash
-# edit overlays/openshift-postgres/secret-patch.yaml with real passwords first
+# edite overlays/openshift-postgres/secret-patch.yaml com senhas reais primeiro
 kubectl kustomize deploy/kubernetes/overlays/openshift-postgres/ | oc apply -f -
 ```
 
-## On-demand sandbox runners
+## Runners de sandbox sob demanda
 
-The `overlays/sandbox-runners/` overlay turns on the **`kubernetes`** managed
-sandbox provider: a `host_type: managed` session spawns one runner Pod that runs
-`omnicraft host` as its entrypoint and dials back over the launch-token tunnel. It
-adds a dedicated runner namespace, a least-privilege server SA (scoped Pod +
-Secret rights, **no `pods/exec`**), and the `sandbox:` server config. The
-overlay swaps in the official `omnicraft-server-kubernetes` image variant, which
-adds the `kubernetes` client extra the provider imports (the base server image
-omits it). See `overlays/sandbox-runners/README.md` for the full guide.
+O overlay `overlays/sandbox-runners/` liga o provider de sandbox gerenciado
+**`kubernetes`**: uma sessão `host_type: managed` gera um Pod runner que roda
+`omnicraft host` como seu entrypoint e disca de volta pelo túnel do
+launch-token. Ele adiciona um namespace dedicado para os runners, uma SA de
+servidor com privilégio mínimo (direitos escopados de Pod + Secret, **sem
+`pods/exec`**), e a config `sandbox:` do servidor. O overlay troca para a
+variante oficial de imagem `omnicraft-server-kubernetes`, que adiciona o
+extra `kubernetes` que o provider importa (a imagem base do servidor não o
+inclui). Veja `overlays/sandbox-runners/README.md` para o guia completo.
 
 ```bash
 kubectl apply -k deploy/kubernetes/overlays/sandbox-runners
-# then create the omnicraft-creds harness Secret (see the overlay README)
+# depois crie o Secret omnicraft-creds do harness (veja o README do overlay)
 ```
 
-**Credentials & auth** — two separate concerns, don't conflate:
+**Credenciais e autenticação** — duas preocupações separadas, não confunda:
 
-- **Server auth.** Front the server with `header`/`oidc` auth or run single-user;
-  the built-in `accounts` mode refuses the per-session runner dial-back (`403`),
-  a framework-level limit shared by all sandbox providers — see [Auth](../README.md#auth).
-- **Model keys** (`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` / `OPENAI_API_KEY`
-  / `GIT_TOKEN` / …) ride the `omnicraft-creds` Secret projected into every runner Pod.
+- **Autenticação do servidor.** Coloque o servidor atrás de autenticação
+  `header`/`oidc`, ou rode em modo single-user; o modo embutido `accounts`
+  recusa o dial-back do runner por sessão (`403`), um limite a nível de
+  framework compartilhado por todos os providers de sandbox — veja
+  [Autenticação](../README.md#autenticação).
+- **Chaves de modelo** (`ANTHROPIC_API_KEY` / `CLAUDE_CODE_OAUTH_TOKEN` /
+  `OPENAI_API_KEY` / `GIT_TOKEN` / …) viajam no Secret `omnicraft-creds`,
+  projetado em todo Pod runner.
 
-Both are detailed in
-[`overlays/sandbox-runners/README.md`](overlays/sandbox-runners/README.md#server-auth-managed-hosts).
+Os dois são detalhados em
+[`overlays/sandbox-runners/README.md`](overlays/sandbox-runners/README.md#autenticação-do-servidor-hosts-gerenciados).
 
-## Verify the deployment
+## Verifique o deploy
 
-Check the rollout and reach the server without a public domain:
+Confira o rollout e alcance o servidor sem um domínio público:
 
 ```bash
 kubectl get pods -n omnicraft          # omnicraft (and, with the overlay, postgres) → Running
 kubectl rollout status deploy/omnicraft -n omnicraft
 kubectl logs -n omnicraft deploy/omnicraft          # server logs
 
-# Port-forward the Service and open the app locally:
+# faça o port-forward do Service e abra o app localmente:
 kubectl port-forward -n omnicraft svc/omnicraft 8000:80
 # → http://localhost:8000   (health check: curl localhost:8000/health → {"status":"ok"})
 ```
 
-The first boot runs database migrations before the server starts listening; the
-pod may restart once if the liveness probe fires during that window (see
-[Resource sizing](#resource-sizing)).
+O primeiro boot roda as migrações do banco de dados antes do servidor começar
+a escutar; o pod pode reiniciar uma vez se a liveness probe disparar durante
+essa janela (veja
+[Dimensionamento de recursos](#dimensionamento-de-recursos)).
 
-To test the Ingress itself instead of port-forwarding, point its hostname at a
-domain that already resolves to localhost — `omnicraft.localtest.me` or
-`<node-ip>.sslip.io` — use the self-signed issuer above, and reach it through the
-ingress controller's published port.
+Para testar o próprio Ingress em vez de usar port-forward, aponte o hostname
+dele para um domínio que já resolve para localhost — `omnicraft.localtest.me`
+ou `<node-ip>.sslip.io` — use o issuer autoassinado acima, e alcance-o pela
+porta publicada do controlador de ingress.
 
-## Next steps: connect a host
+## Próximos passos: conecte um host
 
-The server is the control plane — agents run on **hosts** that register with it.
-A brand-new deployment has none, so connect at least one machine:
+O servidor é o plano de controle — os agentes rodam em **hosts** que se
+registram nele. Um deploy novinho não tem nenhum, então conecte pelo menos uma
+máquina:
 
 ```bash
 omnicraft login https://omnicraft.example.com          # authenticate the CLI
 omnicraft host  --server https://omnicraft.example.com # register this machine
 ```
 
-The host then appears in the web UI when you start a new chat. See the
-[main README](../../README.md) for the full host/auth reference.
+O host então aparece na web UI quando você inicia um chat novo. Veja o
+[README principal](../../README.md) para a referência completa de host/auth.
 
-## Use your own IdP instead (OIDC) — optional
+## Use seu próprio IdP em vez disso (OIDC) — opcional
 
-Optional. The default `accounts` provider (username + password) works out of the
-box; use this only to delegate authentication to an external OIDC provider. Add
-OIDC env vars to the secret:
+Opcional. O provider `accounts` padrão (usuário + senha) funciona de cara; use
+isto só para delegar a autenticação a um provider OIDC externo. Adicione as
+variáveis de ambiente do OIDC ao secret:
 
 ```bash
 kubectl create secret generic omnicraft-oidc -n omnicraft \
@@ -322,18 +339,18 @@ kubectl create secret generic omnicraft-oidc -n omnicraft \
   --from-literal=OMNICRAFT_OIDC_COOKIE_SECRET=$(openssl rand -hex 32)
 ```
 
-Then add `envFrom: [{secretRef: {name: omnicraft-oidc}}]` to the Deployment
-container spec (or merge the values into `omnicraft-secrets`).
+Depois adicione `envFrom: [{secretRef: {name: omnicraft-oidc}}]` à spec do
+container do Deployment (ou junte os valores em `omnicraft-secrets`).
 
-## Resource sizing
+## Dimensionamento de recursos
 
-The server idles around ~275 MB RSS. The manifests request 512 Mi and limit at
-1 Gi — adjust to taste. The first boot against a remote Postgres runs
-migrations and takes ~1 minute; bump the liveness `initialDelaySeconds` to
-~90s if you see the pod get killed during the first deploy.
+O servidor fica ocioso em torno de ~275 MB de RSS. Os manifests pedem 512 Mi e
+limitam em 1 Gi — ajuste a gosto. O primeiro boot contra um Postgres remoto
+roda migrações e leva ~1 minuto; aumente o `initialDelaySeconds` da liveness
+para ~90s se você ver o pod ser morto durante o primeiro deploy.
 
-## Scaling
+## Escalonamento
 
-The server uses an in-memory runner registry, so **only one replica is
-supported**. Do not increase `replicas` unless the architecture is changed to
-use a shared registry (e.g. Redis).
+O servidor usa um registro de runners em memória, então **só uma réplica é
+suportada**. Não aumente `replicas` a menos que a arquitetura seja alterada
+para usar um registro compartilhado (ex.: Redis).

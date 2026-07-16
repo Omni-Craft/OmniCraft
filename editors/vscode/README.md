@@ -1,42 +1,46 @@
 # OmniCraft for VS Code
 
-A minimal VS Code extension that opens your **running local OmniCraft server** inside
-the editor — an editor-beside pane that iframes the same UI you see at
-`http://127.0.0.1:6767`. It is a thin client of the local server's existing HTTP API
-(`server/API.md`); there is nothing new to run on the server side.
+Uma extensão minimalista de VS Code que abre o seu **servidor OmniCraft local em
+execução** dentro do editor — um painel ao lado do editor que traz num iframe a
+mesma UI que você vê em `http://127.0.0.1:6767`. É um cliente leve da API HTTP
+já existente do servidor local (`server/API.md`); não há nada novo para rodar
+do lado do servidor.
 
-This is the first, deliberately small donation (tracking
+Esta é a primeira contribuição, deliberadamente pequena (acompanhe em
 [omnicraft-ai/omnicraft#1219](https://github.com/omnicraft-ai/omnicraft/issues/1219)):
-localhost discovery, the editor iframe pane, and the activity-bar / editor-title icons.
-Sessions, diffs, send-selection, and remote/embedded rendering are intentionally out of
-scope for now.
+descoberta de localhost, o painel de iframe do editor, e os ícones da barra de
+atividades / título do editor. Sessões, diffs, enviar seleção, e renderização
+remota/embutida ficam intencionalmente fora de escopo por enquanto.
 
-## How it works
+## Como funciona
 
-- On activation the extension discovers a locally running server via
-  `~/.omnicraft/local_server.pid` and a `/health` probe (or uses `omnicraft.serverUrl`
-  when set to a localhost URL).
-- The OmniCraft activity-bar view offers an **Open OmniCraft** button. The
-  **OmniCraft: Open** command (`omnicraft.open`) — also on the editor title bar and in the
-  command palette — opens an editor-beside pane that frames the running server.
-- The iframe path is used for **local** servers only; a local server is loopback and
-  needs no auth, so no token ever appears in the iframe URL.
+- Na ativação, a extensão descobre um servidor local em execução via
+  `~/.omnicraft/local_server.pid` e uma checagem em `/health` (ou usa
+  `omnicraft.serverUrl` quando definido para uma URL de localhost).
+- A view da barra de atividades do OmniCraft oferece um botão **Open OmniCraft**.
+  O comando **OmniCraft: Open** (`omnicraft.open`) — também na barra de título do
+  editor e na paleta de comandos — abre um painel ao lado do editor que enquadra
+  o servidor em execução.
+- O caminho por iframe é usado apenas para servidores **locais**; um servidor
+  local é loopback e não precisa de autenticação, então nenhum token aparece na
+  URL do iframe.
 
-## Settings
+## Configurações
 
-| Setting | Default | Purpose |
+| Configuração | Padrão | Finalidade |
 |---|---|---|
-| `omnicraft.serverUrl` | `""` | Manual **localhost** server URL override (e.g. `http://127.0.0.1:6767`); empty = auto-discover. Non-localhost URLs are not supported in this build. |
+| `omnicraft.serverUrl` | `""` | Sobrescrita manual da URL do servidor **localhost** (ex.: `http://127.0.0.1:6767`); vazio = descoberta automática. URLs que não sejam localhost não são suportadas nesta versão. |
 
-## Known limitation
+## Limitação conhecida
 
-On macOS, VS Code does not deliver `Cmd+A/C/V` keystrokes into a cross-origin iframe
-inside a webview, so keyboard paste into the framed app's inputs does not work there.
-This is an upstream VS Code issue, not fixable from the extension for the iframe render
-path — see microsoft/vscode#129178 and microsoft/vscode#182642. (The on-page copy
-buttons and `navigator.clipboard` paths still work.)
+No macOS, o VS Code não entrega as teclas `Cmd+A/C/V` para um iframe de origem
+cruzada dentro de um webview, então colar pelo teclado nos campos do app
+enquadrado não funciona ali. É um problema do próprio VS Code, não corrigível
+pela extensão no caminho de renderização por iframe — veja microsoft/vscode#129178
+e microsoft/vscode#182642. (Os botões de copiar na própria página e os caminhos
+via `navigator.clipboard` continuam funcionando.)
 
-## Build / test / package
+## Build / teste / empacotamento
 
 ```bash
 npm ci
@@ -46,19 +50,19 @@ npm run build        # esbuild -> dist/extension.js
 npm run package      # @vscode/vsce package -> omnicraft-vscode-<version>.vsix
 ```
 
-Install the resulting `.vsix` via the Extensions view → "Install from VSIX…". The
-`.vsix` runtime is `dist/extension.js` + `media/`.
+Instale o `.vsix` resultante pela view Extensions → "Install from VSIX…". O
+runtime do `.vsix` é `dist/extension.js` + `media/`.
 
-## Layout
+## Estrutura
 
 ```
 src/
-├── extension.ts        # activate()/deactivate() — wires discovery + panel + command + view
-├── commands/openPanel.ts  # the omnicraft.open command
+├── extension.ts        # activate()/deactivate() — conecta descoberta + painel + comando + view
+├── commands/openPanel.ts  # o comando omnicraft.open
 ├── panel/              # EditorPanelController, host.ts (render), iframeHtml.ts, csp.ts
-├── config/             # settings + localhost server-target resolution
-└── discovery/          # local-server discovery (pidfile / health / liveness)
+├── config/             # configurações + resolução do alvo do servidor localhost
+└── discovery/          # descoberta do servidor local (pidfile / health / liveness)
 ```
 
-Licensed under Apache-2.0 (see `LICENSE`). Contributions require a DCO sign-off
-(`git commit -s`), per the repository `CONTRIBUTING.md`.
+Licenciado sob Apache-2.0 (veja `LICENSE`). Contribuições exigem assinatura DCO
+(`git commit -s`), conforme o `CONTRIBUTING.md` do repositório.

@@ -1,5 +1,5 @@
 # runtime
 
-The execution engine — how an agent **runs**. Given a spec and user input, it drives the agent's reasoning loop: invoking LLMs, calling tools, managing skills, and producing responses.
+O motor de execução — como um agente **roda**. Dado um spec e a entrada do usuário, ele conduz o loop de raciocínio do agente: invocando LLMs, chamando ferramentas, gerenciando skills e produzindo respostas.
 
-The runtime is a library, not a service. The server is its primary host, but it can also be used directly for local development, embedded in other applications, or invoked from tests.
+O runtime é uma biblioteca, não um serviço. O servidor é o seu host principal, mas ele também pode ser usado diretamente para desenvolvimento local, embutido em outras aplicações, ou invocado a partir de testes.

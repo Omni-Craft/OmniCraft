@@ -1,183 +1,203 @@
 # OmniCraft Desktop (Electron)
 
-A thin [Electron](https://www.electronjs.org) desktop shell around the
-existing OmniCraft web UI. It shows the **same** UI you get in a browser, but
-adds native niceties:
+Um shell de desktop fino em [Electron](https://www.electronjs.org) em volta
+da web UI existente do OmniCraft. Ele mostra a **mesma** UI que você tem num
+navegador, mas acrescenta mordomias nativas:
 
-- **OS-native desktop notifications** (via the main-process `Notification`
-  API) when an agent finishes a turn (`running` → `idle`/`failed`), raises a
-  new elicitation (asks for input), or a runner disconnects (`online` →
-  `offline`). A notification fires for any such event **except** the one
-  conversation you're actively viewing (window focused _and_ that chat
-  open). Sessions already settled at launch don't fire; only fresh
-  transitions this client observes do. On a turn-end the notification body
-  shows the **first few lines of the agent's final message** when they can be
-  fetched (one best-effort `GET /items` call), falling back to a generic
-  "Agent finished and is ready for your input." On macOS each notification can
-  also **play a sound** — a system sound you pick in the **Notifications** menu
-  (see below). It's **off by default (opt-in)**: a fresh install stays silent
-  until you turn it on, so the sound never surprises you.
-- **A foreground attention cue.** macOS (and Windows) suppress the notification
-  _banner_ for the **frontmost** app — and macOS suppresses its **sound** too —
-  so the notification still lands in Notification Center, but no toast pops (and
-  on macOS no sound plays), which reads as "notifications only work when the app
-  is in the background." Because the web layer already only notifies for
-  sessions you are _not_ actively viewing, the shell adds OS-level cues the
-  frontmost app _can_ produce: it **bounces the macOS dock icon** (or flashes
-  the taskbar frame on Windows/Linux), and on macOS it **plays the chosen sound
-  itself** (via `afplay`) instead of the suppressed notification sound. Because
-  the shell plays it, the alert is audible **whether OmniCraft is backgrounded or
-  in front** — and the toast's own sound is muted so the cue never doubles.
-- **Multiple windows** (**Server → New Window**, `Cmd/Ctrl+N`). Each window is
-  an independent view, opening on the current window's URL so you can then
-  navigate it to a different conversation and watch two side by side. A
-  window can also be opened against a **different server** (see "Multiple
-  servers" below). Notifications and the dock badge are app-wide (one badge
-  for all windows); a notification click focuses the window that fired it.
-- **A dock / taskbar badge showing the number of unread sessions** at all
-  times (macOS dock badge, Linux Unity launcher count, via
-  `app.setBadgeCount`). A session becomes "unread" when it finishes a turn
-  or asks for input while you're not actively viewing it, and is cleared the
-  moment you view it. Runner disconnects notify but do **not** count toward
-  the badge.
-- **The standard native menu** (App / Edit / View / Window / Help) built from
-  Electron's menu roles, so the usual text-editing shortcuts — Cmd/Ctrl-A,
-  C, V, X, Z — work inside the webview's text fields. Our custom actions —
-  **New Window**, **New Window on Different Server…**, and
-  **Change Server…** — live in a dedicated **Server** submenu. On macOS a
-  **Notifications** submenu turns the notification sound on/off (**Play
-  Notification Sound**, **off by default** — the user opts in) and picks which
-  macOS system sound to play (**Sound ▸** — Glass, Ping, Hero, …); choosing one
-  previews it, and the choice persists in `settings.json` and applies to the
-  next notification.
-- **Browser-style file drag-and-drop** works out of the box: Electron does
-  not intercept file drops the way Tauri does by default, so dropping an
-  image onto a text field reaches the web app's HTML5 drop handler with no
-  extra configuration.
-- **Microphone permission for voice dictation.** The composer's dictation
-  button uses the Web Speech API plus a `getUserMedia` audio stream (the mic
-  level meter). Both go through Chromium's permission layer, which in Electron
-  asks the _embedder_ (us) rather than showing Chrome's prompt — with no
-  handler wired, Chromium denies by default, so `recognition.start()` fails
-  instantly with `not-allowed` and the button appears dead. The main process
-  now wires `setPermissionRequestHandler` / `setPermissionCheckHandler` to
-  grant the audio permissions, and on macOS calls
-  `systemPreferences.askForMediaAccess("microphone")` lazily — on the first
-  actual mic request (the user clicking dictate), not at app startup — so the
-  OS-level mic gate is open too (packaged builds ship
+- **Notificações de desktop nativas do SO** (via a API `Notification` do
+  processo principal) quando um agente termina um turno (`running` →
+  `idle`/`failed`), levanta uma elicitação nova (pede input), ou um runner
+  desconecta (`online` → `offline`). Uma notificação dispara para qualquer
+  evento desses **exceto** a conversa que você está vendo ativamente (janela
+  em foco _e_ aquele chat aberto). Sessões já assentadas no lançamento não
+  disparam; só transições novas que este cliente observa disparam. Num
+  fim-de-turno o corpo da notificação mostra as **primeiras linhas da
+  mensagem final do agente** quando conseguem ser buscadas (uma chamada
+  `GET /items` best-effort), caindo para um genérico "Agent finished and is
+  ready for your input." quando não. No macOS cada notificação também pode
+  **tocar um som** — um som de sistema que você escolhe no menu
+  **Notifications** (veja abaixo). É **desligado por padrão (opt-in)**: uma
+  instalação nova fica silenciosa até você ligar, então o som nunca
+  surpreende.
+- **Um sinal de atenção em primeiro plano.** macOS (e Windows) suprimem o
+  _banner_ de notificação para o app em **primeiro plano** — e o macOS
+  suprime o **som** dela também — então a notificação ainda chega no
+  Notification Center, mas nenhum toast aparece (e no macOS nenhum som
+  toca), o que passa a impressão de que "notificações só funcionam quando o
+  app está em segundo plano". Como a camada web já só notifica para sessões
+  que você _não_ está vendo ativamente, o shell acrescenta sinais em nível
+  de SO que o app em primeiro plano _consegue_ produzir: ele **quica o ícone
+  do dock no macOS** (ou pisca o frame da taskbar no Windows/Linux), e no
+  macOS ele **toca o som escolhido ele mesmo** (via `afplay`) em vez do som
+  de notificação suprimido. Como é o shell que toca, o alerta é audível
+  **estando o OmniCraft em segundo ou primeiro plano** — e o som do toast em
+  si é mudo para que o sinal nunca dobre.
+- **Múltiplas janelas** (**Server → New Window**, `Cmd/Ctrl+N`). Cada janela
+  é uma view independente, abrindo na URL da janela atual, então você pode
+  navegá-la para uma conversa diferente e acompanhar duas lado a lado. Uma
+  janela também pode ser aberta contra um **servidor diferente** (veja
+  "Múltiplos servidores" abaixo). Notificações e o badge do dock são do app
+  inteiro (um badge para todas as janelas); um clique na notificação foca a
+  janela que a disparou.
+- **Um badge de dock / taskbar mostrando o número de sessões não lidas** o
+  tempo todo (badge do dock no macOS, contagem do Unity launcher no Linux,
+  via `app.setBadgeCount`). Uma sessão vira "não lida" quando termina um
+  turno ou pede input enquanto você não está vendo ela ativamente, e é
+  limpa no momento em que você a vê. Desconexões de runner notificam mas
+  **não** contam para o badge.
+- **O menu nativo padrão** (App / Edit / View / Window / Help) construído a
+  partir dos roles de menu do Electron, então os atalhos usuais de edição de
+  texto — Cmd/Ctrl-A, C, V, X, Z — funcionam dentro dos campos de texto da
+  webview. Nossas ações customizadas — **New Window**, **New Window on
+  Different Server…** e **Change Server…** — vivem num submenu **Server**
+  dedicado. No macOS, um submenu **Notifications** liga/desliga o som de
+  notificação (**Play Notification Sound**, **desligado por padrão** — o
+  usuário faz opt-in) e escolhe qual som de sistema do macOS tocar
+  (**Sound ▸** — Glass, Ping, Hero, …); escolher um faz uma prévia, e a
+  escolha persiste em `settings.json` e se aplica à próxima notificação.
+- **Arrastar-e-soltar de arquivo estilo navegador** funciona sem
+  configuração: o Electron não intercepta drops de arquivo do jeito que o
+  Tauri faz por padrão, então soltar uma imagem num campo de texto chega ao
+  handler HTML5 de drop do app web sem nenhuma configuração extra.
+- **Permissão de microfone para ditado por voz.** O botão de ditado do
+  composer usa a Web Speech API mais um stream de áudio `getUserMedia` (o
+  medidor de nível de mic). Os dois passam pela camada de permissão do
+  Chromium, que no Electron pergunta ao _embedder_ (nós) em vez de mostrar
+  o prompt do Chrome — sem handler nenhum plugado, o Chromium nega por
+  padrão, então `recognition.start()` falha na hora com `not-allowed` e o
+  botão parece morto. O processo principal agora conecta
+  `setPermissionRequestHandler` / `setPermissionCheckHandler` para conceder
+  as permissões de áudio, e no macOS chama
+  `systemPreferences.askForMediaAccess("microphone")` de forma preguiçosa —
+  na primeira requisição de mic de fato (o usuário clicando em ditado), não
+  na inicialização do app — para que o portão de mic a nível de SO também
+  esteja aberto (builds empacotados vêm com
   `NSMicrophoneUsageDescription`).
 
-  > **Caveat — Web Speech may still not transcribe in Electron.** Granting the
-  > mic clears the _permission_ gate, but `SpeechRecognition` also depends on
-  > Google's cloud speech backend keyed to official Google Chrome builds, which
-  > Electron's bundled Chromium does **not** ship. So recognition can still
-  > fail (typically a `network` error) even with the mic allowed. The web app
-  > degrades gracefully (the button shows "Dictation unavailable" rather than
-  > crashing). Fully reliable in-app dictation would require a MediaRecorder
-  > capture + a server-side transcription endpoint (e.g. Whisper) wired to the
-  > composer's existing `onAudioRecorded` fallback — not yet implemented.
+  > **Ressalva — o Web Speech ainda pode não transcrever no Electron.**
+  > Conceder o mic limpa o portão de _permissão_, mas o `SpeechRecognition`
+  > também depende do backend de fala em nuvem do Google, atrelado a builds
+  > oficiais do Google Chrome, que o Chromium empacotado do Electron **não**
+  > traz. Então o reconhecimento ainda pode falhar (tipicamente um erro
+  > `network`) mesmo com o mic permitido. O app web degrada com
+  > elegância (o botão mostra "Dictation unavailable" em vez de quebrar).
+  > Ditado in-app totalmente confiável exigiria uma captura via
+  > MediaRecorder + um endpoint de transcrição no servidor (ex.: Whisper)
+  > plugado ao fallback `onAudioRecorded` já existente do composer — ainda
+  > não implementado.
 
-## How it works (zero UI duplication)
+## Como funciona (zero duplicação de UI)
 
-The desktop app does **not** ship a copy of the web UI. It bundles only a tiny
-"connect to server" page (`setup/index.html`). On launch:
+O app de desktop **não** embarca uma cópia da web UI. Ele empacota só uma
+página pequena de "conectar ao servidor" (`setup/index.html`). No
+lançamento:
 
-1. If no server URL is saved yet, it shows the setup page (one input +
-   Connect). You enter your OmniCraft server URL (default
-   `http://localhost:8000`).
-2. It persists that URL to the per-user app data dir (`settings.json` under
-   Electron's `userData` path) and **loads the server's own origin**, where
-   the server serves the real SPA (the production `web` build, the same
-   bytes a browser would load).
-3. On subsequent launches it skips the setup page and loads the saved server
-   directly.
+1. Se nenhuma URL de servidor está salva ainda, ele mostra a página de setup
+   (um input + Connect). Você digita a URL do seu servidor OmniCraft
+   (padrão `http://localhost:8000`).
+2. Ele persiste essa URL no diretório de dados do app por usuário
+   (`settings.json` sob o caminho `userData` do Electron) e **carrega a
+   origem do próprio servidor**, onde o servidor serve a SPA real (o build
+   `web` de produção, os mesmos bytes que um navegador carregaria).
+3. Nos lançamentos seguintes ele pula a página de setup e carrega o
+   servidor salvo diretamente.
 
-If the saved server fails to load (server down, DNS failure, TLS error), the
-window falls back to the setup page with the error shown and the failed URL
-pre-filled — the saved URL is kept, so Connect simply retries it.
+Se o servidor salvo falha ao carregar (servidor fora do ar, falha de DNS,
+erro de TLS), a janela cai de volta para a página de setup com o erro
+mostrado e a URL que falhou pré-preenchida — a URL salva é mantida, então
+Connect simplesmente tenta de novo.
 
-Entering a plain-`http://` URL for a **non-local** host shows a warning first
-(anyone on the network path can act as that server); a second Connect click
-proceeds. `http://localhost:8000` connects with no friction.
+Digitar uma URL `http://` pura para um host **não-local** mostra um aviso
+antes (qualquer um no caminho de rede pode agir como aquele servidor); um
+segundo clique em Connect prossegue. `http://localhost:8000` conecta sem
+atrito.
 
-Change the server later via the **Server → Change Server…** menu item, which
-clears the saved URL and returns the focused window to the setup page.
+Troque o servidor depois pelo item de menu **Server → Change Server…**, que
+limpa a URL salva e volta a janela em foco para a página de setup.
 
-Open another view with **Server → New Window** (`Cmd/Ctrl+N`). It clones the
-focused window's current URL onto a new window against the same server, so two
-conversations can be watched at once.
+Abra outra view com **Server → New Window** (`Cmd/Ctrl+N`). Ele clona a URL
+atual da janela em foco numa janela nova contra o mesmo servidor, para que
+duas conversas possam ser acompanhadas ao mesmo tempo.
 
-The native enhancements live on the web side in
-[`../src/lib/nativeBridge.ts`](../src/lib/nativeBridge.ts). It detects the
-Electron shell at runtime (the preload exposes `window.omnicraftDesktop`
-with `kind: "electron"`) and routes notifications/badge through the IPC
-bridge; in a plain browser it falls back to the Web Notifications path. So the
-one `web` bundle works both in a browser and under Electron.
+As melhorias nativas vivem do lado web em
+[`../src/lib/nativeBridge.ts`](../src/lib/nativeBridge.ts). Ele detecta o
+shell Electron em tempo de execução (o preload expõe
+`window.omnicraftDesktop` com `kind: "electron"`) e roteia
+notificações/badge pela bridge de IPC; num navegador comum ele cai para o
+caminho de Web Notifications. Então o mesmo bundle `web` funciona tanto num
+navegador quanto sob o Electron.
 
-## Architecture
+## Arquitetura
 
 ```
 electron/
-  package.json             # Electron + electron-builder deps and build config
-  src/main.js              # main process: window, settings, menu, IPC, badge, notify
+  package.json             # dependências e config de build do Electron + electron-builder
+  src/main.js              # processo principal: janela, settings, menu, IPC, badge, notify
   src/preload.js           # contextBridge: window.omnicraftDesktop + omnicraftSetup
-  src/find_preload.js      # contextBridge for the find bar: window.omnicraftFind
-  src/browserViewRegistry.js  # per-conversation WebContentsView registry (browser pane)
-  src/browserViewBounds.js    # CSS-px → window-DIP bounds conversion (browser pane)
-  src/browserIpc.js           # omnicraft:browser-* IPC handlers (extracted from main.js)
-  setup/index.html         # the bundled "connect to server" setup page
-  find/index.html          # the bundled find-in-page bar (Cmd/Ctrl+F)
-  icons/                   # app icons
+  src/find_preload.js      # contextBridge para a barra de busca: window.omnicraftFind
+  src/browserViewRegistry.js  # registro de WebContentsView por conversa (pane de navegador)
+  src/browserViewBounds.js    # conversão de bounds CSS-px → window-DIP (pane de navegador)
+  src/browserIpc.js           # handlers de IPC omnicraft:browser-* (extraído de main.js)
+  setup/index.html         # a página de setup "conectar ao servidor" embarcada
+  find/index.html          # a barra de busca-na-página embarcada (Cmd/Ctrl+F)
+  icons/                   # ícones do app
 ```
 
-Native niceties beyond notifications/badge: a right-click context menu
-(cut/copy/paste, spelling suggestions + Add to Dictionary, Copy Link
-Address), window size/position persistence across launches, and
-find-in-page (**Edit → Find…**, `Cmd/Ctrl+F`) — a small bar anchored to the
-window's top-right corner; Enter / Shift+Enter step through matches, Esc
-dismisses.
+Mordomias nativas além de notificações/badge: um menu de contexto de
+clique-direito (recortar/copiar/colar, sugestões de ortografia + Add to
+Dictionary, Copy Link Address), persistência de tamanho/posição de janela
+entre lançamentos, e busca-na-página (**Edit → Find…**, `Cmd/Ctrl+F`) — uma
+barra pequena ancorada no canto superior direito da janela; Enter /
+Shift+Enter percorrem os resultados, Esc dispensa.
 
-- **Main process** (`src/main.js`) owns settings persistence, window
-  creation, the application menu, permission handling (microphone), and IPC
-  handlers for the badge and notifications (`normalize_url`, `change_server`,
-  navigate-to-server, New Window).
-- **Preload** (`src/preload.js`) is the only bridge between the remote
-  (untrusted) SPA and the main process. It runs with `contextIsolation` and
-  exposes a tiny, serialization-safe API via `contextBridge` — never raw
-  `ipcRenderer` or Node.
-- **Security posture**: `nodeIntegration: false`, `contextIsolation: true`.
-  `window.open` / `target=_blank` links are opened in the user's real
-  browser, not chromeless Electron windows. Non-web schemes (`vscode://`,
-  `ssh://`, …) launch an OS protocol handler with page-controlled
-  arguments, so they prompt for consent first — showing the requesting
-  origin and the full URL — with an optional persisted "always allow this
-  scheme from this server". Beyond that, each window is
-  **pinned to the one server origin the user explicitly connected it to**,
-  and that pin — not navigation — is the trust boundary:
-  - Navigation is deliberately _not_ restricted: servers may sit behind
-    auth that redirects through external identity providers, so a window
-    can legitimately visit foreign origins mid-login.
-  - Instead, every privileged IPC handler verifies its sender frame.
-    `notify` / `setBadgeCount` only work when both the calling frame _and_
-    the window's top-level page are on the pinned origin (so a pinned-origin
-    iframe embedded in a hostile page gets nothing); the setup bridge
-    (`omnicraftSetup`) only works for the bundled setup page itself, so a
-    server page can never read or silently re-point the saved server URL.
-    Foreign pages get an inert bridge.
-  - The microphone permission grant is likewise scoped: only the audio set,
-    only for pages on an origin some window is pinned to, and only when the
-    requesting page is the top-level page — everything else is denied.
+- O **processo principal** (`src/main.js`) é dono da persistência de
+  settings, criação de janela, o menu da aplicação, o tratamento de
+  permissão (microfone), e os handlers de IPC para o badge e as
+  notificações (`normalize_url`, `change_server`, navegar-para-servidor,
+  New Window).
+- O **preload** (`src/preload.js`) é a única ponte entre a SPA remota (não
+  confiável) e o processo principal. Ele roda com `contextIsolation` e
+  expõe uma API minúscula, segura para serialização, via `contextBridge` —
+  nunca `ipcRenderer` ou Node cru.
+- **Postura de segurança**: `nodeIntegration: false`, `contextIsolation:
+true`. Links `window.open` / `target=_blank` são abertos no navegador
+  real do usuário, não em janelas Electron sem chrome. Esquemas não-web
+  (`vscode://`, `ssh://`, …) lançam um handler de protocolo do SO com
+  argumentos controlados pela página, então pedem consentimento antes —
+  mostrando a origem requisitante e a URL inteira — com um "sempre permitir
+  esse esquema deste servidor" opcional e persistido. Além disso, cada
+  janela é **fixada na única origem de servidor que o usuário conectou
+  explicitamente nela**, e essa fixação — não a navegação — é o limite de
+  confiança:
+  - A navegação deliberadamente _não_ é restrita: servidores podem estar
+    atrás de autenticação que redireciona por provedores de identidade
+    externos, então uma janela pode legitimamente visitar origens
+    estrangeiras no meio de um login.
+  - Em vez disso, todo handler de IPC privilegiado verifica o seu frame
+    remetente. `notify` / `setBadgeCount` só funcionam quando tanto o frame
+    chamador _quanto_ a página de nível superior da janela estão na origem
+    fixada (então um iframe de origem fixada embutido numa página hostil
+    não recebe nada); a bridge de setup (`omnicraftSetup`) só funciona para
+    a própria página de setup embarcada, então uma página de servidor
+    nunca consegue ler ou repontar silenciosamente a URL de servidor
+    salva. Páginas estrangeiras recebem uma bridge inerte.
+  - A concessão de permissão de microfone é igualmente delimitada: só o
+    conjunto de áudio, só para páginas numa origem que alguma janela tem
+    fixada, e só quando a página requisitante é a página de nível
+    superior — tudo o resto é negado.
 
-## Embedded browser pane
+## Pane de navegador embutido
 
-The desktop shell hosts an **embedded browser pane**: a real Chromium page the
-user can drive (URL bar + toolbar) and point-and-prompt in design mode. This PR
-covers that user-facing pane plus the Electron/renderer plumbing; the
-agent-facing builtin `browser_*` tools (navigate / snapshot / click / type /
-screenshot) that can also drive the pane land in a separate PR. A
-webview/iframe can't provide screenshots, arbitrary in-page JS, or cross-origin
-navigation, so each browser is a native Electron **`WebContentsView`**
-positioned over a placeholder `<div>` the SPA measures — not an in-page element.
+O shell de desktop hospeda um **pane de navegador embutido**: uma página
+Chromium real que o usuário pode dirigir (barra de URL + toolbar) e
+apontar-e-comandar em modo de design. Esta PR cobre esse pane voltado ao
+usuário mais a plumbing de Electron/renderer; as ferramentas builtin
+`browser_*` voltadas ao agente (navigate / snapshot / click / type /
+screenshot) que também conseguem dirigir o pane entram numa PR separada.
+Um webview/iframe não consegue fornecer screenshots, JS arbitrário na
+página, ou navegação cross-origin, então cada navegador é uma
+**`WebContentsView`** nativa do Electron posicionada sobre um `<div>` de
+placeholder que a SPA mede — não um elemento in-page.
 
 ```mermaid
 sequenceDiagram
@@ -196,199 +216,219 @@ sequenceDiagram
     S-->>A: result JSON (or clean timeout)
 ```
 
-The browser runs on the user's machine (a native `WebContentsView`); the agent —
-which may run on a different host — drives it purely by messages: an action
-request fans out over the session stream, the renderer claims and executes it
-against its local Chromium, and the result is posted back.
+O navegador roda na máquina do usuário (uma `WebContentsView` nativa); o
+agente — que pode rodar num host diferente — o dirige puramente por
+mensagens: uma requisição de ação sai em fanout pelo stream da sessão, o
+renderer a reivindica e a executa contra o seu Chromium local, e o
+resultado é postado de volta.
 
-**Pieces:**
+**Peças:**
 
-- `src/browserViewRegistry.js` — a per-**conversation** `Map` of
-  `WebContentsView`s (cap 10). `setActive` attaches one view to the host window
-  and **detaches (does not destroy)** the previous one, so a background
-  conversation's page keeps running when the user switches away; views are
-  destroyed only on explicit close or window teardown. Each child view keeps
+- `src/browserViewRegistry.js` — um `Map` por **conversa** de
+  `WebContentsView`s (limite de 10). `setActive` anexa uma view à janela
+  hospedeira e **desanexa (não destrói)** a anterior, então a página de uma
+  conversa em segundo plano continua rodando quando o usuário troca de
+  view; views só são destruídas no fechamento explícito ou na desmontagem
+  da janela. Cada view filha mantém
   `nodeIntegration:false, contextIsolation:true, sandbox:true`.
-- `src/browserViewBounds.js` — converts the placeholder's renderer CSS pixels to
-  window device-independent pixels (they diverge after `Cmd+/Cmd-` zoom).
-- `src/main.js` — instantiates one registry **per shell window** and injects it
-  (plus the `isPinnedOriginSender` trust gate) into `registerBrowserIpc(...)`.
-- `src/browserIpc.js` — the whole `ipcMain.handle('omnicraft:browser-*')` surface,
-  extracted out of `main.js` so that file stays bounded:
-  `open-or-navigate`, `set-active`, `resize`, `screenshot`
-  (`capturePage().toPNG()` → base64), `execute`, `has-view`, `close`, plus the
-  toolbar handlers `go-back`, `go-forward`, `reload`, and `open-devtools`
-  (toggle, docked bottom), plus the design-mode handlers
-  `enable-design-mode` / `disable-design-mode` / `signal-design-result`
-  (inject / tear down the in-page element picker and paint result feedback).
-  Every handler is gated on `isPinnedOriginSender` (only
-  the connected server's own page may drive the views) and resolves the _sender
-  window's own_ registry, so one window can never manipulate another's panes.
-  On view creation it also wires `did-navigate` / `did-navigate-in-page`
-  listeners that push `browser-url-changed` + `browser-nav-state` to the renderer
-  so the toolbar's URL bar live-tracks the real URL (redirects, in-page link
-  clicks, agent navigation) instead of going stale.
-- `src/preload.js` — adds `browserOpenOrNavigate/SetActive/Resize/Screenshot/`
-  `Execute/Close` + `browserHasView`, the toolbar methods
-  `browserGoBack/GoForward/Reload` + `openBrowserDevTools`, the design-mode
-  methods `browserEnableDesignMode/DisableDesignMode/SignalDesignResult`, and the
-  subscriptions `onBrowserViewCreated` / `onBrowserHostActiveChanged` /
+- `src/browserViewBounds.js` — converte os pixels CSS do renderer do
+  placeholder para pixels device-independent da janela (eles divergem
+  depois de zoom com `Cmd+/Cmd-`).
+- `src/main.js` — instancia um registro **por janela do shell** e o injeta
+  (mais o portão de confiança `isPinnedOriginSender`) em
+  `registerBrowserIpc(...)`.
+- `src/browserIpc.js` — toda a superfície
+  `ipcMain.handle('omnicraft:browser-*')`, extraída de `main.js` para que
+  esse arquivo continue limitado: `open-or-navigate`, `set-active`,
+  `resize`, `screenshot` (`capturePage().toPNG()` → base64), `execute`,
+  `has-view`, `close`, mais os handlers de toolbar `go-back`, `go-forward`,
+  `reload` e `open-devtools` (toggle, ancorado embaixo), mais os handlers
+  de modo de design `enable-design-mode` / `disable-design-mode` /
+  `signal-design-result` (injetar / desmontar o seletor de elemento
+  in-page e pintar o feedback do resultado). Todo handler é gateado em
+  `isPinnedOriginSender` (só a própria página do servidor conectado pode
+  dirigir as views) e resolve o registro _da própria janela remetente_,
+  então uma janela nunca consegue manipular os panes de outra. Na criação
+  da view ele também conecta listeners `did-navigate` /
+  `did-navigate-in-page` que empurram `browser-url-changed` +
+  `browser-nav-state` para o renderer, para que a barra de URL da toolbar
+  acompanhe a URL real ao vivo (redirects, cliques de link in-page,
+  navegação do agente) em vez de ficar desatualizada.
+- `src/preload.js` — adiciona
+  `browserOpenOrNavigate/SetActive/Resize/Screenshot/Execute/Close` +
+  `browserHasView`, os métodos de toolbar
+  `browserGoBack/GoForward/Reload` + `openBrowserDevTools`, os métodos de
+  modo de design
+  `browserEnableDesignMode/DisableDesignMode/SignalDesignResult`, e as
+  subscrições `onBrowserViewCreated` / `onBrowserHostActiveChanged` /
   `onBrowserViewClosed` / `onBrowserUrlChanged` / `onBrowserNavState` +
   `onBrowserElementSelected` / `onBrowserElementPromptSubmit` /
-  `onBrowserElementPromptDismiss` to `window.omnicraftDesktop`, each a thin
-  `ipcRenderer.invoke` / `ipcRenderer.on`.
-- Renderer side (in `web/src`): `hooks/useBrowserAgentRelay.ts` receives the
-  `browser.action_request` SSE event (emitted by the separate agent-tools PR),
-  **claims** the action on the server
-  (atomic check-and-set so two windows on one server can't double-execute),
-  runs it via the preload bridge, and POSTs the result back with its claim
-  token; `components/BrowserPane/BrowserPane.tsx` measures the placeholder and
-  keeps the native view positioned over it. Both self-gate on
-  `isElectronShell()`, so a plain browser tab is inert (the action times out on
-  the server with a clean "is the desktop app open?" error).
+  `onBrowserElementPromptDismiss` a `window.omnicraftDesktop`, cada um um
+  `ipcRenderer.invoke` / `ipcRenderer.on` fino.
+- Lado renderer (em `web/src`): `hooks/useBrowserAgentRelay.ts` recebe o
+  evento SSE `browser.action_request` (emitido pela PR separada de
+  ferramentas de agente), **reivindica** a ação no servidor (check-and-set
+  atômico para que duas janelas num servidor não possam executar em
+  duplicidade), a roda via a bridge do preload, e faz POST do resultado de
+  volta com o seu token de reivindicação; `components/BrowserPane/BrowserPane.tsx`
+  mede o placeholder e mantém a view nativa posicionada sobre ele. Os dois
+  se auto-gateiam em `isElectronShell()`, então uma aba de navegador comum
+  fica inerte (a ação expira no servidor com um erro limpo de "o app de
+  desktop está aberto?").
 
-**First-navigate activation.** The first `browser_navigate` on a conversation
-creates the view **detached** (nothing is active yet), so no
-`browser-host-active-changed` fires. The registry therefore also emits a
-`browser-view-created` event on create; `BrowserPane` listens for it (and
-probes `browserHasView` on remount), mounts its measuring placeholder, and
-calls `browserSetActive(conversationId)` — which attaches the view and starts
-bounds sync. Without this signal the pane would gate itself off forever and the
-embedded browser would stay invisible. (`browserViewRegistry.test.js` locks the
-create-signal → setActive → attached transition.)
+**Ativação no primeiro navigate.** O primeiro `browser_navigate` numa
+conversa cria a view **desanexada** (nada está ativo ainda), então nenhum
+`browser-host-active-changed` dispara. O registro por isso também emite um
+evento `browser-view-created` na criação; `BrowserPane` escuta por ele (e
+sonda `browserHasView` na remontagem), monta o seu placeholder de medição,
+e chama `browserSetActive(conversationId)` — que anexa a view e começa a
+sincronização de bounds. Sem esse sinal o pane se gatearia para sempre e o
+navegador embutido ficaria invisível para sempre.
+(`browserViewRegistry.test.js` fixa a transição
+create-signal → setActive → attached.)
 
-**Toolbar.** When a view is attached, `BrowserPane` renders a user-facing
-toolbar above the page: back / forward / reload, a DevTools toggle, and an
-editable URL bar (Enter navigates; the typed value is normalized to add a
-scheme — a dotless host like `localhost` gets `http://`, everything else
-`https://`). The bar reflects the _real_ URL via `onBrowserUrlChanged`, but
-never overwrites what the user is actively typing. The pane is a flex **column**:
-the toolbar is a fixed-height row _above_ the measured container, because the
-native `WebContentsView` paints over that container's rect — a toolbar inside it
-would be hidden by the overlay. The URL bar reuses the existing
-`browserOpenOrNavigate(..., {force:true})` path (the same one the relay uses), so
-no separate navigation IPC exists for manual entry.
+**Toolbar.** Quando uma view está anexada, `BrowserPane` renderiza uma
+toolbar voltada ao usuário acima da página: voltar / avançar / recarregar,
+um toggle de DevTools, e uma barra de URL editável (Enter navega; o valor
+digitado é normalizado para adicionar um esquema — um host sem ponto como
+`localhost` recebe `http://`, tudo o resto `https://`). A barra reflete a
+URL _real_ via `onBrowserUrlChanged`, mas nunca sobrescreve o que o usuário
+está digitando ativamente. O pane é uma **coluna** flex: a toolbar é uma
+linha de altura fixa _acima_ do container medido, porque a
+`WebContentsView` nativa pinta sobre o retângulo desse container — uma
+toolbar dentro dele ficaria escondida pelo overlay. A barra de URL
+reaproveita o caminho `browserOpenOrNavigate(..., {force:true})` já
+existente (o mesmo que o relay usa), então nenhuma IPC de navegação
+separada existe para entrada manual.
 
-**Design mode (point-and-prompt).** A toolbar toggle (next to DevTools) injects
-an in-page element picker into the `WebContentsView` via `executeJavaScript`:
-hovering highlights the element under the cursor (overlay + `<Component>`/tag
-label); clicking opens a popup anchored to that element with an input + Send.
-On Send the popup emits a `console.log` marker (the injected script can't
-`require('electron')`), which the per-view console-message listener in
-`browserIpc.js` forwards to the SPA as `browser-element-prompt-submit`
-(carrying the element info; a cropped element screenshot arrives on the earlier
-`browser-element-selected` event). **There is no backend
-design-edit route** — `AppShell` (where the relay is hoisted, so it's listening
-even when the Browser tab isn't mounted) builds a `[Design Mode — …]` prompt,
-attaches the screenshot as a `File`, and sends it through the _normal_ chat
-path (`chatStore.send`, targeting the conversation's own bound agent). It then
-calls `browserSignalDesignResult` so the popup paints green/red feedback. The
-picker markers are `__omni_element_select__` / `__omni_element_prompt_submit__`
-/ `__omni_element_dismiss__`, and the per-view
-console listener is stored on the registry entry
-(`designModeListener` / `designModeWebContents`) so `browserViewRegistry`'s
-`close()` detaches it on teardown. Electron-only (needs `executeJavaScript` +
-the native view); no server flag.
+**Modo de design (apontar-e-comandar).** Um toggle na toolbar (ao lado do
+DevTools) injeta um seletor de elemento in-page na `WebContentsView` via
+`executeJavaScript`: passar o mouse destaca o elemento sob o cursor
+(overlay + label `<Component>`/tag); clicar abre um popup ancorado naquele
+elemento com um input + Send. No Send o popup emite um marcador
+`console.log` (o script injetado não consegue `require('electron')`), que
+o listener de mensagem de console por view em `browserIpc.js` encaminha
+para a SPA como `browser-element-prompt-submit` (carregando a informação
+do elemento; um screenshot recortado do elemento chega no evento anterior
+`browser-element-selected`). **Não existe rota de edição de design no
+backend** — o `AppShell` (onde o relay é hospedado, então ele fica
+escutando mesmo quando a aba Browser não está montada) constrói um prompt
+`[Design Mode — …]`, anexa o screenshot como um `File`, e o manda pelo
+caminho de chat _normal_ (`chatStore.send`, mirando o agente vinculado à
+própria conversa). Depois ele chama `browserSignalDesignResult` para que
+o popup pinte o feedback verde/vermelho. Os marcadores do seletor são
+`__omni_element_select__` / `__omni_element_prompt_submit__` /
+`__omni_element_dismiss__`, e o listener de console por view fica
+guardado na entrada do registro (`designModeListener` /
+`designModeWebContents`) para que o `close()` do `browserViewRegistry` o
+desconecte na desmontagem. Só Electron (precisa de `executeJavaScript` +
+a view nativa); sem flag de servidor.
 
-**JS trust boundary (important):** `omnicraft:browser-execute` runs
-arbitrary JS in the child view via `executeJavaScript(js, true)`. It is exposed
-to the SPA **only for the relay's own fixed templates** (the DOM-snapshot walk,
-and the click / type element resolvers) — there is deliberately **no
-agent-facing generic `evaluate`**. This keeps the _agent_ boundary: the agent
-picks elements by `ref`/`selector` and supplies text, but never ships a raw JS
-string that main will run. (It does not, and is not intended to, defend against
-XSS _within_ the visited page — that page runs its own scripts in its own
-sandboxed view regardless.) Preserve this when extending the bridge: add typed,
-argument-shaped actions, not a passthrough JS channel.
+**Limite de confiança de JS (importante):** `omnicraft:browser-execute`
+roda JS arbitrário na view filha via `executeJavaScript(js, true)`. Ele é
+exposto à SPA **só para os próprios templates fixos do relay** (a
+varredura de snapshot do DOM, e os resolvedores de elemento de
+click / type) — deliberadamente **não existe** um `evaluate` genérico
+voltado ao agente. Isso mantém o limite do _agente_: o agente escolhe
+elementos por `ref`/`selector` e fornece texto, mas nunca envia uma string
+de JS crua para o main rodar. (Isso não defende, e não pretende defender,
+contra XSS _dentro_ da página visitada — aquela página roda os próprios
+scripts na sua própria view sandboxada de qualquer jeito.) Preserve isso
+ao estender a bridge: adicione ações tipadas, com formato de argumento, não
+um canal de JS passthrough.
 
-**Availability.** The pane is always on in this build — this shell machinery
-activates the moment a `browser.action_request` arrives (the agent-side
-`browser_*` tools that emit it ship in the separate tools PR). No flag to enable
-it. Outside the Electron shell (a plain browser tab)
-the renderer half is inert, so the tools fail cleanly with a "is the desktop
-app open?" error rather than hanging.
+**Disponibilidade.** O pane está sempre ligado neste build — essa
+maquinaria do shell ativa no momento em que um `browser.action_request`
+chega (as ferramentas `browser_*` do lado do agente que o emitem entram na
+PR separada de ferramentas). Nenhuma flag para ligá-lo. Fora do shell
+Electron (uma aba de navegador comum) a metade do renderer fica inerte,
+então as ferramentas falham de forma limpa com um erro de "o app de
+desktop está aberto?" em vez de travar.
 
-## Prerequisites
+## Pré-requisitos
 
-- **Node** 22.x + npm (already used by `web`).
-- Electron ships its own Chromium/Node, so no system webview libs are needed
-  on Linux for _running_ the built app, though packaging tools may pull a few
-  build deps.
+- **Node** 22.x + npm (já usado por `web`).
+- O Electron traz o próprio Chromium/Node, então nenhuma lib de webview de
+  sistema é necessária no Linux para _rodar_ o app já buildado, embora
+  ferramentas de empacotamento possam puxar algumas dependências de build.
 
-## Run it (development)
+## Rodando (desenvolvimento)
 
-From the `web/electron/` directory:
+A partir do diretório `web/electron/`:
 
 ```bash
-npm install     # installs electron + electron-builder
-npm start        # launches the Electron shell
+npm install     # instala electron + electron-builder
+npm start        # lança o shell Electron
 ```
 
-The shell opens on the bundled setup page. Point it at a running OmniCraft
-server (see below), Connect, and you're in.
+O shell abre na página de setup embarcada. Aponte-o para um servidor
+OmniCraft rodando (veja abaixo), clique em Connect, e você está dentro.
 
-> Note: this loads the UI from whatever server URL you give it — it does
-> **not** run the Vite dev server. To develop the web UI itself with hot
-> reload, run `npm run dev` (plain Vite in a browser) from `web/` as usual.
+> Nota: isso carrega a UI a partir de qualquer URL de servidor que você
+> fornecer — ele **não** roda o servidor de dev do Vite. Para desenvolver a
+> web UI em si com hot reload, rode `npm run dev` (Vite puro num navegador)
+> a partir de `web/` como de costume.
 
-## Build a distributable
+## Buildando um distribuível
 
-From `web/electron/`:
+A partir de `web/electron/`:
 
 ```bash
-npm run build             # current platform
-npm run build:mac         # .dmg + .zip (signed if an identity is available, not notarized)
-npm run build:mac:release # .dmg + .zip, signed + notarized (requires credentials, see below)
+npm run build             # plataforma atual
+npm run build:mac         # .dmg + .zip (assinado se uma identidade estiver disponível, não notarizado)
+npm run build:mac:release # .dmg + .zip, assinado + notarizado (exige credenciais, veja abaixo)
 npm run build:linux       # AppImage + .deb
-npm run build:win         # NSIS installer
+npm run build:win         # instalador NSIS
 ```
 
-Output lands in `electron/dist/` (the DMG is named
+A saída fica em `electron/dist/` (o DMG é nomeado
 `OmniCraft-<version>-<arch>.dmg`).
 
-## macOS code signing & notarization
+## Assinatura de código & notarização no macOS
 
-The mac build is configured for Apple's **hardened runtime** with the
-entitlements Electron needs (`build/entitlements.mac.plist`: V8 JIT plus
-microphone for dictation). Signing is driven entirely by what credentials
-are present — there are no code changes between a dev build and a release
-build:
+O build de mac é configurado para o **hardened runtime** da Apple com os
+entitlements que o Electron precisa (`build/entitlements.mac.plist`: JIT
+do V8 mais microfone para ditado). A assinatura é comandada inteiramente
+pelas credenciais presentes — não há mudança de código entre um build de
+dev e um build de release:
 
-| Credentials present                                                | Result                                                               |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------- |
-| none                                                               | ad-hoc–signed app; runs locally, other Macs see a Gatekeeper warning |
-| Developer ID cert                                                  | signed app; downloads still warn until notarized                     |
-| Developer ID cert + Apple notarization creds (`build:mac:release`) | signed + notarized; installs cleanly everywhere                      |
+| Credenciais presentes                                                             | Resultado                                                                     |
+| --------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| nenhuma                                                                           | app assinado ad-hoc; roda localmente, outros Macs veem um aviso do Gatekeeper |
+| Certificado Developer ID                                                          | app assinado; downloads ainda avisam até ser notarizado                       |
+| Certificado Developer ID + credenciais de notarização Apple (`build:mac:release`) | assinado + notarizado; instala limpo em todo lugar                            |
 
-### 1. Get a signing certificate
+### 1. Obtenha um certificado de assinatura
 
-You need a **Developer ID Application** certificate from an Apple Developer
-Program account (the kind used for distribution _outside_ the App Store).
-Create it at <https://developer.apple.com/account/resources/certificates>
-(or via Xcode → Settings → Accounts → Manage Certificates), then either:
+Você precisa de um certificado **Developer ID Application** de uma conta do
+Apple Developer Program (o tipo usado para distribuição _fora_ da App
+Store). Crie-o em
+<https://developer.apple.com/account/resources/certificates>
+(ou via Xcode → Settings → Accounts → Manage Certificates), depois:
 
-- **Keychain (local builds):** install the cert + private key into your
-  login keychain. electron-builder auto-discovers it — `npm run build:mac`
-  just works. Verify with
-  `security find-identity -v -p codesigning` (you should see
+- **Keychain (builds locais):** instale o certificado + chave privada no
+  seu keychain de login. O electron-builder o descobre automaticamente —
+  `npm run build:mac` simplesmente funciona. Verifique com
+  `security find-identity -v -p codesigning` (você deve ver
   `Developer ID Application: <Your Name> (<TEAMID>)`).
-- **Env vars (CI):** export the cert + key as a password-protected `.p12`
-  and set:
+- **Variáveis de ambiente (CI):** exporte o certificado + chave como um
+  `.p12` protegido por senha e defina:
 
   ```bash
-  export CSC_LINK=/path/to/developer-id.p12   # or a base64 string / https URL
+  export CSC_LINK=/path/to/developer-id.p12   # ou uma string base64 / URL https
   export CSC_KEY_PASSWORD='the p12 password'
   ```
 
-To force an **unsigned** build even when a cert is present (faster dev
-iteration): `CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:mac`.
+Para forçar um build **não assinado** mesmo com um certificado presente
+(iteração de dev mais rápida): `CSC_IDENTITY_AUTO_DISCOVERY=false npm run
+build:mac`.
 
-### 2. Notarize (release builds)
+### 2. Notarize (builds de release)
 
-Notarization uploads the signed app to Apple for malware scanning;
-without it, macOS warns on first launch of a downloaded app. It needs
-network access and Apple credentials — either an App Store Connect API
-key (preferred for CI):
+A notarização sobe o app assinado para a Apple para varredura de malware;
+sem ela, o macOS avisa no primeiro lançamento de um app baixado. Precisa de
+acesso à rede e credenciais Apple — ou uma chave de API do App Store
+Connect (preferível para CI):
 
 ```bash
 export APPLE_API_KEY=/path/to/AuthKey_XXXXXXXXXX.p8
@@ -396,7 +436,8 @@ export APPLE_API_KEY_ID=XXXXXXXXXX
 export APPLE_API_ISSUER=<issuer-uuid>
 ```
 
-or your Apple ID with an [app-specific password](https://support.apple.com/102654):
+ou o seu Apple ID com uma
+[senha específica de app](https://support.apple.com/102654):
 
 ```bash
 export APPLE_ID=you@example.com
@@ -404,229 +445,250 @@ export APPLE_APP_SPECIFIC_PASSWORD=xxxx-xxxx-xxxx-xxxx
 export APPLE_TEAM_ID=<TEAMID>
 ```
 
-then:
+depois:
 
 ```bash
 npm run build:mac:release
 ```
 
-This is the same build with `mac.notarize=true` switched on; expect the
-notarization step to add a few minutes (Apple-side processing). Verify the
-result with:
+Esse é o mesmo build com `mac.notarize=true` ligado; espere que o passo de
+notarização acrescente alguns minutos (processamento do lado da Apple).
+Verifique o resultado com:
 
 ```bash
 spctl -a -vv dist/mac-arm64/OmniCraft.app   # → "accepted, source=Notarized Developer ID"
 ```
 
-`build:mac:release` **fails loudly** if signing or notarization
-credentials are missing — that's intentional, so a release artifact can't
-silently ship unsigned.
+`build:mac:release` **falha explicitamente** se credenciais de assinatura ou
+notarização estão faltando — isso é intencional, para que um artefato de
+release não consiga sair sem assinatura silenciosamente.
 
-## Getting a server to point at
+## Conseguindo um servidor para apontar
 
-Any reachable OmniCraft server works. For a quick local target, run the
-server from this repo:
+Qualquer servidor OmniCraft alcançável funciona. Para um alvo local rápido,
+rode o servidor a partir deste repositório:
 
 ```bash
-# from the repo root, with the project venv:
-.venv/bin/python -m omnicraft.server   # serves on http://localhost:8000
+# a partir da raiz do repositório, com o venv do projeto:
+.venv/bin/python -m omnicraft.server   # serve em http://localhost:8000
 ```
 
-Then enter `http://localhost:8000` in the setup page.
+Depois digite `http://localhost:8000` na página de setup.
 
-## Managing servers and hosting
+## Gerenciando servidores e hosting
 
-Beyond pointing at an already-running server, the shell can drive the local
-`omnicraft` CLI to start a server and register this machine as a **host** (a
-machine that runs the agent work a server dispatches). Two concepts stay
-deliberately separate:
+Além de apontar para um servidor já rodando, o shell consegue dirigir a CLI
+`omnicraft` local para subir um servidor e registrar essa máquina como um
+**host** (uma máquina que roda o trabalho de agente que um servidor
+despacha). Dois conceitos ficam deliberadamente separados:
 
-- **Server** — the backend the webview talks to (local or remote).
-- **Host** — _this machine_ executing agent work for a server. Because hosting
-  runs agent code, it is **opt-in** and **explicit**: the shell never connects
-  this machine as a runner on its own — not on connect, not on launch. You
-  connect it from the **host selection menu** inside the app (when starting a
-  chat, pick this machine), which drives `controlHost` over the bridge. That
-  request alone isn't trusted to authorize hosting: the SPA is served by the
-  server, so `start`/`restart` additionally require a **native, main-process
-  confirmation** the page can't forge or auto-dismiss (persisted per server
-  origin, so a trusted server is asked only once).
+- **Servidor** — o backend com o qual a webview conversa (local ou remoto).
+- **Host** — _essa máquina_ executando trabalho de agente para um servidor.
+  Como hospedar roda código de agente, isso é **opt-in** e **explícito**: o
+  shell nunca conecta essa máquina como um runner sozinho — nem no connect,
+  nem no lançamento. Você a conecta pelo **menu de seleção de host** dentro
+  do app (ao iniciar um chat, escolha essa máquina), que dirige o
+  `controlHost` pela bridge. Essa requisição sozinha não é confiável para
+  autorizar o hosting: a SPA é servida pelo servidor, então
+  `start`/`restart` exigem adicionalmente uma **confirmação nativa do
+  processo principal** que a página não consegue forjar nem
+  auto-dispensar (persistida por origem de servidor, então um servidor de
+  confiança só é perguntado uma vez).
 
-### Detecting the CLI and customizing its path
+### Detectando a CLI e customizando o caminho dela
 
-The CLI ships under two names that resolve to the same entry point — `omnicraft`
-(canonical) and `omni` (short alias) — and the shell probes **both**:
-`settings.omnicraft_path` first, then `PATH` (`omnicraft` then `omni`), then the
-well-known install locations (`~/.local/bin`, `~/.cargo/bin`, Homebrew,
-`/usr/local/bin`, each tried under both names). A GUI-launched app inherits a
-minimal `PATH`, which is why the install locations are probed directly. The path
-is resolved once at startup and cached in-memory for the session.
+A CLI é distribuída sob dois nomes que resolvem para o mesmo entry point —
+`omnicraft` (canônico) e `omni` (apelido curto) — e o shell sonda **os
+dois**: `settings.omnicraft_path` primeiro, depois `PATH` (`omnicraft`
+depois `omni`), depois os locais de instalação conhecidos
+(`~/.local/bin`, `~/.cargo/bin`, Homebrew, `/usr/local/bin`, cada um
+tentado sob os dois nomes). Um app lançado pela GUI herda um `PATH`
+mínimo, motivo pelo qual os locais de instalação são sondados
+diretamente. O caminho é resolvido uma vez na inicialização e cacheado em
+memória para a sessão.
 
-You can see and change which binary is used in two places:
+Você pode ver e mudar qual binário é usado em dois lugares:
 
-- **Setup page** — hidden by default behind a **gear icon** (top-right) that
-  opens a small modal. The resolved/auto-detected path shows as the field's
-  **placeholder** (the value stays empty until you type an override); set it via
-  free-text or a native file picker. When nothing is found the gear gets an
-  accent dot and the modal shows the install one-liner
+- **Página de setup** — escondida por padrão atrás de um **ícone de
+  engrenagem** (canto superior direito) que abre um modal pequeno. O
+  caminho resolvido/autodetectado aparece como o **placeholder** do campo
+  (o valor fica vazio até você digitar uma sobrescrita); defina-o por
+  texto livre ou um seletor de arquivo nativo. Quando nada é encontrado a
+  engrenagem ganha um ponto de destaque e o modal mostra o comando de
+  instalação de uma linha
   ```bash
   curl -fsSL https://raw.githubusercontent.com/omnicraft-ai/omnicraft/main/scripts/install_oss.sh | sh
   ```
-- **In-app** — **Settings → Local CLI** (desktop only): shows the resolved path
-  and version, a **Change…** button (native file picker) and **Reset to
-  auto-detected**. For safety the in-app surface exposes **no free-text setter**
-  — a connected server must not be able to silently repoint the CLI at an
-  arbitrary binary, so changing it requires a user-driven OS dialog.
+- **Dentro do app** — **Settings → Local CLI** (só desktop): mostra o
+  caminho e a versão resolvidos, um botão **Change…** (seletor de arquivo
+  nativo) e **Reset to auto-detected**. Por segurança a superfície dentro
+  do app não expõe **nenhum setter de texto livre** — um servidor
+  conectado não pode repontar silenciosamente a CLI para um binário
+  arbitrário, então mudá-la exige um diálogo de SO dirigido pelo usuário.
 
-A configured path is saved to `settings.json` (`omnicraft_path`) only once it
-validates as a runnable CLI; clearing it reverts to auto-detection. Connecting
-to a **remote** server never needs the CLI — only "Start locally" and hosting do.
+Um caminho configurado é salvo em `settings.json` (`omnicraft_path`) só
+depois de validar como uma CLI executável; limpá-lo reverte para
+autodetecção. Conectar a um servidor **remoto** nunca precisa da CLI — só
+"Start locally" e hosting precisam.
 
 ### Start locally
 
-**"Start a server on this machine"** runs `omnicraft server start` (idempotent —
-reuses a healthy one) and then connects this window to its
-`http://127.0.0.1:<port>` URL through the normal connect flow. It does not
-connect this machine as a runner — that stays an explicit step in the app.
+**"Start a server on this machine"** roda `omnicraft server start`
+(idempotente — reaproveita uma instância saudável) e depois conecta essa
+janela na URL `http://127.0.0.1:<port>` dela pelo fluxo normal de connect.
+Não conecta essa máquina como um runner — isso continua sendo um passo
+explícito dentro do app.
 
-### Connecting this machine as a runner
+### Conectando essa máquina como um runner
 
-There is **no** connect-time toggle and no sidebar status row: the shell never
-connects a runner automatically. Inside the connected app, the host selection
-menu (when starting a chat) tags this machine and offers to connect it. Choosing
-it calls `controlHost("start")` over the bridge. Because that call originates in
-server-served code, the main process does not treat it as the user's consent: on
-the first `start`/`restart` for a server origin it shows a **native confirmation
-dialog** ("Allow _host_ to manage OmniCraft on this machine?") with **Don't Allow**
-(default) / **Allow Once** / **Always Allow**. Only after approval does it — once
-the CLI is authenticated for the server (remote only; local needs none) — either
-adopt a daemon already serving that server (one you started by hand) or spawn
-`omnicraft host --server <url>`. **Allow Once** connects this time and re-prompts
-next time; **Always Allow** records the origin in `settings.json`
-(`allowed_hosting_origins`) so later connects skip the prompt. `stop` is
-fail-safe and needs no confirmation. The same bridge exposes `stop` / `restart`.
+Não existe toggle no momento do connect nem linha de status na sidebar: o
+shell nunca conecta um runner automaticamente. Dentro do app conectado, o
+menu de seleção de host (ao iniciar um chat) marca essa máquina e oferece
+para conectá-la. Escolhê-la chama `controlHost("start")` pela bridge. Como
+essa chamada se origina em código servido pelo servidor, o processo
+principal não a trata como o consentimento do usuário: no primeiro
+`start`/`restart` para uma origem de servidor ele mostra um **diálogo de
+confirmação nativo** ("Allow _host_ to manage OmniCraft on this machine?")
+com **Don't Allow** (padrão) / **Allow Once** / **Always Allow**. Só depois
+da aprovação ele — assim que a CLI estiver autenticada para o servidor
+(só remoto; local não precisa de nada) — ou adota um daemon já servindo
+aquele servidor (um que você iniciou à mão) ou lança
+`omnicraft host --server <url>`. **Allow Once** conecta dessa vez e
+pergunta de novo na próxima; **Always Allow** registra a origem em
+`settings.json` (`allowed_hosting_origins`) para que conexões futuras
+pulem o prompt. `stop` é fail-safe e não precisa de confirmação. A mesma
+bridge expõe `stop` / `restart`.
 
-Status is read live (host connected = a live daemon process **and** an online
-host tunnel; the shell never caches it). The host surface goes through the JS
-bridge — `window.omnicraftDesktop` → `getHostStatus` / `getHostIdentity` /
-`onHostStatusChanged` (read + live) and `controlHost` (start/stop/restart),
-typed in [`../src/lib/nativeBridge.ts`](../src/lib/nativeBridge.ts) and gated to
-the window's **pinned origin** like the badge/notification bridge.
+O status é lido ao vivo (host conectado = um processo de daemon vivo **e**
+um túnel de host online; o shell nunca o cacheia). A superfície de host
+passa pela bridge JS — `window.omnicraftDesktop` →
+`getHostStatus` / `getHostIdentity` / `onHostStatusChanged` (leitura + ao
+vivo) e `controlHost` (start/stop/restart), tipada em
+[`../src/lib/nativeBridge.ts`](../src/lib/nativeBridge.ts) e gateada na
+**origem fixada** da janela, como a bridge de badge/notificação.
 
-### Lifecycle
+### Ciclo de vida
 
-The desktop **owns the host processes it starts**: quitting the app SIGTERMs
-them (and stops a local server it started), so closing the app disconnects this
-machine. A daemon the shell merely _adopted_ (you started it in a terminal) is
-left running on quit. Hosting is **not** restored on the next launch — you
-reconnect this machine explicitly from the host menu when you want it.
+O desktop **é dono dos processos de host que ele inicia**: fechar o app
+manda SIGTERM neles (e para um servidor local que ele iniciou), então
+fechar o app desconecta essa máquina. Um daemon que o shell só _adotou_
+(você o iniciou num terminal) fica rodando depois de fechar. O hosting
+**não** é restaurado no próximo lançamento — você reconecta essa máquina
+explicitamente pelo menu de host quando quiser.
 
 ## Passkeys (WebAuthn)
 
-External security keys (e.g. a YubiKey) work out of the box: Chromium's
-content layer speaks CTAP to the key directly. That's also why the flow is
-_invisible_ — the passkey sheet you see in Chrome/Safari is browser chrome,
-which Electron doesn't ship. Touching the key completes the ceremony with no
-UI.
+Chaves de segurança externas (ex.: uma YubiKey) funcionam sem configuração:
+a camada de conteúdo do Chromium fala CTAP direto com a chave. É por isso
+também que o fluxo é _invisível_ — a folha de passkey que você vê no
+Chrome/Safari é chrome do navegador, que o Electron não distribui. Tocar
+na chave completa a cerimônia sem UI nenhuma.
 
-For a visual flow, the shell enables Electron's **Touch ID platform
-authenticator** (`app.configureWebAuthn`, Electron ≥ 42, macOS only):
-registering or signing in with a platform passkey then shows the native
-macOS Touch ID / keychain dialog, and a native chooser appears when several
-saved passkeys match. Three pieces must agree before this activates:
+Para um fluxo visual, o shell ativa o **autenticador de plataforma Touch
+ID** do Electron (`app.configureWebAuthn`, Electron ≥ 42, só macOS):
+registrar ou entrar com uma passkey de plataforma então mostra o diálogo
+nativo de Touch ID / keychain do macOS, e um seletor nativo aparece quando
+várias passkeys salvas combinam. Três peças precisam concordar antes disso
+ativar:
 
-1. `WEBAUTHN_KEYCHAIN_ACCESS_GROUP` in `src/main.js` —
+1. `WEBAUTHN_KEYCHAIN_ACCESS_GROUP` em `src/main.js` —
    `"<TEAM_ID>.ai.omnicraft.desktop"`.
-2. The same string in the `keychain-access-groups` entitlement in
+2. A mesma string no entitlement `keychain-access-groups` em
    `signing/entitlements.mac.plist`.
-3. An **embedded Developer ID provisioning profile**
-   (`signing/omnicraft.provisionprofile`, wired via `provisioningProfile`
-   in `package.json`). `keychain-access-groups` is a _restricted_
-   entitlement: a Developer ID signature alone doesn't authorize it, and
-   AMFI SIGKILLs the app at launch ("Launchd job spawn failed", POSIX
-   error 163). Create the profile in the Apple Developer portal: an App ID
-   for `ai.omnicraft.desktop` (no extra capabilities — every profile
-   automatically authorizes keychain groups under `<TEAM_ID>.*`), then
-   Profiles → Distribution → Developer ID for that App ID. Verify with
+3. Um **perfil de provisionamento Developer ID embutido**
+   (`signing/omnicraft.provisionprofile`, plugado via `provisioningProfile`
+   em `package.json`). `keychain-access-groups` é um entitlement
+   _restrito_: uma assinatura Developer ID sozinha não o autoriza, e o AMFI
+   mata o app com SIGKILL no lançamento ("Launchd job spawn failed", erro
+   POSIX 163). Crie o perfil no Apple Developer portal: um App ID para
+   `ai.omnicraft.desktop` (sem capacidades extras — todo perfil autoriza
+   grupos de keychain sob `<TEAM_ID>.*` automaticamente), depois Profiles →
+   Distribution → Developer ID para aquele App ID. Verifique com
    `security cms -D -i signing/omnicraft.provisionprofile`.
 
-The signing identity's team must match the group prefix —
-`package.json` pins `"identity"` for this reason (with several certs in
-the keychain, electron-builder's auto-discovery can pick the wrong one).
-Helpers must NOT inherit the keychain entitlement
-(`entitlementsInherit` points at the minimal
-`signing/entitlements.mac.inherit.plist`; a restricted entitlement on a
-helper shows up as a "GPU process exited unexpectedly" crash loop).
+A identidade de assinatura precisa bater com o prefixo do grupo —
+`package.json` fixa a `"identity"` por esse motivo (com vários certificados
+no keychain, a autodescoberta do electron-builder pode escolher o errado).
+Helpers NÃO PODEM herdar o entitlement de keychain
+(`entitlementsInherit` aponta para o mínimo
+`signing/entitlements.mac.inherit.plist`; um entitlement restrito num
+helper aparece como um loop de crash "GPU process exited unexpectedly").
 
-It only works in a **code-signed** build, on Macs with a Secure Enclave.
-Until all three are set — and always in unsigned `npm start` dev runs —
-the platform authenticator stays off and security keys remain the
-(working, silent) path.
+Só funciona num build **assinado por código**, em Macs com Secure Enclave.
+Até as três coisas estarem configuradas — e sempre em execuções de dev não
+assinadas via `npm start` — o autenticador de plataforma fica desligado e
+as chaves de segurança continuam sendo o caminho (funcional, silencioso).
 
-Caveats: these passkeys are device-bound in the app's own keychain access
-group — they are **not** synced via iCloud Keychain, and passkeys you saved
-in Safari/Chrome are not visible to the app (and vice versa). Showing the
-full system passkey sheet (iCloud Keychain, cross-device QR) for arbitrary
-user-chosen servers would require Apple's browser-only
-`web-browser.public-key-credential` entitlement, or per-domain associated
-domains — neither fits an app whose servers are user-deployed.
+Ressalvas: essas passkeys são vinculadas ao dispositivo no próprio grupo de
+acesso de keychain do app — elas **não** são sincronizadas via iCloud
+Keychain, e passkeys que você salvou no Safari/Chrome não ficam visíveis
+para o app (e vice-versa). Mostrar a folha completa de passkey do sistema
+(iCloud Keychain, QR entre dispositivos) para servidores arbitrários
+escolhidos pelo usuário exigiria o entitlement
+`web-browser.public-key-credential`, exclusivo de navegador, da Apple, ou
+domínios associados por domínio — nenhum dos dois cabe num app cujos
+servidores são publicados pelo usuário.
 
-## Localhost access (auth flows)
+## Acesso a localhost (fluxos de autenticação)
 
-Trusted pages may call services on the user's own machine
-(`http://localhost:<port>`, `127.0.0.1`, `[::1]`) even when those
-services don't send CORS headers — authentication flows use this to
-reach local auth helpers/token brokers. The shell injects the CORS (and
-preflight) response headers itself, scoped to requests _from_ a trusted
-page origin _to_ a loopback host; see `src/localhost_cors.js`. Trusted
-means:
+Páginas confiáveis podem chamar serviços na própria máquina do usuário
+(`http://localhost:<port>`, `127.0.0.1`, `[::1]`) mesmo quando esses
+serviços não enviam headers de CORS — fluxos de autenticação usam isso
+para alcançar helpers de auth locais / brokers de token. O shell injeta
+os headers de resposta de CORS (e preflight) ele mesmo, delimitado a
+requisições _de_ uma origem de página confiável _para_ um host loopback;
+veja `src/localhost_cors.js`. Confiável significa:
 
-- a window's **pinned server origin**, or
-- the **current top-level page of a pinned window** — auth flows
-  redirect the main frame through SSO/IdP origins that can't be known in
-  advance (server → SSO domain → localhost helper probe), and those
-  pages get localhost access while the user is actually on them.
-  In-window navigation only starts from the pinned server (links/popups
-  open in the external browser), so this doesn't extend to arbitrary
-  sites; iframes never match (main-frame origin only).
+- a **origem de servidor fixada** de uma janela, ou
+- a **página de nível superior atual de uma janela fixada** — fluxos de
+  autenticação redirecionam o frame principal por origens de SSO/IdP que
+  não podem ser conhecidas de antemão (servidor → domínio de SSO → sonda
+  de helper localhost), e essas páginas recebem acesso a localhost
+  enquanto o usuário está de fato nelas. A navegação dentro da janela só
+  começa a partir do servidor fixado (links/popups abrem no navegador
+  externo), então isso não se estende a sites arbitrários; iframes nunca
+  combinam (só a origem do frame principal).
 
-Anything else stays blocked by normal CORS, and a localhost service that
-sends its own `Access-Control-Allow-Origin` keeps enforcing its own
-policy untouched.
+Qualquer outra coisa continua bloqueada pelo CORS normal, e um serviço
+localhost que envia o próprio `Access-Control-Allow-Origin` continua
+aplicando a própria política sem alteração.
 
-If a page needs localhost while _not_ being the visible top-level page,
-hand-add its origin to `settings.json`:
+Se uma página precisa de localhost sem ser a página de nível superior
+visível, adicione a origem dela à mão em `settings.json`:
 
 ```json
 { "localhost_allowed_origins": ["https://login.example.com"] }
 ```
 
-(`settings.json` lives in Electron's per-user `userData` dir — on macOS,
-`~/Library/Application Support/OmniCraft/settings.json`.)
+(`settings.json` vive no diretório `userData` por usuário do Electron —
+no macOS, `~/Library/Application Support/OmniCraft/settings.json`.)
 
-## Multiple servers
+## Múltiplos servidores
 
-One server URL is saved as the default, but extra windows can be opened
-against _different_ servers via **Server → New Window on Different
-Server…**. It opens a setup page in **per-window** mode: the URL you connect
-applies to that window only and is never saved, so the default server is
-untouched and the extra connection ends when the window closes. These
-windows get the same per-window origin pinning as regular ones. With windows
-on more than one server, the dock badge shows the sum of each server's unread
-count and notification titles are prefixed with the firing server's hostname.
+Uma URL de servidor é salva como padrão, mas janelas extras podem ser
+abertas contra servidores _diferentes_ via **Server → New Window on
+Different Server…**. Ela abre uma página de setup em modo **por-janela**:
+a URL que você conecta se aplica só àquela janela e nunca é salva, então o
+servidor padrão fica intocado e a conexão extra termina quando a janela
+fecha. Essas janelas recebem a mesma fixação de origem por-janela das
+janelas normais. Com janelas em mais de um servidor, o badge do dock mostra
+a soma da contagem de não lidos de cada servidor e os títulos de
+notificação são prefixados com o hostname do servidor que disparou.
 
-## Implementation notes
+## Notas de implementação
 
-- **Runtime:** bundled Chromium (so the build is ~100+ MB, but the renderer
-  matches Chrome's behavior exactly — no OS-webview quirks).
-- **Native bridge detection:** `window.omnicraftDesktop` (`kind: "electron"`),
-  exposed by the preload. The web-side `nativeBridge.ts` routes the badge to
-  `app.setBadgeCount` and notifications to the main-process `Notification` API
-  via IPC; in a plain browser it falls back to the Web Notifications path.
-- **File drag-drop** works by default (Electron doesn't intercept HTML5 file
-  drops).
-- **Toolchain:** Node only — no Rust or platform webview libraries.
+- **Runtime:** Chromium empacotado (então o build tem ~100+ MB, mas o
+  renderer bate exatamente o comportamento do Chrome — sem peculiaridades
+  de webview de SO).
+- **Detecção de bridge nativa:** `window.omnicraftDesktop`
+  (`kind: "electron"`), exposta pelo preload. O `nativeBridge.ts` do lado
+  web roteia o badge para `app.setBadgeCount` e as notificações para a API
+  `Notification` do processo principal via IPC; num navegador comum ele
+  cai para o caminho de Web Notifications.
+- **Arrastar-e-soltar de arquivo** funciona por padrão (o Electron não
+  intercepta drops de arquivo HTML5).
+- **Toolchain:** só Node — sem Rust nem libs de webview de plataforma.
 
-> Historical note: an earlier Tauri-based shell lived in `web/src-tauri`.
-> It was removed in favor of shipping Electron only; `nativeBridge.ts` no
-> longer carries a Tauri code path.
+> Nota histórica: um shell baseado em Tauri anterior vivia em
+> `web/src-tauri`. Ele foi removido em favor de distribuir só Electron;
+> `nativeBridge.ts` não carrega mais um caminho de código Tauri.

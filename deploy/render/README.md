@@ -1,82 +1,87 @@
-# OmniCraft on Render
+# OmniCraft na Render
 
-Deploy OmniCraft to Render in one click. Render provisions the app and a
-managed Postgres database, assigns an HTTPS URL on `*.onrender.com`, and
-handles SSL automatically. No local tooling required.
+Publique o OmniCraft na Render em um clique. A Render provisiona o app e um
+banco Postgres gerenciado, atribui uma URL HTTPS em `*.onrender.com`, e cuida
+do SSL automaticamente. Nenhuma ferramenta local necessária.
 
 [![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/omnicraft-ai/omnicraft)
 
-> **Note:** The button points at the public repo `github.com/omnicraft-ai/omnicraft`.
-> It goes live once that repo **and** the `ghcr.io/omnicraft-ai/omnicraft-server`
-> package are public; until then it only works if you connect Render to the
-> (private) repo in the dashboard first.
+> **Nota:** O botão aponta para o repositório público
+> `github.com/omnicraft-ai/omnicraft`. Ele entra no ar assim que esse
+> repositório **e** o pacote `ghcr.io/omnicraft-ai/omnicraft-server` ficarem
+> públicos; até lá, só funciona se você conectar a Render ao repositório
+> (privado) pelo painel primeiro.
 
-## What gets provisioned
+## O que é provisionado
 
-The `render.yaml` blueprint at the repo root defines:
+O blueprint `render.yaml` na raiz do repositório define:
 
-- **omnicraft** (Starter web service) — pulls the pre-built image
-  `ghcr.io/omnicraft-ai/omnicraft-server:latest` (CI-built; ships the web UI
-  bundle), served on `https://omnicraft-<hash>.onrender.com`. While the GHCR
-  package is private, add a Render registry credential and reference it from
-  `render.yaml` (`image.creds`); once public, the pull is anonymous.
-- **omnicraft-db** (`basic-256mb` managed Postgres) — `DATABASE_URL` is injected
-  into the service automatically
-- **artifact-data** (10 GB persistent disk) — mounted at `/data` so server
-  config, first-boot credentials, cookie secrets, and agent artifacts survive
-  redeploys. Artifacts live under `/data/artifacts`.
+- **omnicraft** (serviço web Starter) — puxa a imagem pré-construída
+  `ghcr.io/omnicraft-ai/omnicraft-server:latest` (construída pela CI; já traz o
+  bundle da web UI), servida em `https://omnicraft-<hash>.onrender.com`.
+  Enquanto o pacote GHCR for privado, adicione uma credencial de registry da
+  Render e referencie-a no `render.yaml` (`image.creds`); assim que ficar
+  público, o pull passa a ser anônimo.
+- **omnicraft-db** (Postgres gerenciado `basic-256mb`) — o `DATABASE_URL` é
+  injetado no serviço automaticamente.
+- **artifact-data** (disco persistente de 10 GB) — montado em `/data`, para
+  que a configuração do servidor, as credenciais do primeiro boot, os
+  segredos de cookie e os artefatos dos agentes sobrevivam aos redeploys. Os
+  artefatos ficam em `/data/artifacts`.
 
-## Quickstart (built-in accounts — the default)
+## Início rápido (contas embutidas — o padrão)
 
-The blueprint defaults to the built-in `accounts` auth provider: multi-user
-out of the box, no external IdP, and **no env vars to fill in** — the server
-mints its own cookie secret and auto-detects its public URL from Render.
+O blueprint usa por padrão o provedor de autenticação embutido `accounts`:
+multiusuário logo de cara, sem IdP externo, e **nenhuma env var para
+preencher** — o servidor gera o próprio segredo de cookie e auto-detecta a sua
+URL pública a partir da Render.
 
-1. Click the Deploy to Render button above → **Apply**. Wait ~3–5 min for the
-   image pull + health check.
-2. **Get the admin password:** open the service → **Logs** and find the
-   first-boot block:
+1. Clique no botão Deploy to Render acima → **Apply**. Aguarde ~3–5 min para o
+   pull da imagem + o health check.
+2. **Pegue a senha do admin:** abra o serviço → **Logs** e ache o bloco do
+   primeiro boot:
    ```
    ✓ Created initial admin account (accounts auth provider).
        password: <generated>
    ```
-   (also written to `/data/admin-credentials` on the disk; printed once).
-3. Open your `https://<service>.onrender.com` URL, log in as the admin, and
-   invite teammates from **Members** in the web UI.
+   (também gravada em `/data/admin-credentials` no disco; impressa uma vez).
+3. Abra a sua URL `https://<service>.onrender.com`, entre como o admin, e
+   convide colegas em **Members** na web UI.
 
-> To set a known admin password instead of the generated one, add
-> `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD` in the dashboard before first boot.
+> Para definir uma senha de admin conhecida em vez da gerada, adicione
+> `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD` no painel antes do primeiro boot.
 
-## Use your own IdP instead (OIDC)
+## Use o seu próprio IdP (OIDC)
 
-Prefer to delegate login to GitHub / Google / Okta instead of built-in
-accounts? Switch the provider after the initial deploy. HTTPS is provided
-automatically by Render.
+Prefere delegar o login para GitHub / Google / Okta em vez das contas
+embutidas? Troque o provedor depois do deploy inicial. O HTTPS já é fornecido
+automaticamente pela Render.
 
-### GitHub OAuth (simplest to register)
+### GitHub OAuth (o mais simples de cadastrar)
 
-1. Go to `github.com/settings/developers` → **New OAuth App**.
+1. Vá para `github.com/settings/developers` → **New OAuth App**.
    - Homepage URL: `https://omnicraft-<hash>.onrender.com`
    - Authorization callback URL:
      `https://omnicraft-<hash>.onrender.com/auth/callback`
-   - Click **Register application**, then **Generate a new client secret**.
+   - Clique em **Register application**, depois em **Generate a new client
+     secret**.
 
-2. In the Render dashboard, open the **omnicraft** service → **Environment**
-   and add / update these variables:
+2. No painel da Render, abra o serviço **omnicraft** → **Environment** e
+   adicione / atualize estas variáveis:
 
    | Variable | Value |
    |---|---|
    | `OMNICRAFT_AUTH_PROVIDER` | `oidc` |
    | `OMNICRAFT_OIDC_ISSUER` | `https://github.com` |
-   | `OMNICRAFT_OIDC_CLIENT_ID` | your GitHub OAuth client ID |
-   | `OMNICRAFT_OIDC_CLIENT_SECRET` | your GitHub OAuth client secret |
+   | `OMNICRAFT_OIDC_CLIENT_ID` | seu client ID do GitHub OAuth |
+   | `OMNICRAFT_OIDC_CLIENT_SECRET` | seu client secret do GitHub OAuth |
    | `OMNICRAFT_OIDC_REDIRECT_URI` | `https://omnicraft-<hash>.onrender.com/auth/callback` |
 
-   Also add `OMNICRAFT_OIDC_COOKIE_SECRET` = a 64-hex-char value from
-   `openssl rand -hex 32` — OIDC mode requires it and validates it as hex.
+   Adicione também `OMNICRAFT_OIDC_COOKIE_SECRET` = um valor de 64 caracteres
+   hex de `openssl rand -hex 32` — o modo OIDC exige isso e valida como hex.
 
-3. Click **Save Changes**. Render redeploys automatically. Visit the URL —
-   you'll be redirected to GitHub to log in.
+3. Clique em **Save Changes**. A Render faz redeploy automaticamente. Visite a
+   URL — você será redirecionado para o GitHub para entrar.
 
 ### Google Workspace
 
@@ -85,69 +90,73 @@ automatically by Render.
 | `OMNICRAFT_AUTH_PROVIDER` | `oidc` |
 | `OMNICRAFT_OIDC_ISSUER` | `https://accounts.google.com` |
 | `OMNICRAFT_OIDC_CLIENT_ID` | `…apps.googleusercontent.com` |
-| `OMNICRAFT_OIDC_CLIENT_SECRET` | your client secret |
+| `OMNICRAFT_OIDC_CLIENT_SECRET` | seu client secret |
 | `OMNICRAFT_OIDC_REDIRECT_URI` | `https://omnicraft-<hash>.onrender.com/auth/callback` |
-| `OMNICRAFT_OIDC_ALLOWED_DOMAINS` | `example.com` (critical — see note below) |
+| `OMNICRAFT_OIDC_ALLOWED_DOMAINS` | `example.com` (crítico — veja a nota abaixo) |
 
-> **Important:** Without `OMNICRAFT_OIDC_ALLOWED_DOMAINS`, any Google account
-> can log in when the OAuth consent screen is "External." Always restrict to
-> your domain.
+> **Importante:** Sem `OMNICRAFT_OIDC_ALLOWED_DOMAINS`, qualquer conta Google
+> consegue entrar quando a tela de consentimento OAuth é "External". Sempre
+> restrinja ao seu domínio.
 
-### Generic OIDC (Okta, Auth0, Keycloak, Entra ID)
+### OIDC genérico (Okta, Auth0, Keycloak, Entra ID)
 
-Set `OMNICRAFT_OIDC_ISSUER` to your IdP's base URL (the one that publishes
-`/.well-known/openid-configuration`). The rest of the variables are the same
-as above.
+Defina `OMNICRAFT_OIDC_ISSUER` para a URL base do seu IdP (a que publica
+`/.well-known/openid-configuration`). O resto das variáveis é o mesmo de
+acima.
 
-## Custom domain
+## Domínio personalizado
 
-In the Render dashboard, open the **omnicraft** service → **Settings** →
-**Custom Domains** → **Add Custom Domain**. Point your DNS CNAME at the
-Render-assigned address. Render provisions a Let's Encrypt cert automatically.
+No painel da Render, abra o serviço **omnicraft** → **Settings** →
+**Custom Domains** → **Add Custom Domain**. Aponte seu registro DNS CNAME
+para o endereço atribuído pela Render. A Render provisiona um certificado
+Let's Encrypt automaticamente.
 
-Update `OMNICRAFT_OIDC_REDIRECT_URI` to use the custom domain after DNS
-propagates.
+Atualize `OMNICRAFT_OIDC_REDIRECT_URI` para usar o domínio personalizado
+depois que o DNS propagar.
 
-## Upgrading
+## Atualizando
 
-Render redeploys automatically when a new commit lands on the connected branch
-(if auto-deploy is enabled), or manually:
+A Render faz redeploy automaticamente quando um commit novo chega na branch
+conectada (se o auto-deploy estiver ativado), ou manualmente:
 
-1. In the Render dashboard, open the **omnicraft** service.
-2. Click **Manual Deploy** → **Deploy latest commit**.
+1. No painel da Render, abra o serviço **omnicraft**.
+2. Clique em **Manual Deploy** → **Deploy latest commit**.
 
-## Cost
+## Custo
 
-Render: ~$7/month for the Starter web service + ~$6/month for the `basic-256mb`
-managed Postgres. Total ~$13/month for a lightly loaded instance. Bump the
-Postgres plan (`basic-1gb`, …) for more storage.
+Render: ~$7/mês pelo serviço web Starter + ~$6/mês pelo Postgres gerenciado
+`basic-256mb`. Total ~$13/mês para uma instância levemente carregada. Suba o
+plano do Postgres (`basic-1gb`, …) para mais armazenamento.
 
-> **Note:** the web service needs a paid (Starter+) instance because of the
-> persistent artifact disk, and Render's free Postgres plans expire — so a paid
-> DB tier (`basic-256mb`) is the persistent default here.
+> **Nota:** o serviço web precisa de uma instância paga (Starter+) por causa
+> do disco persistente de artefatos, e os planos gratuitos de Postgres da
+> Render expiram — então um tier pago de banco (`basic-256mb`) é o padrão
+> persistente aqui.
 
-> **Memory:** the Starter web service (512 MB) clears the server's ~512 MB–1 GB
-> working set. Don't drop below it.
+> **Memória:** o serviço web Starter (512 MB) cobre o conjunto de trabalho de
+> ~512 MB–1 GB do servidor. Não fique abaixo disso.
 
-## Cheaper: SQLite on the disk (lite tier)
+## Mais barato: SQLite no disco (nível leve)
 
-For a single-instance deploy you can skip the managed Postgres entirely and run
-on **SQLite on the persistent disk** — it survives redeploys (the disk does) and
-saves the ~$6/month DB cost. SQLite is a first-class backend; the tradeoff is
-single-instance only (no horizontal scaling) and no managed backups, so keep
-Postgres for production / multi-instance.
+Para um deploy de instância única você pode pular o Postgres gerenciado por
+completo e rodar em **SQLite no disco persistente** — ele sobrevive a
+redeploys (o disco sobrevive) e economiza o custo de ~$6/mês do banco. O
+SQLite é um backend de primeira classe; o tradeoff é ficar limitado a uma
+única instância (sem escala horizontal) e sem backups gerenciados, então
+mantenha o Postgres para produção / múltiplas instâncias.
 
-To use it, drop the `databases:` block from `render.yaml` and replace the
-`DATABASE_URL` env var with a path on the disk:
+Para usar, remova o bloco `databases:` do `render.yaml` e troque a env var
+`DATABASE_URL` por um caminho no disco:
 
 ```yaml
       - key: DATABASE_URL
         value: sqlite:////data/artifacts/chat.db
 ```
 
-> **Or an external Neon Postgres.** You can point `DATABASE_URL` at a Neon
-> database ([pg.new](https://pg.new)) instead of the managed Render one — e.g.
-> to use Neon's free *persistent* tier rather than Render's paid DB. Tradeoff:
-> you lose the integrated auto-provisioning (a separate signup + connection
-> string) and add some cross-provider latency, so the managed Render Postgres
-> stays the simpler default.
+> **Ou um Postgres externo da Neon.** Você pode apontar o `DATABASE_URL` para
+> um banco da Neon ([pg.new](https://pg.new)) em vez do gerenciado pela
+> Render — por exemplo, para usar o tier *persistente* gratuito da Neon em vez
+> do banco pago da Render. O tradeoff: você perde o auto-provisionamento
+> integrado (um cadastro separado + string de conexão) e ganha alguma latência
+> entre provedores, então o Postgres gerenciado da Render continua sendo o
+> padrão mais simples.

@@ -1,45 +1,46 @@
 # UI Preview
 
-Deploy a live, per-PR preview of the OmniCraft web UI as a
+Publica uma prévia ao vivo, por PR, da web UI do OmniCraft como um
 [Databricks App](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/)
-when a PR changes the frontend (`web/`).
+quando um PR muda o frontend (`web/`).
 
-## How it works
+## Como funciona
 
-1. A maintainer adds the `ui-preview` label to a PR (the workflow is gated to
-   `OWNER`/`MEMBER`/`COLLABORATOR` authors).
-2. The [UI Preview workflow](../workflows/ui-preview.yml) builds the SPA + the
-   OmniCraft wheels and deploys them to an ephemeral Databricks App
+1. Um mantenedor adiciona o label `ui-preview` a um PR (o workflow só é
+   liberado para autores `OWNER`/`MEMBER`/`COLLABORATOR`).
+2. O [workflow do UI Preview](../workflows/ui-preview.yml) constrói o SPA + os
+   wheels do OmniCraft e os publica num Databricks App efêmero
    (`omnicraft-ui-preview-pr-<N>`).
-3. A comment with the preview URL is posted on the PR and updated on each push.
-4. The app is deleted automatically when the PR is closed.
+3. Um comentário com a URL da prévia é postado no PR e atualizado a cada push.
+4. O app é apagado automaticamente quando o PR é fechado.
 
-## What it is
+## O que é
 
-Unlike OmniCraft's production Databricks deploy (`deploy/databricks/`, backed by
-Lakebase Postgres + UC Volumes), the preview is intentionally ephemeral and
-self-contained: a **SQLite** database + local-disk artifact store, thrown away
-on teardown.
+Diferente do deploy de produção do OmniCraft no Databricks
+(`deploy/databricks/`, apoiado em Lakebase Postgres + UC Volumes), a prévia é
+intencionalmente efêmera e autocontida: um banco **SQLite** + um repositório
+de artefatos em disco local, descartados no desmonte.
 
-There is **no LLM or runner baked into the preview** -- OmniCraft runs agent
-turns on a runner the user connects from their own machine or sandbox
-(`omnicraft run … --server <preview-url>`), where the model credentials live. So
-the preview is for reviewing the UI's look-and-feel and navigation; to drive a
-real session, connect your own host to the preview URL.
+Não há **nenhum LLM ou runner embutido na prévia** -- o OmniCraft roda os
+turns dos agentes num runner que o usuário conecta a partir da própria máquina
+ou sandbox (`omnicraft run … --server <preview-url>`), onde ficam as
+credenciais do modelo. Então a prévia serve para revisar o visual e a
+navegação da UI; para conduzir uma sessão de verdade, conecte o seu próprio
+host à URL da prévia.
 
-## Access
+## Acesso
 
-Preview apps are only accessible to maintainers with Databricks workspace
-access (the Apps proxy injects `X-Forwarded-Email`, so the app runs in header
-auth mode).
+Os apps de prévia só são acessíveis a mantenedores com acesso ao workspace do
+Databricks (o proxy dos Apps injeta `X-Forwarded-Email`, então o app roda no
+modo de autenticação por header).
 
-## Setup (one-time, by a maintainer)
+## Configuração (única, feita por um mantenedor)
 
-Add these repo secrets:
+Adicione estes secrets do repositório:
 
 - `DATABRICKS_HOST`
 - `DATABRICKS_CLIENT_ID`
 - `DATABRICKS_CLIENT_SECRET`
 
-Create a `ui-preview` label. If the workspace IP-allowlists, register a
-static-IP runner and point the `deploy`/`cleanup` jobs at it.
+Crie um label `ui-preview`. Se o workspace usa allowlist de IP, cadastre um
+runner de IP estático e aponte os jobs `deploy`/`cleanup` para ele.

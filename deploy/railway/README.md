@@ -1,102 +1,112 @@
-# OmniCraft on Railway
+# OmniCraft na Railway
 
-Deploy OmniCraft to Railway. Railway pulls the pre-built image, runs it next to
-a managed Postgres, and serves it over HTTPS on `*.up.railway.app`.
+Publique o OmniCraft na Railway. A Railway puxa a imagem pré-construída, roda
+ela ao lado de um Postgres gerenciado, e serve tudo por HTTPS em
+`*.up.railway.app`.
 
-> **Railway is not yet a true one-click.** Unlike Render's `render.yaml` (fully
-> declarative — Postgres, port, and env all wired automatically), a bare
-> `railway.toml` leaves several things to wire by hand (steps below). A real
-> one-click experience needs a **published Railway template** that pre-wires the
-> Postgres reference, `HOST`, and target port — tracked as a follow-up. Until
-> then, use the manual steps here. (Render is the smoother path today.)
+> **A Railway ainda não é um clique só de verdade.** Diferente do `render.yaml`
+> da Render (totalmente declarativo — Postgres, porta e env todos conectados
+> automaticamente), um `railway.toml` puro deixa várias coisas para conectar na
+> mão (passos abaixo). Uma experiência de um clique de verdade precisa de um
+> **template publicado da Railway** que já venha com a referência do Postgres,
+> o `HOST` e a porta de destino pré-conectados — isso está rastreado como um
+> follow-up. Até lá, use os passos manuais aqui. (A Render é o caminho mais
+> tranquilo hoje.)
 
-<!-- TODO(oss-release): publish a Railway template (pre-wiring Postgres + HOST +
-     port) and add the button:
+<!-- TODO(oss-release): publicar um template da Railway (pré-conectando Postgres + HOST +
+     porta) e adicionar o botão:
      [![Deploy on Railway](https://railway.com/button.svg)](https://railway.com/deploy/<template-id>) -->
 
-## What gets provisioned
+## O que é provisionado
 
-- **omnicraft** — web service that pulls `ghcr.io/omnicraft-ai/omnicraft-server`
-  via `deploy/docker/Dockerfile.prebuilt`, served on `https://<project>.up.railway.app`.
-- **Postgres** — Railway-managed PostgreSQL plugin you add to the project.
-  Railway links its `DATABASE_URL` into the app as a reference to the database
-  instance's variable (largely automatic), but the value can lag on the first
-  deploy — see step 2.
+- **omnicraft** — serviço web que puxa `ghcr.io/omnicraft-ai/omnicraft-server`
+  via `deploy/docker/Dockerfile.prebuilt`, servido em
+  `https://<project>.up.railway.app`.
+- **Postgres** — plugin PostgreSQL gerenciado pela Railway, que você adiciona
+  ao projeto. A Railway conecta o `DATABASE_URL` dele no app como uma
+  referência à variável da instância do banco (praticamente automático), mas o
+  valor pode demorar a propagar no primeiro deploy — veja o passo 2.
 
-Artifact storage uses the container's local filesystem by default (ephemeral
-across redeploys). For persistence, add a Railway Volume mounted at
-`/data/artifacts`.
+O armazenamento de artefatos usa o sistema de arquivos local do container por
+padrão (efêmero entre redeploys). Para persistência, adicione um Volume da
+Railway montado em `/data/artifacts`.
 
-> **Optional: external Neon Postgres.** Instead of the Railway plugin, you can
-> point `DATABASE_URL` at a Neon database ([pg.new](https://pg.new)) — e.g. for
-> Neon's serverless scale-to-zero or branching. Tradeoff: you lose the
-> integrated provisioning (a separate signup + connection string) and add some
-> cross-provider latency, so the Railway plugin stays the simpler default.
+> **Opcional: Postgres externo da Neon.** Em vez do plugin da Railway, você
+> pode apontar o `DATABASE_URL` para um banco da Neon
+> ([pg.new](https://pg.new)) — por exemplo, para o scale-to-zero serverless da
+> Neon ou para branching. O tradeoff: você perde o provisionamento integrado
+> (um cadastro separado + string de conexão) e ganha alguma latência
+> entre provedores, então o plugin da Railway continua sendo o padrão mais
+> simples.
 
-## Setup (built-in accounts — the default)
+## Configuração (contas embutidas — o padrão)
 
-Defaults to the `accounts` auth provider: multi-user, no external IdP. The
-steps below are validated end-to-end:
+Usa por padrão o provedor de autenticação `accounts`: multiusuário, sem IdP
+externo. Os passos abaixo foram validados ponta a ponta:
 
-1. **Deploy from the repo** — New Project → Deploy from GitHub repo → this repo.
-   Railway reads `railway.toml` and pulls the image. **Add a Postgres plugin**
-   to the project.
-2. **Database** — Railway links the Postgres `DATABASE_URL` into the app as a
-   reference to the db instance's variable (largely automatic when you add the
-   plugin). If the first deploy errors with `DATABASE_URL is required`, the
-   reference value simply hadn't propagated yet — **redeploy** and it resolves.
-   (To confirm, the app service should have a `DATABASE_URL` variable
-   referencing the Postgres service, e.g. `${{Postgres.DATABASE_URL}}`.)
-3. **Get the admin password** from the first-boot **Deploy logs** (printed once;
-   idempotent — later boots don't reprint):
+1. **Publique a partir do repositório** — New Project → Deploy from GitHub
+   repo → este repositório. A Railway lê o `railway.toml` e puxa a imagem.
+   **Adicione um plugin de Postgres** ao projeto.
+2. **Banco de dados** — A Railway conecta o `DATABASE_URL` do Postgres no app
+   como uma referência à variável da instância do banco (praticamente
+   automático ao adicionar o plugin). Se o primeiro deploy der erro com
+   `DATABASE_URL is required`, o valor da referência simplesmente ainda não
+   tinha propagado — **faça o redeploy** e resolve. (Para confirmar, o serviço
+   do app deve ter uma variável `DATABASE_URL` referenciando o serviço do
+   Postgres, ex.: `${{Postgres.DATABASE_URL}}`.)
+3. **Pegue a senha do admin** nos **Deploy logs** do primeiro boot (impressa
+   uma vez; idempotente — boots seguintes não reimprimem):
    ```
    ✓ Created initial admin account (accounts auth provider).
        password: <generated>
    ```
-   It's also written to `/data/admin-credentials`.
-4. Open the URL, log in as `admin`, invite teammates from **Members**.
+   Ela também é gravada em `/data/admin-credentials`.
+4. Abra a URL, entre como `admin`, convide colegas em **Members**.
 
-> **`HOST` is handled automatically.** Railway injects `HOST=[::]`, which a
-> socket bind can't use and which Railway's IPv4 edge can't reach; the
-> entrypoint detects Railway and coerces it to `0.0.0.0`, so no manual `HOST`
-> variable is needed. If the generated domain returns "Application failed to
-> respond," Railway's port auto-detect picked the wrong port — open
-> Settings → Networking and set the domain's target port to the `PORT` Railway
-> injected (shown in the boot log as `Uvicorn running on …:<port>`).
+> **O `HOST` é tratado automaticamente.** A Railway injeta `HOST=[::]`, que um
+> bind de socket não consegue usar e que o edge IPv4 da Railway não consegue
+> alcançar; o entrypoint detecta a Railway e converte para `0.0.0.0`, então
+> nenhuma variável `HOST` manual é necessária. Se o domínio gerado retornar
+> "Application failed to respond", o auto-detect de porta da Railway escolheu
+> a porta errada — abra Settings → Networking e defina a porta de destino do
+> domínio para a `PORT` que a Railway injetou (mostrada no log de boot como
+> `Uvicorn running on …:<port>`).
 
-> The cookie secret is auto-minted and `OMNICRAFT_ACCOUNTS_BASE_URL` is
-> auto-detected from `RAILWAY_PUBLIC_DOMAIN`, so those don't need setting. To
-> pin a known admin password, set `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD`
-> before first boot.
+> O segredo do cookie é gerado automaticamente e o
+> `OMNICRAFT_ACCOUNTS_BASE_URL` é auto-detectado a partir de
+> `RAILWAY_PUBLIC_DOMAIN`, então essas duas variáveis não precisam ser
+> definidas. Para fixar uma senha de admin conhecida, defina
+> `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD` antes do primeiro boot.
 
-## Use your own IdP instead (OIDC)
+## Use o seu próprio IdP (OIDC)
 
-Prefer GitHub / Google / Okta login over built-in accounts? Switch the provider
-in the service Variables. OIDC requires HTTPS — Railway provides it
-automatically on `*.up.railway.app`. If you set a custom domain, point it at
-your project before completing these steps.
+Prefere login via GitHub / Google / Okta em vez das contas embutidas? Troque o
+provedor nas Variables do serviço. O OIDC exige HTTPS — a Railway fornece isso
+automaticamente em `*.up.railway.app`. Se você definir um domínio
+personalizado, aponte-o para o seu projeto antes de concluir estes passos.
 
-### GitHub OAuth (simplest to register)
+### GitHub OAuth (o mais simples de cadastrar)
 
-1. Go to `github.com/settings/developers` → **New OAuth App**.
+1. Vá para `github.com/settings/developers` → **New OAuth App**.
    - Homepage URL: `https://<project>.up.railway.app`
    - Authorization callback URL: `https://<project>.up.railway.app/auth/callback`
-   - Click **Register application**, then **Generate a new client secret**.
+   - Clique em **Register application**, depois em **Generate a new client
+     secret**.
 
-2. In your Railway project, open the **omnicraft** service → **Variables**
-   and add:
+2. No seu projeto Railway, abra o serviço **omnicraft** → **Variables** e
+   adicione:
 
    | Variable | Value |
    |---|---|
    | `OMNICRAFT_AUTH_PROVIDER` | `oidc` |
    | `OMNICRAFT_OIDC_ISSUER` | `https://github.com` |
-   | `OMNICRAFT_OIDC_CLIENT_ID` | your GitHub OAuth client ID |
-   | `OMNICRAFT_OIDC_CLIENT_SECRET` | your GitHub OAuth client secret |
+   | `OMNICRAFT_OIDC_CLIENT_ID` | seu client ID do GitHub OAuth |
+   | `OMNICRAFT_OIDC_CLIENT_SECRET` | seu client secret do GitHub OAuth |
    | `OMNICRAFT_OIDC_REDIRECT_URI` | `https://<project>.up.railway.app/auth/callback` |
-   | `OMNICRAFT_OIDC_COOKIE_SECRET` | output of `openssl rand -hex 32` |
+   | `OMNICRAFT_OIDC_COOKIE_SECRET` | saída de `openssl rand -hex 32` |
 
-3. Railway redeploys automatically. Visit the URL — you'll be redirected to
-   GitHub to log in.
+3. A Railway faz redeploy automaticamente. Visite a URL — você será
+   redirecionado para o GitHub para entrar.
 
 ### Google Workspace
 
@@ -105,51 +115,53 @@ your project before completing these steps.
 | `OMNICRAFT_AUTH_PROVIDER` | `oidc` |
 | `OMNICRAFT_OIDC_ISSUER` | `https://accounts.google.com` |
 | `OMNICRAFT_OIDC_CLIENT_ID` | `…apps.googleusercontent.com` |
-| `OMNICRAFT_OIDC_CLIENT_SECRET` | your client secret |
+| `OMNICRAFT_OIDC_CLIENT_SECRET` | seu client secret |
 | `OMNICRAFT_OIDC_REDIRECT_URI` | `https://<project>.up.railway.app/auth/callback` |
-| `OMNICRAFT_OIDC_COOKIE_SECRET` | output of `openssl rand -hex 32` |
-| `OMNICRAFT_OIDC_ALLOWED_DOMAINS` | `example.com` (critical — see note below) |
+| `OMNICRAFT_OIDC_COOKIE_SECRET` | saída de `openssl rand -hex 32` |
+| `OMNICRAFT_OIDC_ALLOWED_DOMAINS` | `example.com` (crítico — veja a nota abaixo) |
 
-> **Important:** Without `OMNICRAFT_OIDC_ALLOWED_DOMAINS`, any Google account
-> can log in when the OAuth consent screen is "External." Always restrict to
-> your domain.
+> **Importante:** Sem `OMNICRAFT_OIDC_ALLOWED_DOMAINS`, qualquer conta Google
+> consegue entrar quando a tela de consentimento OAuth é "External". Sempre
+> restrinja ao seu domínio.
 
-### Generic OIDC (Okta, Auth0, Keycloak, Entra ID)
+### OIDC genérico (Okta, Auth0, Keycloak, Entra ID)
 
-Set `OMNICRAFT_OIDC_ISSUER` to your IdP's base URL (the one that publishes
-`/.well-known/openid-configuration`). The rest of the variables are the same
-as above.
+Defina `OMNICRAFT_OIDC_ISSUER` para a URL base do seu IdP (a que publica
+`/.well-known/openid-configuration`). O resto das variáveis é o mesmo de
+acima.
 
-## Custom domain
+## Domínio personalizado
 
-In your Railway project, open **Settings** → **Domains** → **Add domain**.
-Point your DNS A/AAAA record at the Railway-assigned address. Railway
-provisions a Let's Encrypt cert automatically.
+No seu projeto Railway, abra **Settings** → **Domains** → **Add domain**.
+Aponte seu registro DNS A/AAAA para o endereço atribuído pela Railway. A
+Railway provisiona um certificado Let's Encrypt automaticamente.
 
-Update `OMNICRAFT_OIDC_REDIRECT_URI` to use the custom domain after DNS
-propagates.
+Atualize `OMNICRAFT_OIDC_REDIRECT_URI` para usar o domínio personalizado
+depois que o DNS propagar.
 
-## Upgrading
+## Atualizando
 
-Railway redeploys automatically when a new image tag is pushed to GHCR
-(if you've configured a webhook) or on demand:
+A Railway faz redeploy automaticamente quando uma tag de imagem nova é
+publicada no GHCR (se você configurou um webhook) ou sob demanda:
 
-1. In the Railway dashboard, open the **omnicraft** service.
-2. Click **Deploy** → **Latest** to pull the newest `:latest` image.
+1. No painel da Railway, abra o serviço **omnicraft**.
+2. Clique em **Deploy** → **Latest** para puxar a imagem `:latest` mais nova.
 
-## Cost
+## Custo
 
-Railway Hobby plan: ~$5/month base + per-minute CPU/memory usage. A lightly
-loaded OmniCraft instance (few concurrent users) typically stays under
-$10–15/month total including the Postgres plugin.
+Plano Railway Hobby: ~$5/mês de base + uso de CPU/memória por minuto. Uma
+instância do OmniCraft levemente carregada (poucos usuários simultâneos)
+costuma ficar abaixo de $10–15/mês no total, incluindo o plugin de Postgres.
 
-## Publishing the template
+## Publicando o template
 
-One-time setup done by the repo owner after the repository is public:
+Configuração única, feita pelo dono do repositório depois que o repositório
+fica público:
 
-1. Go to `railway.com/new/template` and click **Create template**.
-2. Point it at `github.com/omnicraft-ai/omnicraft`.
-3. Select the **Postgres** plugin.
-4. Pre-fill default env vars with descriptions for the optional OIDC fields.
-5. Click **Publish**. Copy the generated deploy URL and update the badge at the
-   top of this file and in `deploy/README.md`.
+1. Vá para `railway.com/new/template` e clique em **Create template**.
+2. Aponte para `github.com/omnicraft-ai/omnicraft`.
+3. Selecione o plugin **Postgres**.
+4. Preencha as env vars padrão com descrições para os campos opcionais de
+   OIDC.
+5. Clique em **Publish**. Copie a URL de deploy gerada e atualize o badge no
+   topo deste arquivo e em `deploy/README.md`.

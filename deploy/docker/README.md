@@ -1,127 +1,129 @@
-# OmniCraft — docker-compose stack
+# OmniCraft — stack docker-compose
 
-Run the server as a self-contained Docker stack on any host: your
-laptop, a VPS, an EC2 instance, a home server, anywhere `docker
-compose` runs.
+Rode o servidor como uma stack Docker autocontida em qualquer host: seu
+notebook, uma VPS, uma instância EC2, um servidor de casa, em qualquer lugar
+onde `docker compose` rode.
 
-The stack:
-- `postgres` — persistent DB on a Docker volume
-- `omnicraft` — the server image (built from `../Dockerfile`)
+A stack:
+- `postgres` — banco de dados persistente num volume Docker
+- `omnicraft` — a imagem do servidor (construída a partir de `../Dockerfile`)
 
-Auth is in-process — the server has both header-proxy and native
-OIDC modes built in (see [Multi-user mode](#multi-user-mode-oidc)
-below). There is no separate auth-proxy container.
+A autenticação é in-process — o servidor tem embutidos os modos header-proxy
+e OIDC nativo (veja [Modo multiusuário](#modo-multiusuário-oidc) abaixo). Não
+há um container separado de auth-proxy.
 
-## Quickstart (single-user)
+## Início rápido (usuário único)
 
 ```bash
 cd deploy/docker
-./bootstrap.sh                          # mints POSTGRES_PASSWORD + cookie secret into .env
+./bootstrap.sh                          # gera POSTGRES_PASSWORD + cookie secret no .env
 docker compose up -d
-docker compose logs -f omnicraft       # ctrl-c when boot is clean
+docker compose logs -f omnicraft       # ctrl-c quando o boot estiver limpo
 ```
 
-`bootstrap.sh` is idempotent — re-running it leaves already-set secrets
-alone. If you prefer to manage `.env` yourself, just `cp .env.example
-.env` and edit `POSTGRES_PASSWORD` (and `OMNICRAFT_OIDC_COOKIE_SECRET`
-if you're enabling OIDC) by hand.
+O `bootstrap.sh` é idempotente — rodá-lo de novo deixa os secrets já
+definidos intactos. Se você preferir gerenciar o `.env` você mesmo, basta
+`cp .env.example .env` e editar `POSTGRES_PASSWORD` (e
+`OMNICRAFT_OIDC_COOKIE_SECRET` se você for ativar o OIDC) manualmente.
 
-Server is on http://localhost:8000. The web UI prints the CLI command
-to launch a local runner against it. From your laptop:
+O servidor está em http://localhost:8000. A web UI imprime o comando de CLI
+para lançar um runner local contra ele. Do seu notebook:
 
 ```bash
 omnicraft run path/to/agent.yaml --server http://localhost:8000
 ```
 
-Reset everything (drops the DB and the artifact store):
+Reinicie tudo do zero (apaga o banco de dados e o armazenamento de
+artefatos):
 
 ```bash
 docker compose down -v
 ```
 
-## Multi-user mode (accounts — default)
+## Modo multiusuário (accounts — padrão)
 
-Built-in accounts auth: no IdP to register, no proxy to host.
-This is the default — `docker compose up -d` brings it up with no
-extra env wiring. First boot creates an admin user (named after the
-operator's OS user, falling back to `admin` in headless containers)
-with a random password that lands in the container logs and on the
-persistent volume at `/data/admin-credentials`.
+Autenticação `accounts` embutida: nenhum IdP para registrar, nenhum proxy
+para hospedar. Este é o padrão — `docker compose up -d` já sobe com ela, sem
+nenhuma variável de ambiente extra para configurar. O primeiro boot cria um
+usuário admin (nomeado a partir do usuário do SO de quem operou, caindo para
+`admin` em containers headless) com uma senha aleatória que aparece nos logs
+do container e no volume persistente em `/data/admin-credentials`.
 
-For any deploy reachable through a public domain, also set the
-external URL so invite links resolve correctly:
+Para qualquer deploy alcançável por um domínio público, defina também a URL
+externa para que os links de convite resolvam corretamente:
 
 ```bash
-# Add to .env (bootstrap.sh already minted the cookie secret for you):
+# Adicione ao .env (o bootstrap.sh já gerou o cookie secret para você):
 OMNICRAFT_ACCOUNTS_BASE_URL=https://omnicraft.example.com
 
 docker compose up -d
 docker compose logs omnicraft | grep -A4 "Created initial admin"
 ```
 
-Copy the random `password` from the log line into the web UI's
-login form, then:
+Copie o `password` aleatório da linha de log para o formulário de login da
+web UI, depois:
 
-- Click your username in the top-right → **Members** → **Invite member**.
-- Share the single-use URL with the teammate; they pick their own
-  username and password when they redeem it.
-- Sign-out lives in the same account menu.
+- Clique no seu nome de usuário no canto superior direito → **Members** →
+  **Invite member**.
+- Compartilhe a URL de uso único com o colega; ele escolhe o próprio nome de
+  usuário e senha ao resgatá-la.
+- O sign-out fica no mesmo menu de conta.
 
-Headless deploy (CI, Cloud Run, etc.) where you can't read the
-logs? Pre-seed the password:
+Deploy headless (CI, Cloud Run, etc.) onde você não consegue ler os logs?
+Pré-defina a senha:
 
 ```bash
 OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD=<your-strong-password>
 ```
 
-The persistent password file is at `/data/admin-credentials` on
-the `artifact-data` volume — survives `docker compose restart`,
-deleted by `docker compose down -v`.
+O arquivo persistente da senha fica em `/data/admin-credentials` no volume
+`artifact-data` — sobrevive a `docker compose restart`, e é apagado por
+`docker compose down -v`.
 
-## Multi-user mode (OIDC)
+## Modo multiusuário (OIDC)
 
-Single-user mode trusts everyone who reaches the port and uses the
-identity `"local"` for all requests. For a shared deploy, the server
-has native OIDC support — it handles the full
-login flow itself (`/auth/login`, `/auth/callback`, `/auth/logout`)
-with a signed session cookie. No extra container, no Caddy basic-auth
-shim, no oauth2-proxy.
+O modo usuário único confia em qualquer um que alcance a porta e usa a
+identidade `"local"` para todas as requisições. Para um deploy compartilhado,
+o servidor tem suporte nativo a OIDC — ele mesmo cuida do fluxo de login
+inteiro (`/auth/login`, `/auth/callback`, `/auth/logout`) com um cookie de
+sessão assinado. Sem container extra, sem shim de basic-auth do Caddy, sem
+oauth2-proxy.
 
-### Walkthrough: GitHub OAuth (easiest to register)
+### Passo a passo: GitHub OAuth (o mais fácil de registrar)
 
-1. **Register the OAuth app.** Go to
-   https://github.com/settings/developers → New OAuth App. Set the
-   callback to `https://<your-host>/auth/callback` (HTTPS is
-   strongly recommended; GitHub permits HTTP for testing but warns).
+1. **Registre o app OAuth.** Vá a https://github.com/settings/developers →
+   New OAuth App. Defina o callback como `https://<your-host>/auth/callback`
+   (HTTPS é fortemente recomendado; o GitHub permite HTTP para testes, mas
+   avisa).
 
-2. **Mint a cookie secret.** `./bootstrap.sh` already did this on the
-   quickstart path — `OMNICRAFT_OIDC_COOKIE_SECRET` is set in your
-   `.env`. If you skipped it, run `openssl rand -hex 32` and paste the
-   value yourself.
+2. **Gere um cookie secret.** O `./bootstrap.sh` já fez isso no caminho do
+   início rápido — `OMNICRAFT_OIDC_COOKIE_SECRET` está definido no seu
+   `.env`. Se você pulou essa etapa, rode `openssl rand -hex 32` e cole o
+   valor você mesmo.
 
-3. **Edit `.env`:**
+3. **Edite o `.env`:**
    ```bash
    OMNICRAFT_AUTH_PROVIDER=oidc
    OMNICRAFT_OIDC_ISSUER=https://github.com
    OMNICRAFT_OIDC_CLIENT_ID=Iv1.abc123…
    OMNICRAFT_OIDC_CLIENT_SECRET=…
    OMNICRAFT_OIDC_REDIRECT_URI=https://omnicraft.example.com/auth/callback
-   # OMNICRAFT_OIDC_COOKIE_SECRET is already set by bootstrap.sh — leave it alone.
+   # OMNICRAFT_OIDC_COOKIE_SECRET já está definido pelo bootstrap.sh — não mexa.
    ```
 
-4. **Bring it up.**
+4. **Suba tudo.**
    ```bash
    docker compose up -d
    ```
 
-   The server will fail loud at startup if any required OIDC env var
-   is missing — check `docker compose logs omnicraft` if it doesn't
-   come up.
+   O servidor vai falhar ruidosamente na inicialização se alguma variável de
+   ambiente do OIDC obrigatória estiver faltando — confira
+   `docker compose logs omnicraft` se ele não subir.
 
-5. **Visit the URL** → you should be redirected to GitHub to log in,
-   then back to the web UI with a `__Host-ap_session` cookie set.
+5. **Visite a URL** → você deve ser redirecionado ao GitHub para entrar, e
+   então de volta para a web UI com um cookie `__Host-ap_session` definido.
 
-### Walkthrough: Google Workspace (with domain allowlist)
+### Passo a passo: Google Workspace (com allowlist de domínio)
 
 ```bash
 OMNICRAFT_AUTH_PROVIDER=oidc
@@ -133,14 +135,14 @@ OMNICRAFT_OIDC_COOKIE_SECRET=<64-hex-chars>
 OMNICRAFT_OIDC_ALLOWED_DOMAINS=example.com,subsidiary.example.com
 ```
 
-`ALLOWED_DOMAINS` is critical when the OAuth consent screen is
-"External" — without it, any Google account on the planet can log in.
+`ALLOWED_DOMAINS` é crítico quando a tela de consentimento OAuth é
+"External" — sem ele, qualquer conta do Google no planeta consegue entrar.
 
-### Generic OIDC (Okta, Auth0, Keycloak, Entra ID)
+### OIDC genérico (Okta, Auth0, Keycloak, Entra ID)
 
-Any IdP that publishes `/.well-known/openid-configuration` works.
-Set `OMNICRAFT_OIDC_ISSUER` to the base URL; the server fetches
-discovery at startup.
+Qualquer IdP que publique `/.well-known/openid-configuration` funciona.
+Defina `OMNICRAFT_OIDC_ISSUER` para a URL base; o servidor busca o discovery
+na inicialização.
 
 ```bash
 OMNICRAFT_AUTH_PROVIDER=oidc
@@ -151,59 +153,59 @@ OMNICRAFT_OIDC_REDIRECT_URI=https://omnicraft.example.com/auth/callback
 OMNICRAFT_OIDC_COOKIE_SECRET=<64-hex-chars>
 ```
 
-### HTTPS for the callback URL
+### HTTPS para a URL de callback
 
-Most IdPs require HTTPS for non-localhost redirect URIs, and the
-session cookie uses the `__Host-` prefix which browsers only
-accept over HTTPS. Three options:
+A maioria dos IdPs exige HTTPS para redirect URIs que não sejam localhost, e
+o cookie de sessão usa o prefixo `__Host-`, que os navegadores só aceitam
+sobre HTTPS. Três opções:
 
-1. **Use the bundled Caddy overlay** (easiest — any VPS / EC2 / home
-   server with a public domain):
+1. **Use o overlay do Caddy incluído** (o mais fácil — qualquer VPS / EC2 /
+   servidor de casa com um domínio público):
 
    ```bash
-   # In .env:
+   # No .env:
    OMNICRAFT_DOMAIN=omnicraft.example.com
-   OMNICRAFT_ACME_EMAIL=you@example.com      # optional, for Let's Encrypt notices
+   OMNICRAFT_ACME_EMAIL=you@example.com      # opcional, para avisos do Let's Encrypt
 
-   # Point DNS A/AAAA records at the host, then:
+   # Aponte os registros DNS A/AAAA para o host, depois:
    docker compose -f docker-compose.yaml -f docker-compose.https.yaml up -d
    ```
 
-   Caddy auto-provisions and renews a Let's Encrypt cert; the
-   omnicraft container stops being directly exposed and only :80 +
-   :443 are published. Requires Docker Compose 2.24+ for the overlay's
-   `!reset` directive. See `Caddyfile` for the (3-line) config.
+   O Caddy provisiona e renova automaticamente um certificado Let's Encrypt;
+   o container omnicraft para de ser exposto diretamente e só as portas :80
+   e :443 são publicadas. Exige o Docker Compose 2.24+ para a diretiva
+   `!reset` do overlay. Veja o `Caddyfile` para a configuração (de 3 linhas).
 
-2. **Behind an existing reverse proxy** — point your proxy at
-   `omnicraft:8000` over the docker network (or `127.0.0.1:8000`
-   from the host). Examples: AWS ALB with ACM cert, Cloudflare in
-   "Full" SSL mode, Fly.io / Cloud Run / Render platform certs.
+2. **Atrás de um reverse proxy existente** — aponte seu proxy para
+   `omnicraft:8000` pela rede docker (ou `127.0.0.1:8000` a partir do host).
+   Exemplos: AWS ALB com certificado ACM, Cloudflare no modo SSL "Full",
+   certificados de plataforma da Fly.io / Cloud Run / Render.
 
-## Header-proxy mode (for deploys behind an existing SSO proxy)
+## Modo header-proxy (para deploys atrás de um proxy SSO existente)
 
-If you already have oauth2-proxy, Databricks Apps, AWS ALB OIDC,
-Cloudflare Access, Tailscale Funnel, or any other proxy that injects
-an identity header, set `OMNICRAFT_AUTH_PROVIDER=header`. The
-server will reject requests without the header.
+Se você já tem oauth2-proxy, Databricks Apps, AWS ALB OIDC, Cloudflare
+Access, Tailscale Funnel, ou qualquer outro proxy que injete um header de
+identidade, defina `OMNICRAFT_AUTH_PROVIDER=header`. O servidor vai rejeitar
+requisições sem o header.
 
 ```bash
 OMNICRAFT_AUTH_PROVIDER=header
 ```
 
-The header read is `X-Forwarded-Email` by default. Proxies that use
-a different header name set `OMNICRAFT_AUTH_HEADER` to point the
-server at it — for example, Cloudflare Access supplies the
-authenticated email in `Cf-Access-Authenticated-User-Email`:
+O header lido é `X-Forwarded-Email` por padrão. Proxies que usam um nome de
+header diferente definem `OMNICRAFT_AUTH_HEADER` para apontar o servidor
+para ele — por exemplo, o Cloudflare Access fornece o email autenticado em
+`Cf-Access-Authenticated-User-Email`:
 
 ```bash
 OMNICRAFT_AUTH_PROVIDER=header
 OMNICRAFT_AUTH_HEADER=Cf-Access-Authenticated-User-Email
 ```
 
-Some proxies namespace the value they inject. Google IAP forwards the
-email in `X-Goog-Authenticated-User-Email` prefixed with
-`accounts.google.com:`; set `OMNICRAFT_AUTH_HEADER_STRIP_PREFIX` to drop
-it and recover the bare email:
+Alguns proxies colocam um prefixo no valor que injetam. O Google IAP
+encaminha o email em `X-Goog-Authenticated-User-Email` prefixado com
+`accounts.google.com:`; defina `OMNICRAFT_AUTH_HEADER_STRIP_PREFIX` para
+remover esse prefixo e recuperar o email puro:
 
 ```bash
 OMNICRAFT_AUTH_PROVIDER=header
@@ -211,89 +213,91 @@ OMNICRAFT_AUTH_HEADER=X-Goog-Authenticated-User-Email
 OMNICRAFT_AUTH_HEADER_STRIP_PREFIX=accounts.google.com:
 ```
 
-**Security note:** in this mode the proxy is responsible for
-stripping any inbound copy of the identity header from the client
-request — otherwise any visitor can spoof an identity. The server
-trusts whatever value reaches it.
+**Nota de segurança:** neste modo, o proxy é responsável por remover
+qualquer cópia do header de identidade vinda da requisição do cliente —
+caso contrário, qualquer visitante pode forjar uma identidade. O servidor
+confia em qualquer valor que chegue até ele.
 
-## Environment variables
+## Variáveis de ambiente
 
-| Variable | Default | Purpose |
+| Variável | Padrão | Finalidade |
 |---|---|---|
-| `POSTGRES_PASSWORD` | *required* | DB password for the bundled Postgres container. |
-| `POSTGRES_USER` / `POSTGRES_DB` | `omnicraft` | DB user + database name. |
-| `OMNICRAFT_PORT` | `8000` | Host port the server is published on. |
-| `OMNICRAFT_AUTH_ENABLED` | `1` (in compose) | Master auth switch. `1` → accounts (or oidc if `OMNICRAFT_OIDC_ISSUER` is set); `0` → single-user local mode (every request is the shared `local` user — local dev only, never shared deploys). |
-| `OMNICRAFT_AUTH_PROVIDER` | unset | Escape hatch to pin a mode explicitly: `header` / `accounts` / `oidc`. Overrides the `AUTH_ENABLED` auto-selection. |
-| `OMNICRAFT_AUTH_HEADER` | `X-Forwarded-Email` | Header-mode only: name of the trusted identity header. Set for proxies that use another name, e.g. `Cf-Access-Authenticated-User-Email` (Cloudflare Access). |
-| `OMNICRAFT_AUTH_HEADER_STRIP_PREFIX` | unset (strip nothing) | Header-mode only: prefix removed from the identity header value. Set to `accounts.google.com:` for Google IAP's `X-Goog-Authenticated-User-Email`. |
-| `OMNICRAFT_OIDC_*` | unset | OIDC config — required in oidc mode (issuer set, or `AUTH_PROVIDER=oidc`). See `.env.example`. |
-| `PYPI_INDEX_URL` | `https://pypi.org/simple` | Build-time PyPI index — override only behind a corporate proxy. |
+| `POSTGRES_PASSWORD` | *obrigatório* | Senha do banco para o container Postgres incluído. |
+| `POSTGRES_USER` / `POSTGRES_DB` | `omnicraft` | Usuário do banco + nome do banco de dados. |
+| `OMNICRAFT_PORT` | `8000` | Porta do host em que o servidor é publicado. |
+| `OMNICRAFT_AUTH_ENABLED` | `1` (no compose) | Chave mestra de autenticação. `1` → accounts (ou oidc se `OMNICRAFT_OIDC_ISSUER` estiver definido); `0` → modo local de usuário único (toda requisição é o usuário compartilhado `local` — só para dev local, nunca para deploys compartilhados). |
+| `OMNICRAFT_AUTH_PROVIDER` | não definido | Saída de emergência para fixar um modo explicitamente: `header` / `accounts` / `oidc`. Sobrescreve a seleção automática do `AUTH_ENABLED`. |
+| `OMNICRAFT_AUTH_HEADER` | `X-Forwarded-Email` | Só no modo header: nome do header de identidade confiável. Defina para proxies que usam outro nome, ex.: `Cf-Access-Authenticated-User-Email` (Cloudflare Access). |
+| `OMNICRAFT_AUTH_HEADER_STRIP_PREFIX` | não definido (não remove nada) | Só no modo header: prefixo removido do valor do header de identidade. Defina como `accounts.google.com:` para o `X-Goog-Authenticated-User-Email` do Google IAP. |
+| `OMNICRAFT_OIDC_*` | não definido | Configuração OIDC — obrigatória no modo oidc (issuer definido, ou `AUTH_PROVIDER=oidc`). Veja `.env.example`. |
+| `PYPI_INDEX_URL` | `https://pypi.org/simple` | Índice do PyPI usado no build — sobrescreva só atrás de um proxy corporativo. |
 
-`DATABASE_URL` and `ARTIFACT_DIR` are computed by compose and
-injected into the container.
+`DATABASE_URL` e `ARTIFACT_DIR` são calculados pelo compose e injetados no
+container.
 
-## Host image (`--target host`)
+## Imagem do host (`--target host`)
 
-The same Dockerfile publishes a second image: the official OmniCraft
-**host** image, which remote sandboxes boot from so they start in
-seconds instead of paying an in-sandbox dependency install. It bakes
-the full omnicraft install (all three packages + deps, `python` and
-`pip` on PATH), `git` (workspaces / worktrees), `tmux` (terminal
-sessions spawned by native harnesses), and the coding-harness CLIs —
-`claude`, `codex`, `pi`, and `kiro-cli`, with the runtime they need — so
-claude-sdk / claude-native / codex / pi / kiro-native agents run in sandboxes
-without an in-sandbox install. None of the server-only bits are
-included (no SPA bundle, no psycopg, no uvicorn entrypoint).
+O mesmo Dockerfile publica uma segunda imagem: a imagem oficial de **host**
+do OmniCraft, da qual sandboxes remotos sobem para começar em segundos em
+vez de pagar o custo de uma instalação de dependências dentro do sandbox.
+Ela traz a instalação completa do omnicraft (os três pacotes + dependências,
+`python` e `pip` no PATH), `git` (workspaces / worktrees), `tmux` (sessões de
+terminal lançadas por harnesses nativos), e as CLIs de harness de código —
+`claude`, `codex`, `pi`, e `kiro-cli`, com o runtime que precisam — então
+agentes claude-sdk / claude-native / codex / pi / kiro-native rodam em
+sandboxes sem uma instalação dentro do sandbox. Nenhuma parte exclusiva do
+servidor é incluída (sem bundle SPA, sem psycopg, sem entrypoint do uvicorn).
 
-CI publishes it next to the server image, with the same tag scheme:
+A CI publica essa imagem ao lado da imagem do servidor, com o mesmo esquema
+de tags:
 
-- `ghcr.io/omnicraft-ai/omnicraft-host:latest` — tracks main HEAD
-  (the default for `omnicraft sandbox create --provider modal`)
-- `ghcr.io/omnicraft-ai/omnicraft-host:sha-<short>` — immutable
-  per-commit pin
-- `ghcr.io/omnicraft-ai/omnicraft-host:vX.Y.Z` — release tags
+- `ghcr.io/omnicraft-ai/omnicraft-host:latest` — acompanha o HEAD da main
+  (o padrão para `omnicraft sandbox create --provider modal`)
+- `ghcr.io/omnicraft-ai/omnicraft-host:sha-<short>` — fixação imutável por
+  commit
+- `ghcr.io/omnicraft-ai/omnicraft-host:vX.Y.Z` — tags de release
 
-Build it locally from the repo root:
+Construa-a localmente a partir da raiz do repositório:
 
 ```bash
 docker build -t omnicraft-host:latest --target host \
              -f deploy/docker/Dockerfile .
 ```
 
-### Using it with the Modal sandbox provider
+### Usando-a com o provedor de sandbox Modal
 
-`omnicraft sandbox create --provider modal` boots sandboxes from
-`ghcr.io/omnicraft-ai/omnicraft-host:latest` by default. Your local
-checkout's wheels are still built and overlaid on top at create time
-(`pip install --force-reinstall --no-deps`), so the sandbox runs
-exactly your code — the baked image just supplies the dependency
-tree. A checkout that adds a brand-new dependency needs that package
-installed manually in the sandbox until the official image rebuilds
-with it.
+`omnicraft sandbox create --provider modal` sobe sandboxes a partir de
+`ghcr.io/omnicraft-ai/omnicraft-host:latest` por padrão. Os wheels do seu
+checkout local ainda são construídos e sobrepostos por cima no momento da
+criação (`pip install --force-reinstall --no-deps`), então o sandbox roda
+exatamente o seu código — a imagem pré-assada só fornece a árvore de
+dependências. Um checkout que adiciona uma dependência totalmente nova
+precisa que esse pacote seja instalado manualmente no sandbox até a imagem
+oficial ser reconstruída com ele.
 
-Two environment variables tune the pull:
+Duas variáveis de ambiente ajustam o pull:
 
-| Variable | Purpose |
+| Variável | Finalidade |
 |---|---|
-| `OMNICRAFT_MODAL_HOST_IMAGE` | Override the image ref, e.g. an org-internal copy (`ghcr.io/<your-org>/omnicraft-host:latest`) or a `:sha-<short>` pin. |
-| `OMNICRAFT_MODAL_REGISTRY_SECRET` | Name of a [Modal secret](https://modal.com/secrets) holding registry credentials for private pulls. Create it with keys `REGISTRY_USERNAME` (your registry username) and `REGISTRY_PASSWORD` (for GHCR: a personal access token with `read:packages`). Unset = anonymous pull. |
+| `OMNICRAFT_MODAL_HOST_IMAGE` | Sobrescreve a referência da imagem, ex.: uma cópia interna da organização (`ghcr.io/<your-org>/omnicraft-host:latest`) ou uma fixação `:sha-<short>`. |
+| `OMNICRAFT_MODAL_REGISTRY_SECRET` | Nome de um [secret da Modal](https://modal.com/secrets) guardando credenciais de registry para pulls privados. Crie-o com as chaves `REGISTRY_USERNAME` (seu usuário de registry) e `REGISTRY_PASSWORD` (para o GHCR: um personal access token com `read:packages`). Não definido = pull anônimo. |
 
-### Using it with the Daytona sandbox provider
+### Usando-a com o provedor de sandbox Daytona
 
-The same host image backs Daytona-managed sessions (server config
-`sandbox.provider: daytona`; Daytona is managed-only — there is no
-`omnicraft sandbox create --provider daytona` CLI flow). Daytona ingests
-the registry image into an internal snapshot on first use (the first
-launch from a given image takes minutes; later launches reuse the
-snapshot and take seconds). Override the ref with
-`OMNICRAFT_DAYTONA_HOST_IMAGE` or the server config's
-`sandbox.daytona.image`. See
-[`deploy/daytona/README.md`](../daytona/README.md) for the
-full provider guide (credentials, the free-tier egress relay, and
-security considerations).
+A mesma imagem de host dá suporte às sessões gerenciadas pela Daytona
+(configuração do servidor `sandbox.provider: daytona`; a Daytona é
+managed-only — não há um fluxo de CLI `omnicraft sandbox create --provider
+daytona`). A Daytona ingere a imagem do registry num snapshot interno no
+primeiro uso (o primeiro lançamento a partir de uma dada imagem leva
+minutos; lançamentos posteriores reaproveitam o snapshot e levam segundos).
+Sobrescreva a referência com `OMNICRAFT_DAYTONA_HOST_IMAGE` ou o
+`sandbox.daytona.image` da configuração do servidor. Veja
+[`deploy/daytona/README.md`](../daytona/README.md) para o guia completo do
+provedor (credenciais, o relay de saída do nível gratuito, e considerações
+de segurança).
 
-## Related design docs
+## Documentos de design relacionados
 
-- `designs/OIDC_AUTH.md` — full native OIDC design
-- `designs/SESSIONS_AUTH.md` — `AuthProvider` contract + permission system
+- `designs/OIDC_AUTH.md` — design completo do OIDC nativo
+- `designs/SESSIONS_AUTH.md` — contrato `AuthProvider` + sistema de
+  permissões

@@ -1,22 +1,23 @@
-# App icons
+# Ícones do app
 
-- `../../platform-assets/AppIcon.icon` — source of truth for the Apple
-  platform icon: an Apple Icon Composer bundle (layered artwork + gradient
-  background), shared by Electron and iOS.
-- `Assets.car` + `icon.icns` — compiled from `AppIcon.icon` by `actool`
-  (checked in so builds don't require Xcode 26+). `Assets.car` gives the
-  native dynamic icon on macOS 26+ (liquid glass, light/dark/tinted);
-  `icon.icns` is the static fallback used by older macOS and as
-  electron-builder's `mac.icon`. The `build/afterPack.js` hook copies
-  `Assets.car` into the app bundle, and `CFBundleIconName=AppIcon`
-  (in `mac.extendInfo`) tells macOS to look for it. electron-builder
-  has no native `.icon` support yet — see
+- `../../platform-assets/AppIcon.icon` — fonte da verdade do ícone da
+  plataforma Apple: um bundle do Apple Icon Composer (arte em camadas +
+  fundo em gradiente), compartilhado por Electron e iOS.
+- `Assets.car` + `icon.icns` — compilados a partir de `AppIcon.icon` pelo
+  `actool` (versionados para que os builds não precisem do Xcode 26+).
+  `Assets.car` dá o ícone dinâmico nativo no macOS 26+ (liquid glass,
+  claro/escuro/tintado); `icon.icns` é o fallback estático usado por macOS
+  mais antigos e como o `mac.icon` do electron-builder. O hook
+  `build/afterPack.js` copia `Assets.car` para dentro do bundle do app, e
+  `CFBundleIconName=AppIcon` (em `mac.extendInfo`) diz ao macOS para
+  procurar por ele. O electron-builder ainda não tem suporte nativo a
+  `.icon` — veja
   https://github.com/electron-userland/electron-builder/issues/9254.
-- `icon.ico` / `icon.png` — Windows / Linux icons.
+- `icon.ico` / `icon.png` — ícones de Windows / Linux.
 
-## Regenerating after editing AppIcon.icon
+## Regenerando depois de editar o AppIcon.icon
 
-Requires Xcode 26+ (Icon Composer `.icon` support in actool):
+Exige Xcode 26+ (suporte a `.icon` do Icon Composer no actool):
 
 ```bash
 cd web/electron/icons

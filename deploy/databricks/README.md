@@ -1,60 +1,64 @@
-# Deploying OmniCraft on Databricks Apps
+# Publicando o OmniCraft no Databricks Apps
 
-This directory deploys the OmniCraft server to
+Este diretório publica o servidor OmniCraft no
 [Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/)
 via [Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/):
 
-- **Lakebase** (managed PostgreSQL) — the database for every store.
-- **UC Volumes** — the artifact store for agent bundles and executor
-  storage snapshots.
+- **Lakebase** (PostgreSQL gerenciado) — o banco de dados para todo o
+  armazenamento.
+- **UC Volumes** — o armazenamento de artefatos para bundles de agente e
+  snapshots de armazenamento do executor.
 
-> **Most Databricks users want the managed offering instead.**
-> [OmniCraft on Databricks](https://docs.databricks.com/aws/en/omnicraft/)
-> (Beta) runs the server for you, wired to workspace identity,
-> Foundation Models, AI Gateway, and MLflow Tracing out of the box.
-> Enable the **OmniCraft** preview in your workspace settings and follow
-> the quickstart there. Use this directory only when you need to
-> self-manage the deployment: the managed service is not in your region
-> yet, or you need control it does not expose today (custom YAML
-> policies, bring-your-own provider API keys, custom egress controls).
+> **A maioria dos usuários do Databricks quer a oferta gerenciada em vez
+> disso.** O [OmniCraft no Databricks](https://docs.databricks.com/aws/en/omnicraft/)
+> (Beta) roda o servidor por você, ligado à identidade do workspace, aos
+> Foundation Models, ao AI Gateway e ao MLflow Tracing prontos de fábrica.
+> Ative a prévia do **OmniCraft** nas configurações do seu workspace e siga o
+> quickstart de lá. Use este diretório só quando você precisar autogerenciar
+> o deploy: o serviço gerenciado ainda não está na sua região, ou você
+> precisa de um controle que ele ainda não expõe hoje (políticas YAML
+> customizadas, chaves de API de provider próprias, controles de egress
+> customizados).
 
-The orchestrator at `deploy.py` builds the wheels, generates an app
-`pyproject.toml` + `uv.lock`, and then runs
-`databricks bundle deploy` + `bundle run` against the bundle config
-in `databricks.yml`. App config (Lakebase, UC volume) lives
-declaratively in `databricks.yml` — adding or removing a resource is
-a YAML edit, not a Python SDK call.
+O orquestrador em `deploy.py` constrói as wheels, gera um `pyproject.toml` +
+`uv.lock` do app, e então roda `databricks bundle deploy` + `bundle run`
+contra a configuração do bundle em `databricks.yml`. A configuração do app
+(Lakebase, UC volume) vive de forma declarativa em `databricks.yml` —
+adicionar ou remover um recurso é uma edição de YAML, não uma chamada ao SDK
+Python.
 
-Runs unchanged from a laptop. Re-runnable; every step is idempotent.
+Roda sem alteração a partir de um notebook. Reexecutável; todo passo é
+idempotente.
 
-## Prerequisites
+## Pré-requisitos
 
-1. A Databricks workspace with Databricks Apps, Lakebase, and UC
-   Volumes enabled.
-2. The [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install.md)
-   installed and authenticated. Either a CLI profile
-   (`DATABRICKS_CONFIG_PROFILE=<profile>`) or env-based auth
-   (`DATABRICKS_HOST` + `DATABRICKS_CLIENT_ID` + `DATABRICKS_CLIENT_SECRET`).
-3. The repo's local venv with the `databricks` extra:
-   `uv sync --extra databricks` (use `uv`, not global pip).
-4. Permissions to create or use:
-   - a Lakebase project (one per app — do not share with other apps);
-   - a UC volume whose parent catalog/schema can grant access to the
-     app service principal;
-   - (optional) Databricks secrets for LLM API keys.
+1. Um workspace Databricks com Databricks Apps, Lakebase e UC Volumes
+   habilitados.
+2. A [CLI do Databricks](https://docs.databricks.com/aws/en/dev-tools/cli/install.md)
+   instalada e autenticada. Ou um perfil de CLI
+   (`DATABRICKS_CONFIG_PROFILE=<profile>`) ou autenticação por variável de
+   ambiente (`DATABRICKS_HOST` + `DATABRICKS_CLIENT_ID` +
+   `DATABRICKS_CLIENT_SECRET`).
+3. O venv local do repositório com o extra `databricks`:
+   `uv sync --extra databricks` (use `uv`, não o pip global).
+4. Permissões para criar ou usar:
+   - um projeto Lakebase (um por app — não compartilhe com outros apps);
+   - um volume UC cujo catálogo/schema pai possa conceder acesso ao service
+     principal do app;
+   - (opcional) secrets do Databricks para chaves de API de LLM.
 
-Set your workspace URL in `databricks.yml` under
-`targets.prod.workspace.host` (it ships as a `https://example.databricks.com`
-placeholder; DAB reads `workspace.host` before resolving variables, so it
-must be a literal).
+Defina a URL do seu workspace em `databricks.yml`, em
+`targets.prod.workspace.host` (ele vem com um placeholder
+`https://example.databricks.com`; o DAB lê `workspace.host` antes de
+resolver variáveis, então precisa ser um literal).
 
-## One-time bootstrap
+## Bootstrap único
 
-### 1. Lakebase project (one per app — never share)
+### 1. Projeto Lakebase (um por app — nunca compartilhe)
 
-Reusing a shared autoscaling project causes the migrate-on-boot hook
-to fail with "permission denied for table agents" because the tables
-are owned by whoever ran migrations first. Always start fresh:
+Reaproveitar um projeto de autoscaling compartilhado faz o hook de migração
+no boot falhar com "permission denied for table agents", porque as tabelas
+pertencem a quem rodou as migrações primeiro. Sempre comece do zero:
 
 ```python
 from databricks.sdk import WorkspaceClient
@@ -86,22 +90,22 @@ CREATE SCHEMA IF NOT EXISTS main.omnicraft;
 CREATE VOLUME IF NOT EXISTS main.omnicraft.artifacts;
 ```
 
-The `artifacts` volume is referenced declaratively in `databricks.yml`
-(the app resource) via `--var volume_name=…`.
+O volume `artifacts` é referenciado declarativamente em `databricks.yml` (o
+recurso do app) via `--var volume_name=…`.
 
-### 3. First deploy — creates the app and its service principal
+### 3. Primeiro deploy — cria o app e o seu service principal
 
-Run the [Deploy](#deploy) command once. The first
-`databricks bundle deploy` creates the app and provisions its service
-principal (SP). This first pass will **not** pass its `/health` check
-yet: the SP has no Lakebase schema grants, so the migrate-on-boot hook
-fails with `permission denied for schema public`. That's expected —
-the next step grants those privileges.
+Rode o comando de [Deploy](#deploy) uma vez. O primeiro `databricks bundle
+deploy` cria o app e provisiona o seu service principal (SP). Esse primeiro
+passo **não** vai passar no seu healthcheck `/health` ainda: o SP não tem
+grants de schema no Lakebase, então o hook de migração no boot falha com
+`permission denied for schema public`. Isso é esperado — o próximo passo
+concede esses privilégios.
 
-### 4. Grant the app SP Lakebase privileges
+### 4. Conceda ao SP do app os privilégios do Lakebase
 
-Now that the app (and its SP) exist, grant the SP the public schema
-privileges Alembic needs, then re-run the deploy:
+Agora que o app (e o seu SP) existem, conceda ao SP os privilégios do schema
+public que o Alembic precisa, e então rode o deploy de novo:
 
 ```bash
 python deploy/databricks/grant_sp_perms.py \
@@ -112,16 +116,16 @@ python deploy/databricks/grant_sp_perms.py \
 ```
 
 > [!NOTE]
-> Lakebase uses two spellings for the same database. The **resource
-> path** uses a hyphenated slug — `…/databases/databricks-postgres`
-> (what `deploy.py --lakebase-database` and `databricks.yml` want) —
-> while the underlying **PostgreSQL database name** uses an underscore,
-> `databricks_postgres` (what `grant_sp_perms.py --database` and the
-> app's `PGDATABASE` use). Pass each form where shown.
+> O Lakebase usa duas grafias para o mesmo banco. O **caminho de recurso**
+> usa um slug com hífen — `…/databases/databricks-postgres` (o que
+> `deploy.py --lakebase-database` e `databricks.yml` querem) — enquanto o
+> **nome do banco PostgreSQL** subjacente usa underscore,
+> `databricks_postgres` (o que `grant_sp_perms.py --database` e o
+> `PGDATABASE` do app usam). Passe cada forma onde indicado.
 
-After this one-time grant, re-running the deploy boots the app cleanly
-and `/health` returns 200. Subsequent redeploys are a single
-`deploy.py` invocation.
+Depois desse grant único, rodar o deploy de novo sobe o app limpo e o
+`/health` responde 200. Redeploys seguintes são uma única chamada a
+`deploy.py`.
 
 ## Deploy
 
@@ -134,26 +138,27 @@ uv run python deploy/databricks/deploy.py \
     --volume-name main.omnicraft.artifacts
 ```
 
-The script builds wheels, classifies them by size, copies wheels into
-`src/`, regenerates `src/pyproject.toml` and `src/uv.lock`, runs
-`databricks bundle deploy --target prod`, runs
-`databricks bundle run omnicraft --target prod`, and polls `/health`
-with backoff until 200.
+O script constrói as wheels, as classifica por tamanho, copia as wheels para
+`src/`, regenera `src/pyproject.toml` e `src/uv.lock`, roda `databricks
+bundle deploy --target prod`, roda `databricks bundle run omnicraft --target
+prod`, e faz polling em `/health` com backoff até 200.
 
-All OmniCraft wheels must fit under the Databricks Apps source
-snapshot limit (10 MB). If a wheel exceeds it, rebuild with
-`--skip-web-ui` or reduce the wheel size; uv lockfiles cannot point at
-UC Volume wheel paths because `uv lock` validates path sources locally.
+Todas as wheels do OmniCraft precisam caber sob o limite de snapshot de
+origem do Databricks Apps (10 MB). Se uma wheel ultrapassar isso, reconstrua
+com `--skip-web-ui` ou reduza o tamanho da wheel; lockfiles do uv não
+conseguem apontar para caminhos de wheel em UC Volume porque o `uv lock`
+valida path sources localmente.
 
-Re-running is safe — every step is idempotent.
+Rodar de novo é seguro — todo passo é idempotente.
 
 > [!TIP]
-> To lock against a private PyPI mirror or proxy instead of public
-> PyPI, set `UV_INDEX_URL` before running `deploy.py`.
+> Para travar contra um mirror ou proxy de PyPI privado em vez do PyPI
+> público, defina `UV_INDEX_URL` antes de rodar `deploy.py`.
 
-## Smoke check
+## Verificação rápida
 
-`deploy.py` polls `/health` automatically. To check other endpoints:
+O `deploy.py` faz polling em `/health` automaticamente. Para checar outros
+endpoints:
 
 ```bash
 TOKEN="$(databricks auth token <your-profile> --output json \
@@ -164,131 +169,131 @@ curl --http1.1 -fsS \
     https://<app>.databricksapps.com/health
 ```
 
-## How it works
+## Como funciona
 
-### Authentication
+### Autenticação
 
-The app runs as a Databricks service principal. Credentials are
-managed automatically:
+O app roda como um service principal do Databricks. As credenciais são
+gerenciadas automaticamente:
 
-- **Lakebase** — OAuth tokens generated via
-  `WorkspaceClient.postgres.generate_database_credential()`, injected
-  into every new SQLAlchemy connection via a class-level
-  `do_connect` event hook in `src/app.py`.
-- **UC Volumes** — Workspace credentials used by the Databricks SDK
-  (ambient in Apps).
-- **TUI / API access** — Browser-based OAuth using the
-  `databricks-cli` OIDC client with PKCE.
+- **Lakebase** — tokens OAuth gerados via
+  `WorkspaceClient.postgres.generate_database_credential()`, injetados em
+  toda conexão SQLAlchemy nova via um hook de evento `do_connect` de nível de
+  classe em `src/app.py`.
+- **UC Volumes** — credenciais de workspace usadas pelo SDK do Databricks
+  (ambiente nos Apps).
+- **Acesso via TUI / API** — OAuth baseado em navegador usando o cliente
+  OIDC do `databricks-cli` com PKCE.
 
-The Databricks Apps proxy injects `X-Forwarded-Email` on every
-request, so the app pins `OMNICRAFT_AUTH_PROVIDER=header` (see
-`src/app.py`).
+O proxy do Databricks Apps injeta `X-Forwarded-Email` em toda requisição,
+então o app fixa `OMNICRAFT_AUTH_PROVIDER=header` (veja `src/app.py`).
 
 > [!IMPORTANT]
-> Header auth trusts the `X-Forwarded-Email` header verbatim. This is
-> safe **only** because the Databricks Apps platform terminates auth at
-> its proxy, strips any client-supplied copy of the header, and the app
-> port is never reachable except through that proxy. Don't expose the
-> app process directly (e.g. a port forward or alternate ingress that
-> bypasses the proxy): a caller who can set the header themselves could
-> then impersonate any user. If you front the app with anything other
-> than the standard Apps proxy, ensure it sanitizes the header too.
+> A autenticação por header confia no header `X-Forwarded-Email` ao pé da
+> letra. Isso só é seguro **porque** a plataforma Databricks Apps termina a
+> autenticação no seu proxy, remove qualquer cópia do header vinda do
+> cliente, e a porta do app nunca é alcançável exceto através desse proxy.
+> Não exponha o processo do app diretamente (por exemplo, um port forward ou
+> um ingress alternativo que pule o proxy): um chamador que consiga definir o
+> header ele mesmo poderia então se passar por qualquer usuário. Se você
+> colocar o app atrás de qualquer coisa além do proxy padrão dos Apps,
+> garanta que ela também higienize o header.
 
-### Token lifecycle
+### Ciclo de vida do token
 
-Lakebase OAuth tokens expire after 60 minutes. The SQLAlchemy
-connection pool recycles connections every 5 minutes by default
-(configurable via `AP_POOL_RECYCLE_SECONDS`), ensuring fresh tokens
-on new connections.
+Os tokens OAuth do Lakebase expiram depois de 60 minutos. O pool de conexões
+do SQLAlchemy recicla conexões a cada 5 minutos por padrão (configurável via
+`AP_POOL_RECYCLE_SECONDS`), garantindo tokens novos em conexões novas.
 
-### Storage
+### Armazenamento
 
-| Component | Backend | Purpose |
+| Componente | Backend | Finalidade |
 |---|---|---|
-| Agent specs, tasks, conversations | Lakebase (PostgreSQL) | Durable metadata |
-| Agent bundles, executor snapshots | UC Volumes | Binary blob storage |
-| DBOS workflow state | Lakebase (same DB) | Workflow recovery |
-| Executor working dirs | Local ephemeral disk | Cache (restored from UC Volumes) |
+| Specs de agente, tasks, conversas | Lakebase (PostgreSQL) | Metadados duráveis |
+| Bundles de agente, snapshots do executor | UC Volumes | Armazenamento de blob binário |
+| Estado de workflow do DBOS | Lakebase (mesmo banco) | Recuperação de workflow |
+| Diretórios de trabalho do executor | Disco local efêmero | Cache (restaurado a partir de UC Volumes) |
 
-## Configuration reference
+## Referência de configuração
 
-Environment variables read by `src/app.py`:
+Variáveis de ambiente lidas por `src/app.py`:
 
-| Variable | Source | Description |
+| Variável | Origem | Descrição |
 |---|---|---|
-| `PGHOST` | Databricks runtime | Lakebase hostname |
-| `PGPORT` | Databricks runtime | Lakebase port (default 5432) |
-| `PGDATABASE` | Databricks runtime | Lakebase database name |
-| `PGUSER` | Databricks runtime | Lakebase user (service principal) |
-| `PGSSLMODE` | Databricks runtime | SSL mode (default `require`) |
-| `AP_LAKEBASE_ENDPOINT` | app resource `valueFrom: postgres` | Lakebase endpoint for token generation |
-| `AP_ARTIFACT_VOLUME_PATH` | app resource `valueFrom: artifact_volume` | UC Volume path for artifacts |
-| `DATABRICKS_APP_PORT` | Databricks runtime | App port (default 8000) |
-| `AP_POOL_RECYCLE_SECONDS` | Optional | Connection pool recycle interval (default 300) |
+| `PGHOST` | Runtime do Databricks | Hostname do Lakebase |
+| `PGPORT` | Runtime do Databricks | Porta do Lakebase (padrão 5432) |
+| `PGDATABASE` | Runtime do Databricks | Nome do banco Lakebase |
+| `PGUSER` | Runtime do Databricks | Usuário do Lakebase (service principal) |
+| `PGSSLMODE` | Runtime do Databricks | Modo SSL (padrão `require`) |
+| `AP_LAKEBASE_ENDPOINT` | recurso do app `valueFrom: postgres` | Endpoint do Lakebase para geração de token |
+| `AP_ARTIFACT_VOLUME_PATH` | recurso do app `valueFrom: artifact_volume` | Caminho do UC Volume para artefatos |
+| `DATABRICKS_APP_PORT` | Runtime do Databricks | Porta do app (padrão 8000) |
+| `AP_POOL_RECYCLE_SECONDS` | Opcional | Intervalo de reciclagem do pool de conexões (padrão 300) |
 
-## Multi-app safety — one bundle, many apps
+## Segurança multi-app — um bundle, muitos apps
 
-The same bundle directory can deploy many apps (one per `--app-name`).
-Terraform can only delete or replace what is tracked in the state it
-loads, so the blast radius of a deploy is exactly that state file.
+O mesmo diretório de bundle pode publicar vários apps (um por
+`--app-name`). O Terraform só consegue apagar ou substituir o que está
+rastreado no estado que ele carrega, então o raio de impacto de um deploy é
+exatamente aquele arquivo de estado.
 
-- **Remote state is per app.** `targets.<t>.workspace.root_path` ends
-  in `${var.app_name}`, so `--app-name X` reads and writes state only
-  under `.bundle/omnicraft/X`. A deploy of X cannot mutate app Y.
-- **The app resource's `name` is `${var.app_name}`.** If the loaded
-  state tracks app X but you pass `app_name=Y`, terraform sees a name
-  change and plans a **destroy of X + create of Y**. Never bind the
-  bundle resource to one app and then deploy with a different
-  `--app-name`.
-- The **local** cache at `deploy/databricks/.databricks/bundle/<target>/`
-  is per-*target*. Before deploying a *different* app on a target
-  you've used before, drop it: `rm -rf deploy/databricks/.databricks/bundle/<target>`
-  (it's only a cache; the per-app remote state is the source of truth).
+- **O estado remoto é por app.** `targets.<t>.workspace.root_path` termina
+  em `${var.app_name}`, então `--app-name X` lê e escreve estado só sob
+  `.bundle/omnicraft/X`. Um deploy de X não consegue alterar o app Y.
+- **O `name` do recurso do app é `${var.app_name}`.** Se o estado carregado
+  rastreia o app X mas você passa `app_name=Y`, o terraform vê uma mudança de
+  nome e planeja um **destroy de X + create de Y**. Nunca vincule o recurso
+  do bundle a um app e depois faça deploy com um `--app-name` diferente.
+- O cache **local** em `deploy/databricks/.databricks/bundle/<target>/` é
+  por *target*. Antes de publicar um app *diferente* num target já usado
+  antes, remova-o:
+  `rm -rf deploy/databricks/.databricks/bundle/<target>`
+  (é só um cache; o estado remoto por app é a fonte da verdade).
 
-If a `bundle deploy` plan ever shows a delete or replace of a
-`databricks_app`, abort and re-check the bind and `--app-name` —
-routine redeploys only ever update in place.
+Se um plano de `bundle deploy` mostrar um delete ou replace de um
+`databricks_app`, aborte e reconfira o bind e o `--app-name` — redeploys de
+rotina só atualizam no lugar.
 
-## Common deploy modes
+## Modos comuns de deploy
 
 ```bash
-# Iterate without rebuilding wheels (reuses dist/; useful when you only
-# changed app.py / app.yaml). Skips the clean-tree check.
+# Iterar sem reconstruir as wheels (reaproveita dist/; útil quando só mudou
+# app.py / app.yaml). Pula a checagem de árvore limpa.
 uv run python deploy/databricks/deploy.py --skip-build --allow-dirty ...
 
-# API-only deploy (drops the SPA from the main wheel).
+# Deploy só de API (tira a SPA da wheel principal).
 uv run python deploy/databricks/deploy.py --skip-web-ui ...
 ```
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
+| Sintoma | Causa | Correção |
 |---|---|---|
-| Deploy refuses: "working tree has uncommitted changes" / "HEAD is not at origin/main" | Clean-tree assertion | Commit/stash, `git checkout main && git pull`, or pass `--allow-dirty` |
-| `bundle deploy` fails: "Resource already managed by Terraform" | App already bound to another bundle directory | Run from that directory, or unbind: `databricks bundle deployment unbind omnicraft` |
-| `bundle deploy` fails: "An app with the same name already exists" | App exists but isn't bound to this bundle (or a stale per-target local cache from a *different* app made `deploy.py` skip the bind) | `rm -rf deploy/databricks/.databricks/bundle/<target>`, then bind: `databricks bundle deployment bind omnicraft <app-name> --target <target> --auto-approve --var ...` |
-| App fails "Error installing packages"; `/logz` shows "Ignoring existing lockfile due to … exclude newer …" then a PyPI fetch timeout | The Apps runtime pins a global uv `exclude-newer` cutoff; a lock generated without the matching option is re-resolved in-container, where PyPI is unreachable | Read the cutoff from `/logz` ("change of exclude newer timestamp from X to Y") and redeploy with `UV_EXCLUDE_NEWER=<cutoff>` in the environment |
-| `permission denied for table agents` | Lakebase tables owned by wrong user | Connect as the owner and `DROP TABLE … CASCADE`; redeploy |
-| `schema "dbos" already exists` | Same for the DBOS schema | `DROP SCHEMA dbos CASCADE` and redeploy |
-| `permission denied for schema public` | App SP missing schema grants | Run `grant_sp_perms.py` (one-time) |
-| `Field 'spec.role' cannot be empty` | Lakebase requires explicit role for extra databases | Use the project's default database; don't create extras |
-| Deploy refuses because a wheel is over 10 MB | uv app payload requires local wheel path sources | Rebuild with `--skip-web-ui` or reduce wheel size |
-| App starts cleanly but the first agent request 403s on the artifact volume | App SP has `WRITE_VOLUME` on the leaf but no `USE_CATALOG` / `USE_SCHEMA` on the parents | `deploy.py` grants both automatically — for a fresh catalog, redeploy or grant manually via `databricks grants update` |
+| Deploy recusa: "working tree has uncommitted changes" / "HEAD is not at origin/main" | Verificação de árvore limpa | Faça commit/stash, `git checkout main && git pull`, ou passe `--allow-dirty` |
+| `bundle deploy` falha: "Resource already managed by Terraform" | App já vinculado a outro diretório de bundle | Rode a partir daquele diretório, ou desvincule: `databricks bundle deployment unbind omnicraft` |
+| `bundle deploy` falha: "An app with the same name already exists" | App existe mas não está vinculado a este bundle (ou um cache local por target obsoleto, de um app *diferente*, fez o `deploy.py` pular o bind) | `rm -rf deploy/databricks/.databricks/bundle/<target>`, depois vincule: `databricks bundle deployment bind omnicraft <app-name> --target <target> --auto-approve --var ...` |
+| App falha com "Error installing packages"; `/logz` mostra "Ignoring existing lockfile due to … exclude newer …" e depois um timeout no fetch do PyPI | O runtime dos Apps fixa um corte global `exclude-newer` do uv; um lock gerado sem essa opção correspondente é re-resolvido dentro do container, onde o PyPI é inalcançável | Leia o corte em `/logz` ("change of exclude newer timestamp from X to Y") e faça o redeploy com `UV_EXCLUDE_NEWER=<cutoff>` no ambiente |
+| `permission denied for table agents` | Tabelas do Lakebase pertencem ao usuário errado | Conecte como o dono e `DROP TABLE … CASCADE`; redeploy |
+| `schema "dbos" already exists` | O mesmo, para o schema do DBOS | `DROP SCHEMA dbos CASCADE` e redeploy |
+| `permission denied for schema public` | SP do app sem grants de schema | Rode `grant_sp_perms.py` (uma vez) |
+| `Field 'spec.role' cannot be empty` | Lakebase exige role explícita para bancos extras | Use o banco padrão do projeto; não crie extras |
+| Deploy recusa porque uma wheel está acima de 10 MB | Payload do app do uv exige path sources locais de wheel | Reconstrua com `--skip-web-ui` ou reduza o tamanho da wheel |
+| App sobe limpo mas a primeira requisição de agente dá 403 no volume de artefatos | SP do app tem `WRITE_VOLUME` na folha mas não `USE_CATALOG` / `USE_SCHEMA` nos pais | O `deploy.py` concede os dois automaticamente — para um catálogo novo, redeploy ou conceda manualmente via `databricks grants update` |
 
-## Files in this directory
+## Arquivos neste diretório
 
-| File | Purpose |
+| Arquivo | Finalidade |
 |---|---|
-| `deploy.py` | Orchestrator. Single entry point. |
-| `databricks.yml` | DAB bundle config. Declares the app + its resources. |
-| `build.sh` | Cleans static, builds the web UI, builds three wheels. |
-| `grant_sp_perms.py` | One-time Lakebase `public` schema grant for the app SP. |
-| `src/app.py` | The app process. SQLAlchemy `do_connect` token hook + Alembic-on-boot + uvicorn. |
-| `src/app.yaml` | App startup config — command + env-var wiring. |
-| `src/pyproject.toml` / `src/uv.lock` | Regenerated per deploy; not committed (they pin the per-deploy wheel version). |
+| `deploy.py` | Orquestrador. Ponto de entrada único. |
+| `databricks.yml` | Configuração do bundle DAB. Declara o app + os seus recursos. |
+| `build.sh` | Limpa os estáticos, constrói a web UI, constrói três wheels. |
+| `grant_sp_perms.py` | Grant único do schema `public` do Lakebase para o SP do app. |
+| `src/app.py` | O processo do app. Hook de token `do_connect` do SQLAlchemy + Alembic no boot + uvicorn. |
+| `src/app.yaml` | Configuração de startup do app — comando + conexão de env-var. |
+| `src/pyproject.toml` / `src/uv.lock` | Regenerados a cada deploy; não versionados (fixam a versão de wheel por deploy). |
 
-## See also
+## Veja também
 
-- [`databricks.yml`](./databricks.yml) — DAB bundle config.
-- [Databricks Apps docs](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/).
-- [Databricks Asset Bundles docs](https://docs.databricks.com/aws/en/dev-tools/bundles/).
+- [`databricks.yml`](./databricks.yml) — configuração do bundle DAB.
+- [Documentação do Databricks Apps](https://docs.databricks.com/aws/en/dev-tools/databricks-apps/).
+- [Documentação do Databricks Asset Bundles](https://docs.databricks.com/aws/en/dev-tools/bundles/).

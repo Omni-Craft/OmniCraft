@@ -1,15 +1,16 @@
 # omnicraft-ui-sdk
 
-Terminal UI components (Rich + prompt_toolkit) for building
-[omnicraft](https://github.com/omnicraft-ai/omnicraft) frontends.
+Componentes de UI de terminal (Rich + prompt_toolkit) para construir
+frontends do [omnicraft](https://github.com/omnicraft-ai/omnicraft).
 
-`omnicraft-ui-sdk` provides the reusable rendering and input building blocks used
-by the omnicraft CLI to display streaming agent output in the terminal. It is
-released in lockstep with the core `omnicraft` package at a matching version:
+O `omnicraft-ui-sdk` fornece os blocos reutilizáveis de renderização e entrada
+usados pela CLI do omnicraft para exibir a saída do agente em streaming no
+terminal. Ele é publicado em conjunto com o pacote principal `omnicraft`, na
+mesma versão:
 
 ```bash
 pip install omnicraft-ui-sdk
 ```
 
-See the [omnicraft repository](https://github.com/omnicraft-ai/omnicraft) for full
-documentation.
+Veja o [repositório do omnicraft](https://github.com/omnicraft-ai/omnicraft)
+para a documentação completa.

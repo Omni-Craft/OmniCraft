@@ -1,20 +1,23 @@
 # OmniCraft iOS
 
-Thin SwiftUI/WKWebView shell for OmniCraft. Like the Electron app, this target
-loads the server-served web UI instead of shipping a duplicate copy of the SPA.
+Um shell fino em SwiftUI/WKWebView para o OmniCraft. Como o app Electron,
+esse target carrega a web UI servida pelo servidor em vez de embarcar uma
+cópia duplicada da SPA.
 
-## Development
+## Desenvolvimento
 
-Open `OmniCraft.xcodeproj` in Xcode 16 or newer and run the `OmniCraft` scheme on
-an iOS 18 simulator.
+Abra `OmniCraft.xcodeproj` no Xcode 16 ou mais novo e rode o scheme
+`OmniCraft` num simulador iOS 18.
 
-Debug builds allow `http://` web content for local development by enabling
-`NSAllowsArbitraryLoadsInWebContent`. Release builds keep App Transport
-Security defaults and require remote servers to use `https://`.
+Builds de debug permitem conteúdo web `http://` para desenvolvimento local
+ao ativar `NSAllowsArbitraryLoadsInWebContent`. Builds de release mantêm os
+padrões do App Transport Security e exigem que servidores remotos usem
+`https://`.
 
-## Scope
+## Escopo
 
-The first version provides native setup chrome, recent servers, WKWebView
-loading, foreground local notifications, app badge updates, and notification
-tap routing back into the SPA. It does not implement APNs, background polling,
-or localhost proxy/CORS behavior.
+A primeira versão fornece chrome nativo de configuração, servidores
+recentes, carregamento de WKWebView, notificações locais em primeiro plano,
+atualizações de badge do app e roteamento de toque de notificação de volta
+para a SPA. Ela não implementa APNs, polling em segundo plano, ou
+comportamento de proxy/CORS para localhost.

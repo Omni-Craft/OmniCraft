@@ -1,163 +1,177 @@
-# Harness test bench
+# Bancada de testes de harness
 
-A pluggable conformance suite that probes harness behavior and reconciles the
-observed verdicts with the capability model to surface drift. Design and
-rationale: [`docs/harness-bench-design.md`](../../docs/harness-bench-design.md).
+Uma suíte de conformidade plugável que sonda o comportamento do harness e
+reconcilia os vereditos observados com o modelo de capacidades para revelar
+divergência (drift). Design e justificativa:
+[`docs/harness-bench-design.md`](../../docs/harness-bench-design.md).
 
-## Run it
+## Rodando
 
 ```bash
-# List official harnesses (name, resolved transport, model).
+# Lista os harnesses oficiais (nome, transporte resolvido, modelo).
 python -m tests.harness_bench --list
 
-# Force the declared-only matrix: no turns and no credentials required.
+# Força a matriz só-declarada: sem turnos e sem credenciais necessárias.
 python -m tests.harness_bench --no-live
 
-# Probe one harness. Credentials are resolved like `omni run`.
+# Sonda um harness. Credenciais são resolvidas como no `omni run`.
 python -m tests.harness_bench --harness codex
 
-# Override the configured/ambient Databricks profile.
+# Sobrescreve o profile Databricks configurado/ambiente.
 python -m tests.harness_bench --harness codex --profile my-profile
 
-# Probe several harnesses concurrently with the live table.
+# Sonda vários harnesses concorrentemente com a tabela ao vivo.
 python -m tests.harness_bench --jobs 4 --rich
 ```
 
-Without `--live` or `--no-live`, the CLI runs live when gateway credentials are
-resolvable and otherwise renders the declared matrix offline. Credential
-resolution follows `omni run`: existing ambient `OPENAI_*` routing is
-preserved; otherwise `--profile` overrides the configured profile. A
-non-zero exit means at least one `DRIFT` cell was found.
+Sem `--live` ou `--no-live`, a CLI roda ao vivo quando credenciais de gateway
+são resolvíveis e, caso contrário, renderiza a matriz declarada offline. A
+resolução de credenciais segue o `omni run`: o roteamento ambiente
+`OPENAI_*` já existente é preservado; caso contrário, `--profile` sobrescreve
+o profile configurado. Um exit não-zero significa que ao menos uma célula de
+`DRIFT` foi encontrada.
 
 ### Flags
 
-- `--live` / `--no-live` -- force live probing or the declared-only matrix.
-  `--live` requires resolvable gateway credentials.
-- `--profile NAME` -- optional Databricks profile override; it is not required
-  when config or ambient `OPENAI_*` already supplies credentials.
-- `--harness NAME` -- probe one harness (repeatable). Accepts an official name
-  or a `module:attr` / `module.ATTR` reference to a community `BenchProfile`.
-  Defaults to every official harness.
-- `--fast` -- run SDK harnesses on `sdk-inproc` instead of the `full-server`
-  default. This skips server startup, but policy ALLOW/ASK/DENY are not
-  observable and tool/cost verdicts are limited to what the wrap forwards.
-  It has no effect on native harnesses and is mutually exclusive with
-  `--transport`.
-- `--transport NAME` -- force `sdk-inproc`, `full-server`, or `native-tui`,
-  overriding the harness-family default.
-- `--jobs N` / `-j N` -- run up to N harnesses concurrently (default 1).
-  Probes within one harness remain sequential and report order is stable.
-- `--rich` / `--no-rich` -- force or disable the live progress table. Auto mode
-  uses Rich on a TTY and plain per-line output otherwise.
-- `--report PATH` -- also write the final matrix. Format follows `--json` or
-  `--markdown`, then the filename extension.
+- `--live` / `--no-live` -- força a sondagem ao vivo ou a matriz
+  só-declarada. `--live` exige credenciais de gateway resolvíveis.
+- `--profile NAME` -- sobrescrita opcional do profile Databricks; não é
+  necessária quando a config ou o `OPENAI_*` de ambiente já fornecem
+  credenciais.
+- `--harness NAME` -- sonda um harness (repetível). Aceita um nome oficial ou
+  uma referência `module:attr` / `module.ATTR` a um `BenchProfile` da
+  comunidade. O padrão é todo harness oficial.
+- `--fast` -- roda harnesses de SDK no `sdk-inproc` em vez do padrão
+  `full-server`. Isso pula o boot do servidor, mas os vereditos de política
+  ALLOW/ASK/DENY não ficam observáveis e os vereditos de
+  ferramenta/custo ficam limitados ao que o wrap encaminha. Não tem efeito
+  em harnesses nativos e é mutuamente exclusivo com `--transport`.
+- `--transport NAME` -- força `sdk-inproc`, `full-server` ou `native-tui`,
+  sobrescrevendo o padrão da família do harness.
+- `--jobs N` / `-j N` -- roda até N harnesses concorrentemente (padrão 1).
+  As sondagens dentro de um harness continuam sequenciais e a ordem do
+  relatório é estável.
+- `--rich` / `--no-rich` -- força ou desliga a tabela de progresso ao vivo. O
+  modo automático usa Rich num TTY e saída simples linha a linha caso
+  contrário.
+- `--report PATH` -- também escreve a matriz final. O formato segue o
+  `--json` ou `--markdown`, depois a extensão do nome do arquivo.
 
-### Output formats
+### Formatos de saída
 
-- Default: aligned terminal table plus Notes for every non-supported cell.
-  Color disables automatically when piped or with `--no-color`.
-- `--markdown`: GitHub-flavored table for docs and pull requests.
-- `--json`: machine-readable output for diffing runs or regenerating docs.
+- Padrão: tabela de terminal alinhada mais Notes para toda célula
+  não-suportada. A cor desliga automaticamente quando redirecionada ou com
+  `--no-color`.
+- `--markdown`: tabela no formato GitHub para docs e pull requests.
+- `--json`: saída legível por máquina para comparar execuções ou regenerar
+  docs.
 
-Each row includes the transport that actually ran it, such as
-`claude-sdk [full-server]` or `kimi-native [native]`. Under `--rich`, the live
-table is rendered on stderr; the stdout report avoids printing the grid twice,
-but redirected output remains self-contained.
+Cada linha inclui o transporte que de fato rodou, como `claude-sdk
+[full-server]` ou `kimi-native [native]`. Sob `--rich`, a tabela ao vivo é
+renderizada no stderr; o relatório do stdout evita imprimir a grade duas
+vezes, mas a saída redirecionada continua autocontida.
 
-## Transport selection
+## Seleção de transporte
 
-A profile's `transport` is a harness-family marker. The resolved driver is:
+O `transport` de um profile é um marcador da família do harness. O driver
+resolvido é:
 
-- **SDK family:** `full-server` by default. This runs through a real server and
-  runner and observes server-dispatched tools plus fixed ALLOW/ASK/DENY policy
-  behavior. `--fast` selects the cheaper wrap-direct `sdk-inproc` driver.
-- **Native family:** `native-tui`, which drives a resident vendor CLI in a
-  runner-owned tmux pane through the server session API.
-- `--transport NAME` overrides the family default when the driver supports the
-  selected harness.
+- **Família SDK:** `full-server` por padrão. Isso roda por um servidor e
+  runner reais e observa ferramentas despachadas pelo servidor mais o
+  comportamento de política ALLOW/ASK/DENY fixo. `--fast` seleciona o
+  driver `sdk-inproc` mais barato, direto no wrap.
+- **Família nativa:** `native-tui`, que dirige uma CLI de vendor residente
+  num pane tmux de propriedade do runner através da API de sessão do
+  servidor.
+- `--transport NAME` sobrescreve o padrão da família quando o driver suporta
+  o harness selecionado.
 
-## Dimensions
+## Dimensões
 
-| Probe | What it verifies | Priority |
+| Sondagem | O que verifica | Prioridade |
 | --- | --- | --- |
-| **Basic turn** | A turn completes and returns assistant text. | P0 |
-| **Streaming** | More than one output-text delta is emitted; a repeated single delta is `PARTIAL`. | P0 |
-| **Tool calling** | A tool call is surfaced and the turn closes after its result. | P0 |
-| **Policy DENY** | A tool-call policy blocks the call. | P0 |
-| **Policy ALLOW** | A tool call proceeds while an explicit allow policy is attached. | P1 |
-| **Policy ASK** | An ask policy raises an approval elicitation. | P1 |
-| **Model override** | The harness accepts and completes with the requested model. | P0 |
-| **Cost tracking** | A completed turn reports priced cost (`SUPPORTED`) or tokens only (`PARTIAL`). | P1 |
-| **Interrupt** | A running turn stops after interruption. | P0 |
+| **Turno básico** | Um turno completa e retorna texto do assistente. | P0 |
+| **Streaming** | Mais de um delta de output-text é emitido; um delta único repetido é `PARTIAL`. | P0 |
+| **Chamada de ferramenta** | Uma chamada de ferramenta é exposta e o turno fecha depois do resultado dela. | P0 |
+| **Política DENY** | Uma política de chamada de ferramenta bloqueia a chamada. | P0 |
+| **Política ALLOW** | Uma chamada de ferramenta prossegue com uma política de allow explícita anexada. | P1 |
+| **Política ASK** | Uma política de ask levanta uma elicitação de aprovação. | P1 |
+| **Sobrescrita de modelo** | O harness aceita e completa com o modelo requisitado. | P0 |
+| **Rastreio de custo** | Um turno completo reporta custo precificado (`SUPPORTED`) ou só tokens (`PARTIAL`). | P1 |
+| **Interrupção** | Um turno em execução para depois de interrompido. | P0 |
 
-Verdicts are `SUPPORTED` (`✓`), `PARTIAL` (`~`), `UNSUPPORTED` (`✗`),
-`NOT_APPLICABLE` (`—`), `UNKNOWN` (`?`), `SKIPPED` (`·`), and `DRIFT` (`!!`).
-A skip means the bench could not measure the behavior in that environment or
-transport; it does not claim the harness lacks the capability.
+Os vereditos são `SUPPORTED` (`✓`), `PARTIAL` (`~`), `UNSUPPORTED` (`✗`),
+`NOT_APPLICABLE` (`—`), `UNKNOWN` (`?`), `SKIPPED` (`·`) e `DRIFT` (`!!`).
+Um skip significa que a bancada não conseguiu medir o comportamento naquele
+ambiente ou transporte; não afirma que o harness não tem a capacidade.
 
-### Coverage by transport
+### Cobertura por transporte
 
-| Dimension | `full-server` | `native-tui` | `sdk-inproc` (`--fast`) |
+| Dimensão | `full-server` | `native-tui` | `sdk-inproc` (`--fast`) |
 | --- | --- | --- | --- |
-| Basic turn, Streaming, Model override, Interrupt | End-to-end through server + runner | End-to-end through server + runner + vendor CLI | Wrap boundary only |
-| Tool calling | Server-dispatched builtin | Vendor tool mirrored as a session item | Request-level wrap tool |
-| Policy DENY | Fixed policy in the agent spec | Session CEL policy + native policy hook | Not observable |
-| Policy ALLOW / ASK | Fixed policy; ASK observes and resolves an elicitation | Temporary session CEL policy; ASK observes and resolves an elicitation | Not observable |
-| Cost tracking | Session snapshot | Session snapshot when the vendor forwards usage | Completed-response usage when forwarded |
+| Turno básico, Streaming, Sobrescrita de modelo, Interrupção | Ponta a ponta por servidor + runner | Ponta a ponta por servidor + runner + CLI de vendor | Só o limite do wrap |
+| Chamada de ferramenta | Builtin despachada pelo servidor | Ferramenta de vendor espelhada como um item de sessão | Wrap de ferramenta a nível de requisição |
+| Política DENY | Política fixa no spec do agente | Política CEL de sessão + hook de política nativa | Não observável |
+| Política ALLOW / ASK | Política fixa; ASK observa e resolve uma elicitação | Política CEL de sessão temporária; ASK observa e resolve uma elicitação | Não observável |
+| Rastreio de custo | Snapshot de sessão | Snapshot de sessão quando o vendor encaminha uso | Uso da resposta completa quando encaminhado |
 
-The bench is a headless client of the server API. It verifies the contract the
-web application consumes, not browser rendering; UI presentation belongs in
-`tests/e2e_ui/`.
+A bancada é um cliente headless da API do servidor. Ela verifica o contrato
+que a aplicação web consome, não a renderização do navegador; a apresentação
+de UI pertence a `tests/e2e_ui/`.
 
 ## Layout
 
-| File | Role |
+| Arquivo | Papel |
 | --- | --- |
-| `verdict.py` | Verdicts, priorities, probe results, and drift reconciliation |
-| `profile.py` | `BenchProfile` and profile-name resolution |
-| `manifest.py` | Official profiles derived from the capability registry and e2e probe metadata |
-| `transport.py` | Driver protocol, registry, and transport resolution |
-| `driver.py` | `SdkInprocDriver`, shared `TurnResult`, and usage helpers |
-| `full_server.py` | Shared server/runner lifecycle and agent/session registration |
-| `full_server_driver.py` | Full-server probe implementation and shared polling |
-| `native_tui_driver.py` | Native vendor CLI provisioning and native probe implementation |
-| `session_items.py` | Shared parsing for session-item envelope shapes |
-| `runtime_env.py` | Credential/config resolution shared with the normal runtime behavior |
-| `probes/` | One module per dimension; `ALL_PROBES` defines display and run order |
-| `events.py` / `richreport.py` | Structured progress events and optional Rich rendering |
-| `bench.py` | Orchestration, concurrency, prerequisite handling, and shared-server wiring |
-| `report.py` | Terminal, Markdown, and JSON renderers |
+| `verdict.py` | Vereditos, prioridades, resultados de sondagem e reconciliação de drift |
+| `profile.py` | `BenchProfile` e resolução de nome de profile |
+| `manifest.py` | Profiles oficiais derivados do registro de capacidades e dos metadados de sondagem e2e |
+| `transport.py` | Protocolo de driver, registro e resolução de transporte |
+| `driver.py` | `SdkInprocDriver`, `TurnResult` compartilhado e helpers de uso |
+| `full_server.py` | Ciclo de vida compartilhado de servidor/runner e registro de agente/sessão |
+| `full_server_driver.py` | Implementação de sondagem full-server e polling compartilhado |
+| `native_tui_driver.py` | Provisionamento de CLI de vendor nativa e implementação de sondagem nativa |
+| `session_items.py` | Parsing compartilhado para os formatos de envelope de item de sessão |
+| `runtime_env.py` | Resolução de credencial/config compartilhada com o comportamento de runtime normal |
+| `probes/` | Um módulo por dimensão; `ALL_PROBES` define ordem de exibição e execução |
+| `events.py` / `richreport.py` | Eventos de progresso estruturados e renderização Rich opcional |
+| `bench.py` | Orquestração, concorrência, tratamento de pré-requisito e conexão com servidor compartilhado |
+| `report.py` | Renderizadores de terminal, Markdown e JSON |
 
-Reusable production helpers live in `omnicraft.config` and the existing runtime
-utility modules rather than being duplicated in the bench.
+Helpers de produção reutilizáveis ficam em `omnicraft.config` e nos módulos
+de utilitário de runtime já existentes, em vez de duplicados na bancada.
 
-## Extending the bench
+## Estendendo a bancada
 
-### Add a harness
+### Adicionar um harness
 
-- **Official SDK:** register the harness normally; base probe metadata and
-  capabilities flow into the manifest without a new driver.
-- **Native:** every harness marked `NATIVE_TUI` is derived automatically;
-  `native_vendor()` derives its launch metadata from capabilities.
-- **Community:** ship a `BenchProfile` and select it with
+- **SDK oficial:** registre o harness normalmente; os metadados de sondagem
+  base e as capacidades fluem para o manifesto sem precisar de um driver
+  novo.
+- **Nativo:** todo harness marcado `NATIVE_TUI` é derivado automaticamente;
+  `native_vendor()` deriva os metadados de lançamento dele a partir das
+  capacidades.
+- **Comunidade:** publique um `BenchProfile` e selecione-o com
   `--harness mypkg.harness:PROFILE`.
 
-A community native harness is recognized by the bench, but the server still
-needs a seeded native UI agent. Registry-driven native-agent seeding remains an
-open platform item.
+Um harness nativo da comunidade é reconhecido pela bancada, mas o servidor
+ainda precisa de um agente de UI nativa semeado. O seeding de agente nativo
+guiado pelo registro continua sendo um item de plataforma em aberto.
 
-### Add a dimension
+### Adicionar uma dimensão
 
-Add a `CapabilityProbe` under `probes/`, register it in
-`probes/__init__.py:ALL_PROBES`, add a semantic method to the driver protocol,
-and derive or declare the expected verdict. Keep transport-specific mechanics
-inside drivers so probes remain harness-agnostic.
+Adicione um `CapabilityProbe` em `probes/`, registre-o em
+`probes/__init__.py:ALL_PROBES`, adicione um método semântico ao protocolo do
+driver, e derive ou declare o veredito esperado. Mantenha a mecânica
+específica de transporte dentro dos drivers para que as sondagens continuem
+agnósticas de harness.
 
-## Current gaps
+## Lacunas atuais
 
-- Native agent seeding in the server is still hardcoded rather than driven by
-  the harness registry, which limits community-native end-to-end execution.
-- Some native harnesses require vendor login/provider setup that the bench
-  cannot provision and therefore skip cleanly.
-- Steering, live queue, resume/fork, reasoning, images, and compaction do not
-  yet have probes.
+- O seeding de agente nativo no servidor ainda é hardcoded em vez de guiado
+  pelo registro de harness, o que limita a execução ponta a ponta nativa da
+  comunidade.
+- Alguns harnesses nativos exigem login/configuração de provedor do vendor
+  que a bancada não consegue provisionar e, por isso, pulam de forma limpa.
+- Steering, fila ao vivo, resume/fork, reasoning, imagens e compaction ainda
+  não têm sondagens.

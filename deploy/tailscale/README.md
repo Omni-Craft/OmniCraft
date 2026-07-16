@@ -1,122 +1,123 @@
-# OmniCraft on Tailscale
+# OmniCraft no Tailscale
 
-[Tailscale](https://tailscale.com) gives every device on your network a
-stable private hostname (`<machine>.ts.net`) and connects them peer-to-peer
-over WireGuard — no port forwarding, no firewall rules. This makes it easy
-to access a server running on your laptop from your phone, tablet, or any
-other device you own.
+O [Tailscale](https://tailscale.com) dá a cada dispositivo da sua rede um
+hostname privado estável (`<machine>.ts.net`) e os conecta ponto a ponto via
+WireGuard — sem redirecionamento de porta, sem regras de firewall. Isso torna
+fácil acessar um servidor rodando no seu notebook a partir do celular, tablet,
+ou qualquer outro dispositivo seu.
 
 > [!NOTE]
-> This is not a cloud deploy. Tailscale is a networking layer, not a hosting
-> service — you still run the server yourself (laptop, VPS, home server).
-> If you want the server to stay up when your laptop closes, deploy to a
-> cloud platform (see [../README.md](../README.md)) and use Tailscale just
-> for private access.
+> Isso não é um deploy na nuvem. O Tailscale é uma camada de rede, não um
+> serviço de hospedagem — você continua rodando o servidor você mesmo
+> (notebook, VPS, servidor de casa). Se você quer que o servidor continue no
+> ar quando o seu notebook fechar, publique numa plataforma de nuvem (veja
+> [../README.md](../README.md)) e use o Tailscale só para acesso privado.
 
-## Prerequisites
+## Pré-requisitos
 
-- Tailscale installed on your server machine and every client device.
-  All signed in to the same Tailscale account.
-- OmniCraft server running locally (e.g. `omnicraft server` or
-  `docker compose up -d` from `deploy/docker/`).
+- Tailscale instalado na máquina do servidor e em todo dispositivo cliente.
+  Todos logados na mesma conta Tailscale.
+- Servidor OmniCraft rodando localmente (ex.: `omnicraft server` ou
+  `docker compose up -d` a partir de `deploy/docker/`).
 
-## Tailnet-only access (phone / tablet / remote laptop)
+## Acesso só pela tailnet (celular / tablet / notebook remoto)
 
-Expose the local server over HTTPS to every device on your tailnet:
+Exponha o servidor local por HTTPS para todo dispositivo da sua tailnet:
 
 ```bash
 tailscale serve https / http://localhost:8000
 ```
 
-Tailscale issues a TLS certificate for `https://<machine>.ts.net` and
-proxies traffic to `localhost:8000`. No other device on the internet can
-reach it.
+O Tailscale emite um certificado TLS para `https://<machine>.ts.net` e faz
+proxy do tráfego para `localhost:8000`. Nenhum outro dispositivo na internet
+consegue alcançá-lo.
 
-Set two environment variables on the server before starting it:
+Defina duas variáveis de ambiente no servidor antes de subi-lo:
 
 ```dotenv
-# Trust the Tailscale origin so WebSocket handshakes and multipart
-# uploads are accepted from the browser on your phone/tablet.
+# Confie na origem do Tailscale para que os handshakes de WebSocket e os
+# uploads multipart sejam aceitos a partir do navegador no seu celular/tablet.
 OMNICRAFT_WS_ALLOWED_ORIGINS=https://<machine>.ts.net
 
-# Public base URL — used to build the correct __Host- cookie prefix
-# and any invite / magic-link URLs.
+# URL base pública — usada para montar o prefixo correto do cookie __Host-
+# e as URLs de convite / magic-link.
 OMNICRAFT_ACCOUNTS_BASE_URL=https://<machine>.ts.net
 ```
 
-Without `OMNICRAFT_WS_ALLOWED_ORIGINS` the browser will get WebSocket close
-code `4403` and an HTTP 403 *"Forbidden: this endpoint requires a trusted
-Origin header"* on chat and file uploads. Without `OMNICRAFT_ACCOUNTS_BASE_URL`
-session cookies won't use the `__Host-` prefix and invite links resolve to
-the wrong host.
+Sem `OMNICRAFT_WS_ALLOWED_ORIGINS` o navegador vai receber o código de
+fechamento de WebSocket `4403` e um HTTP 403 *"Forbidden: this endpoint
+requires a trusted Origin header"* no chat e nos uploads de arquivo. Sem
+`OMNICRAFT_ACCOUNTS_BASE_URL` os cookies de sessão não vão usar o prefixo
+`__Host-` e os links de convite vão resolver para o host errado.
 
-**With Docker Compose** (`deploy/docker/`), add both lines to your `.env`:
+**Com o Docker Compose** (`deploy/docker/`), adicione as duas linhas ao seu
+`.env`:
 
 ```bash
-# generate and edit .env if you haven't already
+# gere e edite o .env se ainda não tiver feito isso
 cp deploy/docker/.env.example deploy/docker/.env
 
-# add to .env:
+# adicione ao .env:
 OMNICRAFT_WS_ALLOWED_ORIGINS=https://<machine>.ts.net
 OMNICRAFT_ACCOUNTS_BASE_URL=https://<machine>.ts.net
 ```
 
-Then restart:
+Depois reinicie:
 
 ```bash
 docker compose up -d
 ```
 
-Open `https://<machine>.ts.net` on any device on your tailnet.
+Abra `https://<machine>.ts.net` em qualquer dispositivo da sua tailnet.
 
-## Cloud sandbox hosts and Tailscale Funnel
+## Hosts de sandbox na nuvem e o Tailscale Funnel
 
-Cloud sandbox providers (Modal, Daytona, E2B, …) run the OmniCraft host
-process *inside* a remote container. That host dials **out** to
-`server_url` over WebSocket to receive work — so it needs to reach the
-server from the sandbox provider's cloud network, not just from your
-tailnet.
+Provedores de sandbox na nuvem (Modal, Daytona, E2B, …) rodam o processo de
+host do OmniCraft *dentro* de um container remoto. Esse host disca **para
+fora**, para `server_url`, via WebSocket para receber trabalho — então ele
+precisa alcançar o servidor a partir da rede na nuvem do provedor de sandbox,
+não só da sua tailnet.
 
-A server behind plain `tailscale serve` is only reachable from your
-tailnet. **Tailscale Funnel** fixes this: it makes a specific port
-reachable from the public internet while keeping the same
-`<machine>.ts.net` hostname.
+Um servidor atrás de um `tailscale serve` simples só é alcançável a partir da
+sua tailnet. O **Tailscale Funnel** resolve isso: ele torna uma porta
+específica alcançável a partir da internet pública mantendo o mesmo hostname
+`<machine>.ts.net`.
 
 ```bash
 tailscale funnel 8000
 ```
 
-Then point the sandbox config at the public Tailscale URL:
+Depois aponte a configuração do sandbox para a URL pública do Tailscale:
 
 ```yaml
-# config.yaml (or /data/config.yaml in Docker)
+# config.yaml (ou /data/config.yaml no Docker)
 sandbox:
-  provider: modal          # or daytona, e2b, …
+  provider: modal          # ou daytona, e2b, …
   server_url: https://<machine>.ts.net
 ```
 
 > [!IMPORTANT]
-> Funnel makes the server reachable from the public internet, so enable
-> auth before turning it on:
+> O Funnel torna o servidor alcançável a partir da internet pública, então
+> ative a autenticação antes de ligá-lo:
 >
 > ```dotenv
 > OMNICRAFT_AUTH_ENABLED=1
 > OMNICRAFT_ACCOUNTS_BASE_URL=https://<machine>.ts.net
 > ```
 >
-> See [Auth](../README.md#auth) for the full setup.
+> Veja [Autenticação](../README.md#autenticação) para a configuração completa.
 
-## Summary
+## Resumo
 
-| Goal | Command | Reachable from |
+| Objetivo | Comando | Alcançável a partir de |
 |---|---|---|
-| Access from devices on your tailnet | `tailscale serve https / http://localhost:8000` | Tailnet only |
-| Cloud sandbox hosts + tailnet | `tailscale funnel 8000` | Public internet + tailnet |
+| Acesso de dispositivos na sua tailnet | `tailscale serve https / http://localhost:8000` | Só a tailnet |
+| Hosts de sandbox na nuvem + tailnet | `tailscale funnel 8000` | Internet pública + tailnet |
 
-## Environment variable reference
+## Referência de variáveis de ambiente
 
-| Variable | Purpose |
+| Variável | Finalidade |
 |---|---|
-| `OMNICRAFT_WS_ALLOWED_ORIGINS` | Comma-separated origin allowlist. Set to `https://<machine>.ts.net` to trust the Tailscale origin for WebSocket and multipart routes. |
-| `OMNICRAFT_ACCOUNTS_BASE_URL` | Public base URL. Used for session cookie security (`__Host-` prefix) and invite / magic-link URLs. |
-| `OMNICRAFT_AUTH_ENABLED` | `1` to require login. Recommended when using Tailscale Funnel (public internet exposure). |
+| `OMNICRAFT_WS_ALLOWED_ORIGINS` | Allowlist de origens separadas por vírgula. Defina como `https://<machine>.ts.net` para confiar na origem do Tailscale nas rotas de WebSocket e multipart. |
+| `OMNICRAFT_ACCOUNTS_BASE_URL` | URL base pública. Usada para a segurança do cookie de sessão (prefixo `__Host-`) e para URLs de convite / magic-link. |
+| `OMNICRAFT_AUTH_ENABLED` | `1` para exigir login. Recomendado ao usar o Tailscale Funnel (exposição à internet pública). |

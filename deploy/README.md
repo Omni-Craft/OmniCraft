@@ -445,7 +445,7 @@ omnicraft debug migrate-accounts-to-oidc <database-url> --domain yourcompany.com
 
 Para os passo a passo específicos de cada provedor (GitHub OAuth, Google
 Workspace, OIDC genérico), veja
-[`docker/README.md#multi-user-mode-oidc`](docker/README.md#multi-user-mode-oidc).
+[`docker/README.md#multi-user-mode-oidc`](docker/README.md#modo-multiusuário-oidc).
 
 ### Modo header (X-Forwarded-Email)
 
@@ -494,7 +494,7 @@ outro chamador.
 deploys) ou `oidc`**; os dois autenticam usuários no servidor, sem proxy nenhum
 para acertar. Só escolha `header` quando você já opera um proxy em que confia
 para definir e higienizar o header de identidade, e leia
-[`docker/README.md#header-proxy-mode-for-deploys-behind-an-existing-sso-proxy`](docker/README.md#header-proxy-mode-for-deploys-behind-an-existing-sso-proxy)
+[`docker/README.md#header-proxy-mode-for-deploys-behind-an-existing-sso-proxy`](docker/README.md#modo-header-proxy-para-deploys-atrás-de-um-proxy-sso-existente)
 antes.
 
 ## Adicionando um novo destino de deploy

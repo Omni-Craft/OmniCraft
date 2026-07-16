@@ -1,92 +1,93 @@
-# OmniCraft on Daytona
+# OmniCraft no Daytona
 
-[Daytona](https://www.daytona.io) sandboxes give you disposable cloud
-machines for running OmniCraft hosts, two ways:
+Os sandboxes do [Daytona](https://www.daytona.io) te dão máquinas de nuvem
+descartáveis para rodar hosts do OmniCraft, de duas formas:
 
-- **CLI-launched**: `omnicraft sandbox create` / `connect` provisions a
-  sandbox from your terminal, ships your local checkout into it, and
-  registers it as a host with your server.
-- **Server-managed**: the server provisions a sandbox automatically
-  when a session is created with `"host_type": "managed"` and
-  terminates it when the session is deleted.
+- **Lançado pela CLI**: `omnicraft sandbox create` / `connect` provisiona um
+  sandbox a partir do seu terminal, envia o seu checkout local para dentro
+  dele, e o registra como host no seu servidor.
+- **Gerenciado pelo servidor**: o servidor provisiona um sandbox
+  automaticamente quando uma sessão é criada com `"host_type": "managed"` e o
+  encerra quando a sessão é apagada.
 
-Sandboxes boot from the official prebaked host image, so startup is
-seconds once Daytona has cached the image as an internal snapshot —
-the very first launch from a given image takes a few minutes while
-Daytona pulls and snapshots it.
+Os sandboxes inicializam a partir da imagem oficial pré-pronta do host, então
+o startup leva segundos assim que o Daytona já colocou a imagem em cache como
+um snapshot interno — o primeiríssimo lançamento a partir de uma imagem leva
+alguns minutos enquanto o Daytona puxa e tira o snapshot dela.
 
-> This directory also contains the source of the **free-tier egress
-> relay** (`wrangler.toml`, `src/index.js`) — a Cloudflare Worker that
-> lets Daytona Tier 1/2 sandboxes reach your server through Daytona's
-> egress firewall. See
-> [Free-tier relay setup](#free-tier-relay-setup-tier-12). It is NOT
-> a server deploy target.
+> Este diretório também contém o código-fonte do **relay de egress do tier
+> gratuito** (`wrangler.toml`, `src/index.js`) — um Cloudflare Worker que
+> deixa sandboxes Daytona Tier 1/2 alcançarem o seu servidor através do
+> firewall de egress do Daytona. Veja
+> [Configuração do relay do tier gratuito](#configuração-do-relay-do-tier-gratuito-tier-12).
+> Ele NÃO é um destino de deploy do servidor.
 
-## Prerequisites
+## Pré-requisitos
 
 ```bash
-pip install 'omnicraft[daytona]'   # installs the daytona SDK extra
+pip install 'omnicraft[daytona]'   # instala o extra do SDK do daytona
 ```
 
 > [!IMPORTANT]
-> **Egress on Daytona is allowlisted, which shapes how you run hosts
-> (CLI-launched and managed alike).** Daytona
-> [Tier 1/2 organizations](https://www.daytona.io/docs/en/limits/)
-> permit outbound traffic only to a
-> [fixed allowlist](https://www.daytona.io/docs/en/network-limits) of
-> public domains (git hosts, package managers, the major AI provider
-> APIs) that org admins **cannot modify**. Two consequences:
+> **O egress no Daytona é allowlisted, o que molda como você roda hosts
+> (lançados pela CLI e gerenciados, os dois).** Organizações Daytona
+> [Tier 1/2](https://www.daytona.io/docs/en/limits/) permitem tráfego de
+> saída só para uma
+> [allowlist fixa](https://www.daytona.io/docs/en/network-limits) de
+> domínios públicos (hosts de git, gerenciadores de pacote, as APIs dos
+> principais providers de IA) que admins da org **não conseguem modificar**.
+> Duas consequências:
 >
-> 1. The in-sandbox host's dial-back to your OmniCraft `server_url` is
->    blocked unless that URL is on the allowlist — otherwise the
->    launch times out with "managed host did not come online".
-> 2. The agent's LLM calls only work against an **allowlisted model
->    endpoint** (`api.openai.com`, `api.anthropic.com`, …). A private
->    or gateway endpoint is blocked the same way.
+> 1. A discagem de volta do host dentro do sandbox para o seu `server_url`
+>    do OmniCraft é bloqueada a menos que essa URL esteja na allowlist —
+>    senão o lançamento dá timeout com "managed host did not come online".
+> 2. As chamadas de LLM do agente só funcionam contra um **endpoint de
+>    modelo allowlisted** (`api.openai.com`, `api.anthropic.com`, …). Um
+>    endpoint privado ou de gateway é bloqueado da mesma forma.
 >
-> **Two ways to satisfy this:**
+> **Duas formas de resolver isso:**
 >
-> - **Tier 3+** (a $500 *usage top-up* — prepaid sandbox credit, not a
->   fee) lifts the egress restriction entirely: point `server_url` at
->   your real server and use any model endpoint, no relay. Best for
->   teams already on Daytona; cleanest security posture (end-to-end
->   TLS, no middlebox).
-> - **Free tier (Tier 1/2) via an allowlisted relay** — `*.workers.dev`
->   passes the firewall, so a tiny Cloudflare Worker that reverse-
->   proxies to your server lets the dial-back through; route any
->   non-allowlisted model endpoint through a second Worker the same
->   way. **Verified working end-to-end on Tier 1.** This inserts a
->   TLS-terminating middlebox, so read
->   [Security considerations](#security-considerations) first. See
->   [Free-tier relay setup](#free-tier-relay-setup-tier-12) below.
+> - **Tier 3+** (um *top-up* de uso de $500 — crédito de sandbox pré-pago,
+>   não uma taxa) remove a restrição de egress por completo: aponte
+>   `server_url` para o seu servidor de verdade e use qualquer endpoint de
+>   modelo, sem relay. Melhor para times que já estão no Daytona; a postura
+>   de segurança mais limpa (TLS ponta a ponta, sem middlebox).
+> - **Tier gratuito (Tier 1/2) via um relay allowlisted** — `*.workers.dev`
+>   passa pelo firewall, então um Cloudflare Worker pequeno que faz reverse
+>   proxy para o seu servidor deixa a discagem de volta passar; roteie
+>   qualquer endpoint de modelo não allowlisted por um segundo Worker da
+>   mesma forma. **Verificado funcionando de ponta a ponta no Tier 1.** Isso
+>   insere um middlebox que termina TLS, então leia
+>   [Considerações de segurança](#considerações-de-segurança) primeiro. Veja
+>   [Configuração do relay do tier gratuito](#configuração-do-relay-do-tier-gratuito-tier-12)
+>   abaixo.
 >
-> If you're evaluating cloud sandboxes from scratch and don't want to
-> run a relay, [Modal](../modal/README.md#sandboxes-for-runner-hosts)
-> has full egress on its entry tier.
+> Se você está avaliando sandboxes de nuvem do zero e não quer rodar um
+> relay, o [Modal](../modal/README.md#sandboxes-para-hosts-de-runner) tem egress
+> total no seu tier de entrada.
 
-Create an API key in the [Daytona dashboard](https://app.daytona.io)
-(Dashboard → Keys) and make it available where the launcher runs —
-your shell for the CLI flow, the **server** process for managed
-sandboxes:
+Crie uma chave de API no [painel do Daytona](https://app.daytona.io)
+(Dashboard → Keys) e deixe-a disponível onde o launcher roda — o seu shell
+para o fluxo de CLI, o processo do **servidor** para sandboxes gerenciados:
 
 ```bash
 export DAYTONA_API_KEY=dtn_…
-# Optional: a non-default API endpoint or target region
+# Opcional: um endpoint de API ou região de destino não padrão
 # export DAYTONA_API_URL=https://app.daytona.io/api
 # export DAYTONA_TARGET=us
 ```
 
-## CLI-launched sandboxes
+## Sandboxes lançados pela CLI
 
-Provision a sandbox and ship your local checkout into it:
+Provisione um sandbox e envie o seu checkout local para dentro dele:
 
 ```bash
 omnicraft sandbox create --provider daytona
 ```
 
-This pulls the host image, builds wheels from your local checkout, and
-overlays them on top — so the sandbox runs *your* code, not whatever
-the image was built from. Then register it as a host with your server:
+Isso puxa a imagem do host, constrói wheels a partir do seu checkout local, e
+as sobrepõe — então o sandbox roda *o seu* código, não o que a imagem foi
+construída a partir de. Depois registre-o como host no seu servidor:
 
 ```bash
 omnicraft sandbox connect --provider daytona \
@@ -94,74 +95,75 @@ omnicraft sandbox connect --provider daytona \
   --server https://your-host
 ```
 
-`connect` runs `omnicraft host` inside the sandbox (over a PTY session)
-and holds the connection open in your terminal — Ctrl-C tears it down.
-New sessions targeting that host now run in the sandbox.
+O `connect` roda o `omnicraft host` dentro do sandbox (via uma sessão PTY) e
+mantém a conexão aberta no seu terminal — Ctrl-C derruba tudo. Novas sessões
+apontando para esse host agora rodam no sandbox.
 
-Running multiple sandboxes against one server? Pass a unique
-`--host-name <label>` to each `connect` — the server keys hosts on
-(owner, name), and sandboxes that share a hostname collide.
+Rodando vários sandboxes contra um servidor? Passe um `--host-name <label>`
+único para cada `connect` — o servidor indexa hosts por (dono, nome), e
+sandboxes que compartilham um nome colidem.
 
-Sandboxes are disposable. When your code changes, create a new one —
-and delete the old one (Daytona sandboxes have no lifetime cap, and
-the CLI flow disables idle auto-stop, so abandoned sandboxes keep
-billing until removed via the
-[dashboard](https://app.daytona.io) or `daytona sandbox delete`).
+Sandboxes são descartáveis. Quando o seu código mudar, crie um novo — e
+apague o antigo (sandboxes Daytona não têm teto de tempo de vida, e o fluxo
+de CLI desliga o auto-stop por ociosidade, então sandboxes abandonados
+continuam sendo cobrados até serem removidos pelo
+[painel](https://app.daytona.io) ou por `daytona sandbox delete`).
 
 > [!NOTE]
-> On free-tier (Tier 1/2) organizations the `--server` URL must pass
-> the egress allowlist or the in-sandbox `omnicraft host` can't dial
-> back — see the tier note above and the
-> [relay setup](#free-tier-relay-setup-tier-12).
+> Em organizações no tier gratuito (Tier 1/2) a URL de `--server` precisa
+> passar pela allowlist de egress ou o `omnicraft host` dentro do sandbox não
+> consegue discar de volta — veja a nota sobre tiers acima e a
+> [configuração do relay](#configuração-do-relay-do-tier-gratuito-tier-12).
 
-To inject LLM/git credentials into a CLI-launched sandbox, set
-`OMNICRAFT_DAYTONA_SANDBOX_ENV` in your shell to a comma-separated list
-of variable names (e.g. `ANTHROPIC_API_KEY,GIT_TOKEN`) before running
-`create` — the named variables are copied from your environment into
-the sandbox at provision time.
+Para injetar credenciais de LLM/git num sandbox lançado pela CLI, defina
+`OMNICRAFT_DAYTONA_SANDBOX_ENV` no seu shell com uma lista de nomes de
+variável separados por vírgula (ex.: `ANTHROPIC_API_KEY,GIT_TOKEN`) antes de
+rodar `create` — as variáveis nomeadas são copiadas do seu ambiente para
+dentro do sandbox no momento do provisionamento.
 
-## Server-managed sandboxes
+## Sandboxes gerenciados pelo servidor
 
-Add a `sandbox:` section to the server config (`omnicraft server -c
-config.yaml`, or `<data_dir>/config.yaml`):
+Adicione uma seção `sandbox:` na configuração do servidor (`omnicraft server
+-c config.yaml`, ou `<data_dir>/config.yaml`):
 
 ```yaml
 sandbox:
   provider: daytona
-  server_url: https://your-host    # public URL sandboxes dial back to
+  server_url: https://your-host    # URL pública para onde os sandboxes discam de volta
 ```
 
-`server_url` must be reachable *from Daytona's cloud* — a public HTTPS
-URL, not `localhost`. Sessions created with `host_type: "managed"`
-(the API call or the Web UI's New Sandbox option) then run on a fresh
-Daytona sandbox; the create returns immediately and provisioning
-happens in the background, exactly like the [Modal managed
-flow](../modal/README.md#server-managed-sandboxes) — including
-repository workspaces, the first-message rendezvous, and dead-sandbox
-relaunch.
+`server_url` precisa ser alcançável *a partir da nuvem do Daytona* — uma URL
+HTTPS pública, não `localhost`. Sessões criadas com `host_type: "managed"` (a
+chamada de API ou a opção New Sandbox da Web UI) rodam então num sandbox
+Daytona novo; o create retorna imediatamente e o provisionamento acontece em
+segundo plano, exatamente como o [fluxo gerenciado do
+Modal](../modal/README.md#sandboxes-gerenciados-pelo-servidor) — incluindo workspaces
+de repositório, o rendezvous da primeira mensagem, e o relançamento de
+sandbox morto.
 
-Optional `daytona:` settings:
+Configurações `daytona:` opcionais:
 
 ```yaml
 sandbox:
   provider: daytona
   server_url: https://your-host
   daytona:
-    image: docker.io/<you>/omnicraft-host:latest  # default: official image
+    image: docker.io/<you>/omnicraft-host:latest  # padrão: a imagem oficial
     env: [OPENAI_API_KEY, ANTHROPIC_API_KEY, GIT_TOKEN]
 ```
 
-## Credentials for the sandbox (LLM keys, git tokens)
+## Credenciais para o sandbox (chaves de LLM, tokens de git)
 
-Daytona has no provider-side named-secret store to attach at sandbox
-creation, so credentials are injected as environment variables instead:
-`sandbox.daytona.env` lists the **names** of variables to copy from the
-**server's own environment** into every sandbox at provision time.
-Values never live in the config file — set them where the server runs:
+O Daytona não tem um cofre de secret nomeado do lado do provider para anexar
+na criação do sandbox, então as credenciais são injetadas como variáveis de
+ambiente: `sandbox.daytona.env` lista os **nomes** das variáveis a copiar do
+**próprio ambiente do servidor** para dentro de cada sandbox no momento do
+provisionamento. Os valores nunca ficam no arquivo de configuração — defina-
+os onde o servidor roda:
 
 ```bash
-export OPENAI_API_KEY=sk-…       # on the server
-export GIT_TOKEN=github_pat_…    # private-repo clone/fetch/push
+export OPENAI_API_KEY=sk-…       # no servidor
+export GIT_TOKEN=github_pat_…    # clone/fetch/push de repositório privado
 ```
 
 ```yaml
@@ -172,139 +174,145 @@ sandbox:
     env: [OPENAI_API_KEY, GIT_TOKEN]
 ```
 
-A listed name that is **not** set in the server's environment fails the
-launch loudly (it would otherwise surface much later as an opaque
-harness auth failure inside the sandbox).
+Um nome listado que **não** está definido no ambiente do servidor faz o
+lançamento falhar ruidosamente (senão isso apareceria bem mais tarde como uma
+falha opaca de autenticação do harness dentro do sandbox).
 
-Which variables to inject — providers, gateways, subscriptions, git —
-is identical to Modal; see the [variable table and per-plan
-recipes](../modal/README.md#llm-credentials-for-managed-sandboxes) and
-[git credentials](../modal/README.md#git-credentials-private-repositories).
-The in-sandbox host forwards the same standard set to its runners, and
-`OMNICRAFT_RUNNER_ENV_PASSTHROUGH` (as an injected variable) names any
-extras.
+Quais variáveis injetar — providers, gateways, assinaturas, git — é idêntico
+ao Modal; veja a [tabela de variáveis e as receitas por
+plano](../modal/README.md#credenciais-de-llm-para-sandboxes-gerenciados) e as
+[credenciais de git](../modal/README.md#credenciais-do-git-repositórios-privados).
+O host dentro do sandbox repassa o mesmo conjunto padrão para os seus
+runners, e `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` (como uma variável injetada)
+nomeia quaisquer extras.
 
-The same env-injection also carries **credentials for connecting to
-the server itself**, for a host that authenticates its dial-back with
-user credentials instead of a launch token. Managed launches never
-need this: the server injects a per-launch host token automatically.
-But a [CLI-launched](#cli-launched-sandboxes) host does when the
-server requires authentication — inject the keys for the relevant
-server, e.g. `DATABRICKS_HOST` + `DATABRICKS_TOKEN` (or
-`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET`) for a
-Databricks-fronted server, by naming them in
-`OMNICRAFT_DAYTONA_SANDBOX_ENV` before `create` — and the in-sandbox
-host mints fresh bearer tokens from them on every reconnect. See
-[Connecting to an authenticated
-server](../modal/README.md#connecting-to-an-authenticated-server) in
-the Modal guide.
+A mesma injeção de env também carrega **credenciais para conectar ao próprio
+servidor**, para um host que autentica a sua discagem de volta com
+credenciais de usuário em vez de um token de lançamento. Lançamentos
+gerenciados nunca precisam disso: o servidor injeta um token de host por
+lançamento automaticamente. Mas um host
+[lançado pela CLI](#sandboxes-lançados-pela-cli) precisa quando o servidor
+exige autenticação — injete as chaves do servidor em questão, ex.:
+`DATABRICKS_HOST` + `DATABRICKS_TOKEN` (ou `DATABRICKS_CLIENT_ID` /
+`DATABRICKS_CLIENT_SECRET`) para um servidor por trás do Databricks, nomeando-
+as em `OMNICRAFT_DAYTONA_SANDBOX_ENV` antes do `create` — e o host dentro do
+sandbox gera bearer tokens novos a partir delas a cada reconexão. Veja
+[Conectando a um servidor
+autenticado](../modal/README.md#conectando-a-um-servidor-autenticado) no
+guia do Modal.
 
 > [!NOTE]
-> On the **free tier**, the agent's model endpoint must also be
-> allowlisted (`api.openai.com`, `api.anthropic.com`, …). A private or
-> gateway endpoint is firewalled — route it through a second relay (see
-> below) and inject the relay's `*.workers.dev` URL as `OPENAI_BASE_URL`
-> / `ANTHROPIC_BASE_URL`.
+> No **tier gratuito**, o endpoint de modelo do agente também precisa estar
+> na allowlist (`api.openai.com`, `api.anthropic.com`, …). Um endpoint
+> privado ou de gateway fica atrás do firewall — roteie-o por um segundo
+> relay (veja abaixo) e injete a URL `*.workers.dev` do relay como
+> `OPENAI_BASE_URL` / `ANTHROPIC_BASE_URL`.
 
-## Free-tier relay setup (Tier 1/2)
+## Configuração do relay do tier gratuito (Tier 1/2)
 
-Daytona free-tier (Tier 1/2) sandboxes can only reach an
-[allowlisted set of domains](https://www.daytona.io/docs/en/network-limits);
-`*.workers.dev` is on it. The ready-to-deploy Cloudflare Worker in this
-directory lives there and transparently reverse-proxies every request —
-plain HTTP and WebSocket upgrades — to your real OmniCraft server, so a
-managed host's dial-back (the host tunnel WS, the runner tunnel WS, and
-plain HTTP) reaches the server through the firewall.
+Sandboxes Daytona no tier gratuito (Tier 1/2) só conseguem alcançar um
+[conjunto de domínios allowlisted](https://www.daytona.io/docs/en/network-limits);
+`*.workers.dev` está nele. O Cloudflare Worker pronto para deploy neste
+diretório mora lá e faz reverse proxy de forma transparente de toda
+requisição — HTTP puro e upgrades de WebSocket — para o seu servidor OmniCraft
+de verdade, então a discagem de volta de um host gerenciado (o WS do túnel de
+host, o WS do túnel de runner, e HTTP puro) alcança o servidor através do
+firewall.
 
 ```bash
-npm i -g wrangler          # or use npx
-wrangler login             # one-time, free, no credit card
+npm i -g wrangler          # ou use npx
+wrangler login             # uma vez, grátis, sem cartão de crédito
 cd deploy/daytona
 wrangler deploy --var UPSTREAM_URL:https://your-omnicraft-server
 # → https://omnicraft-daytona-relay.<your-subdomain>.workers.dev
 ```
 
-Point `sandbox.daytona.server_url` at the printed `*.workers.dev` URL.
-For a non-allowlisted model endpoint, deploy a second copy
-(`name = "omnicraft-llm-relay"`, `UPSTREAM_URL` = your gateway) and
-inject its URL as `OPENAI_BASE_URL` via `sandbox.daytona.env`.
+Aponte `sandbox.daytona.server_url` para a URL `*.workers.dev` impressa. Para
+um endpoint de modelo não allowlisted, publique uma segunda cópia (`name =
+"omnicraft-llm-relay"`, `UPSTREAM_URL` = o seu gateway) e injete a URL dela
+como `OPENAI_BASE_URL` via `sandbox.daytona.env`.
 
-**This path is verified end-to-end on a real Daytona Tier 1 org**
-(managed create → host dial-back through the relay → runner → real LLM
-turn → teardown). Read the security trade-off below before relying on
-it.
+**Este caminho é verificado de ponta a ponta numa org Daytona Tier 1 de
+verdade** (create gerenciado → discagem de volta do host através do relay →
+runner → turno de LLM de verdade → teardown). Leia o trade-off de segurança
+abaixo antes de depender dele.
 
-## Security considerations
+## Considerações de segurança
 
-- **Injected credentials live in Daytona's control plane.** Daytona has
-  no named-secret store, so `sandbox.daytona.env` values are sent to
-  Daytona's API as literal sandbox env vars and stored in sandbox
-  metadata — a third party now holds whatever you inject (LLM keys,
-  `GIT_TOKEN`). Prefer **scoped, short-lived** credentials: a
-  fine-grained PAT limited to the repos a session needs, a gateway
-  token over a root provider key. (Modal's launcher attaches named
-  Modal secrets instead, so its values stay in Modal's secret store —
-  a stronger posture; this is the main security difference between the
-  two providers.)
-- **All managed sandboxes share one Daytona org + API key.**
-  Cross-user isolation between OmniCraft users rides entirely on
-  Daytona's sandbox boundaries, and the shared org key can enumerate
-  and delete any user's sandbox. Same single-tenant-org shape as the
-  Modal provider; scope the org to this workload and nothing else.
-- **The launch token's lifetime is 7 days.** Daytona sandboxes have no
-  platform lifetime cap, so the per-launch host token must outlive a
-  long-running sandbox across tunnel reconnects — a longer window than
-  Modal's ~25h. A leaked token is replayable against the server for
-  that window; a relaunch mints a fresh one. Deployments injecting
-  their own launcher can set a shorter `token_ttl_s` on
-  `ManagedSandboxConfig` if their sandboxes are short-lived.
-- **The Tier 1/2 relay workaround is a TLS-terminating MITM.** A relay
-  on an allowlisted wildcard domain (`*.vercel.app` / `*.workers.dev`)
-  must be an L7 service — it terminates TLS and re-originates, so it
-  sees the host launch token and all tunnel payload (runner frames,
-  tool output, file contents) in plaintext at its edge. Only use a
-  relay you fully control, with logging off; never a shared/public
-  one. The direct-egress (Tier 3) path keeps the tunnel end-to-end TLS
-  with no middlebox and is the right choice for any
-  security-sensitive deployment.
+- **Credenciais injetadas vivem no control plane do Daytona.** O Daytona não
+  tem cofre de secret nomeado, então os valores de `sandbox.daytona.env` são
+  enviados para a API do Daytona como variáveis de ambiente literais do
+  sandbox e guardados nos metadados do sandbox — um terceiro agora detém
+  tudo que você injetar (chaves de LLM, `GIT_TOKEN`). Prefira credenciais
+  **com escopo restrito e de vida curta**: um PAT granular limitado aos
+  repositórios que uma sessão precisa, um token de gateway em vez de uma
+  chave raiz do provider. (O launcher do Modal anexa secrets nomeados do
+  Modal em vez disso, então os valores dele ficam no cofre de secrets do
+  Modal — uma postura mais forte; essa é a principal diferença de segurança
+  entre os dois providers.)
+- **Todos os sandboxes gerenciados compartilham uma org Daytona + uma chave
+  de API.** O isolamento entre usuários do OmniCraft se apoia inteiramente
+  nas fronteiras de sandbox do Daytona, e a chave de org compartilhada
+  consegue enumerar e apagar o sandbox de qualquer usuário. Mesma forma de
+  org de tenant único do provider Modal; restrinja a org só a essa carga de
+  trabalho.
+- **O tempo de vida do token de lançamento é de 7 dias.** Sandboxes Daytona
+  não têm teto de tempo de vida da plataforma, então o token de host por
+  lançamento precisa sobreviver a um sandbox de longa duração através de
+  reconexões de túnel — uma janela maior que as ~25h do Modal. Um token
+  vazado é reutilizável contra o servidor por essa janela; um relançamento
+  gera um novo. Deploys que injetam o seu próprio launcher podem definir um
+  `token_ttl_s` mais curto no `ManagedSandboxConfig` se os seus sandboxes
+  forem de vida curta.
+- **A solução de contorno do relay Tier 1/2 é um MITM que termina TLS.** Um
+  relay num domínio coringa allowlisted (`*.vercel.app` / `*.workers.dev`)
+  precisa ser um serviço L7 — ele termina o TLS e reorigina, então vê o
+  token de lançamento do host e todo o payload do túnel (frames de runner,
+  saída de ferramentas, conteúdo de arquivos) em texto puro na sua borda. Use
+  só um relay que você controla totalmente, com logging desligado; nunca um
+  compartilhado/público. O caminho de egress direto (Tier 3) mantém o túnel
+  com TLS ponta a ponta sem middlebox nenhum e é a escolha certa para
+  qualquer deploy sensível à segurança.
 
 ## Troubleshooting
 
-- **"managed host did not come online within 120s"** — on Tier 1/2
-  organizations this is almost always the egress firewall blocking the
-  host's dial-back to `server_url` (see the tier note above). Verify
-  with `curl <server_url>/health` inside a sandbox. On Tier 3+, check
-  `/tmp/omnicraft-host.log` inside the sandbox.
-- **Slow first launch** — the initial create from a new image builds a
-  Daytona snapshot (minutes); subsequent launches are seconds.
+- **"managed host did not come online within 120s"** — em organizações Tier
+  1/2 isso quase sempre é o firewall de egress bloqueando a discagem de
+  volta do host para `server_url` (veja a nota sobre tiers acima). Verifique
+  com `curl <server_url>/health` dentro de um sandbox. No Tier 3+, cheque o
+  `/tmp/omnicraft-host.log` dentro do sandbox.
+- **Primeiro lançamento lento** — o create inicial a partir de uma imagem
+  nova constrói um snapshot do Daytona (minutos); lançamentos seguintes são
+  em segundos.
 - **"Organization is suspended: Please verify your email address"** —
-  complete email verification in the
-  [dashboard](https://app.daytona.io/dashboard/limits) (signing up via
-  GitHub/Google SSO arrives pre-verified).
+  complete a verificação de email no
+  [painel](https://app.daytona.io/dashboard/limits) (cadastro via SSO do
+  GitHub/Google chega pré-verificado).
 
-## Lifecycle notes
+## Notas de ciclo de vida
 
-- **No platform lifetime cap.** Unlike Modal's 24-hour limit, Daytona
-  sandboxes run until deleted. OmniCraft disables Daytona's 15-minute
-  idle auto-stop at provision time (a session host must survive gaps
-  between turns); the sandbox is deleted when its session is deleted,
-  and the dead-sandbox relaunch path replaces one that crashed or was
-  deleted out-of-band.
-- **First launch per image is slow.** Daytona builds an internal
-  snapshot from the image on first use (minutes for the ~1.4 GiB host
-  image); subsequent launches reuse it (seconds).
-- **Custom images** work like Modal's: build the `host` target of
-  [`deploy/docker/Dockerfile`](../docker/Dockerfile)
-  (`--platform linux/amd64`) and push it to any registry Daytona can
-  pull from, then set `sandbox.daytona.image` or
+- **Sem teto de tempo de vida da plataforma.** Diferente do limite de 24
+  horas do Modal, sandboxes Daytona rodam até serem apagados. O OmniCraft
+  desliga o auto-stop por ociosidade de 15 minutos do Daytona no momento do
+  provisionamento (um host de sessão precisa sobreviver a intervalos entre
+  turnos); o sandbox é apagado quando a sua sessão é apagada, e o caminho de
+  relançamento de sandbox morto substitui um que quebrou ou foi apagado fora
+  de banda.
+- **O primeiro lançamento por imagem é lento.** O Daytona constrói um
+  snapshot interno a partir da imagem no primeiro uso (minutos para a imagem
+  de host de ~1,4 GiB); lançamentos seguintes o reaproveitam (segundos).
+- **Imagens customizadas** funcionam como as do Modal: construa o alvo
+  `host` do [`deploy/docker/Dockerfile`](../docker/Dockerfile)
+  (`--platform linux/amd64`) e envie para qualquer registry de onde o
+  Daytona possa puxar, depois defina `sandbox.daytona.image` ou
   `OMNICRAFT_DAYTONA_HOST_IMAGE`.
 
-## Environment variable reference
+## Referência de variáveis de ambiente
 
-| Variable | Where it's read | Purpose |
+| Variável | Onde é lida | Finalidade |
 |---|---|---|
-| `DAYTONA_API_KEY` | CLI machine / server | Daytona API credentials (required) |
-| `DAYTONA_API_URL` | CLI machine / server | Non-default Daytona API endpoint |
-| `DAYTONA_TARGET` | CLI machine / server | Target region for new sandboxes |
-| `OMNICRAFT_DAYTONA_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.daytona.image` takes precedence) |
-| `OMNICRAFT_DAYTONA_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.daytona.env` takes precedence for managed) |
+| `DAYTONA_API_KEY` | máquina da CLI / servidor | Credenciais de API do Daytona (obrigatório) |
+| `DAYTONA_API_URL` | máquina da CLI / servidor | Endpoint de API do Daytona não padrão |
+| `DAYTONA_TARGET` | máquina da CLI / servidor | Região de destino para sandboxes novos |
+| `OMNICRAFT_DAYTONA_HOST_IMAGE` | máquina da CLI / servidor | Sobrescreve a referência da imagem do host (`sandbox.daytona.image` tem precedência) |
+| `OMNICRAFT_DAYTONA_SANDBOX_ENV` | máquina da CLI / servidor | Nomes de variável de ambiente do lado do launcher, separados por vírgula, a injetar (`sandbox.daytona.env` tem precedência no modo gerenciado) |

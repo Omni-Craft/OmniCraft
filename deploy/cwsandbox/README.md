@@ -1,56 +1,60 @@
-# CoreWeave Sandbox provider
+# Provider CoreWeave Sandbox
 
-[CoreWeave Sandbox](https://docs.coreweave.com/products/sandboxes) gives you
-disposable cloud machines for running OmniCraft hosts, two ways:
+O [CoreWeave Sandbox](https://docs.coreweave.com/products/sandboxes) te dá
+máquinas de nuvem descartáveis para rodar hosts do OmniCraft, de duas formas:
 
-- **CLI-launched**: `omnicraft sandbox create` / `connect` provisions a sandbox
-  from your terminal, ships your local checkout into it, and registers it as a
-  host with your server.
-- **Server-managed**: the server provisions a sandbox automatically when a
-  session is created with `"host_type": "managed"` and terminates it when the
-  session is deleted.
+- **Lançado pela CLI**: `omnicraft sandbox create` / `connect` provisiona um
+  sandbox a partir do seu terminal, envia o seu checkout local para dentro
+  dele, e o registra como host no seu servidor.
+- **Gerenciado pelo servidor**: o servidor provisiona um sandbox
+  automaticamente quando uma sessão é criada com `"host_type": "managed"` e o
+  encerra quando a sessão é apagada.
 
-The launcher wraps the official
-[`cwsandbox`](https://github.com/coreweave/cwsandbox-client) Python SDK, gated
-behind the `cwsandbox` extra and imported lazily — same posture as the Modal and
-Daytona launchers. Sandboxes boot from the official prebaked host image, so
-startup is seconds.
+O launcher encapsula o SDK Python oficial do
+[`cwsandbox`](https://github.com/coreweave/cwsandbox-client), protegido pelo
+extra `cwsandbox` e importado de forma preguiçosa — a mesma postura dos
+launchers do Modal e do Daytona. Os sandboxes inicializam a partir da imagem
+oficial pré-pronta do host, então o startup leva segundos.
 
-Two traits shape the rest of this guide:
+Duas características moldam o resto deste guia:
 
-- **No local port forward.** CoreWeave Sandbox can't forward a sandbox→laptop
-  callback port, so the interactive in-sandbox `omnicraft login` / App OAuth step
-  is skipped automatically (as on Modal and Daytona) — fine for token/OIDC-auth
-  servers.
-- **No egress by default.** CW Sandbox blocks outbound traffic unless asked; the
-  launcher requests `egress_mode: internet` so the host can reach your server and
-  the agent can reach its model endpoint.
+- **Sem port forward local.** O CoreWeave Sandbox não consegue encaminhar uma
+  porta de callback sandbox→notebook, então o passo interativo de
+  `omnicraft login` / App OAuth dentro do sandbox é pulado automaticamente
+  (como no Modal e no Daytona) — tudo bem para servidores autenticados por
+  token/OIDC.
+- **Sem egress por padrão.** O CW Sandbox bloqueia tráfego de saída a menos
+  que seja pedido; o launcher solicita `egress_mode: internet` para que o
+  host consiga alcançar o seu servidor e o agente consiga alcançar o endpoint
+  do seu modelo.
 
 ```bash
 pip install 'omnicraft[cwsandbox]'
 ```
 
-## Prerequisites
+## Pré-requisitos
 
-Create a CoreWeave Sandbox API key and make it available where the launcher
-runs — your shell for the CLI flow, the **server** process for managed sandboxes
-(12-factor; never in config files):
+Crie uma chave de API do CoreWeave Sandbox e deixe-a disponível onde o
+launcher roda — o seu shell para o fluxo de CLI, o processo do **servidor**
+para sandboxes gerenciados (12-factor; nunca em arquivos de configuração):
 
 ```bash
-export CWSANDBOX_API_KEY=...                          # CoreWeave Sandbox API key
-export CWSANDBOX_BASE_URL=https://api.cwsandbox.com   # optional (this is the default)
+export CWSANDBOX_API_KEY=...                          # chave de API do CoreWeave Sandbox
+export CWSANDBOX_BASE_URL=https://api.cwsandbox.com   # opcional (este é o padrão)
 ```
 
-## The host image
+## A imagem do host
 
-Sandboxes boot from `ghcr.io/omnicraft-ai/omnicraft-host:latest`, published by CI
-from the `host` target of [`deploy/docker/Dockerfile`](../docker/Dockerfile)
-with OmniCraft and its dependencies preinstalled — including the coding-harness
-CLIs (`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run without an
-in-sandbox install.
+Os sandboxes inicializam a partir de
+`ghcr.io/omnicraft-ai/omnicraft-host:latest`, publicada pela CI a partir do
+alvo `host` do [`deploy/docker/Dockerfile`](../docker/Dockerfile) com o
+OmniCraft e as suas dependências pré-instaladas — incluindo as CLIs dos
+harnesses de código (`claude`, `codex`, `pi`, `kiro-cli`), então agentes de
+qualquer harness rodam sem instalação dentro do sandbox.
 
-To use a different image (a fork, or extra tooling baked in), build the same
-target and push it anywhere CoreWeave can pull from:
+Para usar uma imagem diferente (um fork, ou ferramentas extras embutidas),
+construa o mesmo alvo e envie para qualquer lugar de onde o CoreWeave possa
+puxar:
 
 ```bash
 docker build -f deploy/docker/Dockerfile --target host \
@@ -59,24 +63,25 @@ docker build -f deploy/docker/Dockerfile --target host \
 docker push docker.io/<you>/omnicraft-host:latest
 ```
 
-Then point OmniCraft at it — `OMNICRAFT_CWSANDBOX_HOST_IMAGE` for the CLI flow, or
-`sandbox.cwsandbox.image` in the server config for the managed flow.
+Depois aponte o OmniCraft para ela — `OMNICRAFT_CWSANDBOX_HOST_IMAGE` para o
+fluxo de CLI, ou `sandbox.cwsandbox.image` na configuração do servidor para o
+fluxo gerenciado.
 
 > [!NOTE]
-> Building on Apple Silicon? Pass `--platform linux/amd64` — sandboxes run
-> x86_64.
+> Construindo em Apple Silicon? Passe `--platform linux/amd64` — os sandboxes
+> rodam em x86_64.
 
-## CLI-launched sandboxes
+## Sandboxes lançados pela CLI
 
-Provision a sandbox and ship your local checkout into it:
+Provisione um sandbox e envie o seu checkout local para dentro dele:
 
 ```bash
 omnicraft sandbox create --provider cwsandbox --server https://your-host
 ```
 
-This pulls the host image, builds wheels from your local checkout, and overlays
-them on top — so the sandbox runs *your* code, not whatever the image was built
-from. Then register it as a host with your server:
+Isso puxa a imagem do host, constrói wheels a partir do seu checkout local, e
+as sobrepõe — então o sandbox roda *o seu* código, não o que a imagem foi
+construída a partir de. Depois registre-o como host no seu servidor:
 
 ```bash
 omnicraft sandbox connect --provider cwsandbox \
@@ -84,70 +89,75 @@ omnicraft sandbox connect --provider cwsandbox \
   --server https://your-host
 ```
 
-`connect` runs `omnicraft host` inside the sandbox and holds the connection open
-in your terminal — Ctrl-C tears it down. New sessions targeting that host now run
-in the sandbox.
+O `connect` roda o `omnicraft host` dentro do sandbox e mantém a conexão
+aberta no seu terminal — Ctrl-C derruba tudo. Novas sessões apontando para
+esse host agora rodam no sandbox.
 
-Running multiple sandboxes against one server? Pass a unique `--host-name
-<label>` to each `connect` — the server keys hosts on (owner, name), and
-sandboxes that share a hostname collide.
+Rodando vários sandboxes contra um servidor? Passe um `--host-name <label>`
+único para cada `connect` — o servidor indexa hosts por (dono, nome), e
+sandboxes que compartilham um nome colidem.
 
-Sandboxes are disposable. When your code changes, create a new one.
+Sandboxes são descartáveis. Quando o seu código mudar, crie um novo.
 
-To inject LLM/git credentials into a CLI-launched sandbox, set
-`OMNICRAFT_CWSANDBOX_SANDBOX_ENV` in your shell to a comma-separated list of
-variable names (e.g. `ANTHROPIC_API_KEY,GIT_TOKEN`) before running `create` — the
-named variables are copied from your environment into the sandbox at provision
-time. A listed name that is **not** set fails the launch loudly (it would
-otherwise surface much later as an opaque harness auth failure inside the
+Para injetar credenciais de LLM/git num sandbox lançado pela CLI, defina
+`OMNICRAFT_CWSANDBOX_SANDBOX_ENV` no seu shell com uma lista de nomes de
+variável separados por vírgula (ex.: `ANTHROPIC_API_KEY,GIT_TOKEN`) antes de
+rodar `create` — as variáveis nomeadas são copiadas do seu ambiente para
+dentro do sandbox no momento do provisionamento. Um nome listado que **não**
+está definido faz o lançamento falhar ruidosamente (senão isso apareceria
+bem mais tarde como uma falha opaca de autenticação do harness dentro do
 sandbox).
 
-### Connecting to an authenticated server
+### Conectando a um servidor autenticado
 
-`connect` runs `omnicraft host` inside the sandbox, and that host must present
-credentials when it dials back to a server that requires authentication. The
-interactive `omnicraft login` browser flow can't run inside a sandbox (no callback
-port forward), so inject the keys for the relevant server instead — name them in
-`OMNICRAFT_CWSANDBOX_SANDBOX_ENV` before `create`:
+O `connect` roda o `omnicraft host` dentro do sandbox, e esse host precisa
+apresentar credenciais quando disca de volta para um servidor que exige
+autenticação. O fluxo interativo de navegador do `omnicraft login` não
+consegue rodar dentro de um sandbox (sem encaminhamento de porta de
+callback), então injete as chaves do servidor em questão — nomeie-as em
+`OMNICRAFT_CWSANDBOX_SANDBOX_ENV` antes do `create`:
 
 ```bash
 export OMNICRAFT_CWSANDBOX_SANDBOX_ENV=DATABRICKS_HOST,DATABRICKS_TOKEN
 omnicraft sandbox create --provider cwsandbox --server https://your-host
 ```
 
-The in-sandbox host mints a fresh bearer token from those credentials on every
-connect and reconnect. For a Databricks-fronted server, inject `DATABRICKS_HOST`
-plus either `DATABRICKS_TOKEN` (a PAT) or `DATABRICKS_CLIENT_ID` /
-`DATABRICKS_CLIENT_SECRET` (an OAuth service principal — re-minting keeps a
-long-lived sandbox connected past any single token's expiry).
+O host dentro do sandbox gera um bearer token novo a partir dessas
+credenciais a cada connect e reconnect. Para um servidor por trás do
+Databricks, injete `DATABRICKS_HOST` mais `DATABRICKS_TOKEN` (um PAT) ou
+`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET` (um service principal
+OAuth — regerar mantém um sandbox de vida longa conectado além da expiração
+de um único token).
 
-A server with no authentication on the host tunnel needs none of this, and
-neither do [server-managed sandboxes](#server-managed-sandboxes) — those
-authenticate with a server-minted per-launch token automatically.
+Um servidor sem autenticação no túnel do host não precisa de nada disso, e
+[sandboxes gerenciados pelo servidor](#sandboxes-gerenciados-pelo-servidor)
+também não — eles se autenticam com um token gerado pelo servidor por
+lançamento, automaticamente.
 
-## Server-managed sandboxes
+## Sandboxes gerenciados pelo servidor
 
-Add a `sandbox:` section to the server config (`omnicraft server -c config.yaml`,
-or `<data_dir>/config.yaml`):
+Adicione uma seção `sandbox:` na configuração do servidor (`omnicraft server
+-c config.yaml`, ou `<data_dir>/config.yaml`):
 
 ```yaml
 sandbox:
   provider: cwsandbox
-  server_url: https://your-host    # public URL sandboxes dial back to
+  server_url: https://your-host    # URL pública para onde os sandboxes discam de volta
 ```
 
-`provider` + `server_url` is a complete config. `server_url` **must be reachable
-from CoreWeave** — the host inside the sandbox opens an outbound WebSocket to it,
-not `localhost`. For local testing, expose your server with a tunnel
-(`cloudflared` / `ngrok`) and point `server_url` at the tunnel URL. The server
-itself needs `CWSANDBOX_API_KEY` (and optional `CWSANDBOX_BASE_URL`) in its
-environment.
+`provider` + `server_url` já é uma configuração completa. O `server_url`
+**precisa ser alcançável a partir do CoreWeave** — o host dentro do sandbox
+abre um WebSocket de saída para ele, não para `localhost`. Para testes
+locais, exponha o seu servidor com um túnel (`cloudflared` / `ngrok`) e
+aponte `server_url` para a URL do túnel. O próprio servidor precisa de
+`CWSANDBOX_API_KEY` (e opcionalmente `CWSANDBOX_BASE_URL`) no seu ambiente.
 
-Sessions created with `host_type: "managed"` (the API call or the Web UI's New
-Sandbox option) then run on a fresh CW sandbox; the create returns immediately
-and provisioning happens in the background, exactly like the [Modal managed
-flow](../modal/README.md#server-managed-sandboxes) — including repository
-workspaces, the first-message rendezvous, and dead-sandbox relaunch.
+Sessões criadas com `host_type: "managed"` (a chamada de API ou a opção New
+Sandbox da Web UI) rodam então num CW sandbox novo; o create retorna
+imediatamente e o provisionamento acontece em segundo plano, exatamente como
+o [fluxo gerenciado do Modal](../modal/README.md#sandboxes-gerenciados-pelo-servidor) —
+incluindo workspaces de repositório, o rendezvous da primeira mensagem, e o
+relançamento de sandbox morto.
 
 ```bash
 curl -X POST https://your-host/v1/sessions \
@@ -155,57 +165,62 @@ curl -X POST https://your-host/v1/sessions \
   -d '{"agent_id": "agent_...", "host_type": "managed"}'
 ```
 
-Each managed sandbox authenticates back with a server-minted, per-launch token;
-no user credentials enter the sandbox for the server connection.
+Cada sandbox gerenciado se autentica de volta com um token gerado pelo
+servidor, por lançamento; nenhuma credencial de usuário entra no sandbox para
+a conexão com o servidor.
 
-Optional `cwsandbox:` settings:
+Configurações `cwsandbox:` opcionais:
 
 ```yaml
 sandbox:
   provider: cwsandbox
   server_url: https://your-host
   cwsandbox:
-    image: docker.io/<you>/omnicraft-host:latest        # default: official image
-    env: [OPENAI_API_KEY, ANTHROPIC_API_KEY, GIT_TOKEN]  # server env var NAMES to inject
+    image: docker.io/<you>/omnicraft-host:latest        # padrão: a imagem oficial
+    env: [OPENAI_API_KEY, ANTHROPIC_API_KEY, GIT_TOKEN]  # NOMES de variável de ambiente do servidor a injetar
 ```
 
-### Managed hosts and server auth
+### Hosts gerenciados e autenticação do servidor
 
-How the dial-back authenticates depends on how the **server** does auth, and
-there is one interaction worth knowing before you deploy. A managed sandbox opens
-two kinds of connections back to the server: the **host tunnel**, which the
-per-launch token authenticates directly (always works), and one **runner tunnel**
-per session, opened by the runner subprocess — which authenticates with whatever
-server credential it can resolve, **not** the per-launch host token.
+Como a discagem de volta se autentica depende de como o **servidor** faz a
+autenticação, e há uma interação que vale a pena conhecer antes de fazer o
+deploy. Um sandbox gerenciado abre dois tipos de conexão de volta para o
+servidor: o **túnel do host**, que o token por lançamento autentica
+diretamente (sempre funciona), e um **túnel de runner** por sessão, aberto
+pelo subprocesso do runner — que se autentica com qualquer credencial de
+servidor que consiga resolver, **não** o token de host por lançamento.
 
-The consequence:
+A consequência:
 
-- **Header / OIDC-proxy auth, or single-user (no-auth) servers** — the runner
-  tunnel needs no extra identity, so managed hosts work out of the box.
-- **The built-in `accounts` provider (`OMNICRAFT_AUTH_ENABLED=1`)** — the runner
-  tunnel additionally requires a *user* identity, which the per-launch host token
-  does not carry, so the runner dial-back is refused (`403`) even though the host
-  tunnel connects. This is a framework-level managed-host interaction shared by
-  **all** sandbox providers (Modal / Daytona / Islo / cwsandbox), not specific to
-  cwsandbox.
+- **Autenticação por header / proxy OIDC, ou servidores single-user
+  (sem autenticação)** — o túnel de runner não precisa de identidade extra
+  nenhuma, então hosts gerenciados funcionam prontos para uso.
+- **O provider embutido `accounts` (`OMNICRAFT_AUTH_ENABLED=1`)** — o túnel
+  de runner exige, além disso, uma identidade de *usuário*, que o token de
+  host por lançamento não carrega, então a discagem de volta do runner é
+  recusada (`403`) mesmo com o túnel do host conectando. Essa é uma interação
+  de hosts gerenciados a nível de framework, compartilhada por **todos** os
+  providers de sandbox (Modal / Daytona / Islo / cwsandbox), não específica
+  do cwsandbox.
 
-So for a managed cwsandbox deployment, front the server with **header or OIDC
-auth** (a reverse proxy / IdP injects the user identity on every request,
-including the runner WebSocket — see
-[`deploy/README.md#auth`](../README.md#auth)), or run it single-user. The
-`accounts` provider is fine for CLI-launched hosts (you `omnicraft login`, and
-that token is what the in-sandbox host forwards), but not yet for the managed
-runner dial-back.
+Então, para um deploy de cwsandbox gerenciado, coloque o servidor atrás de
+**autenticação por header ou OIDC** (um proxy reverso / IdP injeta a
+identidade do usuário em toda requisição, incluindo o WebSocket de runner —
+veja [`deploy/README.md#autenticação`](../README.md#autenticação)), ou rode-o
+single-user. O provider `accounts` funciona bem para hosts lançados pela CLI
+(você faz `omnicraft login`, e esse token é o que o host dentro do sandbox
+repassa), mas ainda não para a discagem de volta do runner gerenciado.
 
-## Model credentials (LLM keys)
+## Credenciais de modelo (chaves de LLM)
 
-A fresh sandbox has no model credentials. Name the variables to inject in
-`OMNICRAFT_CWSANDBOX_SANDBOX_ENV` (CLI) or `sandbox.cwsandbox.env` (managed); the
-launcher copies the value from the launching environment into the sandbox, and
-the in-sandbox host forwards the standard harness credential vars to its runners:
+Um sandbox novo não tem credencial de modelo nenhuma. Nomeie as variáveis a
+injetar em `OMNICRAFT_CWSANDBOX_SANDBOX_ENV` (CLI) ou `sandbox.cwsandbox.env`
+(gerenciado); o launcher copia o valor do ambiente de lançamento para dentro
+do sandbox, e o host dentro do sandbox repassa as variáveis padrão de
+credencial do harness para os seus runners:
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-…   # on the server (managed) or in your shell (CLI)
+export ANTHROPIC_API_KEY=sk-ant-…   # no servidor (gerenciado) ou no seu shell (CLI)
 ```
 
 ```yaml
@@ -216,80 +231,89 @@ sandbox:
     env: [ANTHROPIC_API_KEY]
 ```
 
-Which variables to inject — providers, gateways, subscriptions, git — is
-identical to Modal; see the [variable table and per-plan
-recipes](../modal/README.md#llm-credentials-for-managed-sandboxes) and [git
-credentials](../modal/README.md#git-credentials-private-repositories). For a
-Claude **subscription** specifically, run `claude setup-token` on your own
-machine (one-time browser auth) and inject the resulting long-lived token as
-`CLAUDE_CODE_OAUTH_TOKEN`. For env vars beyond the standard set, inject
+Quais variáveis injetar — providers, gateways, assinaturas, git — é idêntico
+ao Modal; veja a [tabela de variáveis e as receitas por
+plano](../modal/README.md#credenciais-de-llm-para-sandboxes-gerenciados) e as
+[credenciais de git](../modal/README.md#credenciais-do-git-repositórios-privados).
+Para uma **assinatura** do Claude especificamente, rode `claude setup-token`
+na sua própria máquina (autenticação de navegador única) e injete o token de
+vida longa resultante como `CLAUDE_CODE_OAUTH_TOKEN`. Para variáveis de
+ambiente além do conjunto padrão, injete
 `OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 
-## Git credentials (private repositories)
+## Credenciais de git (repositórios privados)
 
-Inject an HTTPS token as `GIT_TOKEN` (GitLab: add `GIT_USERNAME=oauth2`) via
-`OMNICRAFT_CWSANDBOX_SANDBOX_ENV` / `sandbox.cwsandbox.env`. The host image's git
-credential helper answers HTTPS auth from it for both the launch-time clone and
-the agent's later `fetch` / `push`, writing nothing to disk. Use HTTPS repository
-URLs. Details by provider match the [Modal git
-guide](../modal/README.md#git-credentials-private-repositories).
+Injete um token HTTPS como `GIT_TOKEN` (GitLab: adicione
+`GIT_USERNAME=oauth2`) via `OMNICRAFT_CWSANDBOX_SANDBOX_ENV` /
+`sandbox.cwsandbox.env`. O credential helper de git da imagem do host
+responde à autenticação HTTPS a partir dele tanto para o clone no momento do
+lançamento quanto para o `fetch` / `push` posterior do agente, sem escrever
+nada em disco. Use URLs de repositório HTTPS. Detalhes por provider batem com
+o [guia de git do Modal](../modal/README.md#credenciais-do-git-repositórios-privados).
 
-## Security considerations
+## Considerações de segurança
 
-- **Injected credentials live in CoreWeave's control plane.** The launcher passes
-  `sandbox.cwsandbox.env` values to the CoreWeave API as sandbox environment
-  variables, so a third party holds whatever you inject (LLM keys, `GIT_TOKEN`)
-  for the sandbox's life. Prefer **scoped, short-lived** credentials: a
-  fine-grained PAT limited to the repos a session needs, a gateway token over a
-  root provider key.
-- **All managed sandboxes share one CoreWeave org + `CWSANDBOX_API_KEY`.**
-  Cross-user isolation rides on CoreWeave's sandbox boundaries, and the shared key
-  can enumerate and delete any sandbox — the same single-tenant-org shape as the
-  Modal and Daytona providers. Scope the org to this workload and nothing else.
-- **The launch token's lifetime tracks the sandbox lifetime.** CW Sandbox's
-  lifetime is operator-overridable (`OMNICRAFT_CWSANDBOX_MAX_LIFETIME_S`, 24h
-  default), so the per-launch host token TTL is derived from it — always above the
-  cap, so a live sandbox can re-authenticate across reconnects while a leaked
-  token can't outlive the sandbox it came from. A relaunch mints a fresh one.
+- **Credenciais injetadas vivem no control plane do CoreWeave.** O launcher
+  passa os valores de `sandbox.cwsandbox.env` para a API do CoreWeave como
+  variáveis de ambiente do sandbox, então um terceiro detém tudo que você
+  injetar (chaves de LLM, `GIT_TOKEN`) pelo tempo de vida do sandbox. Prefira
+  credenciais **com escopo restrito e de vida curta**: um PAT granular
+  limitado aos repositórios que uma sessão precisa, um token de gateway em
+  vez de uma chave raiz do provider.
+- **Todos os sandboxes gerenciados compartilham uma org do CoreWeave + uma
+  `CWSANDBOX_API_KEY`.** O isolamento entre usuários se apoia inteiramente
+  nas fronteiras de sandbox do CoreWeave, e a chave compartilhada consegue
+  enumerar e apagar qualquer sandbox — a mesma forma de org de tenant único
+  dos providers Modal e Daytona. Restrinja a org só a essa carga de trabalho.
+- **O tempo de vida do token de lançamento acompanha o tempo de vida do
+  sandbox.** O tempo de vida do CW Sandbox é sobrescrevível pelo operador
+  (`OMNICRAFT_CWSANDBOX_MAX_LIFETIME_S`, padrão de 24h), então o TTL do token
+  de host por lançamento é derivado dele — sempre acima do teto, para que um
+  sandbox vivo consiga se reautenticar entre reconexões enquanto um token
+  vazado não consegue durar mais que o sandbox de onde veio. Um relançamento
+  gera um novo.
 
-## Notes / limits
+## Notas / limites
 
-- Sandboxes are reaped at `max_lifetime_seconds` (24h default; override with
-  `OMNICRAFT_CWSANDBOX_MAX_LIFETIME_S`). The managed launch-token TTL is set above
-  that so reconnects keep working.
-- Egress defaults to none on CW Sandbox; the launcher requests `egress_mode:
-  internet` so the host can reach the server and the agent can reach its model
-  endpoint.
+- Sandboxes são recolhidos em `max_lifetime_seconds` (padrão de 24h;
+  sobrescreva com `OMNICRAFT_CWSANDBOX_MAX_LIFETIME_S`). O TTL do token de
+  lançamento gerenciado é definido acima disso para que as reconexões
+  continuem funcionando.
+- Egress assume nenhum por padrão no CW Sandbox; o launcher solicita
+  `egress_mode: internet` para que o host consiga alcançar o servidor e o
+  agente consiga alcançar o endpoint do seu modelo.
 
 ## Troubleshooting
 
-- **"managed host did not come online within 120s"** — the server waits up to two
-  minutes for the in-sandbox host to register. If it times out, check that
-  `server_url` is publicly reachable from CoreWeave, then inspect the in-sandbox
-  host log: `/tmp/omnicraft-host.log`.
-- **Slow first launch** — the first launch from a given image waits on a cold
-  registry pull before the sandbox is ready; subsequent launches reuse the cached
-  image and start in seconds.
-- **Agent has no credentials** — verify the injected var names match the
-  forwarded set (or are named in `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`), and that each
-  name was actually set in the launching environment.
+- **"managed host did not come online within 120s"** — o servidor espera até
+  dois minutos pelo host dentro do sandbox se registrar. Se der timeout,
+  confira se `server_url` está publicamente alcançável a partir do CoreWeave,
+  depois inspecione o log do host dentro do sandbox:
+  `/tmp/omnicraft-host.log`.
+- **Primeiro lançamento lento** — o primeiro lançamento a partir de uma
+  imagem espera um pull frio do registry antes do sandbox ficar pronto;
+  lançamentos seguintes reaproveitam a imagem em cache e começam em segundos.
+- **Agente sem credenciais** — verifique se os nomes das variáveis injetadas
+  batem com o conjunto repassado (ou estão nomeados em
+  `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`), e se cada nome foi de fato definido no
+  ambiente de lançamento.
 
-## Environment variable reference
+## Referência de variáveis de ambiente
 
-| Variable | Where it's read | Purpose |
+| Variável | Onde é lida | Finalidade |
 |---|---|---|
-| `CWSANDBOX_API_KEY` | CLI machine / server | CoreWeave Sandbox API credentials (required) |
-| `CWSANDBOX_BASE_URL` | CLI machine / server | Non-default CW Sandbox API endpoint (default `https://api.cwsandbox.com`) |
-| `OMNICRAFT_CWSANDBOX_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.cwsandbox.image` takes precedence for managed) |
-| `OMNICRAFT_CWSANDBOX_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.cwsandbox.env` takes precedence for managed) |
-| `OMNICRAFT_CWSANDBOX_MAX_LIFETIME_S` | CLI machine / server | Sandbox lifetime cap in seconds (default 24h); also derives the managed launch-token TTL |
-| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
-| `GIT_TOKEN` / `GIT_USERNAME` | inside the sandbox (injected) | HTTPS credentials for private repository clone / fetch / push |
+| `CWSANDBOX_API_KEY` | máquina da CLI / servidor | Credenciais de API do CoreWeave Sandbox (obrigatório) |
+| `CWSANDBOX_BASE_URL` | máquina da CLI / servidor | Endpoint de API não padrão do CW Sandbox (padrão `https://api.cwsandbox.com`) |
+| `OMNICRAFT_CWSANDBOX_HOST_IMAGE` | máquina da CLI / servidor | Sobrescreve a referência da imagem do host (`sandbox.cwsandbox.image` tem precedência no modo gerenciado) |
+| `OMNICRAFT_CWSANDBOX_SANDBOX_ENV` | máquina da CLI / servidor | Nomes de variável de ambiente do lado do launcher, separados por vírgula, a injetar (`sandbox.cwsandbox.env` tem precedência no modo gerenciado) |
+| `OMNICRAFT_CWSANDBOX_MAX_LIFETIME_S` | máquina da CLI / servidor | Teto do tempo de vida do sandbox em segundos (padrão 24h); também deriva o TTL do token de lançamento gerenciado |
+| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | dentro do sandbox (injetado) | Nomes de variável de ambiente extras que o host repassa para os runners |
+| `GIT_TOKEN` / `GIT_USERNAME` | dentro do sandbox (injetado) | Credenciais HTTPS para clone / fetch / push de repositório privado |
 
 ## Smoke test
 
-Validate the API primitives directly (no OmniCraft or SDK install needed — stdlib
-+ curl only):
+Valide as primitivas de API diretamente (sem precisar instalar o OmniCraft ou
+o SDK — só stdlib + curl):
 
 ```bash
 export CWSANDBOX_API_KEY=...

@@ -1,7 +1,7 @@
-# Codex Parity Tests
+# Testes de Paridade do Codex
 
-This suite verifies OmniCraft's Codex integration by running the real boundary
-we care about:
+Esta suíte verifica a integração do OmniCraft com o Codex rodando a fronteira
+real que nos importa:
 
 ```text
 OmniCraft CodexExecutor
@@ -9,13 +9,13 @@ OmniCraft CodexExecutor
   -> mock OpenAI Responses API
 ```
 
-The important choice is that the tests do not mock the OmniCraft-to-Codex API.
-They start a real Codex CLI and only replace the upstream model endpoint. That
-means the test covers Codex app-server JSON-RPC behavior, Codex request
-serialization, retry notifications, streaming notifications, and dynamic tool
-round trips.
+A escolha importante é que os testes não mockam a API OmniCraft-para-Codex.
+Eles sobem uma CLI Codex real e só substituem o endpoint de modelo upstream.
+Isso significa que o teste cobre o comportamento JSON-RPC do app-server do
+Codex, a serialização das requisições do Codex, notificações de retry,
+notificações de streaming, e idas e vindas de ferramentas dinâmicas.
 
-## Architecture
+## Arquitetura
 
 ```text
 pytest
@@ -37,27 +37,29 @@ real codex app-server
 OmniCraft CodexExecutor
 ```
 
-The Rust sidecar exists because Codex's mock Responses API helpers are Rust
-test-support code in the public Codex repository. Rather than reimplementing
-that mock in Python, the sidecar pulls the upstream test-support crate directly
-through Cargo:
+O sidecar em Rust existe porque os helpers de mock da API Responses do Codex
+são código de suporte a teste em Rust no repositório público do Codex. Em vez
+de reimplementar esse mock em Python, o sidecar puxa a crate de suporte a
+teste upstream diretamente via Cargo:
 
 ```text
 core_test_support = { git = "https://github.com/openai/codex.git", rev = "..." }
 ```
 
-That keeps the fake Responses wire format aligned with Codex upstream. Pytest
-still owns the test scenarios and assertions; the sidecar only starts WireMock,
-serves queued SSE fixtures, and reports captured requests.
+Isso mantém o formato de conexão da Responses falsa alinhado com o Codex
+upstream. O pytest continua sendo dono dos cenários de teste e das
+asserções; o sidecar só sobe o WireMock, serve as fixtures SSE enfileiradas,
+e reporta as requisições capturadas.
 
-The revision is pinned in `tests/codex_parity/sidecar/Cargo.toml` so the parity
-harness is reproducible without requiring a checked-in Codex submodule. Updating
-the upstream fixture implementation is a normal Cargo dependency bump: change the
-Codex `rev`, refresh `Cargo.lock`, and run the parity tests.
+A revisão é fixada em `tests/codex_parity/sidecar/Cargo.toml`, então o
+harness de paridade é reproduzível sem exigir um submódulo do Codex versionado
+no repositório. Atualizar a implementação da fixture upstream é um bump normal
+de dependência do Cargo: mude o `rev` do Codex, atualize o `Cargo.lock`, e
+rode os testes de paridade.
 
-## Fixture Flow
+## Fluxo da Fixture
 
-Each test passes a list of model responses to the sidecar:
+Cada teste passa uma lista de respostas de modelo para o sidecar:
 
 ```python
 sidecar = codex_responses_sidecar(
@@ -71,88 +73,98 @@ sidecar = codex_responses_sidecar(
 )
 ```
 
-Each inner list becomes one SSE response body. Codex consumes one body per
-`POST /v1/responses` request. Multi-turn scenarios enqueue multiple inner
-lists, for example a dynamic tool call followed by the assistant's final
-answer after OmniCraft returns the tool result.
+Cada lista interna vira um corpo de resposta SSE. O Codex consome um corpo por
+requisição `POST /v1/responses`. Cenários multi-turno enfileiram várias listas
+internas, por exemplo uma chamada de ferramenta dinâmica seguida pela resposta
+final do assistente depois que o OmniCraft devolve o resultado da ferramenta.
 
-The sidecar prints one JSON `ready` line with a `base_url`. The pytest fixture
-passes that URL into `CodexExecutor` using the existing gateway override path,
-so Codex sends model traffic to the sidecar instead of OpenAI.
+O sidecar imprime uma linha JSON `ready` com uma `base_url`. A fixture do
+pytest passa essa URL para o `CodexExecutor` usando o caminho existente de
+sobrescrita de gateway, então o Codex manda o tráfego de modelo para o sidecar
+em vez de para a OpenAI.
 
-After a turn, pytest asks the sidecar for captured requests over a small JSONL
-stdin/stdout protocol:
+Depois de um turno, o pytest pede ao sidecar as requisições capturadas por um
+pequeno protocolo JSONL de stdin/stdout:
 
 ```json
 {"op": "requests", "min": 1, "timeout_ms": 5000}
 ```
 
-The response includes stable fields that are useful for parity assertions:
-request path, selected headers, and JSON body.
+A resposta inclui campos estáveis úteis para as asserções de paridade: caminho
+da requisição, headers selecionados, e corpo JSON.
 
-## Coverage
+## Cobertura
 
-`test_codex_executor_parity.py` covers executor-observable turn behavior:
+`test_codex_executor_parity.py` cobre o comportamento de turno observável pelo
+executor:
 
 - `sdk/python/tests/test_app_server_run.py`
-  - mock Responses request path/model/input
-  - explicit token usage crossing the app-server boundary
-  - last unknown-phase message selection
-  - final-answer phase preference
-  - commentary-only output not becoming the final response
-  - failed Responses events surfacing as turn errors
+  - path/model/input da requisição mock da Responses
+  - uso explícito de token cruzando a fronteira do app-server
+  - seleção da última mensagem de fase desconhecida
+  - preferência pela fase `final_answer`
+  - saída somente de `commentary` não virando a resposta final
+  - eventos de Responses com falha surgindo como erros de turno
 - `sdk/python/tests/test_app_server_streaming.py`
-  - text delta routing and completed-turn response
-- selected request-routing behavior from `codex-rs/core/tests/suite/*`
-  - dynamic tool call/result round trip through real Codex app-server
+  - roteamento de delta de texto e resposta de turno completado
+- comportamento selecionado de roteamento de requisição de
+  `codex-rs/core/tests/suite/*`
+  - ida e volta de chamada/resultado de ferramenta dinâmica pelo app-server
+    real do Codex
 
-`test_codex_goal.py` covers the Codex goal contract OmniCraft relies on:
+`test_codex_goal.py` cobre o contrato de goal do Codex do qual o OmniCraft
+depende:
 
-- upstream app-server goal operations
-  - `thread/goal/set` + `thread/goal/get` + `thread/goal/clear` round trip
-  - pause/resume through `thread/goal/set` status-only updates
-  - explicit `tokenBudget: null` preservation
-  - idempotent `thread/goal/clear`
-  - `budgetLimited` preservation when setting the same objective
-  - persisted `blocked` and `usageLimited` goal statuses
-- OmniCraft AP goal routes
-  - `PUT /v1/sessions/{id}/codex_goal` forwards objective, budget, and mode
-  - `PATCH /v1/sessions/{id}/codex_goal/status` forwards pause/resume
-  - Codex-owned terminal statuses are rejected as user-writeable inputs
-  - Codex-owned terminal statuses returned by the runner are preserved
-  - API-shaped misses return JSON 404s instead of the SPA shell
+- operações de goal do app-server upstream
+  - ida e volta de `thread/goal/set` + `thread/goal/get` + `thread/goal/clear`
+  - pause/resume via atualizações somente de status do `thread/goal/set`
+  - preservação explícita de `tokenBudget: null`
+  - `thread/goal/clear` idempotente
+  - preservação de `budgetLimited` ao definir o mesmo objetivo
+  - status de goal `blocked` e `usageLimited` persistidos
+- rotas de goal do AP do OmniCraft
+  - `PUT /v1/sessions/{id}/codex_goal` encaminha objective, budget e mode
+  - `PATCH /v1/sessions/{id}/codex_goal/status` encaminha pause/resume
+  - status terminais de propriedade do Codex são rejeitados como entradas
+    graváveis pelo usuário
+  - status terminais de propriedade do Codex devolvidos pelo runner são
+    preservados
+  - erros no formato da API devolvem 404s em JSON em vez do shell da SPA
 
-That is comprehensive for the goal surface OmniCraft owns because it exercises
-both sides of the integration: real Codex app-server JSON-RPC for every
-goal state transition we depend on, and OmniCraft's public HTTP route mapping
-for every browser control we expose. It intentionally does not copy Codex TUI
-slash-menu/status rendering tests; OmniCraft does not embed that TUI path. It
-also does not duplicate Codex's internal goal-extension accounting tests except
-where the app-server result is part of OmniCraft's public contract.
+Isso é abrangente para a superfície de goal que o OmniCraft possui porque
+exercita os dois lados da integração: o JSON-RPC real do app-server do Codex
+para toda transição de estado de goal da qual dependemos, e o mapeamento de
+rotas HTTP públicas do OmniCraft para todo controle de navegador que
+expomos. Intencionalmente não copia os testes de renderização de slash-menu
+/ status da TUI do Codex; o OmniCraft não embute esse caminho de TUI. Também
+não duplica os testes internos de contabilidade de extensão de goal do Codex,
+exceto onde o resultado do app-server faz parte do contrato público do
+OmniCraft.
 
-Not yet represented here: upstream SDK-only app-server tests for lifecycle,
-login, approvals, steer/interrupt, local/remote image input, and skill input.
-Those APIs do not have a direct OmniCraft `CodexExecutor` surface yet, so they
-need either executor-facing analogs or a separate SDK compatibility harness
-before they can be one-for-one parity tests.
+Ainda não representado aqui: testes de app-server só de SDK upstream para
+ciclo de vida, login, aprovações, steer/interrupt, entrada de imagem
+local/remota, e entrada de skill. Essas APIs ainda não têm uma superfície
+direta no `CodexExecutor` do OmniCraft, então precisam de análogos voltados
+para o executor ou de um harness de compatibilidade de SDK separado antes de
+poderem virar testes de paridade um-para-um.
 
-## Updating From Codex Upstream
+## Atualizando a Partir do Upstream do Codex
 
-The upstream Codex fixture dependency is pinned in
+A dependência da fixture upstream do Codex é fixada em
 `tests/codex_parity/sidecar/Cargo.toml`:
 
 ```toml
 core_test_support = { git = "https://github.com/openai/codex.git", rev = "..." }
 ```
 
-To refresh the harness:
+Para atualizar o harness:
 
-1. Update that `rev` to the Codex commit you want to validate against.
-2. Refresh `tests/codex_parity/sidecar/Cargo.lock` by building or testing the
-   sidecar.
-3. Inspect the pinned Codex checkout under Cargo's git cache, usually
+1. Atualize esse `rev` para o commit do Codex contra o qual você quer validar.
+2. Atualize o `tests/codex_parity/sidecar/Cargo.lock` construindo ou testando
+   o sidecar.
+3. Inspecione o checkout do Codex fixado no cache git do Cargo, geralmente em
    `~/.cargo/git/checkouts/codex-*/<rev>/`.
-4. Compare these upstream files against the local parity files:
+4. Compare estes arquivos upstream com os arquivos de paridade locais:
    - `sdk/python/tests/test_app_server_run.py`
    - `sdk/python/tests/test_app_server_streaming.py`
    - `sdk/python/tests/test_app_server_goal_operations.py`
@@ -160,10 +172,11 @@ To refresh the harness:
    - `codex-rs/app-server/tests/suite/v2/thread_resume.rs`
    - `codex-rs/ext/goal/tests/goal_extension_backend.rs`
    - `codex-rs/prompts/src/goals_tests.rs`
-5. Port new app-server public-contract goal cases into
-   `tests/codex_parity/test_codex_goal.py`. Keep TUI-only cases classified as
-   intentionally excluded unless OmniCraft starts exposing that path.
-6. Run the focused goal file, then the full parity suite:
+5. Porte os novos casos de goal do contrato público do app-server para
+   `tests/codex_parity/test_codex_goal.py`. Mantenha os casos só de TUI
+   classificados como intencionalmente excluídos, a menos que o OmniCraft
+   passe a expor esse caminho.
+6. Rode o arquivo de goal focado, depois a suíte de paridade completa:
 
 ```bash
 pytest tests/codex_parity/test_codex_goal.py \
@@ -177,21 +190,21 @@ pytest tests/codex_parity \
   -q
 ```
 
-## Running
+## Executando
 
-Run against the Codex CLI on `PATH`:
+Rode contra a CLI do Codex no `PATH`:
 
 ```bash
 pytest tests/codex_parity --codex-parity -v
 ```
 
-Run against one explicit binary:
+Rode contra um binário explícito:
 
 ```bash
 pytest tests/codex_parity --codex-parity --codex-bin "$(which codex)" -v
 ```
 
-Compare multiple Codex versions:
+Compare múltiplas versões do Codex:
 
 ```bash
 pytest tests/codex_parity \
@@ -201,10 +214,11 @@ pytest tests/codex_parity \
   -v
 ```
 
-You can also set `CODEX_TEST_BINS` to an `os.pathsep`-separated list.
+Você também pode definir `CODEX_TEST_BINS` como uma lista separada por
+`os.pathsep`.
 
-At Databricks, use the internal PyPI proxy when syncing the Python test
-environment:
+Na Databricks, use o proxy interno do PyPI ao sincronizar o ambiente de teste
+Python:
 
 ```bash
 uv --no-config run --frozen \
@@ -213,10 +227,10 @@ uv --no-config run --frozen \
   pytest tests/codex_parity --codex-parity --codex-bin "$(which codex)" -q
 ```
 
-## Why This Shape
+## Por Que Este Formato
 
-Mocking the OmniCraft-to-Codex API would test our assumptions about Codex's
-app-server protocol. This suite instead lets Codex define that contract by
-running the actual CLI/app-server implementation. Only the final network hop is
-mocked, which gives us stable, deterministic tests while still catching
-protocol drift between OmniCraft and Codex.
+Mockar a API OmniCraft-para-Codex testaria nossas suposições sobre o
+protocolo do app-server do Codex. Esta suíte, em vez disso, deixa o Codex
+definir esse contrato rodando a implementação real da CLI/app-server. Só o
+salto final de rede é mockado, o que nos dá testes estáveis e determinísticos
+enquanto ainda captura desvios de protocolo entre o OmniCraft e o Codex.

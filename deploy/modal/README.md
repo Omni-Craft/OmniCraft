@@ -1,56 +1,57 @@
-# OmniCraft on Modal
+# OmniCraft na Modal
 
-[Modal](https://modal.com) plays two distinct roles for OmniCraft:
+A [Modal](https://modal.com) tem dois papéis distintos para o OmniCraft:
 
-1. **[Server deploy target](#deploying-the-server)** — run the
-   OmniCraft server itself on Modal as a single always-on web server
-   (`modal_app.py` in this directory).
-2. **[Sandbox provider](#sandboxes-for-runner-hosts)** — disposable
-   cloud machines for running OmniCraft *hosts*, so sessions execute in
-   the cloud instead of on your laptop.
+1. **[Alvo de deploy do servidor](#publicando-o-servidor)** — rode o próprio
+   servidor OmniCraft na Modal como um único servidor web sempre no ar
+   (`modal_app.py` neste diretório).
+2. **[Provedor de sandbox](#sandboxes-para-hosts-de-runner)** — máquinas
+   descartáveis na nuvem para rodar *hosts* do OmniCraft, para que as sessões
+   rodem na nuvem em vez de no seu notebook.
 
-The two are independent: you can deploy the server anywhere and still
-use Modal sandboxes for hosts, or vice versa.
+Os dois são independentes: você pode fazer o deploy do servidor em qualquer
+lugar e ainda usar sandboxes da Modal para hosts, ou vice-versa.
 
-## Deploying the server
+## Publicando o servidor
 
-Run the OmniCraft server on Modal as a single always-on web server.
-`modal_app.py` pulls the standard server image and launches the same
-Docker entrypoint every other platform uses; Modal provides the HTTPS
-URL, log streaming, and a persistent Volume for the artifact store —
-uploaded agent bundles survive restarts and redeploys here, unlike on
-Heroku or Cloudflare.
+Rode o servidor OmniCraft na Modal como um único servidor web sempre no ar.
+O `modal_app.py` puxa a imagem padrão do servidor e lança o mesmo entrypoint
+Docker que toda outra plataforma usa; a Modal fornece a URL HTTPS, o streaming
+de logs, e um Volume persistente para o armazenamento de artefatos — bundles de agente
+enviados sobrevivem a reinícios e redeploys aqui, diferente do Heroku ou da
+Cloudflare.
 
-### Prerequisites
+### Pré-requisitos
 
-- A Modal account and the CLI: `pip install modal && modal setup`.
-  No Docker needed locally — Modal's builders pull the image.
-- A Postgres database. Modal has no managed Postgres — the fastest is
-  **Neon**: create one at [pg.new](https://pg.new) and copy the
-  connection string.
+- Uma conta na Modal e a CLI: `pip install modal && modal setup`. Não precisa
+  de Docker local — os builders da Modal puxam a imagem.
+- Um banco de dados Postgres. A Modal não tem Postgres gerenciado — o mais
+  rápido é o **Neon**: crie um em [pg.new](https://pg.new) e copie a string
+  de conexão.
 
 ### Deploy
 
 ```bash
-# 1. One secret bundle with the three required values. The app URL is
-#    deterministic: https://<workspace>--omnicraft-server.modal.run
-#    (your workspace name is shown by `modal profile current`).
+# 1. Um secret bundle com os três valores obrigatórios. A URL do app é
+#    determinística: https://<workspace>--omnicraft-server.modal.run
+#    (o nome do seu workspace aparece em `modal profile current`).
 modal secret create omnicraft-deploy \
   DATABASE_URL='postgres://…neon.tech/…' \
   OMNICRAFT_ACCOUNTS_COOKIE_SECRET="$(openssl rand -hex 32)" \
   OMNICRAFT_ACCOUNTS_BASE_URL='https://<workspace>--omnicraft-server.modal.run'
 
-# 2. Ship it.
+# 2. Publique.
 modal deploy deploy/modal/modal_app.py
 ```
 
-`modal deploy` prints the live URL — if it differs from what you guessed
-in step 1 (e.g. a non-default Modal environment adds a suffix), update
-the secret and redeploy.
+O `modal deploy` imprime a URL ao vivo — se ela for diferente do que você
+chutou no passo 1 (ex.: um ambiente Modal não padrão adiciona um sufixo),
+atualize o secret e faça o deploy de novo.
 
-The first boot runs DB migrations over the network (~1 minute on Neon).
+O primeiro boot roda as migrações do banco de dados pela rede (~1 minuto no
+Neon).
 
-**Get the admin password:** the first boot prints it to the app log:
+**Pegue a senha do admin:** o primeiro boot a imprime no log do app:
 
 ```bash
 modal app logs omnicraft
@@ -61,36 +62,36 @@ modal app logs omnicraft
     password: <generated>
 ```
 
-Log in as the admin and invite teammates from **Members** in the web UI.
+Entre como admin e convide seus colegas em **Members** na web UI.
 
-> To set a known admin password instead, add
-> `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD=<password>` to the
-> `omnicraft-deploy` secret before the first deploy.
+> Para definir uma senha de admin conhecida em vez disso, adicione
+> `OMNICRAFT_ACCOUNTS_INIT_ADMIN_PASSWORD=<password>` ao secret
+> `omnicraft-deploy` antes do primeiro deploy.
 
-### Modal-specific caveats
+### Ressalvas específicas da Modal
 
-- **2 MiB WebSocket message cap.** Modal's ingress limits WebSocket
-  messages to 2 MiB each, well below the runner tunnel's own 100 MiB
-  allowance. Normal streaming traffic (events, terminal frames) is far
-  smaller, but a single very large tool payload over the tunnel can
-  fail on this platform.
-- **Connections reset at the 24 h input timeout.** A proxied WebSocket
-  occupies one Modal function input, and inputs are capped at 24 hours
-  — so a tunnel lives at most a day before being cut. Runners
-  auto-reconnect (0.5–10 s jittered backoff).
-- **One always-on container by design.** `min_containers=1` /
-  `max_containers=1` in `modal_app.py`: the runner registry is
-  in-memory, so traffic must land on a single container, and
-  scale-to-zero would kill live tunnels. Don't raise `max_containers`
-  expecting horizontal scaling.
-- **No SQLite tier.** The artifact Volume is durable but is not a place
-  for a SQLite database (eventual-consistency semantics); use Postgres.
+- **Limite de 2 MiB por mensagem de WebSocket.** O ingress da Modal limita as
+  mensagens de WebSocket a 2 MiB cada, bem abaixo dos 100 MiB permitidos pelo
+  próprio túnel do runner. O tráfego normal de streaming (eventos, frames de
+  terminal) é bem menor, mas um payload de ferramenta muito grande sobre o
+  túnel pode falhar nesta plataforma.
+- **Conexões são reiniciadas no timeout de input de 24 h.** Um WebSocket
+  intermediado ocupa um input de função da Modal, e os inputs têm um teto de
+  24 horas — então um túnel vive no máximo um dia antes de ser cortado. Os
+  runners reconectam automaticamente (backoff com jitter de 0,5–10 s).
+- **Um único container sempre no ar, por design.** `min_containers=1` /
+  `max_containers=1` em `modal_app.py`: o registro de runners fica em
+  memória, então o tráfego precisa cair num único container, e o
+  scale-to-zero mataria os túneis vivos. Não aumente `max_containers`
+  esperando escalonamento horizontal.
+- **Sem nível SQLite.** O Volume de artefatos é durável, mas não é lugar para
+  um banco SQLite (semântica de consistência eventual); use Postgres.
 
-### Use your own IdP instead (OIDC)
+### Use seu próprio IdP em vez disso (OIDC)
 
-Add the OIDC values to the `omnicraft-deploy` secret (Modal secrets are
-key-value bundles; `modal secret create` with the same name replaces it)
-and redeploy:
+Adicione os valores do OIDC ao secret `omnicraft-deploy` (secrets da Modal são
+bundles chave-valor; `modal secret create` com o mesmo nome o substitui) e
+faça o deploy de novo:
 
 ```bash
 modal secret create omnicraft-deploy \
@@ -103,72 +104,73 @@ modal secret create omnicraft-deploy \
   OMNICRAFT_OIDC_COOKIE_SECRET="$(openssl rand -hex 32)"
 ```
 
-The IdP registration steps (GitHub / Google / Okta callback URLs, domain
-allow-listing) are identical to the other platforms — see
-[`deploy/render/README.md`](../render/README.md#use-your-own-idp-instead-oidc).
+Os passos de registro no IdP (URLs de callback do GitHub / Google / Okta,
+allow-list de domínio) são idênticos aos das outras plataformas — veja
+[`deploy/render/README.md`](../render/README.md#use-o-seu-próprio-idp-oidc).
 
-### Custom domain
+### Domínio personalizado
 
-Pass `custom_domains=["omnicraft.example.com"]` to `@modal.web_server`
-in `modal_app.py` (requires a paid Modal plan), point your DNS at Modal
-per the printed instructions, and update `OMNICRAFT_ACCOUNTS_BASE_URL`
-(or the OIDC redirect URI) to match.
+Passe `custom_domains=["omnicraft.example.com"]` para `@modal.web_server` em
+`modal_app.py` (exige um plano pago da Modal), aponte seu DNS para a Modal
+seguindo as instruções impressas, e atualize `OMNICRAFT_ACCOUNTS_BASE_URL`
+(ou o redirect URI do OIDC) para combinar.
 
-### Upgrading
+### Atualizando
 
-`modal deploy deploy/modal/modal_app.py` again — Modal re-resolves
-`ghcr.io/omnicraft-ai/omnicraft-server:latest`, so a redeploy is an
-upgrade. The rollout replaces the container; runners reconnect.
+`modal deploy deploy/modal/modal_app.py` de novo — a Modal reresolve
+`ghcr.io/omnicraft-ai/omnicraft-server:latest`, então um redeploy é uma
+atualização. O rollout substitui o container; os runners reconectam.
 
-### Cost
+### Custo
 
-Modal bills actual usage: memory at ~$0.008/GiB-hour and CPU by the
-cycle (so an idle server's CPU line is small). An always-on 1 GiB
-instance runs roughly **$6–8/month**, which fits inside the Starter
-plan's **$30/month of free credits** — making this effectively free for
-a lightly loaded server. Rates: [modal.com/pricing](https://modal.com/pricing).
+A Modal cobra pelo uso real: memória a ~$0,008/GiB-hora e CPU pelo ciclo
+(então a linha de CPU de um servidor ocioso é pequena). Uma instância de 1 GiB
+sempre no ar custa por volta de **$6–8/mês**, o que cabe dentro dos
+**$30/mês de créditos grátis** do plano Starter — tornando isso efetivamente
+gratuito para um servidor com pouca carga. Preços:
+[modal.com/pricing](https://modal.com/pricing).
 
-## Sandboxes for runner hosts
+## Sandboxes para hosts de runner
 
-Modal sandboxes give you disposable cloud machines for running
-OmniCraft hosts — no laptop tethered to a session, no VM to babysit.
-There are two ways to use them:
+Sandboxes da Modal te dão máquinas descartáveis na nuvem para rodar hosts do
+OmniCraft — sem notebook amarrado a uma sessão, sem VM para cuidar. Tem duas
+formas de usá-los:
 
-1. **CLI-launched sandboxes** — you provision a sandbox from your
-   terminal and register it as a host with your server. Good for
-   development and for running your local checkout's code in the cloud.
-2. **Server-managed sandboxes** — the server provisions a sandbox
-   automatically when a session is created with
-   `"host_type": "managed"`, and terminates it when the session is
-   deleted. Good for production deployments where users shouldn't have
-   to think about hosts at all.
+1. **Sandboxes lançados pela CLI** — você provisiona um sandbox pelo seu
+   terminal e o registra como host no seu servidor. Bom para desenvolvimento
+   e para rodar o código do seu checkout local na nuvem.
+2. **Sandboxes gerenciados pelo servidor** — o servidor provisiona um sandbox
+   automaticamente quando uma sessão é criada com `"host_type": "managed"`, e
+   o encerra quando a sessão é apagada. Bom para deploys de produção, onde os
+   usuários não deveriam precisar pensar em hosts.
 
-Both boot from the official prebaked host image, so startup is seconds,
-not minutes.
+Os dois inicializam a partir da imagem oficial pré-pronta do host, então o
+boot leva segundos, não minutos.
 
-### Sandbox prerequisites
+### Pré-requisitos de sandbox
 
 ```bash
 pip install 'omnicraft[modal]'   # installs the modal SDK extra
 modal token new                  # one-time browser auth with Modal
 ```
 
-`modal token new` writes `~/.modal.toml`. Anywhere OmniCraft needs to
-talk to Modal (your laptop for the CLI flow, the server for the managed
-flow), Modal credentials must be available — either that file or the
-`MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` environment variables.
+O `modal token new` grava `~/.modal.toml`. Em qualquer lugar em que o
+OmniCraft precise falar com a Modal (seu notebook para o fluxo da CLI, o
+servidor para o fluxo gerenciado), as credenciais da Modal precisam estar
+disponíveis — seja aquele arquivo, seja as variáveis de ambiente
+`MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`.
 
-### The host image
+### A imagem do host
 
-Sandboxes boot from `ghcr.io/omnicraft-ai/omnicraft-host:latest`, an image
-published by CI from the `host` target of
-[`deploy/docker/Dockerfile`](../docker/Dockerfile) with OmniCraft
-and its dependencies preinstalled — including the coding-harness CLIs
-(`claude`, `codex`, `pi`, `kiro-cli`), so agents on any harness run without an
-in-sandbox install.
+Os sandboxes inicializam a partir de
+`ghcr.io/omnicraft-ai/omnicraft-host:latest`, uma imagem publicada pela CI a
+partir do alvo `host` do [`deploy/docker/Dockerfile`](../docker/Dockerfile),
+com o OmniCraft e suas dependências pré-instaladas — incluindo as CLIs dos
+harnesses de código (`claude`, `codex`, `pi`, `kiro-cli`), então agentes de
+qualquer harness rodam sem instalação dentro do sandbox.
 
-To use a different image (a fork, or extra tooling baked in), build the
-same target and push it anywhere Modal can pull from:
+Para usar uma imagem diferente (um fork, ou ferramentas extras embutidas),
+construa o mesmo alvo e envie para onde a Modal conseguir puxar:
 
 ```bash
 docker build -f deploy/docker/Dockerfile --target host \
@@ -176,28 +178,28 @@ docker build -f deploy/docker/Dockerfile --target host \
 docker push docker.io/<you>/omnicraft-host:latest
 ```
 
-Then point OmniCraft at it — `OMNICRAFT_MODAL_HOST_IMAGE` for the CLI
-flow, or `sandbox.modal.image` in the server config for the managed
-flow (see below). For private registries, set
-`OMNICRAFT_MODAL_REGISTRY_SECRET` to the name of a
-[Modal secret](https://modal.com/secrets) containing
-`REGISTRY_USERNAME` / `REGISTRY_PASSWORD`.
+Depois aponte o OmniCraft para ela — `OMNICRAFT_MODAL_HOST_IMAGE` para o
+fluxo da CLI, ou `sandbox.modal.image` na config do servidor para o fluxo
+gerenciado (veja abaixo). Para registries privados, defina
+`OMNICRAFT_MODAL_REGISTRY_SECRET` como o nome de um
+[secret da Modal](https://modal.com/secrets) contendo `REGISTRY_USERNAME` /
+`REGISTRY_PASSWORD`.
 
 > [!NOTE]
-> Building on Apple Silicon? Pass `--platform linux/amd64` — Modal
-> sandboxes run x86_64.
+> Construindo em Apple Silicon? Passe `--platform linux/amd64` — os sandboxes
+> da Modal rodam x86_64.
 
-### CLI-launched sandboxes
+### Sandboxes lançados pela CLI
 
-Provision a sandbox and ship your local checkout into it:
+Provisione um sandbox e envie o seu checkout local para dentro dele:
 
 ```bash
 omnicraft sandbox create --provider modal
 ```
 
-This pulls the host image, builds wheels from your local checkout, and
-overlays them on top — so the sandbox runs *your* code, not whatever
-the image was built from. Then register it as a host with your server:
+Isso puxa a imagem do host, constrói wheels a partir do seu checkout local, e
+as sobrepõe — então o sandbox roda o *seu* código, não o que a imagem foi
+construída a partir de. Depois registre-o como host no seu servidor:
 
 ```bash
 omnicraft sandbox connect --provider modal \
@@ -205,33 +207,34 @@ omnicraft sandbox connect --provider modal \
   --server https://your-host
 ```
 
-`connect` runs `omnicraft host` inside the sandbox and holds the
-connection open in your terminal — Ctrl-C tears it down. New sessions
-targeting that host now run in the sandbox.
+O `connect` roda `omnicraft host` dentro do sandbox e mantém a conexão aberta
+no seu terminal — Ctrl-C a derruba. Sessões novas apontando para aquele host
+agora rodam no sandbox.
 
-Running multiple sandboxes against one server? Pass a unique
-`--host-name <label>` to each `connect` — the server keys hosts on
-(owner, name), and sandboxes that share a hostname collide.
+Rodando vários sandboxes contra um servidor? Passe um `--host-name <label>`
+único para cada `connect` — o servidor indexa hosts por (owner, name), e
+sandboxes que compartilham um hostname colidem.
 
-Sandboxes are disposable. When your code changes, create a new one.
+Sandboxes são descartáveis. Quando seu código muda, crie um novo.
 
 > [!NOTE]
-> Modal caps sandbox lifetime at 24 hours (a platform hard limit).
-> Re-run `create` + `connect` to roll the host onto a fresh sandbox.
+> A Modal limita a vida do sandbox a 24 horas (um limite rígido da
+> plataforma). Rode `create` + `connect` de novo para levar o host a um
+> sandbox novo.
 
-For provider-side lifecycle (list / status / terminate), use Modal's
-own tooling — the [Modal dashboard](https://modal.com/sandboxes) or the
-`modal` CLI.
+Para o ciclo de vida do lado do provedor (listar / status / terminar), use as
+próprias ferramentas da Modal — o
+[dashboard da Modal](https://modal.com/sandboxes) ou a CLI `modal`.
 
-### Connecting to an authenticated server
+### Conectando a um servidor autenticado
 
-`connect` runs `omnicraft host` inside the sandbox, and that host must
-present credentials when it dials back to a server that requires
-authentication. The interactive `omnicraft login` browser flow can't
-run inside a sandbox, so inject the keys for the relevant server
-instead: park them in a [Modal secret](https://modal.com/secrets) and
-name it in `OMNICRAFT_MODAL_SANDBOX_SECRETS` (comma-separated) before
-running `create`:
+O `connect` roda `omnicraft host` dentro do sandbox, e esse host precisa
+apresentar credenciais quando disca de volta para um servidor que exige
+autenticação. O fluxo interativo do navegador do `omnicraft login` não
+consegue rodar dentro de um sandbox, então injete as chaves do servidor
+relevante: guarde-as num [secret da Modal](https://modal.com/secrets) e
+nomeie-o em `OMNICRAFT_MODAL_SANDBOX_SECRETS` (separado por vírgulas) antes
+de rodar `create`:
 
 ```bash
 modal secret create omnicraft-server-auth \
@@ -241,27 +244,28 @@ export OMNICRAFT_MODAL_SANDBOX_SECRETS=omnicraft-server-auth
 omnicraft sandbox create --provider modal
 ```
 
-The in-sandbox host mints a fresh bearer token from those credentials
-on every connect and reconnect. For a server fronted by Databricks
-authentication, inject `DATABRICKS_HOST` plus either
-`DATABRICKS_TOKEN` (a PAT) or `DATABRICKS_CLIENT_ID` /
-`DATABRICKS_CLIENT_SECRET` (an OAuth service principal — re-minting
-keeps a long-lived sandbox connected past any single token's expiry).
+O host dentro do sandbox gera um bearer token novo a partir dessas
+credenciais em cada connect e reconexão. Para um servidor atrás da
+autenticação Databricks, injete `DATABRICKS_HOST` mais `DATABRICKS_TOKEN` (um
+PAT) ou `DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET` (um service
+principal OAuth — a regeração mantém um sandbox de vida longa conectado
+mesmo depois do vencimento de um token individual).
 
-A server with no authentication on the host tunnel needs none of this,
-and neither do [server-managed sandboxes](#server-managed-sandboxes) —
-those authenticate with a server-minted per-launch token automatically.
+Um servidor sem autenticação no túnel do host não precisa de nada disso, e
+nem os [sandboxes gerenciados pelo servidor](#sandboxes-gerenciados-pelo-servidor)
+precisam — eles se autenticam com um token por lançamento gerado pelo
+servidor, automaticamente.
 
-(The same env var also carries LLM / git credentials for CLI-launched
-sandboxes — any secret named in `OMNICRAFT_MODAL_SANDBOX_SECRETS` lands
-in the sandbox environment, exactly like `sandbox.modal.secrets` does
-for managed launches.)
+(A mesma variável de ambiente também carrega credenciais de LLM / git para
+sandboxes lançados pela CLI — qualquer secret nomeado em
+`OMNICRAFT_MODAL_SANDBOX_SECRETS` cai no ambiente do sandbox, exatamente como
+`sandbox.modal.secrets` faz para lançamentos gerenciados.)
 
-### Server-managed sandboxes
+### Sandboxes gerenciados pelo servidor
 
-With managed hosts, the server does all of the above per session.
-Add a `sandbox:` section to the server config (`omnicraft server -c
-config.yaml`, or `<data_dir>/config.yaml`):
+Com hosts gerenciados, o servidor faz tudo isso acima por sessão. Adicione
+uma seção `sandbox:` na config do servidor (`omnicraft server -c
+config.yaml`, ou `<data_dir>/config.yaml`):
 
 ```yaml
 sandbox:
@@ -269,12 +273,12 @@ sandbox:
   server_url: https://your-host    # public URL sandboxes dial back to
 ```
 
-`server_url` must be reachable *from Modal's cloud* — a public HTTPS
-URL, not `localhost`. The server itself needs Modal credentials in its
-environment (`MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`, or a mounted
-`~/.modal.toml`).
+`server_url` precisa ser alcançável *a partir da nuvem da Modal* — uma URL
+HTTPS pública, não `localhost`. O próprio servidor precisa de credenciais da
+Modal no seu ambiente (`MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET`, ou um
+`~/.modal.toml` montado).
 
-Now create sessions with `host_type: "managed"`:
+Agora crie sessões com `host_type: "managed"`:
 
 ```bash
 curl -X POST https://your-host/v1/sessions \
@@ -282,16 +286,16 @@ curl -X POST https://your-host/v1/sessions \
   -d '{"agent_id": "agent_...", "host_type": "managed"}'
 ```
 
-The create returns immediately; the server provisions a fresh sandbox
-in the background, starts a host in it, and binds the session once the
-host comes online (`host_id` / `workspace` appear on
-`GET /v1/sessions/{id}` when it does). A message posted before then
-waits for the launch to settle, so you can send the first prompt right
-away. Deleting the session terminates the sandbox and removes the
-host. Each sandbox authenticates back with a server-minted, per-launch
-token — no user credentials ever enter the sandbox.
+O create retorna imediatamente; o servidor provisiona um sandbox novo em
+segundo plano, inicia um host nele, e vincula a sessão assim que o host fica
+online (`host_id` / `workspace` aparecem em `GET /v1/sessions/{id}` quando
+isso acontece). Uma mensagem enviada antes disso espera o lançamento se
+estabilizar, então você pode mandar o primeiro prompt logo de cara. Apagar a
+sessão termina o sandbox e remove o host. Cada sandbox se autentica de volta
+com um token por lançamento gerado pelo servidor — nenhuma credencial de
+usuário entra no sandbox.
 
-Optional `modal:` settings:
+Configurações `modal:` opcionais:
 
 ```yaml
 sandbox:
@@ -302,91 +306,91 @@ sandbox:
     secrets: [omnicraft-llm]                       # Modal secrets to inject
 ```
 
-### LLM credentials for managed sandboxes
+### Credenciais de LLM para sandboxes gerenciados
 
-A fresh sandbox has no API keys. Park your provider credentials in a
-[Modal secret](https://modal.com/secrets) and list it under
-`sandbox.modal.secrets` — its env vars are injected into every managed
-sandbox, and the in-sandbox host forwards the standard harness
-credential vars to its runners:
+Um sandbox novo não tem nenhuma chave de API. Guarde as credenciais do seu
+provedor num [secret da Modal](https://modal.com/secrets) e liste-o em
+`sandbox.modal.secrets` — as variáveis de ambiente dele são injetadas em todo
+sandbox gerenciado, e o host dentro do sandbox repassa as variáveis padrão de
+credencial do harness para os seus runners:
 
 ```bash
 modal secret create omnicraft-llm \
   OMNICRAFT_ANTHROPIC_API_KEY=sk-ant-… OPENAI_API_KEY=sk-…
 ```
 
-The forwarded set covers the variables the harnesses themselves
-resolve — and it reaches well beyond the first-party APIs. The
-`*_BASE_URL` variables redirect each harness to *any* compatible
-endpoint, so the same mechanism covers frontier providers, gateways
-like [OpenRouter](https://openrouter.ai) and
-[LiteLLM](https://docs.litellm.ai), and self-hosted open-source models:
+O conjunto repassado cobre as variáveis que os próprios harnesses resolvem —
+e ele vai muito além das APIs de primeira parte. As variáveis `*_BASE_URL`
+redirecionam cada harness para *qualquer* endpoint compatível, então o mesmo
+mecanismo cobre provedores de fronteira, gateways como
+[OpenRouter](https://openrouter.ai) e [LiteLLM](https://docs.litellm.ai), e
+modelos open-source auto-hospedados:
 
-| Variable | Enables |
+| Variável | Habilita |
 |---|---|
-| `OMNICRAFT_ANTHROPIC_API_KEY` or `ANTHROPIC_API_KEY` | Claude models on the Anthropic API (claude-sdk, pi, claude-code harnesses). Prefer the `OMNICRAFT_` form for Claude Code so the raw `ANTHROPIC_API_KEY` env var is not present in the CLI process. |
-| `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` | Anthropic-compatible gateways — point claude-code at a LiteLLM proxy, a Bedrock/Vertex bridge, or a corporate gateway |
-| `CLAUDE_CODE_OAUTH_TOKEN` | claude-code with a Claude subscription (no API key) |
-| `OPENAI_API_KEY` | OpenAI models on the OpenAI API (codex, openai-agents harnesses) |
-| `OPENAI_BASE_URL` | Any OpenAI-compatible endpoint — the de-facto standard API of the open-model ecosystem. Gateways (OpenRouter, LiteLLM), hosted open-weights providers (Together, Fireworks, Groq), or self-hosted vLLM / Ollama — this is how Llama, Qwen, DeepSeek, and friends plug in |
-| `CODEX_ACCESS_TOKEN` | codex with a ChatGPT Business/Enterprise workspace |
-| `GEMINI_API_KEY` | Gemini models on the Google AI API |
+| `OMNICRAFT_ANTHROPIC_API_KEY` ou `ANTHROPIC_API_KEY` | Modelos Claude na API da Anthropic (harnesses claude-sdk, pi, claude-code). Prefira a forma `OMNICRAFT_` para o Claude Code, para que a `ANTHROPIC_API_KEY` crua não fique presente no processo da CLI. |
+| `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` | Gateways compatíveis com Anthropic — aponte o claude-code para um proxy LiteLLM, uma ponte Bedrock/Vertex, ou um gateway corporativo |
+| `CLAUDE_CODE_OAUTH_TOKEN` | claude-code com uma assinatura Claude (sem chave de API) |
+| `OPENAI_API_KEY` | Modelos OpenAI na API da OpenAI (harnesses codex, openai-agents) |
+| `OPENAI_BASE_URL` | Qualquer endpoint compatível com OpenAI — o padrão de-facto do ecossistema de modelos abertos. Gateways (OpenRouter, LiteLLM), provedores hospedados de pesos abertos (Together, Fireworks, Groq), ou vLLM / Ollama auto-hospedados — é assim que Llama, Qwen, DeepSeek e companhia se conectam |
+| `CODEX_ACCESS_TOKEN` | codex com um workspace ChatGPT Business/Enterprise |
+| `GEMINI_API_KEY` | Modelos Gemini na API do Google AI |
 
-Common setups:
+Configurações comuns:
 
-- **Claude with an API key** — put `OMNICRAFT_ANTHROPIC_API_KEY` in the secret.
-  OmniCraft resolves it into Claude Code's `apiKeyHelper`; do not also set
-  `ANTHROPIC_API_KEY` unless you are okay with Claude Code detecting the raw
-  custom key env var.
-- **Claude with a subscription** — run `claude setup-token` on your own
-  machine (one-time browser auth) and store the resulting long-lived
-  token as `CLAUDE_CODE_OAUTH_TOKEN`.
-- **Codex with an API key** — put `OPENAI_API_KEY` in the secret.
-- **Codex with a ChatGPT Business/Enterprise plan** — mint a
-  [Codex access token](https://developers.openai.com/codex/enterprise/access-tokens)
-  in the ChatGPT admin console (a workspace admin must grant the
-  permission) and store it as `CODEX_ACCESS_TOKEN`.
-- **Codex with a ChatGPT Plus/Pro plan** — there is no headless token
-  for personal plans. Codex stores personal-plan auth in
-  `~/.codex/auth.json` with effectively single-use refresh tokens, so
-  copies of that file across machines invalidate each other — it can't
-  be injected into disposable sandboxes via a shared secret. Use an
-  API key or `codex login --device-auth` inside a long-lived sandbox
-  instead (device-code login must first be enabled in ChatGPT →
-  Settings → Security).
-- **Gateways and open-source models** — set `OPENAI_BASE_URL` to the
-  endpoint plus its key as `OPENAI_API_KEY` (e.g.
-  `OPENAI_BASE_URL=https://openrouter.ai/api/v1` with an OpenRouter
-  key, or your own vLLM server's URL). Anthropic-side gateways work
-  the same way via `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN`.
+- **Claude com uma chave de API** — coloque `OMNICRAFT_ANTHROPIC_API_KEY` no
+  secret. O OmniCraft a resolve no `apiKeyHelper` do Claude Code; não defina
+  também `ANTHROPIC_API_KEY`, a menos que você não se importe com o Claude
+  Code detectando a variável de ambiente crua da chave customizada.
+- **Claude com uma assinatura** — rode `claude setup-token` na sua própria
+  máquina (autenticação única pelo navegador) e guarde o token de vida longa
+  resultante como `CLAUDE_CODE_OAUTH_TOKEN`.
+- **Codex com uma chave de API** — coloque `OPENAI_API_KEY` no secret.
+- **Codex com um plano ChatGPT Business/Enterprise** — gere um
+  [token de acesso do Codex](https://developers.openai.com/codex/enterprise/access-tokens)
+  no console de admin do ChatGPT (um admin do workspace precisa conceder a
+  permissão) e guarde-o como `CODEX_ACCESS_TOKEN`.
+- **Codex com um plano ChatGPT Plus/Pro** — não existe token headless para
+  planos pessoais. O Codex guarda a autenticação de plano pessoal em
+  `~/.codex/auth.json` com refresh tokens efetivamente de uso único, então
+  cópias desse arquivo entre máquinas invalidam umas às outras — não dá para
+  injetar num sandbox descartável via um secret compartilhado. Use uma chave
+  de API ou `codex login --device-auth` dentro de um sandbox de vida longa
+  em vez disso (o login por device-code precisa primeiro ser ativado em
+  ChatGPT → Settings → Security).
+- **Gateways e modelos open-source** — defina `OPENAI_BASE_URL` para o
+  endpoint mais sua chave como `OPENAI_API_KEY` (ex.:
+  `OPENAI_BASE_URL=https://openrouter.ai/api/v1` com uma chave do
+  OpenRouter, ou a URL do seu próprio servidor vLLM). Gateways do lado da
+  Anthropic funcionam do mesmo jeito, via `ANTHROPIC_BASE_URL` +
+  `ANTHROPIC_AUTH_TOKEN`.
 
-For env vars beyond the standard set, add
-`OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` to the secret — the
-host forwards the named extras to its runners.
+Para variáveis de ambiente além do conjunto padrão, adicione
+`OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2` ao secret — o host repassa os
+extras nomeados para os seus runners.
 
-To check what actually landed in a sandbox, exec into it with Modal's
-CLI and inspect the environment:
+Para conferir o que de fato chegou num sandbox, dê exec nele com a CLI da
+Modal e inspecione o ambiente:
 
 ```bash
 modal shell <sandbox-id>          # interactive shell in the sandbox
 env | grep -E 'ANTHROPIC|OPENAI|GIT'
 ```
 
-### Git credentials (private repositories)
+### Credenciais do Git (repositórios privados)
 
-Sandboxes clone repository workspaces anonymously by default, which
-covers public repositories only. For private repositories — both the
-clone the server runs at session create and the `git fetch` / `git
-push` the agent runs later — put an HTTPS token in a Modal secret as
+Sandboxes clonam workspaces de repositório anonimamente por padrão, o que
+cobre só repositórios públicos. Para repositórios privados — tanto o clone
+que o servidor roda na criação da sessão quanto o `git fetch` / `git push`
+que o agente roda depois — coloque um token HTTPS num secret da Modal como
 `GIT_TOKEN`:
 
 ```bash
 modal secret create omnicraft-git GIT_TOKEN=github_pat_…
 ```
 
-and list the secret under `sandbox.modal.secrets` (multiple secrets
-compose, so keeping git and LLM credentials in separate secrets is
-fine):
+e liste o secret em `sandbox.modal.secrets` (vários secrets se compõem, então
+manter credenciais de git e de LLM em secrets separados funciona bem):
 
 ```yaml
 sandbox:
@@ -396,67 +400,66 @@ sandbox:
     secrets: [omnicraft-llm, omnicraft-git]
 ```
 
-The host image ships a git credential helper that answers HTTPS
-authentication from `GIT_TOKEN`, so nothing is written to disk and no
-URL ever embeds the token. Details by provider:
+A imagem do host traz um helper de credencial git que responde pela
+autenticação HTTPS a partir de `GIT_TOKEN`, então nada é escrito em disco e
+nenhuma URL nunca embute o token. Detalhes por provedor:
 
-- **GitHub** — use a [fine-grained personal access
-  token](https://github.com/settings/personal-access-tokens) scoped to
-  the repositories the sandbox needs (Contents: read, or read/write if
-  the agent pushes). The default auth username (`x-access-token`)
-  is already correct.
-- **GitLab** — create a project or personal access token with
-  `read_repository` / `write_repository` and add
-  `GIT_USERNAME=oauth2` to the secret.
-- **Other HTTPS remotes** — any server accepting basic auth works;
-  set `GIT_USERNAME` if it requires a specific username.
+- **GitHub** — use um [personal access token de granularidade
+  fina](https://github.com/settings/personal-access-tokens) escopado aos
+  repositórios que o sandbox precisa (Contents: read, ou read/write se o
+  agente fizer push). O usuário de autenticação padrão (`x-access-token`) já
+  está correto.
+- **GitLab** — crie um token de projeto ou pessoal com `read_repository` /
+  `write_repository` e adicione `GIT_USERNAME=oauth2` ao secret.
+- **Outros remotes HTTPS** — qualquer servidor que aceite basic auth
+  funciona; defina `GIT_USERNAME` se ele exigir um usuário específico.
 
-Use HTTPS repository URLs (`https://github.com/org/repo`) for private
-workspaces — SSH URLs (`git@github.com:…`) would need a key and
-known-hosts setup inside the sandbox, which the managed flow does not
-provide.
+Use URLs de repositório HTTPS (`https://github.com/org/repo`) para workspaces
+privados — URLs SSH (`git@github.com:…`) precisariam de uma chave e de
+configuração de known-hosts dentro do sandbox, o que o fluxo gerenciado não
+fornece.
 
-The token is forwarded host→runner (like the LLM credentials above),
-so the agent's own git commands authenticate the same way the
-launch-time clone did. If the agent should also create commits, bake
-or configure `user.name` / `user.email` via your agent's instructions
-or a custom image.
+O token é repassado host→runner (como as credenciais de LLM acima), então os
+próprios comandos git do agente se autenticam do mesmo jeito que o clone no
+lançamento. Se o agente também deve criar commits, embuta ou configure
+`user.name` / `user.email` pelas instruções do seu agente ou por uma imagem
+customizada.
 
-### Environment variable reference
+### Referência de variáveis de ambiente
 
-| Variable | Where it's read | Purpose |
+| Variável | Onde é lida | Propósito |
 |---|---|---|
-| `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | CLI machine / server | Modal API credentials (alternative to `~/.modal.toml`) |
-| `OMNICRAFT_MODAL_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.modal.image` takes precedence for managed) |
-| `OMNICRAFT_MODAL_REGISTRY_SECRET` | CLI machine / server | Modal secret name with `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` for private image pulls |
-| `OMNICRAFT_MODAL_SANDBOX_SECRETS` | CLI machine / server | Comma-separated Modal secret names to inject (`sandbox.modal.secrets` takes precedence for managed) |
-| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (set via a Modal secret) | Extra env var names the host forwards to runners |
-| `GIT_TOKEN` | inside the sandbox (set via a Modal secret) | HTTPS token for private repository clone / fetch / push |
-| `GIT_USERNAME` | inside the sandbox (set via a Modal secret) | Auth username paired with `GIT_TOKEN` (default `x-access-token`; GitLab uses `oauth2`) |
+| `MODAL_TOKEN_ID` / `MODAL_TOKEN_SECRET` | máquina da CLI / servidor | Credenciais da API da Modal (alternativa ao `~/.modal.toml`) |
+| `OMNICRAFT_MODAL_HOST_IMAGE` | máquina da CLI / servidor | Sobrescreve a referência da imagem do host (`sandbox.modal.image` tem precedência para o gerenciado) |
+| `OMNICRAFT_MODAL_REGISTRY_SECRET` | máquina da CLI / servidor | Nome do secret da Modal com `REGISTRY_USERNAME` / `REGISTRY_PASSWORD` para pulls de imagem privada |
+| `OMNICRAFT_MODAL_SANDBOX_SECRETS` | máquina da CLI / servidor | Nomes de secrets da Modal, separados por vírgula, para injetar (`sandbox.modal.secrets` tem precedência para o gerenciado) |
+| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | dentro do sandbox (definida via um secret da Modal) | Nomes de variáveis de ambiente extras que o host repassa aos runners |
+| `GIT_TOKEN` | dentro do sandbox (definida via um secret da Modal) | Token HTTPS para clone / fetch / push de repositório privado |
+| `GIT_USERNAME` | dentro do sandbox (definida via um secret da Modal) | Usuário de autenticação pareado com `GIT_TOKEN` (padrão `x-access-token`; o GitLab usa `oauth2`) |
 
-All of the above are supported public configuration. The variables the
-managed launcher itself sets inside the sandbox —
-`OMNICRAFT_HOST_TOKEN`, `OMNICRAFT_HOST_ID`, `OMNICRAFT_HOST_NAME` —
-are internal plumbing (server-minted per launch) and are never set by
-users.
+Tudo acima é configuração pública suportada. As variáveis que o próprio
+launcher gerenciado define dentro do sandbox —
+`OMNICRAFT_HOST_TOKEN`, `OMNICRAFT_HOST_ID`, `OMNICRAFT_HOST_NAME` — são
+encanamento interno (geradas pelo servidor por lançamento) e nunca são
+definidas por usuários.
 
-### Limits and troubleshooting
+### Limites e resolução de problemas
 
-- **24-hour lifetime.** Modal hard-caps sandbox lifetime at 24 hours.
-  CLI flow: re-run `create` + `connect`. Managed flow: nothing to do —
-  when the sandbox dies, the next message to the session provisions a
-  fresh one under the same host (the session binding survives; a
-  repository workspace is re-cloned). Uncommitted workspace changes
-  die with the sandbox, so push work you care about.
-- **Resources.** Sandboxes are created with 2 CPUs and 4 GiB of
-  memory.
-- **Managed launch hangs then fails.** The server waits up to two
-  minutes for the in-sandbox host to come online. If it times out,
-  check that `server_url` is publicly reachable from Modal, then
-  inspect the host log inside the sandbox: `/tmp/omnicraft-host.log`.
-- **Image pull failures.** Private image without
-  `OMNICRAFT_MODAL_REGISTRY_SECRET` set, or a secret missing
+- **Vida de 24 horas.** A Modal impõe um teto rígido de 24 horas na vida do
+  sandbox. Fluxo da CLI: rode `create` + `connect` de novo. Fluxo gerenciado:
+  nada a fazer — quando o sandbox morre, a próxima mensagem para a sessão
+  provisiona um novo sob o mesmo host (o vínculo da sessão sobrevive; um
+  workspace de repositório é reclonado). Mudanças não commitadas no workspace
+  morrem com o sandbox, então dê push no trabalho que você se importa.
+- **Recursos.** Sandboxes são criados com 2 CPUs e 4 GiB de memória.
+- **Lançamento gerenciado trava e depois falha.** O servidor espera até dois
+  minutos pelo host dentro do sandbox ficar online. Se der timeout, confira
+  se `server_url` é alcançável publicamente a partir da Modal, depois
+  inspecione o log do host dentro do sandbox: `/tmp/omnicraft-host.log`.
+- **Falhas de pull de imagem.** Imagem privada sem
+  `OMNICRAFT_MODAL_REGISTRY_SECRET` definida, ou um secret sem
   `REGISTRY_USERNAME` / `REGISTRY_PASSWORD`.
-- **Agent has no credentials.** Verify the Modal secret is listed in
-  `sandbox.modal.secrets` and its var names match the forwarded set
-  above (or are named in `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`).
+- **Agente sem credenciais.** Confira se o secret da Modal está listado em
+  `sandbox.modal.secrets` e se os nomes das variáveis combinam com o conjunto
+  repassado acima (ou estão nomeados em
+  `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`).

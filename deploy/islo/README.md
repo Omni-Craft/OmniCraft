@@ -1,73 +1,77 @@
-# OmniCraft on Islo
+# OmniCraft no Islo
 
-[Islo](https://islo.dev) sandboxes give you disposable cloud machines for
-running OmniCraft hosts, two ways:
+Sandboxes do [Islo](https://islo.dev) dão a você machines de nuvem
+descartáveis para rodar hosts do OmniCraft, de duas formas:
 
-- **CLI-launched**: `omnicraft sandbox create` / `connect` provisions a
-  sandbox from your terminal, ships your local checkout into it, and
-  registers it as a host with your server.
-- **Server-managed**: the server provisions a sandbox automatically when
-  a session is created with `"host_type": "managed"` and terminates it
-  when the session is deleted.
+- **Lançado pela CLI**: `omnicraft sandbox create` / `connect` provisiona um
+  sandbox a partir do seu terminal, envia seu checkout local para dentro
+  dele, e o registra como host no seu servidor.
+- **Gerenciado pelo servidor**: o servidor provisiona um sandbox
+  automaticamente quando uma sessão é criada com `"host_type": "managed"` e
+  o encerra quando a sessão é apagada.
 
-Sandboxes boot from the official prebaked host image, so startup is
-seconds. Unlike Modal and Daytona, the Islo launcher talks to the Islo
-HTTP API directly through `httpx` (already an OmniCraft dependency), so
-there is **no provider SDK extra to install** — just an API key.
+Sandboxes sobem a partir da imagem de host pré-assada oficial, então a
+inicialização leva segundos. Ao contrário da Modal e da Daytona, o lançador
+do Islo conversa diretamente com a API HTTP do Islo através do `httpx` (já
+uma dependência do OmniCraft), então **não há extra de SDK de provedor para
+instalar** — só uma API key.
 
-What makes Islo different from the other providers, and shapes the rest
-of this guide:
+O que faz o Islo diferente dos outros provedores, e molda o resto deste
+guia:
 
-- **A credential gateway.** Islo can inject LLM/API keys into a sandbox's
-  outbound traffic at the network layer, so the raw key never reaches the
-  sandbox process. This is a first-class, recommended path for model
-  credentials (see [Model credentials](#model-credentials-llm-keys)) and
-  has no equivalent on Modal or Daytona.
-- **No local port forward.** Islo can't forward a sandbox→laptop callback
-  port, so the interactive in-sandbox `omnicraft login` / App OAuth step is
-  skipped automatically (as on Modal and Daytona).
-- **No lifetime cap.** Islo sandboxes run until deleted (like Daytona,
-  unlike Modal's 24 h).
+- **Um gateway de credenciais.** O Islo consegue injetar chaves de LLM/API
+  no tráfego de saída de um sandbox na camada de rede, então a chave crua
+  nunca chega ao processo do sandbox. Este é um caminho de primeira classe,
+  recomendado, para credenciais de modelo (veja [Credenciais de
+  modelo](#credenciais-de-modelo-chaves-de-llm)) e não tem equivalente na
+  Modal ou na Daytona.
+- **Sem port forward local.** O Islo não consegue encaminhar uma porta de
+  callback sandbox→notebook, então o passo interativo de `omnicraft login`
+  / App OAuth dentro do sandbox é pulado automaticamente (como na Modal e
+  na Daytona).
+- **Sem teto de lifetime.** Sandboxes do Islo rodam até serem apagados
+  (como na Daytona, ao contrário das 24 h da Modal).
 
-## Prerequisites
+## Pré-requisitos
 
-Install the [Islo CLI](https://docs.islo.dev) and create an API key, then
-make it available where the launcher runs — your shell for the CLI flow,
-the **server** process for managed sandboxes:
+Instale a [CLI do Islo](https://docs.islo.dev) e crie uma API key, depois a
+deixe disponível onde o lançador roda — seu shell para o fluxo de CLI, o
+processo do **servidor** para sandboxes gerenciados:
 
 ```bash
-curl -fsSL https://islo.dev/install.sh | sh   # install the islo CLI
-islo login                                     # browser OAuth (one-time)
-islo api-key create omnicraft --show            # prints an islo_key_… value
+curl -fsSL https://islo.dev/install.sh | sh   # instala a CLI do islo
+islo login                                     # OAuth pelo navegador (uma vez)
+islo api-key create omnicraft --show            # imprime um valor islo_key_…
 export ISLO_API_KEY=islo_key_…
-# Optional: a non-default API endpoint
+# Opcional: um endpoint de API não padrão
 # export ISLO_BASE_URL=https://api.islo.dev
 ```
 
-`ISLO_API_KEY` is exchanged for a short-lived session token at
-`POST /auth/token`; the token is cached until shortly before expiry. The
-key is the only required credential — no SDK, no `~/.config` file.
+`ISLO_API_KEY` é trocado por um token de sessão de vida curta em `POST
+/auth/token`; o token fica em cache até pouco antes de expirar. A chave é a
+única credencial obrigatória — sem SDK, sem arquivo `~/.config`.
 
 > [!NOTE]
-> **Islo cannot forward a local callback port into the sandbox.** The
-> interactive `omnicraft login` browser flow (and the in-sandbox App OAuth
-> callback) needs a sandbox→laptop port forward, which Islo doesn't
-> provide — so the CLI skips that step automatically, exactly as it does
-> for Modal and Daytona. For a server that requires authentication, inject
-> the credentials instead (see
-> [Connecting to an authenticated server](#connecting-to-an-authenticated-server)).
+> **O Islo não consegue encaminhar uma porta de callback local para dentro
+> do sandbox.** O fluxo interativo de navegador do `omnicraft login` (e o
+> callback de App OAuth dentro do sandbox) precisa de um port forward
+> sandbox→notebook, que o Islo não fornece — então a CLI pula esse passo
+> automaticamente, exatamente como faz para a Modal e a Daytona. Para um
+> servidor que exige autenticação, injete as credenciais em vez disso (veja
+> [Conectando-se a um servidor
+> autenticado](#conectando-se-a-um-servidor-autenticado)).
 
-## The host image
+## A imagem do host
 
-Sandboxes boot from `ghcr.io/omnicraft-ai/omnicraft-host:latest`, published
-by CI from the `host` target of
-[`deploy/docker/Dockerfile`](../docker/Dockerfile) with OmniCraft and its
-dependencies preinstalled — including the coding-harness CLIs (`claude`,
-`codex`, `pi`, `kiro-cli`), so agents on any harness run without an in-sandbox
-install.
+Sandboxes sobem a partir de `ghcr.io/omnicraft-ai/omnicraft-host:latest`,
+publicada pela CI a partir do alvo `host` do
+[`deploy/docker/Dockerfile`](../docker/Dockerfile) com o OmniCraft e suas
+dependências pré-instaladas — incluindo as CLIs de harness de código
+(`claude`, `codex`, `pi`, `kiro-cli`), então agentes de qualquer harness
+rodam sem uma instalação dentro do sandbox.
 
-To use a different image (a fork, or extra tooling baked in), build the
-same target and push it anywhere Islo can pull from:
+Para usar uma imagem diferente (um fork, ou ferramentas extras embutidas),
+construa o mesmo alvo e envie-a para onde o Islo conseguir puxar:
 
 ```bash
 docker build -f deploy/docker/Dockerfile --target host \
@@ -76,31 +80,33 @@ docker build -f deploy/docker/Dockerfile --target host \
 docker push docker.io/<you>/omnicraft-host:latest
 ```
 
-Then point OmniCraft at it — `OMNICRAFT_ISLO_HOST_IMAGE` for the CLI flow,
-or `sandbox.islo.image` in the server config for the managed flow. For a
-private registry, configure the pull credentials on the Islo side (Islo
-pulls the image, not OmniCraft).
+Depois aponte o OmniCraft para ela — `OMNICRAFT_ISLO_HOST_IMAGE` para o
+fluxo de CLI, ou `sandbox.islo.image` na configuração do servidor para o
+fluxo gerenciado. Para um registry privado, configure as credenciais de
+pull do lado do Islo (é o Islo que puxa a imagem, não o OmniCraft).
 
 > [!IMPORTANT]
-> **Native terminals need `bubblewrap`.** The `claude-native` /
-> `codex-native` / `kiro-native` / `pi` harnesses wrap each agent terminal in a bubblewrap
-> (`bwrap`) OS-sandbox, and on Linux that isolation is mandatory and
-> fail-loud — a host image without the `bwrap` binary makes those terminals
-> fail to start (`linux_bwrap sandbox requires the 'bwrap' binary on PATH`).
-> The `host` Dockerfile target installs `bubblewrap`; if you bring your own
-> image, install it there too. See [Troubleshooting](#troubleshooting).
+> **Terminais nativos precisam de `bubblewrap`.** Os harnesses
+> `claude-native` / `codex-native` / `kiro-native` / `pi` embrulham cada
+> terminal de agente num OS-sandbox bubblewrap (`bwrap`), e no Linux esse
+> isolamento é obrigatório e fail-loud — uma imagem de host sem o binário
+> `bwrap` faz esses terminais falharem ao iniciar (`linux_bwrap sandbox
+> requires the 'bwrap' binary on PATH`). O alvo `host` do Dockerfile instala
+> o `bubblewrap`; se você trouxer sua própria imagem, instale-o lá também.
+> Veja [Solução de problemas](#solução-de-problemas).
 
-## CLI-launched sandboxes
+## Sandboxes lançados pela CLI
 
-Provision a sandbox and ship your local checkout into it:
+Provisione um sandbox e envie seu checkout local para dentro dele:
 
 ```bash
 omnicraft sandbox create --provider islo
 ```
 
-This pulls the host image, builds wheels from your local checkout, and
-overlays them on top — so the sandbox runs *your* code, not whatever the
-image was built from. Then register it as a host with your server:
+Isso puxa a imagem de host, constrói wheels a partir do seu checkout local,
+e os sobrepõe por cima — então o sandbox roda *o seu* código, não o que
+quer que a imagem tenha sido construída a partir de. Depois registre-o
+como host no seu servidor:
 
 ```bash
 omnicraft sandbox connect --provider islo \
@@ -108,71 +114,75 @@ omnicraft sandbox connect --provider islo \
   --server https://your-host
 ```
 
-`connect` runs `omnicraft host` inside the sandbox and holds the
-connection open in your terminal — Ctrl-C tears it down. New sessions
-targeting that host now run in the sandbox.
+O `connect` roda `omnicraft host` dentro do sandbox e mantém a conexão
+aberta no seu terminal — Ctrl-C a derruba. Novas sessões direcionadas a
+esse host agora rodam no sandbox.
 
-Running multiple sandboxes against one server? Pass a unique
-`--host-name <label>` to each `connect` — the server keys hosts on
-(owner, name), and sandboxes that share a hostname collide.
+Rodando múltiplos sandboxes contra um servidor? Passe um `--host-name
+<label>` único para cada `connect` — o servidor identifica hosts por
+(owner, name), e sandboxes que compartilham um hostname colidem.
 
-Sandboxes are disposable. When your code changes, create a new one — and
-delete the old one (Islo sandboxes have no lifetime cap, so an abandoned
-sandbox keeps billing until removed via `islo rm <id>` or the
+Sandboxes são descartáveis. Quando seu código muda, crie um novo — e apague
+o antigo (sandboxes do Islo não têm teto de lifetime, então um sandbox
+abandonado continua sendo cobrado até ser removido via `islo rm <id>` ou o
 [dashboard](https://app.islo.dev)).
 
-To inject LLM/git credentials into a CLI-launched sandbox, set
-`OMNICRAFT_ISLO_SANDBOX_ENV` in your shell to a comma-separated list of
-variable names (e.g. `ANTHROPIC_API_KEY,GIT_TOKEN`) before running
-`create` — the named variables are copied from your environment into the
-sandbox at provision time. A listed name that is **not** set fails the
-launch loudly (it would otherwise surface much later as an opaque harness
-auth failure inside the sandbox).
+Para injetar credenciais de LLM/git num sandbox lançado pela CLI, defina
+`OMNICRAFT_ISLO_SANDBOX_ENV` no seu shell como uma lista separada por
+vírgulas de nomes de variáveis (ex.: `ANTHROPIC_API_KEY,GIT_TOKEN`) antes
+de rodar o `create` — as variáveis nomeadas são copiadas do seu ambiente
+para dentro do sandbox no momento do provisionamento. Um nome listado que
+**não** está definido falha o lançamento de forma ruidosa (caso contrário,
+apareceria muito mais tarde como uma falha opaca de autenticação de
+harness dentro do sandbox).
 
-### Connecting to an authenticated server
+### Conectando-se a um servidor autenticado
 
-`connect` runs `omnicraft host` inside the sandbox, and that host must
-present credentials when it dials back to a server that requires
-authentication. The interactive `omnicraft login` browser flow can't run
-inside an Islo sandbox (no callback port forward), so inject the keys for
-the relevant server instead — name them in `OMNICRAFT_ISLO_SANDBOX_ENV`
-before `create`:
+O `connect` roda `omnicraft host` dentro do sandbox, e esse host precisa
+apresentar credenciais quando disca de volta para um servidor que exige
+autenticação. O fluxo interativo de navegador do `omnicraft login` não
+consegue rodar dentro de um sandbox do Islo (sem port forward de
+callback), então injete as chaves para o servidor relevante em vez disso —
+nomeie-as em `OMNICRAFT_ISLO_SANDBOX_ENV` antes do `create`:
 
 ```bash
 export OMNICRAFT_ISLO_SANDBOX_ENV=DATABRICKS_HOST,DATABRICKS_TOKEN
 omnicraft sandbox create --provider islo
 ```
 
-The in-sandbox host mints a fresh bearer token from those credentials on
-every connect and reconnect. For a Databricks-fronted server, inject
-`DATABRICKS_HOST` plus either `DATABRICKS_TOKEN` (a PAT) or
-`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET` (an OAuth service
-principal — re-minting keeps a long-lived sandbox connected past any
-single token's expiry).
+O host dentro do sandbox gera um bearer token novo a partir dessas
+credenciais em todo connect e reconnect. Para um servidor atrás do
+Databricks, injete `DATABRICKS_HOST` mais `DATABRICKS_TOKEN` (um PAT) ou
+`DATABRICKS_CLIENT_ID` / `DATABRICKS_CLIENT_SECRET` (um service principal
+OAuth — regerar mantém um sandbox de vida longa conectado além da
+expiração de qualquer token único).
 
-A server with no authentication on the host tunnel needs none of this,
-and neither do [server-managed sandboxes](#server-managed-sandboxes) —
-those authenticate with a server-minted per-launch token automatically.
+Um servidor sem autenticação no túnel do host não precisa de nada disso, e
+os [sandboxes gerenciados pelo servidor](#sandboxes-gerenciados-pelo-servidor)
+também não — eles se autenticam automaticamente com um token por
+lançamento gerado pelo servidor.
 
-## Server-managed sandboxes
+## Sandboxes gerenciados pelo servidor
 
-Add a `sandbox:` section to the server config (`omnicraft server -c
-config.yaml`, or `<data_dir>/config.yaml`):
+Adicione uma seção `sandbox:` à configuração do servidor (`omnicraft
+server -c config.yaml`, ou `<data_dir>/config.yaml`):
 
 ```yaml
 sandbox:
   provider: islo
-  server_url: https://your-host    # public URL sandboxes dial back to
+  server_url: https://your-host    # URL pública para onde os sandboxes discam de volta
 ```
 
-`server_url` must be reachable *from Islo's cloud* — a public HTTPS URL,
-not `localhost`. The server itself needs `ISLO_API_KEY` (and optional
-`ISLO_BASE_URL`) in its environment. Sessions created with
-`host_type: "managed"` (the API call or the Web UI's New Sandbox option)
-then run on a fresh Islo sandbox; the create returns immediately and
-provisioning happens in the background, exactly like the [Modal managed
-flow](../modal/README.md#server-managed-sandboxes) — including repository
-workspaces, the first-message rendezvous, and dead-sandbox relaunch.
+`server_url` precisa ser alcançável *a partir da nuvem do Islo* — uma URL
+HTTPS pública, não `localhost`. O próprio servidor precisa de
+`ISLO_API_KEY` (e opcionalmente `ISLO_BASE_URL`) no seu ambiente. Sessões
+criadas com `host_type: "managed"` (a chamada de API ou a opção New
+Sandbox da Web UI) então rodam num sandbox novo do Islo; o create retorna
+imediatamente e o provisionamento acontece em segundo plano, exatamente
+como o [fluxo gerenciado da
+Modal](../modal/README.md#sandboxes-gerenciados-pelo-servidor) — incluindo workspaces
+de repositório, o rendezvous da primeira mensagem, e o relançamento de
+sandbox morto.
 
 ```bash
 curl -X POST https://your-host/v1/sessions \
@@ -180,121 +190,128 @@ curl -X POST https://your-host/v1/sessions \
   -d '{"agent_id": "agent_...", "host_type": "managed"}'
 ```
 
-Each managed sandbox authenticates back with a server-minted, per-launch
-token (7-day TTL — see [Lifecycle](#lifecycle-notes)); no user
-credentials enter the sandbox for the server connection.
+Cada sandbox gerenciado se autentica de volta com um token por lançamento
+gerado pelo servidor (TTL de 7 dias — veja [Ciclo de
+vida](#notas-de-ciclo-de-vida)); nenhuma credencial de usuário entra no
+sandbox para a conexão com o servidor.
 
-### Managed hosts and server auth
+### Hosts gerenciados e autenticação do servidor
 
-How the dial-back authenticates depends on how the **server** does auth,
-and there is one interaction worth knowing before you deploy. A managed
-sandbox opens two kinds of connections back to the server:
+Como o dial-back se autentica depende de como o **servidor** faz a
+autenticação, e há uma interação que vale a pena conhecer antes de você
+publicar. Um sandbox gerenciado abre dois tipos de conexão de volta para o
+servidor:
 
-- the **host tunnel** (`/v1/hosts/<id>/tunnel`), which the per-launch
-  token authenticates directly — the server mints it, scopes it to one
-  host, and resolves the owner from it. This always works.
-- one **runner tunnel** per session (`/v1/runners/<token>/tunnel`), opened
-  by the runner subprocess the host spawns. The runner authenticates with
-  *whatever server credential it can resolve* — a proxy-injected identity
-  (header / OIDC), or a stored `omnicraft login` token (local hosts only; a
-  fresh managed sandbox has none) — **not** the per-launch host token.
+- o **túnel do host** (`/v1/hosts/<id>/tunnel`), que o token por
+  lançamento autentica diretamente — o servidor o gera, o escopa a um
+  único host, e resolve o dono a partir dele. Isso sempre funciona.
+- um **túnel de runner** por sessão (`/v1/runners/<token>/tunnel`), aberto
+  pelo subprocesso runner que o host lança. O runner se autentica com
+  *qualquer credencial de servidor que consiga resolver* — uma identidade
+  injetada por proxy (header / OIDC), ou um token de `omnicraft login`
+  armazenado (só hosts locais; um sandbox gerenciado novo não tem nenhum)
+  — **não** o token de host por lançamento.
 
-The consequence:
+A consequência:
 
-- **Header / OIDC-proxy auth, or single-user (no-auth) servers** — the
-  runner tunnel needs no extra identity, so managed hosts work out of the
-  box. **Verified end-to-end on a single-user server**: a session created
-  with `host_type: "managed"` provisioned an Islo sandbox from the bwrap
-  image, the launcher cleared the seeded `apiKeyHelper`, the host *and*
-  runner tunnels connected, and a native Claude terminal ran on the
-  injected `CLAUDE_CODE_OAUTH_TOKEN` subscription.
-- **The built-in `accounts` provider (`OMNICRAFT_AUTH_ENABLED=1`)** — the
-  runner tunnel additionally requires a *user* identity, which the
-  per-launch host token does not carry, so the runner dial-back is refused
-  (`403`) even though the host tunnel connects. This is a framework-level
-  managed-host interaction shared by **all** sandbox providers (Modal /
-  Daytona / Islo), not specific to Islo.
+- **Autenticação header / OIDC-proxy, ou servidores de usuário único (sem
+  autenticação)** — o túnel de runner não precisa de identidade extra,
+  então hosts gerenciados funcionam prontos para uso. **Verificado ponta a
+  ponta num servidor de usuário único**: uma sessão criada com
+  `host_type: "managed"` provisionou um sandbox do Islo a partir da imagem
+  com bwrap, o lançador limpou o `apiKeyHelper` semeado, os túneis de host
+  *e* de runner conectaram, e um terminal nativo do Claude rodou com a
+  assinatura injetada via `CLAUDE_CODE_OAUTH_TOKEN`.
+- **O provedor `accounts` embutido (`OMNICRAFT_AUTH_ENABLED=1`)** — o
+  túnel de runner exige adicionalmente uma identidade de *usuário*, que o
+  token de host por lançamento não carrega, então o dial-back do runner é
+  recusado (`403`) mesmo com o túnel do host conectando. Esta é uma
+  interação a nível de framework para hosts gerenciados, compartilhada
+  por **todos** os provedores de sandbox (Modal / Daytona / Islo), não
+  específica do Islo.
 
-So for a managed Islo deployment, front the server with **header or OIDC
-auth** (a reverse proxy / IdP injects the user identity on every request,
-including the runner WebSocket — see
-[`deploy/README.md#auth`](../README.md#auth)), or run it single-user. The
-`accounts` provider is fine for CLI-launched hosts (you `omnicraft login`,
-and that token is what the in-sandbox host forwards), but not yet for the
-managed runner dial-back.
+Então, para um deploy gerenciado do Islo, coloque o servidor atrás de
+**autenticação header ou OIDC** (um reverse proxy / IdP injeta a
+identidade do usuário em toda requisição, incluindo o WebSocket do
+runner — veja [`deploy/README.md#autenticação`](../README.md#autenticação)), ou rode-o em
+modo usuário único. O provedor `accounts` funciona bem para hosts lançados
+pela CLI (você faz `omnicraft login`, e esse token é o que o host dentro
+do sandbox repassa), mas ainda não para o dial-back de runner gerenciado.
 
-Optional `islo:` settings:
+Configurações opcionais de `islo:`:
 
 ```yaml
 sandbox:
   provider: islo
   server_url: https://your-host
   islo:
-    image: docker.io/<you>/omnicraft-host:latest   # default: official image
-    env: [OPENAI_API_KEY, GIT_TOKEN]               # copy from server env
-    base_url: https://api.islo.dev                 # non-default API endpoint
-    gateway_profile: default                       # Islo gateway for egress + credential injection
-    snapshot_name: warm-host                       # boot from a prebaked snapshot
-    workdir: /root/workspace                       # sandbox working directory
+    image: docker.io/<you>/omnicraft-host:latest   # padrão: imagem oficial
+    env: [OPENAI_API_KEY, GIT_TOKEN]               # copia do ambiente do servidor
+    base_url: https://api.islo.dev                 # endpoint de API não padrão
+    gateway_profile: default                       # gateway do Islo para egress + injeção de credencial
+    snapshot_name: warm-host                       # inicia a partir de um snapshot pré-assado
+    workdir: /root/workspace                       # diretório de trabalho do sandbox
     vcpus: 2
     memory_mb: 4096
     disk_gb: 20
 ```
 
-## Model credentials (LLM keys)
+## Credenciais de modelo (chaves de LLM)
 
-A fresh sandbox has no model credentials of your own. Islo offers **two
-distinct ways** to give the agent a model — and they interact, so pick one
-deliberately per harness.
+Um sandbox novo não tem nenhuma credencial de modelo sua. O Islo oferece
+**duas formas distintas** de dar um modelo ao agente — e elas interagem,
+então escolha uma deliberadamente por harness.
 
-### Option A — Islo gateway integration (recommended)
+### Opção A — integração com o gateway do Islo (recomendado)
 
-This is the Islo-native path with no Modal/Daytona equivalent. Islo
-[gateways](https://docs.islo.dev/cli/gateways) "automatically attach API
-keys, tokens, and secrets to outbound requests" at the **network layer** —
-*"credentials never reach the sandbox process."* You connect a provider
-once, server-side, and every sandbox picks it up:
+Este é o caminho nativo do Islo, sem equivalente na Modal/Daytona. Os
+[gateways](https://docs.islo.dev/cli/gateways) do Islo "anexam
+automaticamente API keys, tokens e secrets às requisições de saída" na
+**camada de rede** — *"as credenciais nunca chegam ao processo do
+sandbox."* Você conecta um provedor uma vez, do lado do servidor, e todo
+sandbox a aproveita:
 
 ```bash
-islo login --tool claude     # OAuth-connect Anthropic (alias: --tool anthropic)
-islo login --tool openai     # …and/or OpenAI
-islo status                  # shows connected integrations
+islo login --tool claude     # conecta a Anthropic via OAuth (apelido: --tool anthropic)
+islo login --tool openai     # …e/ou a OpenAI
+islo status                  # mostra as integrações conectadas
 ```
 
-This is **not Claude-specific** — it's how Islo supplies model
-credentials to *every* harness. Islo pre-seeds each sandbox with a
-**phantom** placeholder key (`islo_phantom_…`) in whatever location the
-harness reads, per provider:
+Isso **não é específico do Claude** — é como o Islo fornece credenciais de
+modelo para *todo* harness. O Islo pré-semeia cada sandbox com uma chave
+placeholder **phantom** (`islo_phantom_…`) em qualquer local que o
+harness leia, por provedor:
 
-| Harness | Phantom key location | Provider endpoint |
+| Harness | Local da chave phantom | Endpoint do provedor |
 |---|---|---|
-| Claude Code (`claude-native`, `claude-sdk`, `pi`) | `apiKeyHelper` in `~/.claude/settings.json` | `api.anthropic.com` |
-| Codex / OpenAI agents | `OPENAI_API_KEY` env var | `api.openai.com` |
+| Claude Code (`claude-native`, `claude-sdk`, `pi`) | `apiKeyHelper` em `~/.claude/settings.json` | `api.anthropic.com` |
+| Codex / agentes OpenAI | variável de ambiente `OPENAI_API_KEY` | `api.openai.com` |
 
-The harness sends that placeholder to its provider endpoint; the gateway
-intercepts the request and swaps it for your connected credential before
-forwarding. The raw key never lands in the sandbox, and the connection is
-team-wide — other members don't need their own. (We observed both phantom
-keys pre-seeded in a single sandbox.)
+O harness envia esse placeholder para o endpoint do seu provedor; o
+gateway intercepta a requisição e o troca pela sua credencial conectada
+antes de encaminhar. A chave crua nunca chega ao sandbox, e a conexão vale
+para o time inteiro — outros membros não precisam da própria. (Observamos
+as duas chaves phantom pré-semeadas num único sandbox.)
 
-These integrations connect **provider API keys** (per-token billing), not
-plan/subscription auth — `--tool claude` gives an Anthropic API key, not a
-Claude Pro/Max subscription; `--tool openai` gives an OpenAI API key, not
-a ChatGPT plan. To use a subscription or plan token on any harness (a
-Claude Pro/Max token, a Codex access token), use
-[Option B](#option-b--omnicraft-env-injection-your-own-key-or-a-subscription).
+Essas integrações conectam **API keys de provedor** (cobrança por token),
+não autenticação de plano/assinatura — `--tool claude` dá uma API key da
+Anthropic, não uma assinatura Claude Pro/Max; `--tool openai` dá uma API
+key da OpenAI, não um plano ChatGPT. Para usar um token de assinatura ou
+plano em qualquer harness (um token Claude Pro/Max, um token de acesso do
+Codex), use a [Opção
+B](#opção-b-injeção-de-variáveis-de-ambiente-do-omnicraft-sua-própria-chave-ou-uma-assinatura).
 
 > [!IMPORTANT]
-> If `islo status` shows **"No integrations connected"** for a provider,
-> its phantom key resolves to nothing — the harness falls back to a failing
-> request (Claude reports "API Usage Billing" and retries). Connect the
-> integration for each provider whose harness you use.
+> Se `islo status` mostrar **"No integrations connected"** para um
+> provedor, a chave phantom dele não resolve para nada — o harness cai
+> numa requisição que falha (o Claude reporta "API Usage Billing" e tenta
+> de novo). Conecte a integração para cada provedor cujo harness você usa.
 
-#### Path A under managed hosts
+#### Caminho A sob hosts gerenciados
 
-This is where the gateway shines: when the **server** launches sandboxes,
-you configure **no model credential on the OmniCraft side at all**. The
-flow:
+É aqui que o gateway brilha: quando o **servidor** lança sandboxes, você
+não configura **nenhuma credencial de modelo do lado do OmniCraft**. O
+fluxo:
 
 ```
 admin (once):  islo login --tool claude   → connects Anthropic to the Islo ACCOUNT
@@ -306,186 +323,206 @@ server ──ISLO_API_KEY──▶ Islo API "create sandbox" ──▶ sandbox u
    agent's claude → api.anthropic.com (phantom key) ──▶ Islo gateway swaps in the real key
 ```
 
-The OmniCraft server only ever holds `ISLO_API_KEY` — the credential it
-uses to *create* sandboxes. Because every managed sandbox is created under
-that Islo account, and integrations are connected at the **account/team**
-level, each one inherits the connected Claude credential through the
-gateway automatically. The only OmniCraft-side knob is which gateway a
-managed sandbox uses:
+O servidor do OmniCraft só guarda `ISLO_API_KEY` — a credencial que ele
+usa para *criar* sandboxes. Como todo sandbox gerenciado é criado sob
+aquela conta do Islo, e as integrações são conectadas no nível de
+**conta/time**, cada um herda a credencial do Claude conectada através do
+gateway automaticamente. O único controle do lado do OmniCraft é qual
+gateway um sandbox gerenciado usa:
 
 ```yaml
 sandbox:
   provider: islo
   server_url: https://your-host
   islo:
-    gateway_profile: default     # the Islo gateway carrying the connected integration
+    gateway_profile: default     # o gateway do Islo que carrega a integração conectada
 ```
 
-Two consequences worth internalizing:
+Duas consequências que vale a pena internalizar:
 
-- **No model secret lives in the OmniCraft server's config or
-  environment** — nothing to leak there. Contrast [Option B under managed
-  hosts](#option-b--omnicraft-env-injection-your-own-key-or-a-subscription),
-  where the key sits in `sandbox.islo.env` (copied from the server's env
-  into each sandbox).
-- **The integration must be connected on the same Islo account the
-  server's `ISLO_API_KEY` belongs to.** If your server runs under a
-  dedicated service/CI Islo account, run `islo login --tool claude` while
-  authenticated as *that* account — not a personal laptop login.
+- **Nenhum secret de modelo mora na configuração ou no ambiente do
+  servidor do OmniCraft** — nada para vazar ali. Compare com a [Opção B
+  sob hosts
+  gerenciados](#opção-b-injeção-de-variáveis-de-ambiente-do-omnicraft-sua-própria-chave-ou-uma-assinatura),
+  onde a chave fica em `sandbox.islo.env` (copiada do ambiente do
+  servidor para cada sandbox).
+- **A integração precisa estar conectada na mesma conta do Islo à qual o
+  `ISLO_API_KEY` do servidor pertence.** Se o seu servidor roda sob uma
+  conta de serviço/CI dedicada do Islo, rode `islo login --tool claude`
+  autenticado como *aquela* conta — não um login pessoal de notebook.
 
-### Option B — OmniCraft env injection (your own key or a subscription)
+### Opção B — injeção de variáveis de ambiente do OmniCraft (sua própria chave ou uma assinatura)
 
-Bring your own credential by naming it in `OMNICRAFT_ISLO_SANDBOX_ENV`
-(CLI) or `sandbox.islo.env` (managed); the launcher copies the value from
-the launching environment into the sandbox, and the in-sandbox host
-forwards the standard harness credential vars to its runners:
+Traga sua própria credencial nomeando-a em `OMNICRAFT_ISLO_SANDBOX_ENV`
+(CLI) ou `sandbox.islo.env` (gerenciado); o lançador copia o valor do
+ambiente que lança para dentro do sandbox, e o host dentro do sandbox
+repassa as variáveis padrão de credencial de harness para seus runners:
 
-| Variable | Enables |
+| Variável | Habilita |
 |---|---|
-| `ANTHROPIC_API_KEY` | Claude models on the Anthropic API |
-| `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` | Anthropic-compatible gateways (LiteLLM, Bedrock/Vertex bridges, corporate proxies) |
-| `CLAUDE_CODE_OAUTH_TOKEN` | claude-code with a Claude **subscription** (no API key) |
-| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | OpenAI or any OpenAI-compatible endpoint (OpenRouter, vLLM, Ollama, …) |
-| `CODEX_ACCESS_TOKEN` | codex with a ChatGPT Business/Enterprise workspace |
-| `GEMINI_API_KEY` | Gemini on the Google AI API |
+| `ANTHROPIC_API_KEY` | Modelos Claude na API da Anthropic |
+| `ANTHROPIC_AUTH_TOKEN`, `ANTHROPIC_BASE_URL` | Gateways compatíveis com Anthropic (LiteLLM, bridges Bedrock/Vertex, proxies corporativos) |
+| `CLAUDE_CODE_OAUTH_TOKEN` | claude-code com uma **assinatura** Claude (sem API key) |
+| `OPENAI_API_KEY` / `OPENAI_BASE_URL` | OpenAI ou qualquer endpoint compatível com OpenAI (OpenRouter, vLLM, Ollama, …) |
+| `CODEX_ACCESS_TOKEN` | codex com um workspace ChatGPT Business/Enterprise |
+| `GEMINI_API_KEY` | Gemini na API do Google AI |
 
-The full per-plan recipes (subscriptions, gateways, open-source models)
-are identical to Modal — see the [variable table and
-recipes](../modal/README.md#llm-credentials-for-managed-sandboxes). For a
-Claude **subscription** specifically, run `claude setup-token` on your own
-machine (one-time browser auth) and inject the resulting long-lived token
-as `CLAUDE_CODE_OAUTH_TOKEN`. For env vars beyond the standard set, inject
+As receitas completas por plano (assinaturas, gateways, modelos
+open-source) são idênticas às da Modal — veja a [tabela de variáveis e as
+receitas](../modal/README.md#credenciais-de-llm-para-sandboxes-gerenciados). Para
+uma **assinatura** Claude especificamente, rode `claude setup-token` na
+sua própria máquina (autenticação única via navegador) e injete o token
+de vida longa resultante como `CLAUDE_CODE_OAUTH_TOKEN`. Para variáveis de
+ambiente além do conjunto padrão, injete
 `OMNICRAFT_RUNNER_ENV_PASSTHROUGH=NAME1,NAME2`.
 
 > [!NOTE]
-> **Your injected Claude credential automatically wins over Islo's phantom
-> helper.** Islo seeds an `apiKeyHelper` into every sandbox, and Claude Code
-> would normally prefer it over a `CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_API_KEY`
-> in the environment. So when you inject one of those, the Islo launcher
-> strips the seeded `apiKeyHelper` at provision time — for **both**
-> CLI-launched and server-managed sandboxes — leaving your credential as the
-> sole auth path. No manual step, nothing to run inside the sandbox.
+> **Sua credencial Claude injetada automaticamente prevalece sobre o
+> helper phantom do Islo.** O Islo semeia um `apiKeyHelper` em todo
+> sandbox, e o Claude Code normalmente o preferiria em vez de um
+> `CLAUDE_CODE_OAUTH_TOKEN`/`ANTHROPIC_API_KEY` no ambiente. Então, quando
+> você injeta um desses, o lançador do Islo remove o `apiKeyHelper`
+> semeado no momento do provisionamento — para **ambos** os sandboxes,
+> lançados pela CLI e gerenciados pelo servidor — deixando sua credencial
+> como o único caminho de autenticação. Nenhum passo manual, nada para
+> rodar dentro do sandbox.
 
-Codex/OpenAI needs nothing special either — its phantom is the
-`OPENAI_API_KEY` env var, which your injected `OPENAI_API_KEY` simply
-overrides.
+Codex/OpenAI também não precisa de nada especial — o phantom dele é a
+variável de ambiente `OPENAI_API_KEY`, que o seu `OPENAI_API_KEY` injetado
+simplesmente sobrescreve.
 
-### Choosing between A and B
+### Escolhendo entre A e B
 
-| | Option A — gateway | Option B — env injection |
+| | Opção A — gateway | Opção B — injeção de variáveis de ambiente |
 |---|---|---|
-| Credential | provider **API key** (Anthropic, OpenAI, …) | your API key **or** subscription/plan token |
-| Billing | per-token API | API key, or your subscription/plan |
-| Key in sandbox? | **No** (gateway injects out-of-band) | Yes (in the sandbox env) |
-| Scope | account/team-wide, all sandboxes | per-sandbox |
-| Managed-host config | just `gateway_profile`; no secret on server | key in `sandbox.islo.env` |
-| Best for | **managed / production**, API-key billing | your own **subscription** or key; CLI or managed |
-| Catch | needs a connected integration | the injected var must be set where the launcher runs |
+| Credencial | **API key** de provedor (Anthropic, OpenAI, …) | sua API key **ou** token de assinatura/plano |
+| Cobrança | API por token | API key, ou sua assinatura/plano |
+| Chave no sandbox? | **Não** (o gateway injeta fora de banda) | Sim (no ambiente do sandbox) |
+| Escopo | conta/time inteiro, todos os sandboxes | por sandbox |
+| Configuração para host gerenciado | só `gateway_profile`; nenhum secret no servidor | chave em `sandbox.islo.env` |
+| Melhor para | **gerenciado / produção**, cobrança por API key | sua própria **assinatura** ou chave; CLI ou gerenciado |
+| Pegadinha | precisa de uma integração conectada | a variável injetada precisa estar definida onde o lançador roda |
 
-Pick **one per harness** — connect Islo's integration *or* inject your own
-credential, never both. Both work in either launch flow: the launcher
-strips Islo's seeded `apiKeyHelper` automatically when you inject a Claude
-credential. The same two patterns apply to Codex/OpenAI (`islo login --tool
-openai`, or inject `OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN`).
+Escolha **uma por harness** — conecte a integração do Islo *ou* injete
+sua própria credencial, nunca as duas. As duas funcionam em qualquer
+fluxo de lançamento: o lançador remove o `apiKeyHelper` semeado do Islo
+automaticamente quando você injeta uma credencial Claude. Os mesmos dois
+padrões se aplicam ao Codex/OpenAI (`islo login --tool openai`, ou injete
+`OPENAI_API_KEY` / `CODEX_ACCESS_TOKEN`).
 
-### Git credentials (private repositories)
+### Credenciais de git (repositórios privados)
 
-Inject an HTTPS token as `GIT_TOKEN` (GitLab: add `GIT_USERNAME=oauth2`)
-via `OMNICRAFT_ISLO_SANDBOX_ENV` / `sandbox.islo.env`. The host image's git
-credential helper answers HTTPS auth from it for both the launch-time
-clone and the agent's later `fetch` / `push`, writing nothing to disk. Use
-HTTPS repository URLs. Details by provider match the [Modal git
-guide](../modal/README.md#git-credentials-private-repositories).
+Injete um token HTTPS como `GIT_TOKEN` (GitLab: adicione
+`GIT_USERNAME=oauth2`) via `OMNICRAFT_ISLO_SANDBOX_ENV` /
+`sandbox.islo.env`. O credential helper de git da imagem de host responde
+à autenticação HTTPS a partir dele, tanto para o clone no momento do
+lançamento quanto para os `fetch` / `push` posteriores do agente, sem
+escrever nada em disco. Use URLs de repositório HTTPS. Detalhes por
+provedor batem com o [guia de git da
+Modal](../modal/README.md#credenciais-do-git-repositórios-privados).
 
-## Security considerations
+## Considerações de segurança
 
-- **Path A keeps the model key out of the sandbox — a real advantage.**
-  With the gateway, the agent process only ever sees the phantom
-  placeholder; the real key is injected at Islo's network edge. A
-  prompt-injected or compromised agent can't exfiltrate a key it never
-  holds. This is the strongest credential posture of the three providers
-  for model keys, and the reason to prefer Option A where API-key billing
-  is acceptable.
-- **The gateway terminates TLS to inject.** Credential injection means
-  Islo's gateway sits in the path of the agent's outbound LLM traffic and
-  re-originates it — so that traffic (prompts, completions, tool output
-  sent to the model) is visible at Islo's edge. Acceptable for most teams,
-  but weigh it for highly sensitive workloads, and scope the
-  `gateway_profile` to exactly the egress you intend.
-- **Option B puts the key in the sandbox.** A subscription token or API key
-  named in `sandbox.islo.env` is copied into the sandbox environment at
-  provision time and lives there for the sandbox's life. Prefer scoped,
-  short-lived credentials, and rely on the per-terminal `bwrap` sandbox
-  (below) to keep the agent away from it.
-- **The agent terminal is sandboxed away from those secrets.** Native
-  harness terminals run under a bubblewrap OS-sandbox that masks dotfiles
-  (`~/.ssh`, `~/.aws`, the injected `~/.omnicraft` server token) and pins
-  the agent to its workspace — defense-in-depth *inside* the Islo sandbox,
-  independent of Islo's own isolation. This is why the image must ship
-  `bwrap` (see [the host image](#the-host-image)).
-- **All managed sandboxes share one Islo org + `ISLO_API_KEY`.**
-  Cross-user isolation rides on Islo's sandbox boundaries, and the shared
-  org key can enumerate and delete any sandbox — the same single-tenant-org
-  shape as the Modal and Daytona providers. Scope the org to this workload.
-- **The launch token's lifetime is 7 days.** Islo sandboxes have no
-  platform lifetime cap, so the per-launch host token must outlive a
-  long-running sandbox across reconnects (a longer replay window than
-  Modal's ~24 h; same as Daytona). A relaunch mints a fresh one.
+- **O Caminho A mantém a chave de modelo fora do sandbox — uma vantagem
+  real.** Com o gateway, o processo do agente só vê o placeholder
+  phantom; a chave real é injetada na borda de rede do Islo. Um agente
+  comprometido ou vítima de prompt injection não consegue exfiltrar uma
+  chave que nunca segurou. Esta é a postura de credencial mais forte dos
+  três provedores para chaves de modelo, e a razão para preferir a Opção A
+  onde a cobrança por API key for aceitável.
+- **O gateway termina o TLS para injetar.** A injeção de credencial
+  significa que o gateway do Islo fica no caminho do tráfego de LLM de
+  saída do agente e o reorigina — então esse tráfego (prompts,
+  completions, saída de ferramenta enviada ao modelo) fica visível na
+  borda do Islo. Aceitável para a maioria dos times, mas pese isso para
+  cargas de trabalho altamente sensíveis, e escope o `gateway_profile`
+  exatamente para o egress que você pretende.
+- **A Opção B coloca a chave no sandbox.** Um token de assinatura ou API
+  key nomeado em `sandbox.islo.env` é copiado para o ambiente do sandbox
+  no momento do provisionamento e vive ali pela vida do sandbox. Prefira
+  credenciais escopadas e de vida curta, e conte com o sandbox `bwrap`
+  por terminal (abaixo) para manter o agente longe dela.
+- **O terminal do agente fica isolado desses secrets.** Terminais de
+  harness nativo rodam sob um OS-sandbox bubblewrap que mascara dotfiles
+  (`~/.ssh`, `~/.aws`, o token do servidor `~/.omnicraft` injetado) e
+  prende o agente ao seu workspace — defesa em profundidade *dentro* do
+  sandbox do Islo, independente do isolamento próprio do Islo. É por isso
+  que a imagem precisa trazer o `bwrap` (veja [a imagem do
+  host](#a-imagem-do-host)).
+- **Todos os sandboxes gerenciados compartilham uma org + `ISLO_API_KEY`
+  do Islo.** O isolamento entre usuários depende das fronteiras de
+  sandbox do Islo, e a chave de org compartilhada consegue enumerar e
+  apagar qualquer sandbox — a mesma forma de org single-tenant dos
+  provedores Modal e Daytona. Escope a org para essa carga de trabalho.
+- **O lifetime do launch token é de 7 dias.** Sandboxes do Islo não têm
+  teto de lifetime de plataforma, então o token de host por lançamento
+  precisa sobreviver a um sandbox de longa duração entre reconexões (uma
+  janela de replay maior que as ~24 h da Modal; igual à Daytona). Um
+  relançamento gera um novo.
 
-## Lifecycle notes
+## Notas de ciclo de vida
 
-- **No platform lifetime cap.** Unlike Modal's 24-hour limit, Islo
-  sandboxes run until deleted. The managed flow deletes a sandbox when its
-  session is deleted, and the dead-sandbox relaunch path replaces one that
-  crashed or was removed out-of-band. CLI-launched sandboxes you delete
-  yourself (`islo rm <id>`).
-- **Resources.** Sandboxes default to 2 vCPUs and 4 GiB of memory;
-  override per managed launch with `vcpus` / `memory_mb` / `disk_gb`.
-- **Warm starts.** Set `sandbox.islo.snapshot_name` to boot from a
-  prebaked Islo snapshot instead of a cold image pull.
-- **Provider-side lifecycle** (list / status / delete / stop) — use the
-  `islo` CLI (`islo ls`, `islo rm <id>`) or the
-  [dashboard](https://app.islo.dev) directly.
+- **Sem teto de lifetime de plataforma.** Ao contrário do limite de 24
+  horas da Modal, sandboxes do Islo rodam até serem apagados. O fluxo
+  gerenciado apaga um sandbox quando sua sessão é apagada, e o caminho de
+  relançamento de sandbox morto substitui um que crashou ou foi removido
+  fora de banda. Sandboxes lançados pela CLI você apaga você mesmo (`islo
+  rm <id>`).
+- **Recursos.** Sandboxes usam por padrão 2 vCPUs e 4 GiB de memória;
+  sobrescreva por lançamento gerenciado com `vcpus` / `memory_mb` /
+  `disk_gb`.
+- **Warm starts.** Defina `sandbox.islo.snapshot_name` para iniciar a
+  partir de um snapshot pré-assado do Islo em vez de um pull de imagem a
+  frio.
+- **Ciclo de vida do lado do provedor** (list / status / delete / stop) —
+  use a CLI `islo` (`islo ls`, `islo rm <id>`) ou o
+  [dashboard](https://app.islo.dev) diretamente.
 
-## Cost
+## Custo
 
-Islo bills usage with no seat licenses or idle fees: ~$0.07/CPU-hour,
-~$0.04/GB-hour of memory, ~$0.0007/GB-hour of disk — about $0.25/hour for
-the default 2 vCPU / 4 GiB sandbox while it runs. New accounts get $50 of
-free credits. Rates: [islo.dev](https://islo.dev).
+O Islo cobra por uso, sem licenças por assento nem taxas de ociosidade:
+~$0.07/hora de CPU, ~$0.04/hora de GB de memória, ~$0.0007/hora de GB de
+disco — cerca de $0.25/hora para o sandbox padrão de 2 vCPU / 4 GiB
+enquanto ele roda. Contas novas ganham $50 de créditos grátis. Tarifas:
+[islo.dev](https://islo.dev).
 
-## Troubleshooting
+## Solução de problemas
 
-- **Native Claude/Codex terminal fails with `linux_bwrap sandbox requires
-  the 'bwrap' binary on PATH`.** The native harnesses wrap each agent
-  terminal in a bubblewrap OS-sandbox; the host image must ship
-  `bubblewrap`. The `host` Dockerfile target installs it — rebuild from a
-  current image, or for a one-off on a CLI-launched sandbox run
-  `apt-get install -y bubblewrap` inside it.
-- **Claude shows "API Usage Billing" / "both `CLAUDE_CODE_OAUTH_TOKEN` and
-  `apiKeyHelper` set."** You injected your own Claude credential (Option B)
-  but Islo's phantom `apiKeyHelper` is still present — the launcher strips it
-  automatically at provision, so this means the strip didn't run: confirm the
-  credential is named in `OMNICRAFT_ISLO_SANDBOX_ENV` / `sandbox.islo.env` (the
-  signal the launcher keys on), and check the provision log for the
-  "clearing Islo's seeded apiKeyHelper" line.
-- **Requests retry then fail with no obvious error.** `islo status` shows
-  no connected integration, so the phantom `apiKeyHelper` resolves to
-  nothing. Connect one (Option A) or switch to Option B.
-- **"managed host did not come online within 120s."** Check that
-  `server_url` is publicly reachable from Islo's cloud, then inspect the
-  in-sandbox host log: `~/.omnicraft/logs/host-runner/*.log`.
-- **Agent has no credentials.** Verify the injected var names match the
-  forwarded set above (or are named in `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`),
-  and that each name was actually set in the launching environment.
+- **Terminal nativo do Claude/Codex falha com `linux_bwrap sandbox
+  requires the 'bwrap' binary on PATH`.** Os harnesses nativos embrulham
+  cada terminal de agente num OS-sandbox bubblewrap; a imagem de host
+  precisa trazer o `bubblewrap`. O alvo `host` do Dockerfile o instala —
+  reconstrua a partir de uma imagem atual, ou, para um caso avulso num
+  sandbox lançado pela CLI, rode `apt-get install -y bubblewrap` dentro
+  dele.
+- **O Claude mostra "API Usage Billing" / "both `CLAUDE_CODE_OAUTH_TOKEN`
+  and `apiKeyHelper` set".** Você injetou sua própria credencial Claude
+  (Opção B) mas o `apiKeyHelper` phantom do Islo ainda está presente — o
+  lançador o remove automaticamente no provisionamento, então isso
+  significa que a remoção não rodou: confirme que a credencial está
+  nomeada em `OMNICRAFT_ISLO_SANDBOX_ENV` / `sandbox.islo.env` (o sinal
+  que o lançador usa), e verifique o log de provisionamento pela linha
+  "clearing Islo's seeded apiKeyHelper".
+- **Requisições tentam de novo e depois falham sem erro óbvio.** O `islo
+  status` mostra nenhuma integração conectada, então o `apiKeyHelper`
+  phantom não resolve para nada. Conecte uma (Opção A) ou troque para a
+  Opção B.
+- **"managed host did not come online within 120s".** Confira que
+  `server_url` é publicamente alcançável a partir da nuvem do Islo, depois
+  inspecione o log do host dentro do sandbox:
+  `~/.omnicraft/logs/host-runner/*.log`.
+- **Agente não tem credenciais.** Verifique se os nomes das variáveis
+  injetadas batem com o conjunto repassado acima (ou estão nomeados em
+  `OMNICRAFT_RUNNER_ENV_PASSTHROUGH`), e que cada nome foi de fato
+  definido no ambiente que lança.
 
-## Environment variable reference
+## Referência de variáveis de ambiente
 
-| Variable | Where it's read | Purpose |
+| Variável | Onde é lida | Finalidade |
 |---|---|---|
-| `ISLO_API_KEY` | CLI machine / server | Islo API credentials (required) |
-| `ISLO_BASE_URL` | CLI machine / server | Non-default Islo API endpoint (default `https://api.islo.dev`) |
-| `OMNICRAFT_ISLO_HOST_IMAGE` | CLI machine / server | Override the host image ref (`sandbox.islo.image` takes precedence for managed) |
-| `OMNICRAFT_ISLO_SANDBOX_ENV` | CLI machine / server | Comma-separated launcher-side env var names to inject (`sandbox.islo.env` takes precedence for managed) |
-| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | inside the sandbox (injected) | Extra env var names the host forwards to runners |
-| `GIT_TOKEN` / `GIT_USERNAME` | inside the sandbox (injected) | HTTPS credentials for private repository clone / fetch / push |
+| `ISLO_API_KEY` | machine da CLI / servidor | Credenciais de API do Islo (obrigatória) |
+| `ISLO_BASE_URL` | machine da CLI / servidor | Endpoint de API do Islo não padrão (padrão `https://api.islo.dev`) |
+| `OMNICRAFT_ISLO_HOST_IMAGE` | machine da CLI / servidor | Sobrescreve a referência da imagem de host (`sandbox.islo.image` tem precedência para gerenciados) |
+| `OMNICRAFT_ISLO_SANDBOX_ENV` | machine da CLI / servidor | Nomes de variáveis de ambiente do lado do lançador a injetar, separados por vírgulas (`sandbox.islo.env` tem precedência para gerenciados) |
+| `OMNICRAFT_RUNNER_ENV_PASSTHROUGH` | dentro do sandbox (injetada) | Nomes extras de variáveis de ambiente que o host repassa aos runners |
+| `GIT_TOKEN` / `GIT_USERNAME` | dentro do sandbox (injetada) | Credenciais HTTPS para clone / fetch / push de repositório privado |

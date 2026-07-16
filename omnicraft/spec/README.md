@@ -1,5 +1,5 @@
 # spec
 
-Defines what an agent **is** — its capabilities, tools, instructions, and configuration. A language-neutral description of agent behavior that any runtime can execute.
+Define o que um agente **é** — suas capacidades, ferramentas, instruções e configuração. Uma descrição do comportamento do agente independente de linguagem, que qualquer runtime pode executar.
 
-The spec is the portable contract between agent developers (who define behavior) and runtimes (who execute it).
+O spec é o contrato portável entre desenvolvedores de agente (que definem o comportamento) e runtimes (que o executam).

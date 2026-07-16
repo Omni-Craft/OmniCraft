@@ -14,7 +14,7 @@ do app desktop nativo.
 [![Licença: Apache 2.0](https://img.shields.io/badge/Licen%C3%A7a-Apache_2.0-0fb5bd.svg)](LICENSE)
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
 ![Idioma: pt--BR](https://img.shields.io/badge/idioma-pt--BR-0fb5bd.svg)
-![Agentes na galeria](https://img.shields.io/badge/galeria-10_agentes_%C2%B7_20_especialistas_%C2%B7_20_skills-0fb5bd.svg)
+![Agentes na galeria](https://img.shields.io/badge/galeria-16_agentes_%C2%B7_51_especialistas_%C2%B7_133_skills-0fb5bd.svg)
 
 </div>
 
@@ -51,7 +51,8 @@ do app desktop nativo.
 
 ## 🗂️ As três superfícies
 
-O OmniCraft organiza o trabalho com agentes e vai além:
+O OmniCraft organiza o trabalho com agentes no mesmo modelo do Claude Desktop
+— e vai além:
 
 | | **💬 Chat** | **🛠️ Craftwork** | **`</>` Code** |
 |---|---|---|---|
@@ -104,7 +105,7 @@ resultado de volta para a mesa de planejamento.
 
 ```bash
 # 1. Instale o CLI (comandos `omnicraft` e o atalho `omni`)
-uv tool install --python 3.12 git+https://github.com/Omni-Craft/OmniCraft.git
+uv tool install --python 3.12 git+https://github.com/editzffaleta/OmniCraft.git
 
 # 2. Configure um provedor de modelo (Anthropic, assinatura Claude, gateway…)
 omnicraft setup
@@ -118,7 +119,7 @@ Abra a web UI, escolha **Início** para conversar ou **Code** para executar —
 ou rode um agente direto no terminal:
 
 ```bash
-omnicraft run examples/fucho/     # orquestradora multi-agente de código
+omnicraft run examples/capataz/   # o capataz das fábricas (orquestrador)
 omnicraft claude                  # Claude Code embrulhado com sessões/políticas
 ```
 
@@ -134,7 +135,7 @@ omnicraft claude                  # Claude Code embrulhado com sessões/polític
 
 ```bash
 # Modo editável (para desenvolver no fork)
-git clone https://github.com/Omni-Craft/OmniCraft.git
+git clone https://github.com/editzffaleta/OmniCraft.git
 cd OmniCraft
 uv tool install --force --editable .
 ```
@@ -148,9 +149,9 @@ uv tool install --force --editable .
 
 ## 🤖 Galeria de agentes: times prontos
 
-**11 agentes instaláveis com um clique** — de assistentes simples a
-orquestradores multi-agente que coordenam times de especialistas, somando
-**21 sub-agentes** e **21 skills**:
+**18 agentes instaláveis com um clique** — de assistentes simples a times
+inteiros de especialistas convertidos das *fábricas* (toolkits de
+desenvolvimento), somando **51 sub-agentes** e **133 skills**:
 
 <p align="center">
   <img src="docs/images/agent-gallery.png" alt="A galeria de agentes com cards mostrando descrição, chips de sub-agentes e skills de cada agente" width="860" />
@@ -158,6 +159,13 @@ orquestradores multi-agente que coordenam times de especialistas, somando
 
 | Agente | O que é | Sub-agentes | Skills |
 |---|---|---:|---:|
+| **capataz** | O capataz das fábricas: orquestra 6 harnesses de código com revisão cruzada, conduz OpenSpec e roteia para as skills das fábricas | 6 | 12 |
+| **mestre-de-obras** | Dirige uma cópia de fábrica sem improvisar: segue o `AGENTS.md`, as changes e os portões dela, e coloca cada especialista no modelo que ela pede (Claude constrói, Codex julga) | 4 | 2 |
+| **fabrica-completa** | Time web + Android + iOS (o superset) | 12 | 41 |
+| **fabrica-ios** | Time Apple nativo — Swift/SwiftUI/Vapor/macOS | 12 | 36 |
+| **fabrica-fullstack** | Time web — NestJS + Next.js + Prisma, Clean Architecture + DDD | 9 | 33 |
+| **fabrica-sites** | Time criativo — design, 3D, shaders, motion, SEO | 9 | 13 |
+| **fabrica-mobile** | Time de app mobile | 9 | 10 |
 | **fucho** | Orquestradora multi-agente de código (Claude Code · Codex · Gemini · Cursor · OpenCode · Hermes · Pi) com revisão de outro fornecedor | 7 | 4 |
 | **gemini** | O Gemini CLI do Google como agente, via ACP — usa o login do próprio CLI | — | — |
 | **maestro** | Testes/QA: escreve testes, delega execução, revisa o design da suíte | 2 | 3 |
@@ -364,9 +372,9 @@ prompt: |
 omnicraft run meu-agente/
 ```
 
-Os 10 agentes de [`examples/`](examples/) são o melhor material de estudo — do
-`chat` minimalista à `fucho` (orquestradora completa com guardrails, spawn e
-revisão cruzada entre fornecedores). Especificação completa em
+Os 16 agentes de [`examples/`](examples/) são o melhor material de estudo — do
+`chat` minimalista ao `capataz` (orquestrador completo com guardrails, spawn e
+OpenSpec). Especificação completa em
 [`docs/AGENT_YAML_SPEC.md`](docs/AGENT_YAML_SPEC.md).
 
 ---
@@ -382,7 +390,7 @@ que não existem no upstream:
 | **Superfícies** | Abas **Início/Code** com históricos separados; **Chat sem filesystem** (garantia no servidor); **Craftwork** in-place estilo Cowork com frequência |
 | **Chat** | Memória local por projeto (sem chave), painel de **Artifacts** com "→ Code", "Discutir no Chat" no caminho inverso, mascote nadando 🐟 |
 | **Automação** | Agendador com cron+fuso+templates, **webhooks com templating** `{{...}}`, **resultado por push**, alerta de falhas, no-overlap, escopo por dono |
-| **Agentes** | Galeria instalável com 11 agentes: a orquestradora **fucho** (7 workers), maestro/atlas/polyglot/sculptor/scribe/sentinel, o **lilo** (debate cross-vendor), o **remy** (memória) e o chat |
+| **Agentes** | Galeria instalável com 18 agentes: **5 fábricas** (51 especialistas, 133 skills), **capataz** e **mestre-de-obras**, a **fucho** (7 workers), maestro/atlas/polyglot/sculptor, e o chat |
 | **Fornecedores** | **Três misturáveis num run**: Claude, Codex e Google — **Gemini CLI** (via ACP) e **Antigravity** somados aos harnesses do upstream. Skill de **roteamento** com tabela tarefa→(worker, modelo) e a regra que importa: quem julga nunca é quem construiu |
 | **Assets locais** | **ComfyUI** ligado aos agentes: imagens de site (RealVisXL em 1024px + upscale 2x por IA) e **3D texto→GLB** (Hunyuan3D) — sem nuvem, sem chave |
 | **Desktop** | Abrir o app **sobe o stack local sozinho** (servidor + host); instaladores **Windows (.exe)** e **macOS (.dmg)**; navegador embutido dirigível pelo agente (`browser_*`) |

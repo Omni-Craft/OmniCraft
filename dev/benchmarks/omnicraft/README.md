@@ -1,159 +1,170 @@
-# OmniCraft performance benchmark
+# Benchmark de performance do OmniCraft
 
-Baseline, repeatable latency/throughput numbers for key OmniCraft user
-journeys, so we can track them over time and catch regressions. Modeled on
-MLflow's `dev/benchmarks/gateway/` workflow.
+Números de latência/throughput de referência, repetíveis, para as principais
+jornadas de usuário do OmniCraft, para que possamos acompanhá-los ao longo do
+tempo e detectar regressões. Modelado no workflow `dev/benchmarks/gateway/` do
+MLflow.
 
-The harness boots a real `omnicraft server`, drives the selected journeys under
-load, prints latency/throughput tables, and writes a versioned JSON report.
-Two families: **HTTP/API journeys** (server + DB, no runner/LLM — fast and
-low-noise) and **full-turn journeys** (a real agent turn through the runner +
-a zero-latency mock LLM). See *Journeys* below.
+O harness sobe um `omnicraft server` de verdade, conduz as jornadas
+selecionadas sob carga, imprime tabelas de latência/throughput, e grava um
+relatório JSON versionado. Duas famílias: **jornadas HTTP/API** (servidor + BD,
+sem runner/LLM — rápidas e com pouco ruído) e **jornadas de turn completo** (um
+turn de agente de verdade através do runner + um LLM mock de latência zero).
+Veja *Jornadas* abaixo.
 
-By default the server boots a fresh, empty SQLite DB, which gives best-case
-numbers that don't move with load. For meaningful results, point it at a
-**pre-seeded corpus** (`seed.py`) and, ideally, at **Postgres** — production
-runs on Databricks Lakebase (Postgres), whose per-query round-trip + pooling
-cost SQLite doesn't have. See *Seeding* and *Backends* below.
+Por padrão o servidor sobe com um BD SQLite novo e vazio, o que dá números de
+melhor caso que não se movem com carga. Para resultados significativos, aponte
+para um **corpus pré-semeado** (`seed.py`) e, idealmente, para **Postgres** —
+a produção roda no Databricks Lakebase (Postgres), cujo custo de round-trip
+por query + pooling o SQLite não tem. Veja *Semeadura* e *Backends* abaixo.
 
-## Run it
+## Como rodar
 
 ```bash
-# All journeys, sequential latency (100 iterations × 3 runs each).
+# Todas as jornadas, latência sequencial (100 iterações × 3 execuções cada).
 uv run --no-sync dev/benchmarks/omnicraft/run.py
 
-# A subset, writing a report for CI artifact upload.
+# Um subconjunto, gravando um relatório para upload como artefato de CI.
 uv run --no-sync dev/benchmarks/omnicraft/run.py \
     --journeys list_sessions,load_conversation_history \
     --iterations 200 --runs 3 --output bench.json
 
-# Throughput mode: >1 concurrency drives concurrency-safe journeys as load.
+# Modo throughput: concorrência >1 conduz jornadas seguras para concorrência como carga.
 uv run --no-sync dev/benchmarks/omnicraft/run.py \
     --requests 500 --concurrency 25 --runs 3
 
-# CI gating: exit 1 if a threshold is breached.
+# Gate de CI: sai com 1 se um limite for violado.
 uv run --no-sync dev/benchmarks/omnicraft/run.py --max-p50-ms 25 --max-p99-ms 100
 ```
 
-`--no-sync` runs against the already-installed venv. (A bare `uv run` may try to
-rebuild the project, which fails in a git worktree without a Node web-UI build;
-`OMNICRAFT_SKIP_WEB_UI=true uv sync` prepares the venv once, then use
+`--no-sync` roda contra o venv já instalado. (Um `uv run` puro pode tentar
+reconstruir o projeto, o que falha num worktree do git sem um build Node da
+web UI; `OMNICRAFT_SKIP_WEB_UI=true uv sync` prepara o venv uma vez, depois use
 `--no-sync`.)
 
-Key flags (`--help` for all): `--journeys A,B`, `--database-uri URI` (seeded
-corpus / Postgres; default: throwaway empty SQLite), `--iterations N` (per
-latency run), `--requests N` / `--concurrency N` (throughput), `--runs N`,
-`--warmup N`, `--output FILE`, `--min-rps` / `--max-p50-ms` / `--max-p99-ms`
-(CI thresholds).
+Flags principais (`--help` para todas): `--journeys A,B`,
+`--database-uri URI` (corpus semeado / Postgres; padrão: SQLite vazio
+descartável), `--iterations N` (por execução de latência), `--requests N` /
+`--concurrency N` (throughput), `--runs N`, `--warmup N`, `--output FILE`,
+`--min-rps` / `--max-p50-ms` / `--max-p99-ms` (limites de CI).
 
-## Journeys
+## Jornadas
 
-### HTTP/API (server + DB, runner-free)
+### HTTP/API (servidor + BD, sem runner)
 
-| Journey | Operation timed | Stressed by |
+| Jornada | Operação medida | Estressada por |
 | --- | --- | --- |
-| `list_sessions` | `GET /v1/sessions` — session-list read | session count |
-| `create_session` | `POST /v1/sessions` then `DELETE` — session create | write path |
-| `get_session` | `GET /v1/sessions/{id}` — single-session snapshot | (O(1)) |
-| `load_conversation_history` | `GET /v1/sessions/{id}/items` — history read | items/session |
-| `search_sessions` | `GET /v1/sessions?search_query=` — unindexed `LIKE` | total item count |
-| `fork_session` | `POST /v1/sessions/{id}/fork` — fork (deep-copy items); forks deleted in teardown, untimed | items/session |
-| `add_comment` | `POST /v1/sessions/{id}/comments` — create a review comment | write path |
+| `list_sessions` | `GET /v1/sessions` — leitura da lista de sessões | contagem de sessões |
+| `create_session` | `POST /v1/sessions` depois `DELETE` — criação de sessão | caminho de escrita |
+| `get_session` | `GET /v1/sessions/{id}` — snapshot de uma sessão | (O(1)) |
+| `load_conversation_history` | `GET /v1/sessions/{id}/items` — leitura de histórico | items/sessão |
+| `search_sessions` | `GET /v1/sessions?search_query=` — `LIKE` sem índice | contagem total de items |
+| `fork_session` | `POST /v1/sessions/{id}/fork` — fork (deep-copy de items); forks apagados no teardown, não medidos | items/sessão |
+| `add_comment` | `POST /v1/sessions/{id}/comments` — cria um comentário de revisão | caminho de escrita |
 
-Read journeys target a **pre-seeded** session when the DB has a corpus; against
-an empty DB they self-seed a small fallback session over HTTP (the
-`external_conversation_item` event — appends items without starting a task), so
-they still work with no runner or LLM.
+Jornadas de leitura miram uma sessão **pré-semeada** quando o BD tem um
+corpus; contra um BD vazio elas se autossemeiam com uma pequena sessão
+fallback via HTTP (o evento `external_conversation_item` — anexa items sem
+iniciar uma task), então continuam funcionando sem runner nem LLM.
 
-### Full-turn (runner + mock LLM)
+### Turn completo (runner + LLM mock)
 
-These drive a real agent turn end-to-end — `POST …/events` → server → **runner**
-→ in-process executor → mock LLM → stream back → `idle`. Selecting any of them
-boots `BenchEnvironment(with_runner=True)` automatically.
+Elas conduzem um turn de agente de verdade, ponta a ponta — `POST …/events` →
+servidor → **runner** → executor in-process → LLM mock → stream de volta →
+`idle`. Selecionar qualquer uma delas sobe automaticamente o
+`BenchEnvironment(with_runner=True)`.
 
-Each turn costs ~1 s+ (vs. the millisecond HTTP journeys), so these journeys
-cap their latency iterations (`Journey.max_iterations`, currently 5) — a large
-`--iterations` tuned for the HTTP journeys is clamped down for them so the run
-stays within the CI time budget, with `--runs` providing the repeats. The cap
-only lowers the count, never raises it. A cold start never deletes its session,
-so sessions accumulate across a run; keeping the count small also keeps that
-drift negligible (~2 ms/turn).
+Cada turn custa ~1 s+ (contra os milissegundos das jornadas HTTP), então essas
+jornadas limitam suas iterações de latência (`Journey.max_iterations`,
+atualmente 5) — um `--iterations` grande ajustado para as jornadas HTTP é
+reduzido para elas, para que a execução caiba no orçamento de tempo da CI, com
+`--runs` fornecendo as repetições. O limite só reduz a contagem, nunca
+aumenta. Um cold start nunca apaga a sua sessão, então as sessões se acumulam
+ao longo de uma execução; manter a contagem pequena também mantém essa deriva
+desprezível (~2 ms/turn).
 
-| Journey | Operation timed |
+| Jornada | Operação medida |
 | --- | --- |
-| `session_cold_start` | Create+bind a fresh session and drive its first turn to `idle` (runner spawn + executor construction + turn) |
-| `warm_turn` | Drive a turn on an already-warm session — steady-state dispatch overhead |
-| `time_to_first_token` | Post a turn; time to the first streamed `output_text` delta |
-| `interrupt` | Interrupt a running (gated) turn; time to cancellation |
-| `read_runner_file` | `GET .../environments/default/filesystem/{path}` — server → runner filesystem read proxy |
+| `session_cold_start` | Cria e vincula uma sessão nova e conduz o primeiro turn dela até `idle` (spawn do runner + construção do executor + turn) |
+| `warm_turn` | Conduz um turn numa sessão já aquecida — overhead de dispatch em regime estacionário |
+| `time_to_first_token` | Posta um turn; tempo até o primeiro delta `output_text` transmitido |
+| `interrupt` | Interrompe um turn em execução (com gate); tempo até o cancelamento |
+| `read_runner_file` | `GET .../environments/default/filesystem/{path}` — proxy servidor → runner de leitura do sistema de arquivos |
 
-`read_runner_file` needs a runner but does **not** drive a turn or call the LLM:
-its setup plants a file via `PUT`, and the timed op is the proxied read (a
-localhost round-trip). Being far cheaper than a turn, it uses a higher iteration
-cap (50) than the full-turn journeys.
+`read_runner_file` precisa de um runner mas **não** conduz um turn nem chama o
+LLM: sua preparação planta um arquivo via `PUT`, e a operação medida é a
+leitura via proxy (um round-trip para localhost). Sendo bem mais barata que um
+turn, ela usa um limite de iterações mais alto (50) do que as jornadas de turn
+completo.
 
-**Only measure what we control.** Full-turn journeys always use the
-**`openai-agents`** SDK harness, which runs **in-process** (a call into the
-`agents` library + an HTTP call to the mock LLM) — no vendor binary, no external
-process. Native harnesses (e.g. `claude-native`) launch the real vendor CLI
-into a tmux pane, whose startup we don't control, so they're deliberately
-excluded. The mock LLM is zero-latency, so every number is omnicraft
-dispatch/streaming/cancel overhead, not model latency.
+**Só medimos o que controlamos.** As jornadas de turn completo sempre usam o
+harness de SDK **`openai-agents`**, que roda **in-process** (uma chamada para a
+biblioteca `agents` + uma chamada HTTP para o LLM mock) — sem binário de
+fornecedor, sem processo externo. Harnesses nativos (ex.: `claude-native`)
+lançam a CLI real do fornecedor num pane do tmux, cujo start-up não
+controlamos, então são deliberadamente excluídos. O LLM mock tem latência
+zero, então todo número é overhead de dispatch/streaming/cancelamento do
+omnicraft, não latência do modelo.
 
-Add a journey by registering a `Journey` in `journeys.py` (set `needs_runner`
-for full-turn journeys).
+Adicione uma jornada registrando um `Journey` em `journeys.py` (defina
+`needs_runner` para jornadas de turn completo).
 
-## Seeding a realistic corpus
+## Semeando um corpus realista
 
-`seed.py` writes a sizeable, deterministic corpus directly through the store
-API (no HTTP, no runner) into the same DB the server then boots against:
+`seed.py` grava um corpus grande e determinístico direto pela API do store
+(sem HTTP, sem runner) no mesmo BD contra o qual o servidor então sobe:
 
 ```bash
-# Seed 5000 sessions × 50 items into a SQLite file, then benchmark against it.
+# Semeia 5000 sessões × 50 items num arquivo SQLite, depois faz o benchmark contra ele.
 uv run --no-sync dev/benchmarks/omnicraft/seed.py \
     --database-uri sqlite:////abs/path/bench.db --sessions 5000 --items-per-session 50
 uv run --no-sync dev/benchmarks/omnicraft/run.py \
     --database-uri sqlite:////abs/path/bench.db --output bench.json
 ```
 
-Seeding is **idempotent**: a matching corpus (same sessions/items/schema) is
-detected and reused, so re-running is a fast no-op — pass `--reseed` to force,
-or a differing config to be warned. SQLite absolute paths need four slashes
-(`sqlite:////abs/...`). The reuse marker records the DB's Alembic head read at
-seed time, so a corpus from an older schema is automatically reseeded — no
-manual revision bookkeeping. `test_seed_creates_listable_corpus` (which seeds
-through the store, running migrations to the current head) is the safety net
-that a schema change hasn't broken seeding.
+A semeadura é **idempotente**: um corpus correspondente (mesmas
+sessões/items/schema) é detectado e reaproveitado, então rodar de novo é um
+no-op rápido — passe `--reseed` para forçar, ou uma configuração diferente
+para ser avisado. Caminhos absolutos de SQLite precisam de quatro barras
+(`sqlite:////abs/...`). O marcador de reaproveitamento registra o head do
+Alembic do BD lido no momento da semeadura, então um corpus de um schema mais
+antigo é automaticamente re-semeado — sem controle manual de revisão.
+`test_seed_creates_listable_corpus` (que semeia através do store, rodando as
+migrações até o head atual) é a rede de segurança de que uma mudança de schema
+não quebrou a semeadura.
 
 ## Backends
 
-`--database-uri` selects the DB; the report's `backend` field (`sqlite` /
-`postgres`) is derived from the URI scheme so results group by backend.
+`--database-uri` seleciona o BD; o campo `backend` do relatório (`sqlite` /
+`postgres`) é derivado do esquema da URI, então os resultados se agrupam por
+backend.
 
-- **SQLite** (default) — in-process; fast, but not prod-representative.
-- **Postgres** — `postgresql+psycopg://user@host:5432/db` (the fully-qualified
-  `+psycopg` form; the server CLI does not normalize a bare `postgresql://`).
-  Requires `psycopg[binary]` (the `databricks` extra). Matches prod's
-  round-trip/pooling profile. Stand up a local one with
+- **SQLite** (padrão) — in-process; rápido, mas não representativo de
+  produção.
+- **Postgres** — `postgresql+psycopg://user@host:5432/db` (a forma totalmente
+  qualificada `+psycopg`; a CLI do servidor não normaliza um `postgresql://`
+  puro). Requer `psycopg[binary]` (o extra `databricks`). Corresponde ao
+  perfil de round-trip/pooling da produção. Suba um local com
   `docker run -e POSTGRES_PASSWORD=… -p 5432:5432 postgres:16`.
 
-## Output → Databricks → dashboard
+## Saída → Databricks → dashboard
 
-The harness writes JSON only. Storage and charting live in Databricks:
+O harness só grava JSON. O armazenamento e a geração de gráficos vivem no
+Databricks:
 
 ```
-run.py --output bench.json   →   GitHub Actions artifact   →   Databricks notebook (ETL)   →   Delta table   →   AI/BI dashboard
-        (this repo)                    (CI, follow-up)              (workspace, yours)
+run.py --output bench.json   →   artefato do GitHub Actions   →   notebook do Databricks (ETL)   →   tabela Delta   →   dashboard AI/BI
+        (este repositório)              (CI, follow-up)              (workspace, seu)
 ```
 
-The repo's contract is the **JSON schema** below. A workspace notebook (owned
-outside this repo, modeled on MLflow's gateway ETL) pulls the CI artifacts via
-the GitHub API, flattens each run's `summary` + `runs` + metadata, and
-`saveAsTable`s into a Delta table the dashboard reads. `sample_output.json` is a
-committed, faithful example so the notebook can be written against a real
-document without running the harness.
+O contrato do repositório é o **schema JSON** abaixo. Um notebook do workspace
+(mantido fora deste repositório, modelado no ETL do gateway do MLflow) puxa os
+artefatos da CI pela API do GitHub, achata o `summary` + `runs` + metadados de
+cada execução, e faz `saveAsTable` numa tabela Delta que o dashboard lê.
+`sample_output.json` é um exemplo comitado e fiel, para que o notebook possa
+ser escrito contra um documento real sem rodar o harness.
 
-### JSON schema (`schema.py`, `SCHEMA_VERSION`)
+### Schema JSON (`schema.py`, `SCHEMA_VERSION`)
 
 ```jsonc
 {
@@ -170,74 +181,80 @@ document without running the harness.
     "<journey name>": {
       "kind": "latency" | "throughput",
       "backend": "sqlite" | "postgres",
-      "runs": [                       // one per --runs
+      "runs": [                       // uma por --runs
         {"n_success": N, "n_failures": N, "failures": {"HTTP 500": 1},
          "wall_time_s": …, "mean_ms": …, "p50_ms": …, "p95_ms": …,
          "p99_ms": …, "max_ms": …, "rps": …}
       ],
       "summary": {"avg_mean_ms": …, "avg_p50_ms": …, "avg_p95_ms": …,
-                  "avg_p99_ms": …, "avg_rps": …}    // averaged across runs
+                  "avg_p99_ms": …, "avg_rps": …}    // média entre as execuções
     }
   }
 }
 ```
 
-The per-journey `summary` + `runs` shape mirrors MLflow's gateway benchmark, so
-the same ETL flatten works — keyed by `journey` and `backend`. Bump
-`SCHEMA_VERSION` on any breaking shape change so the notebook can branch on it.
+O formato `summary` + `runs` por jornada espelha o benchmark de gateway do
+MLflow, então o mesmo achatamento de ETL funciona — chaveado por `journey` e
+`backend`. Suba o `SCHEMA_VERSION` em qualquer mudança de formato que quebre
+compatibilidade, para que o notebook possa ramificar sobre isso.
 
-## Layout
+## Estrutura
 
-| File | Role |
+| Arquivo | Papel |
 | --- | --- |
-| `run.py` | CLI orchestrator + entrypoint |
-| `seed.py` | deterministic corpus seeder (store API) |
-| `journeys.py` | `Journey` dataclass, latency/throughput runners, registry |
-| `environment.py` | server (± runner + mock LLM) lifecycle; `--database-uri` |
-| `measure.py` | `RunResult`, percentile, aggregation, thresholds, tables |
-| `schema.py` | `SCHEMA_VERSION`, `build_report`, git/host metadata |
-| `sample_output.json` | committed example of the JSON contract |
+| `run.py` | orquestrador de CLI + entrypoint |
+| `seed.py` | semeador determinístico de corpus (API do store) |
+| `journeys.py` | dataclass `Journey`, executores de latência/throughput, registro |
+| `environment.py` | ciclo de vida do servidor (± runner + LLM mock); `--database-uri` |
+| `measure.py` | `RunResult`, percentil, agregação, limites, tabelas |
+| `schema.py` | `SCHEMA_VERSION`, `build_report`, metadados de git/host |
+| `sample_output.json` | exemplo comitado do contrato JSON |
 
-The smoke test is `tests/benchmarks/test_benchmark_smoke.py` (boots the server
-with tiny counts + a seeded-corpus unit test; runs on the normal CI lane, no
-creds).
+O smoke test é `tests/benchmarks/test_benchmark_smoke.py` (sobe o servidor com
+contagens minúsculas + um teste unitário de corpus semeado; roda na esteira
+normal de CI, sem credenciais).
 
 ## CI
 
-`.github/workflows/benchmark.yml` runs nightly (and on dispatch) as a backend
-matrix — `sqlite` and `postgres` (a `postgres:16` service container). Each leg
-seeds a corpus (SQLite reuses a cache keyed on the schema head + `seed.py` +
-corpus config, so a migration busts the cache and forces a reseed; Postgres is
-fresh per run), runs the benchmark, and uploads
-`benchmark-results-<backend>-<run_id>.json`. The workspace notebook pulls those
-artifacts.
+`.github/workflows/benchmark.yml` roda todo dia à noite (e sob demanda) como
+uma matriz de backends — `sqlite` e `postgres` (um container de serviço
+`postgres:16`). Cada perna semeia um corpus (o SQLite reaproveita um cache
+chaveado no head do schema + `seed.py` + configuração do corpus, então uma
+migração invalida o cache e força um re-semeamento; o Postgres é novo a cada
+execução), roda o benchmark, e faz upload de
+`benchmark-results-<backend>-<run_id>.json`. O notebook do workspace puxa
+esses artefatos.
 
-Schema changes need no manual step: the seed always targets the current
-migrated schema (migrations run when the store is constructed), the reuse
-marker records the head read at seed time (so old corpora auto-reseed), and
-`test_seed_creates_listable_corpus` fails if a migration genuinely breaks
-seeding.
+Mudanças de schema não precisam de passo manual: a semeadura sempre mira o
+schema migrado atual (as migrações rodam quando o store é construído), o
+marcador de reaproveitamento registra o head lido no momento da semeadura
+(então corpora antigos são re-semeados automaticamente), e
+`test_seed_creates_listable_corpus` falha se uma migração realmente quebrar a
+semeadura.
 
-## Follow-ups
+## Próximos passos
 
-- **Subagent spawn.** A planned full-turn journey (`needs_runner=True`): the
-  parent agent emits a `sys_session_send` tool call, the runner dispatches a
-  child session, and the parent auto-wakes with the collected result. It's
-  fully mockable with the zero-latency mock LLM (no real model) — script the
-  parent's queue to emit the tool call and the child's queue to return a short
-  reply, then poll for the child's marker. It needs the parent bundle to declare
-  a sub-agent under `tools:` (extend `_agent_bundle`); the pattern is in
-  `tests/e2e/test_coder_subagent.py`.
-- **Excluded journeys** (agent-behaviour-dependent, deliberately not measured):
-  multi-turn and tool-calling turns (dominated by the agent's own choices) and
-  large-history turns (the O(N) `history_to_input_items` conversion is real app
-  work but only fires on a cold runner cache, so isolating it entangles with
-  cold-start cost).
-- **CI matrix.** Runner journeys are backend-agnostic (they exercise runner
-  dispatch, not big DB reads), so the nightly workflow can run them on the
-  SQLite leg only rather than both — wire a runner `--journeys` set into
-  `benchmark.yml` when desired.
-- **Simulated provider latency.** The mock LLM returns at ~zero latency, which
-  is what isolates omnicraft overhead. A fixed per-response delay knob would let
-  turns model end-user wall-clock instead; it's a small change behind the
-  `configure_mock` / `set_mock_fallback` seam if that's ever wanted.
+- **Spawn de subagente.** Uma jornada de turn completo planejada
+  (`needs_runner=True`): o agente pai emite uma chamada de ferramenta
+  `sys_session_send`, o runner despacha uma sessão filha, e o pai acorda
+  automaticamente com o resultado coletado. É totalmente mockável com o LLM
+  mock de latência zero (sem modelo de verdade) — programe a fila do pai para
+  emitir a chamada de ferramenta e a fila do filho para devolver uma resposta
+  curta, depois faça polling pelo marcador do filho. Precisa que o bundle do
+  pai declare um subagente em `tools:` (estenda `_agent_bundle`); o padrão está
+  em `tests/e2e/test_coder_subagent.py`.
+- **Jornadas excluídas** (dependentes do comportamento do agente,
+  deliberadamente não medidas): turns multi-turn e com chamada de ferramenta
+  (dominados pelas próprias escolhas do agente) e turns com histórico grande
+  (a conversão O(N) de `history_to_input_items` é trabalho real do app, mas só
+  dispara num cache de runner frio, então isolá-la se entrelaça com o custo de
+  cold-start).
+- **Matriz de CI.** As jornadas de runner são agnósticas de backend (elas
+  exercitam o dispatch do runner, não leituras grandes de BD), então o
+  workflow noturno pode rodá-las só na perna SQLite em vez das duas — conecte
+  um conjunto `--journeys` de runner em `benchmark.yml` quando desejado.
+- **Latência de provedor simulada.** O LLM mock retorna com latência
+  praticamente zero, o que é o que isola o overhead do omnicraft. Um botão de
+  atraso fixo por resposta permitiria que os turns modelassem o wall-clock do
+  usuário final; é uma mudança pequena, atrás do gancho
+  `configure_mock` / `set_mock_fallback`, caso isso venha a ser desejado.

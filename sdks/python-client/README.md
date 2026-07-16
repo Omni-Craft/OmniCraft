@@ -1,20 +1,20 @@
 # omnicraft-client
 
-Python client SDK for the [omnicraft](https://github.com/omnicraft-ai/omnicraft)
-server API.
+SDK cliente Python para a API do servidor
+[omnicraft](https://github.com/omnicraft-ai/omnicraft).
 
-`omnicraft-client` is a typed client for driving omnicraft sessions over the
-server's HTTP + SSE API — creating sessions, sending turns, and streaming
-responses. It shares the `StreamEvent` / `SessionStreamEventType` types that the
-server emits, so streamed envelopes are validated against a single source of
-truth.
+O `omnicraft-client` é um cliente tipado para conduzir sessões do omnicraft
+pela API HTTP + SSE do servidor — criando sessões, enviando turnos e fazendo
+streaming das respostas. Ele compartilha os tipos `StreamEvent` /
+`SessionStreamEventType` que o servidor emite, então os envelopes recebidos em
+streaming são validados contra uma única fonte de verdade.
 
-It is released in lockstep with the core `omnicraft` package at a matching
-version:
+Ele é publicado em conjunto com o pacote principal `omnicraft`, na mesma
+versão:
 
 ```bash
 pip install omnicraft-client
 ```
 
-See the [omnicraft repository](https://github.com/omnicraft-ai/omnicraft) for full
-documentation.
+Veja o [repositório do omnicraft](https://github.com/omnicraft-ai/omnicraft)
+para a documentação completa.

@@ -336,7 +336,18 @@ _STREAM_IDLE_WARN_SECONDS = 600.0
 # Substrings that mark an API failure as a context-window overflow.
 # When present, the surfaced error carries an extra hint so the user
 # understands the session history — not a transient fault — is the cause.
-_CONTEXT_OVERFLOW_MARKERS = ("prompt is too long", "context length", "too many tokens")
+_CONTEXT_OVERFLOW_MARKERS = (
+    "prompt is too long",
+    "context length",
+    "context window",
+    "maximum context",
+    "too many tokens",
+)
+
+# HTTP status the provider returns when the request body is too large to
+# accept (payload/entity too large). Treat it as an overflow signal on par
+# with the text markers above.
+_CONTEXT_OVERFLOW_STATUS = 413
 
 
 def _result_error_message(result_msg: _ResultMessageObj) -> str:
@@ -354,14 +365,22 @@ def _result_error_message(result_msg: _ResultMessageObj) -> str:
     """
     detail = (result_msg.result or "").strip()
     errors = getattr(result_msg, "errors", None)
-    if not detail and isinstance(errors, list) and errors:
-        detail = "; ".join(str(e) for e in errors if e).strip()
+    errors_text = ""
+    if isinstance(errors, list) and errors:
+        errors_text = "; ".join(str(e) for e in errors if e).strip()
+    if not detail and errors_text:
+        detail = errors_text
     status = getattr(result_msg, "api_error_status", None)
     subtype = getattr(result_msg, "subtype", None)
     if not detail:
         detail = f"CLI turn failed (subtype={subtype!r}, api_error_status={status})"
-    probe = f"{detail} {status or ''}".lower()
-    if any(marker in probe for marker in _CONTEXT_OVERFLOW_MARKERS):
+    # Probe over ``errors`` too: a marker can live only in ``errors`` while
+    # ``result`` carries generic text, so folding it in avoids missing an
+    # overflow. The displayed ``detail`` stays as-is.
+    probe = f"{detail} {errors_text} {status or ''}".lower()
+    if status == _CONTEXT_OVERFLOW_STATUS or any(
+        marker in probe for marker in _CONTEXT_OVERFLOW_MARKERS
+    ):
         return (
             "Claude SDK context overflow: the conversation history exceeds the "
             f"model's context window ({detail}). The session is too large to "
@@ -2586,6 +2605,11 @@ class ClaudeSDKExecutor(Executor):
             )
             return
         if terminal_error:
+            # A terminal error broke the stream with a half-failed turn; the
+            # live SDK client may be wedged. Tear it down the same way the
+            # exception boundary does, so a later turn reconnects fresh
+            # instead of resuming onto a dead client.
+            await self._close_live_client(session_key)
             yield ExecutorError(message=terminal_error)
             return
 

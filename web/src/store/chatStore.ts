@@ -1438,7 +1438,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
       queryClient?.invalidateQueries({ queryKey: ["conversations"] });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const { message, code } = describeSendFailure(err);
       // The stash copy rolls back unconditionally — a failed command has
       // no server-side record to ever reconcile a stashed echo.
       const stashSessionId = postedSessionId ?? submitConversationId;
@@ -1464,7 +1464,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }));
       }
       if (stillActive && !alreadyStreaming) {
-        finalizeActive(set, "failed", message, null);
+        if (get().activeResponse !== null) {
+          // A response bubble exists — carry the failure on it.
+          finalizeActive(set, "failed", message, null);
+        } else {
+          // Setup failed before any response bubble (e.g. no runner online to
+          // bind the new session), so finalizeActive would no-op. Append a
+          // standalone error block so the reason is visible, mirroring `send`.
+          set((s) => ({ blocks: [...s.blocks, makeClientErrorBlock(message, code)] }));
+        }
         set({ status: "idle" });
       }
     } finally {
@@ -1906,8 +1914,9 @@ function isNativeModelCompatible(
  *     switch. ``null`` / ``undefined`` falls back to the live
  *     ``conversationId`` (brand-new-chat path).
  * :returns: The bound session id.
- * :raises Error: Re-raises a ``conversationLoadError`` if a needed rebind
- *     of an existing session fails to establish the stream.
+ * :raises Error: When no runner is online to bind a brand-new session, or
+ *     re-raises a ``conversationLoadError`` if a needed rebind of an
+ *     existing session fails to establish the stream.
  */
 async function ensureBoundSession(
   agentId: string,
@@ -1938,7 +1947,15 @@ async function ensureBoundSession(
         silent: true,
       });
     }
-    await bindOnlyOnlineRunner(sessionId);
+    // The top-level new-chat path has no host to auto-launch a runner, so
+    // bind the one online runner explicitly. No runner online → fail loud
+    // instead of committing an orphan session that 503s on every later POST:
+    // throwing here (before conversationId/stream are set) leaves the new-chat
+    // view untouched and the send catch surfaces the reason to the user.
+    const bound = await bindOnlyOnlineRunner(sessionId);
+    if (bound === null) {
+      throw new Error("Nenhum runner online para executar a sessão.");
+    }
     set({
       conversationId: sessionId,
       // We just created this session — set boundAgentId/Name from the

@@ -1668,6 +1668,44 @@ describe("chatStore — send (first-send ordering)", () => {
     ).toBe(false);
   });
 
+  it("surfaces an error and does not promote the unbound session in the UI", async () => {
+    // New-chat-with-no-host path: createSession succeeds but there is no
+    // online runner to bind. The half-created session stays orphaned on the
+    // BACKEND (created, never bound), but it must NOT be promoted into the UI
+    // as a dead, 503-on-every-POST conversation — the user sees why instead.
+    seedSession("conv_new");
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === "/v1/runners") {
+        return mockResponse({ data: [] });
+      }
+      return defaultFetchHandler(input, init);
+    });
+
+    let createdId: string | null = null;
+    await useChatStore.getState().send("hi", "agent_xyz", undefined, {
+      onConversationCreated: (id) => {
+        createdId = id;
+      },
+    });
+
+    const state = useChatStore.getState();
+    // The half-created session is not adopted as the active conversation, and
+    // no POST /events was attempted against it.
+    expect(state.conversationId).toBeNull();
+    expect(createdId).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(([u]) => String(u).endsWith("/v1/sessions/conv_new/events")),
+    ).toBe(false);
+    // The failure is surfaced to the user as an error block, not swallowed.
+    const errorBlock = state.blocks.find((b) => b.type === "error");
+    expect(errorBlock).toBeDefined();
+    expect((errorBlock as { message: string }).message).toMatch(/runner online/i);
+    // And the optimistic bubble is rolled back — nothing will reconcile it.
+    expect(state.pendingUserMessages).toEqual([]);
+    expect(state.status).toBe("idle");
+  });
+
   it("existing-session send only posts an event (no createSession, no stream open)", async () => {
     // Simulate a session already bound: state has conversationId +
     // abortController set. send must NOT createSession or openStream.
@@ -2149,6 +2187,39 @@ describe("chatStore — sendSlashCommand", () => {
       url: "/v1/sessions/conv_new/events",
       method: "POST",
     });
+  });
+
+  it("surfaces an error block when no runner is online (slash-command)", async () => {
+    // Slash-command twin of the `send` no-runner test. Setup fails before any
+    // activeResponse exists, so finalizeActive would no-op — the reason must
+    // still reach the user as a standalone error block.
+    seedSession("conv_new");
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (url === "/v1/runners") {
+        return mockResponse({ data: [] });
+      }
+      return defaultFetchHandler(input, init);
+    });
+
+    let createdId: string | null = null;
+    await useChatStore.getState().sendSlashCommand("grill-me", "", "agent_xyz", {
+      onConversationCreated: (id) => {
+        createdId = id;
+      },
+    });
+
+    const state = useChatStore.getState();
+    expect(state.conversationId).toBeNull();
+    expect(createdId).toBeNull();
+    expect(
+      fetchMock.mock.calls.some(([u]) => String(u).endsWith("/v1/sessions/conv_new/events")),
+    ).toBe(false);
+    const errorBlock = state.blocks.find((b) => b.type === "error");
+    expect(errorBlock).toBeDefined();
+    expect((errorBlock as { message: string }).message).toMatch(/runner online/i);
+    expect(state.pendingUserMessages).toEqual([]);
+    expect(state.status).toBe("idle");
   });
 
   it("resets the streaming status when the POST fails", async () => {

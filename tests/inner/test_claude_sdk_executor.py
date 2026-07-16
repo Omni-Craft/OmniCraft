@@ -2127,6 +2127,85 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         _run(_t())
 
+    def test_error_result_message_closes_live_client(self):
+        """
+        A terminal ``is_error`` result must tear down the live SDK client.
+
+        Without this the failed client stays registered under its session
+        key, so the next turn resumes onto a dead client instead of
+        reconnecting fresh. The teardown must pop the session from
+        ``_clients`` and disconnect, mirroring the exception boundary.
+        """
+        from claude_agent_sdk.types import (
+            ClaudeAgentOptions as SDKClaudeAgentOptions,
+        )
+        from claude_agent_sdk.types import (
+            ResultMessage as SDKResultMessage,
+        )
+
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        disconnected: list[bool] = []
+
+        class _Sentinel:
+            pass
+
+        class _FakeSDK:
+            AssistantMessage = _Sentinel
+            UserMessage = _Sentinel
+            SystemMessage = _Sentinel
+            StreamEvent = _Sentinel
+            ResultMessage = SDKResultMessage
+            ClaudeAgentOptions = SDKClaudeAgentOptions
+            messages = [
+                SDKResultMessage(
+                    subtype="error_during_execution",
+                    session_id="s1",
+                    result="API Error: 400 Prompt is too long",
+                    total_cost_usd=0.0,
+                    duration_ms=100,
+                    duration_api_ms=80,
+                    is_error=True,
+                    num_turns=1,
+                    api_error_status=400,
+                ),
+            ]
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def receive_response(self):
+                    for message in _FakeSDK.messages:
+                        yield message
+
+                async def disconnect(self):
+                    disconnected.append(True)
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+                events = [
+                    e
+                    async for e in executor.run_turn(
+                        [{"role": "user", "content": "hi"}],
+                        [],
+                        "",
+                    )
+                ]
+            self.assertTrue(any(isinstance(e, ExecutorError) for e in events))
+            # Client torn down: nothing left registered, disconnect ran.
+            self.assertEqual(executor._clients, {})
+            self.assertTrue(disconnected, "live client was not disconnected on is_error")
+
+        _run(_t())
+
     def test_keepalive_emitted_before_first_token(self):
         """
         A turn must emit a ``KeepAlive`` once the request is on the wire,
@@ -3475,6 +3554,59 @@ async def test_result_message_usage_none_yields_turn_complete_without_usage() ->
         f"TurnComplete.usage should be None when ResultMessage.usage is None, "
         f"got {turn.usage!r}. An empty dict would display 0 tokens in the ring."
     )
+
+
+# ---------------------------------------------------------------------------
+# Tests: _result_error_message overflow classification
+# ---------------------------------------------------------------------------
+
+
+class _FakeResult:
+    """Minimal stand-in for a failed ``ResultMessage``."""
+
+    def __init__(self, *, result=None, errors=None, api_error_status=None, subtype="error"):
+        self.result = result
+        self.errors = errors
+        self.api_error_status = api_error_status
+        self.subtype = subtype
+
+
+class TestResultErrorMessage(unittest.TestCase):
+    """``_result_error_message`` classifies context-overflow failures."""
+
+    def _msg(self, **kwargs):
+        from omnicraft.inner.claude_sdk_executor import _result_error_message
+
+        return _result_error_message(_FakeResult(**kwargs))
+
+    def test_context_window_marker(self):
+        msg = self._msg(result="Error: the context window was exceeded")
+        self.assertIn("context overflow", msg.lower())
+
+    def test_maximum_context_marker(self):
+        # Covers "maximum context length" via the "maximum context" marker.
+        msg = self._msg(result="400: maximum context length is 200000 tokens")
+        self.assertIn("context overflow", msg.lower())
+
+    def test_http_413_is_overflow(self):
+        # A 413 (payload too large) counts as overflow even without a text marker.
+        msg = self._msg(result="Request Entity Too Large", api_error_status=413)
+        self.assertIn("context overflow", msg.lower())
+
+    def test_marker_only_in_errors_with_generic_result(self):
+        # Generic ``result`` text but a marker hiding in ``errors`` must still
+        # classify as overflow; the shown detail stays the ``result`` text.
+        msg = self._msg(
+            result="Request failed",
+            errors=["upstream: prompt is too long for this model"],
+        )
+        self.assertIn("context overflow", msg.lower())
+        self.assertIn("Request failed", msg)
+
+    def test_non_overflow_error_is_generic(self):
+        msg = self._msg(result="some transient 500", api_error_status=500)
+        self.assertNotIn("context overflow", msg.lower())
+        self.assertIn("turn failed", msg.lower())
 
 
 # ---------------------------------------------------------------------------

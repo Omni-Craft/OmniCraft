@@ -2453,18 +2453,24 @@ class SqlAlchemyConversationStore(ConversationStore):
                 SqlConversation.archived.is_(True),
                 SqlConversation.archived_reason == UNBOUND_SWEEP_ARCHIVE_REASON,
             )
-            values: dict[str, Any] = {
-                "host_id": host_id,
-                "archived": case((may_auto_unarchive, False), else_=SqlConversation.archived),
-                "archived_reason": case(
-                    (may_auto_unarchive, None), else_=SqlConversation.archived_reason
+            # MySQL evaluates SET left-to-right against values already
+            # assigned in the same statement (Postgres/SQLite read the
+            # pre-update row throughout), so the CASEs that inspect
+            # host_id must be assigned BEFORE host_id itself —
+            # ordered_values() pins that order.
+            ordered: list[tuple[str, Any]] = [
+                ("archived", case((may_auto_unarchive, False), else_=SqlConversation.archived)),
+                (
+                    "archived_reason",
+                    case((may_auto_unarchive, None), else_=SqlConversation.archived_reason),
                 ),
-                "updated_at": now_epoch(),
-            }
+                ("host_id", host_id),
+                ("updated_at", now_epoch()),
+            ]
             if workspace is not None:
-                values["workspace"] = workspace
+                ordered.append(("workspace", workspace))
             if git_branch is not None:
-                values["git_branch"] = git_branch
+                ordered.append(("git_branch", git_branch))
 
             stmt = (
                 update(SqlConversation)
@@ -2472,7 +2478,7 @@ class SqlAlchemyConversationStore(ConversationStore):
                     SqlConversation.workspace_id == current_workspace_id(),
                     SqlConversation.id == conversation_id,
                 )
-                .values(**values)
+                .ordered_values(*ordered)
             )
             result = session.execute(stmt)
             if result.rowcount == 0:

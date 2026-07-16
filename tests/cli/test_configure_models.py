@@ -53,6 +53,7 @@ from omnicraft.onboarding.configure_models import (
     kind_glyph,
     provider_display_name,
 )
+from omnicraft.onboarding.databricks_config import databricks_sdk_installed
 from omnicraft.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
     GEMINI_FAMILY,
@@ -60,6 +61,16 @@ from omnicraft.onboarding.provider_config import (
     get_default_provider,
     load_config,
     load_providers,
+)
+
+# The 5 tests below exercise the "SDK present" Databricks flow without
+# mocking `databricks_sdk_installed` — they need the real `databricks-sdk`
+# package (the `databricks` extra) importable to reach that code path. CI
+# installs the extra; local dev typically doesn't, so those tests skip
+# there instead of failing on absent third-party state.
+requires_databricks_sdk = pytest.mark.skipif(
+    not databricks_sdk_installed(),
+    reason="requires the databricks extra (databricks-sdk) to be installed",
 )
 
 
@@ -585,6 +596,7 @@ def test_add_menu_options_ordering() -> None:
     assert gemini == ["Gemini — chave de API"]
 
 
+@requires_databricks_sdk
 def test_add_menu_databricks_option_gated_on_extra(monkeypatch) -> None:
     """The Databricks option stays visible without the SDK, with the hint.
 
@@ -1357,6 +1369,7 @@ def _databricks_add_menu_index() -> int:
     return next(i for i, o in enumerate(opts) if o.kind == DATABRICKS_KIND) + 1
 
 
+@requires_databricks_sdk
 def test_configure_harnesses_add_databricks_normalizes_url_and_persists(
     isolated_config, monkeypatch
 ) -> None:
@@ -1431,6 +1444,7 @@ def test_configure_harnesses_add_databricks_normalizes_url_and_persists(
     assert get_default_provider(cfg, "openai") is None
 
 
+@requires_databricks_sdk
 def test_configure_harnesses_add_databricks_fails_loud_when_ucode_records_no_state(
     isolated_config, monkeypatch
 ) -> None:
@@ -1466,6 +1480,7 @@ def test_configure_harnesses_add_databricks_fails_loud_when_ucode_records_no_sta
     assert "databricks" not in cfg.get("providers", {})
 
 
+@requires_databricks_sdk
 def test_configure_harnesses_add_databricks_under_codex_scopes_to_codex(
     isolated_config, monkeypatch
 ) -> None:
@@ -2179,6 +2194,7 @@ def test_configure_harnesses_pi_page_excludes_subscription_rows(isolated_config)
     assert "Subscription" not in pi_frame
 
 
+@requires_databricks_sdk
 def test_configure_harnesses_add_databricks_under_pi_scopes_to_pi(
     isolated_config, monkeypatch
 ) -> None:

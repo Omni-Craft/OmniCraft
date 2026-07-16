@@ -11287,14 +11287,18 @@ async def test_external_idle_status_makes_required_terminal_exit_clean(tmp_path:
             "resource_type": "terminal",
             "session_id": conv_id,
         }
+        # The exit cleanup closes a real subprocess-backed terminal before
+        # publishing ``session.resource.deleted``, so a ``sleep(0)`` spin can
+        # outrun it under CI load; poll on a bounded real-time deadline.
         queued_events: list[dict[str, Any]] = []
-        for _ in range(1000):
+        deadline = asyncio.get_running_loop().time() + 5.0
+        while asyncio.get_running_loop().time() < deadline:
             queued_events.extend(
                 _drain_session_event_queue(_session_event_queues_ref.get(conv_id))
             )
             if pm.released and deleted_event in queued_events:
                 break
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.01)
     finally:
         _session_event_queues_ref.pop(conv_id, None)
 

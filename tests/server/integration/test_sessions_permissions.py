@@ -808,6 +808,49 @@ async def test_archive_requires_owner_access(
     assert resp.json()["archived"] is True
 
 
+async def test_host_bind_requires_owner_access(
+    auth_client: httpx.AsyncClient,
+) -> None:
+    """Late host-bind via PATCH ``host_id`` is gated owner-only.
+
+    Binding a host rewires where the session runs (the next message
+    launches a runner there), so a shared editor must not be able to
+    move another user's session onto a host. The denied PATCH must
+    leave the session unbound — the owner check fires before any
+    workspace validation or store write.
+    """
+    s1 = await _create_session_as(auth_client, "ignored", "user-a")
+    session_id = s1["id"]
+
+    # user-a grants user-b EDIT — still not enough for host-bind.
+    resp = await _grant_permission(
+        auth_client,
+        session_id,
+        granter="user-a",
+        target_user="user-b",
+        level=LEVEL_EDIT,
+    )
+    assert resp.status_code == 200
+
+    resp = await auth_client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": "host_x", "workspace": "/work/repo"},
+        headers={"X-Forwarded-Email": "user-b"},
+    )
+    assert resp.status_code == 403, (
+        f"editor user-b must not host-bind another user's session "
+        f"(host-bind is owner-only). Got {resp.status_code}: {resp.text}"
+    )
+
+    # The denied PATCH mutated nothing: the session is still unbound.
+    snap = await auth_client.get(
+        f"/v1/sessions/{session_id}",
+        headers={"X-Forwarded-Email": "user-a"},
+    )
+    assert snap.json()["host_id"] is None, "denied host-bind must not set host_id"
+    assert snap.json()["workspace"] is None
+
+
 async def test_cost_control_override_patch_requires_edit_access(
     auth_client: httpx.AsyncClient,
 ) -> None:

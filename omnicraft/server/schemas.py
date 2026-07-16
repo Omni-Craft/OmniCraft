@@ -1203,6 +1203,15 @@ class SessionCreateRequest(BaseModel):
     to the same endpoint; this JSON body remains the existing
     session-create contract for clients that already uploaded an agent.
 
+    Binding contract: without ``host_id`` the session is created
+    UNBOUND (``host_id``/``workspace``/``runner_id`` all null) and
+    cannot receive events until it is bound — posting one first fails
+    ``503 runner_unavailable``. Bind a host (+ workspace) via
+    ``PATCH /v1/sessions/{id}`` before sending events, or let an
+    in-process caller bind its own runner via the same PATCH with
+    ``runner_id``. Passing ``host_id`` + ``workspace`` here binds and
+    launches in one call.
+
     :param agent_id: Durable identifier of the agent to bind,
         e.g. ``"ag_abc123"``. Must match a registered agent.
     :param initial_items: Initial queued events/inputs, typically a
@@ -1235,8 +1244,12 @@ class SessionCreateRequest(BaseModel):
     :param host_id: Optional host to launch the runner on, e.g.
         ``"host_a1b2c3d4..."``. When set, the server triggers the
         host launch flow (generate binding token, write runner_id,
-        send launch frame). ``None`` for CLI-initiated sessions.
-        Must be ``None`` when ``host_type`` is ``"managed"``.
+        send launch frame). ``None`` creates an UNBOUND session that
+        cannot receive events until a host is attached later via
+        ``PATCH /v1/sessions/{id}`` (``host_id`` + ``workspace``) — the
+        late host-bind path that completes create-then-bind — or until
+        an in-process caller binds its own runner. Must be ``None``
+        when ``host_type`` is ``"managed"``.
     :param workspace: Where the session works. For external hosts:
         an absolute path on the host where the runner should start,
         e.g. ``"/Users/corey/universe/src/foo"``. Required when
@@ -1853,6 +1866,24 @@ class UpdateSessionRequest(BaseModel):
     :param runner_id: Identifier of a registered runner, e.g.
         ``"runner_abc123"``. ``None`` leaves runner binding
         unchanged.
+    :param host_id: Host to bind to an already-created session, e.g.
+        ``"host_a1b2c3d4..."``. This is the late host-bind primitive
+        that completes the ``create-then-bind`` flow: a session created
+        WITHOUT a host (unbound) can be attached to one from outside
+        the process so it can receive events. ``workspace`` is
+        REQUIRED when ``host_id`` is set — both are validated against
+        the agent's ``os_env.cwd`` boundary and written together (the
+        ``host_id IS NULL OR workspace IS NOT NULL`` invariant). After
+        binding, the next posted event triggers the host's
+        launch-on-demand path instead of failing with "no runner
+        bound". Owner-only. ``None`` leaves host binding unchanged.
+    :param workspace: Absolute path on the host where the runner should
+        start, e.g. ``"/Users/corey/universe/src/foo"``. Required (and
+        only meaningful) when ``host_id`` is set on this request; the
+        server validates it exists, falls within the agent's
+        ``os_env.cwd`` boundary, and contains any subdirectory the
+        agent expects. Tilde/relative paths are rejected. ``None``
+        leaves it unchanged.
     :param title: New title, e.g. ``"debugging auth flow"``.
         ``None`` leaves unchanged.
     :param labels: Guardrails labels to upsert. Merges with existing
@@ -1909,6 +1940,8 @@ class UpdateSessionRequest(BaseModel):
     """
 
     runner_id: str | None = None
+    host_id: str | None = None
+    workspace: str | None = None
     title: str | None = None
     labels: dict[str, str] | None = None
     reasoning_effort: str | None = None

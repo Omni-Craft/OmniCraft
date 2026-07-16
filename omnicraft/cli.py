@@ -7745,6 +7745,10 @@ def _stop_session_on_server(
         )
 
 
+class _DaemonUnreachableError(click.ClickException):
+    """Raised when a daemon's sessions cannot be listed (server unreachable)."""
+
+
 def _stop_daemon_sessions(
     record: _HostDaemonRecord,
     *,
@@ -7756,7 +7760,9 @@ def _stop_daemon_sessions(
     :param record: Daemon record whose host-bound sessions should stop.
     :param force: Continue stopping remaining sessions after failures.
     :returns: Number of sessions successfully stopped.
-    :raises click.ClickException: If session listing or stop fails and
+    :raises _DaemonUnreachableError: If session listing fails and ``force``
+        is ``False``.
+    :raises click.ClickException: If an individual session stop fails and
         ``force`` is ``False``.
     """
     result = _sessions_for_daemon(record)
@@ -7764,7 +7770,7 @@ def _stop_daemon_sessions(
         if force:
             click.echo(f"{record.target}: pulando parada de sessão: {result.error}", err=True)
             return 0
-        raise click.ClickException(f"{record.target}: {result.error}")
+        raise _DaemonUnreachableError(f"{record.target}: {result.error}")
     if result.base_url is None:
         return 0
     stopped = 0
@@ -7859,9 +7865,22 @@ def host_stop(
         click.echo("Nenhum daemon host correspondente encontrado.")
         return
     for record in records:
+        # Dead pid: the record is stale, so prune it without a remote session
+        # stop and move on.
+        if not _pid_alive(record.pid):
+            _delete_daemon_record(record)
+            click.echo(f"Registro obsoleto removido: {record.target} pid={record.pid}.")
+            continue
         stopped = 0
         if not daemon_only:
-            stopped = _stop_daemon_sessions(record, force=force)
+            try:
+                stopped = _stop_daemon_sessions(record, force=force)
+            except _DaemonUnreachableError as exc:
+                # The pid is alive but the server is unreachable. We are stopping
+                # the daemon regardless, so warn and proceed instead of aborting.
+                # A genuine per-session stop failure raises a plain
+                # click.ClickException and still aborts here (as before).
+                click.echo(str(exc), err=True)
         _terminate_daemon(record, force=force)
         click.echo(f"Daemon {record.target} parado pid={record.pid}; sessions_stopped={stopped}.")
 

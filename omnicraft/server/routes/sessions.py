@@ -14138,6 +14138,18 @@ def create_sessions_router(
         stores the bundle and creates the conversation row plus
         session-scoped agent row in one database transaction.
 
+        Binding contract: WITHOUT ``host_id`` the session is created
+        UNBOUND (``host_id``/``workspace``/``runner_id`` all null). That
+        is legitimate — an in-process caller drives the session itself
+        and binds its own runner via ``PATCH /v1/sessions/{id}`` with
+        ``runner_id``; a create-then-bind caller attaches a host later.
+        But an unbound session cannot receive events until it is bound:
+        posting one before then fails ``503 runner_unavailable``. To
+        make it live, bind a host (and its required workspace) via
+        ``PATCH /v1/sessions/{id}`` with ``host_id`` + ``workspace`` —
+        the next event then launches a runner on that host. Passing
+        ``host_id`` + ``workspace`` here binds and launches in one call.
+
         :param request: FastAPI request containing either JSON or
             multipart form data.
         :returns: :class:`SessionResponse` for JSON create, or
@@ -15550,6 +15562,26 @@ def create_sessions_router(
                     f"To fork this session instead, run: omnicraft run --fork {session_id}",
                     code=ErrorCode.FORBIDDEN,
                 )
+        if body.host_id is not None and permission_store is not None:
+            # Late host-bind rewires where the session runs, so gate it
+            # on ownership just like the runner attach above — an editor
+            # must not be able to move another user's session onto a host.
+            if not check_session_access(
+                user_id, session_id, LEVEL_OWNER, permission_store, conversation_store
+            ):
+                raise OmniCraftError(
+                    f"Only the session owner can bind a host to session {session_id!r}.",
+                    code=ErrorCode.FORBIDDEN,
+                )
+        if body.host_id is not None and body.runner_id is not None:
+            # Host-bind and runner-bind are distinct flows on distinct
+            # fields; combining them in one request is contradictory and
+            # could leave a partial apply if one half fails. Reject up
+            # front, before any field mutates.
+            raise OmniCraftError(
+                "host_id and runner_id cannot be set in the same request",
+                code=ErrorCode.INVALID_INPUT,
+            )
         if body.labels:
             # Advisor-owned cost_control.* labels are written only by the
             # session's bound runner; gate them on runner proof BEFORE any
@@ -15672,6 +15704,78 @@ def create_sessions_router(
                 f"invalid terminal_launch_args: {exc}",
                 code=ErrorCode.INVALID_INPUT,
             ) from exc
+
+        # Late host-bind runs before the runner/update mutations below so
+        # every precondition is validated before anything is written — a
+        # rejected bind applies nothing. Contract: see
+        # UpdateSessionRequest.host_id.
+        if body.host_id is not None:
+            conv_for_host = await asyncio.to_thread(
+                conversation_store.get_conversation, session_id
+            )
+            if conv_for_host is None:
+                raise OmniCraftError("Session not found", code=ErrorCode.NOT_FOUND)
+            if conv_for_host.agent_id is None:
+                raise OmniCraftError(
+                    "Not a session (no agent binding)",
+                    code=ErrorCode.NOT_FOUND,
+                )
+            # Narrow contract: only an unbound session. An existing host or
+            # runner would mean silently moving a live session or splitting
+            # host/runner across execution locations.
+            if conv_for_host.host_id is not None or conv_for_host.runner_id is not None:
+                raise OmniCraftError(
+                    "session already bound (host/runner); late host-bind only "
+                    "applies to an unbound session",
+                    code=ErrorCode.CONFLICT,
+                )
+            # A managed session is hostless+runnerless only while its
+            # background provisioning runs; binding an external host now
+            # would race that task onto a second location. The in-memory
+            # tracker (the signal post_event uses) covers the live/failed
+            # window; the durable repo label covers repo-workspace managed
+            # sessions across a restart. A workspace-less managed session
+            # orphaned by a restart is uncovered — no durable host_type
+            # marker exists to key on.
+            from omnicraft.server.managed_hosts import MANAGED_REPO_LABEL_KEY
+
+            _managed_tracker = getattr(request.app.state, "managed_launches", None)
+            _session_is_managed = (
+                _managed_tracker is not None and _managed_tracker.get(session_id) is not None
+            ) or MANAGED_REPO_LABEL_KEY in conv_for_host.labels
+            if _session_is_managed:
+                raise OmniCraftError(
+                    "managed sessions cannot be host-bound via PATCH",
+                    code=ErrorCode.INVALID_INPUT,
+                )
+            agent_for_host = await asyncio.to_thread(agent_store.get, conv_for_host.agent_id)
+            if agent_for_host is None:
+                raise OmniCraftError(
+                    f"Agent not found: {conv_for_host.agent_id!r}",
+                    code=ErrorCode.NOT_FOUND,
+                )
+            # Raises INVALID_INPUT when workspace is missing/out of bounds,
+            # enforcing "host + workspace together".
+            canonical_workspace = await _validate_session_workspace(
+                user_id=user_id,
+                host_id=body.host_id,
+                workspace=body.workspace,
+                agent=agent_for_host,
+                agent_cache=agent_cache,
+                request=request,
+            )
+            try:
+                await asyncio.to_thread(
+                    conversation_store.set_host_id,
+                    session_id,
+                    body.host_id,
+                    canonical_workspace,
+                )
+            except ConversationNotFoundError as exc:
+                raise OmniCraftError(
+                    "Session not found",
+                    code=ErrorCode.NOT_FOUND,
+                ) from exc
 
         if body.runner_id is not None:
             # Empty string is the clear sentinel (None = leave unchanged);
@@ -20025,6 +20129,18 @@ def create_sessions_router(
             # approval) are best-effort and silently skip when no
             # runner is bound — item events can't, because that
             # would desync conversation store and harness state.
+            #
+            # Split the human message by binding state: no host means a
+            # never-bound (create-then-bind) session — point at late
+            # host-bind; a bound host means the runner is merely offline,
+            # so a retry/relaunch can still win and it keeps the original.
+            if conv.host_id is None:
+                raise OmniCraftError(
+                    "session has no host bound; bind one via "
+                    "PATCH /v1/sessions/{id} with host_id + workspace "
+                    "before sending events",
+                    code=ErrorCode.RUNNER_UNAVAILABLE,
+                )
             raise OmniCraftError(
                 "No runner bound for session",
                 code=ErrorCode.RUNNER_UNAVAILABLE,

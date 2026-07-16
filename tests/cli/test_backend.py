@@ -1077,6 +1077,7 @@ def test_host_stop_stops_sessions_before_daemon(
 ) -> None:
     """``connect stop`` posts stop_session before terminating the daemon."""
     monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: True)
     _write_daemon_registry_record(
         tmp_path,
         pid=4242,
@@ -1137,6 +1138,7 @@ def test_host_stop_daemon_only_skips_session_stop(
 ) -> None:
     """``connect stop --daemon-only`` terminates without HTTP session calls."""
     monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: True)
     _write_daemon_registry_record(
         tmp_path,
         pid=4242,
@@ -1163,6 +1165,150 @@ def test_host_stop_daemon_only_skips_session_stop(
 
     assert result.exit_code == 0, result.output
     assert terminated == ["https://server.example.com"]
+
+
+def test_host_stop_prunes_stale_dead_pid_record(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A dead-pid record is really unlinked without a remote session stop."""
+    monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: False)
+    target = "https://server.example.com"
+    _write_daemon_registry_record(
+        tmp_path,
+        pid=4242,
+        target=target,
+        mode="server",
+        server_url=target,
+    )
+    record_path = cli._daemon_record_path(target)
+    assert record_path.exists()
+    monkeypatch.setattr(
+        cli,
+        "_host_http_json",
+        lambda **kwargs: pytest.fail(f"unexpected HTTP call: {kwargs}"),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_terminate_daemon",
+        lambda record, *, force: pytest.fail("dead pid should not be terminated"),
+    )
+
+    result = CliRunner().invoke(cli_group, ["host", "stop", "--server", target])
+
+    assert result.exit_code == 0, result.output
+    assert not record_path.exists()
+    assert "Registro obsoleto removido" in result.output
+    assert "pid=4242" in result.output
+
+
+def test_host_stop_dead_pid_prunes_even_with_daemon_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A dead-pid record is pruned regardless of ``--daemon-only``."""
+    monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: False)
+    target = "https://server.example.com"
+    _write_daemon_registry_record(
+        tmp_path,
+        pid=4242,
+        target=target,
+        mode="server",
+        server_url=target,
+    )
+    record_path = cli._daemon_record_path(target)
+    monkeypatch.setattr(
+        cli,
+        "_terminate_daemon",
+        lambda record, *, force: pytest.fail("dead pid should not be terminated"),
+    )
+
+    result = CliRunner().invoke(cli_group, ["host", "stop", "--server", target, "--daemon-only"])
+
+    assert result.exit_code == 0, result.output
+    assert not record_path.exists()
+    assert "Registro obsoleto removido" in result.output
+
+
+def test_host_stop_unreachable_server_still_terminates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A live pid with an unreachable server warns but still stops the daemon."""
+    monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    # Live at the stale-guard and terminate entry, then observed dead so the
+    # real _terminate_daemon runs its grace-loop cleanup after SIGTERM.
+    liveness = iter([True, True, False])
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: next(liveness, False))
+    killed: list[int] = []
+    monkeypatch.setattr(cli.os, "kill", lambda pid, sig: killed.append(pid))
+    monkeypatch.setattr(cli.time, "sleep", lambda seconds: None)
+    target = "https://server.example.com"
+    _write_daemon_registry_record(
+        tmp_path,
+        pid=4242,
+        target=target,
+        mode="server",
+        server_url=target,
+    )
+    record_path = cli._daemon_record_path(target)
+    monkeypatch.setattr(
+        cli,
+        "_sessions_for_daemon",
+        lambda record, **kwargs: cli._DaemonSessionsResult(
+            base_url=target,
+            sessions=[],
+            error="listagem de sessões falhou: ConnectError",
+        ),
+    )
+
+    result = CliRunner().invoke(cli_group, ["host", "stop", "--server", target])
+
+    assert result.exit_code == 0, result.output
+    assert killed == [4242]
+    assert not record_path.exists()
+    assert "ConnectError" in result.output
+    assert "sessions_stopped=0" in result.output
+
+
+def test_host_stop_session_stop_failure_still_aborts_without_force(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A per-session stop failure (not a listing failure) still aborts."""
+    monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: True)
+    target = "https://server.example.com"
+    _write_daemon_registry_record(
+        tmp_path,
+        pid=4242,
+        target=target,
+        mode="server",
+        server_url=target,
+    )
+    monkeypatch.setattr(
+        cli,
+        "_sessions_for_daemon",
+        lambda record, **kwargs: cli._DaemonSessionsResult(
+            base_url=target,
+            sessions=[{"id": "conv_owned", "host_id": "host_abc"}],
+            error=None,
+        ),
+    )
+
+    def _fail_stop(*, base_url: str, session_id: str) -> None:
+        """Simulate a genuine per-session stop failure (HTTP/auth error)."""
+        raise click.ClickException(f"{session_id}: parada da sessão falhou")
+
+    monkeypatch.setattr(cli, "_stop_session_on_server", _fail_stop)
+    monkeypatch.setattr(
+        cli,
+        "_terminate_daemon",
+        lambda record, *, force: pytest.fail("daemon must not be terminated on abort"),
+    )
+
+    result = CliRunner().invoke(cli_group, ["host", "stop", "--server", target])
+
+    assert result.exit_code != 0
+    assert "parada da sessão falhou" in result.output
 
 
 def test_host_stop_session_stops_only_named_sessions(

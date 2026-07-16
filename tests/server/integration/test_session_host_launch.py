@@ -254,6 +254,43 @@ async def _serve_one_launch(
     raise AssertionError("host never received a launch frame from the inline path")
 
 
+async def _serve_one_stat(comm: ApplicationCommunicator) -> HostStatFrame:
+    """Answer the host's ``host.stat`` round-trip for one workspace check.
+
+    The late host-bind PATCH validates the workspace against the host
+    (``host.stat``) before writing ``host_id``/``workspace``. This reads
+    the host's outbound frames (skipping interleaved pings), replies
+    "exists/directory" echoing the requested path as the canonical path,
+    and returns the stat frame the server sent.
+
+    :param comm: The connected host communicator.
+    :returns: The ``host.stat`` frame the server sent.
+    :raises AssertionError: If no stat frame arrives within the budget.
+    """
+    for _ in range(40):
+        output = await comm.receive_output(timeout=3.0)
+        if output["type"] != "websocket.send":
+            continue
+        frame = decode_host_frame(output["text"])
+        if isinstance(frame, HostStatFrame):
+            await comm.send_input(
+                {
+                    "type": "websocket.receive",
+                    "text": encode_host_frame(
+                        HostStatResultFrame(
+                            request_id=frame.request_id,
+                            status="ok",
+                            exists=True,
+                            type="directory",
+                            canonical_path=frame.path,
+                        )
+                    ),
+                }
+            )
+            return frame
+    raise AssertionError("host never received a stat frame from the PATCH host-bind path")
+
+
 async def _serve_one_stop(comm: ApplicationCommunicator) -> str:
     """Answer the host's ``host.stop_runner`` round-trip for one Stop.
 
@@ -1310,3 +1347,419 @@ async def test_health_reports_online_for_host_on_other_replica(
         "registry instead of the hosts DB."
     )
     assert batch.json()["sessions"][session_id]["runner_online"] is False
+
+
+async def test_patch_binds_host_to_unbound_session_and_makes_it_recoverable(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Late host-bind via ``PATCH /v1/sessions/{id}`` completes create-then-bind.
+
+    A session created WITHOUT ``host_id`` is fully unbound
+    (``host_id``/``workspace``/``runner_id`` all NULL) — a legitimate
+    flow, but pre-fix there was no public way to attach a host to it, so
+    the first message dead-ended in a 503 "no runner bound". This pins
+    the fix: PATCH-binding ``host_id`` + ``workspace`` validates the
+    workspace against the host, writes both together, and the next
+    message then takes the host launch-on-demand path
+    (``host.launch_runner``) instead of the 503.
+
+    Mutation check: drop the ``body.host_id`` handling in
+    ``update_session`` and the host_id/workspace assertions fail; drop
+    the launch-on-demand relaunch arm and ``_wait_for_launch`` returns
+    ``None`` and the recoverability assertion fails.
+    """
+    from omnicraft.runtime import set_runner_client
+    from omnicraft.server.routes import sessions as sessions_module
+
+    monkeypatch.setattr(sessions_module, "_HOST_BOUND_RUNNER_CONNECT_GRACE_S", 0.0)
+
+    comm = await _connect_host(app)
+    agent = await create_test_agent(client)
+
+    # Create WITHOUT host_id → the session is fully unbound.
+    create_resp = await client.post("/v1/sessions", json={"agent_id": agent["id"]})
+    assert create_resp.status_code == 201, create_resp.text
+    session_id = create_resp.json()["id"]
+    assert create_resp.json()["host_id"] is None
+    assert create_resp.json()["workspace"] is None
+
+    unbound = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert unbound is not None
+    assert unbound.host_id is None
+    assert unbound.workspace is None
+    assert unbound.runner_id is None
+
+    # PATCH-bind a host + workspace. The route validates the workspace
+    # against the host (host.stat), so answer that round-trip.
+    stat_responder = asyncio.create_task(_serve_one_stat(comm))
+    patch_resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": _WORKSPACE},
+    )
+    await stat_responder
+
+    assert patch_resp.status_code == 200, patch_resp.text
+    assert patch_resp.json()["host_id"] == _HOST_ID
+    assert patch_resp.json()["workspace"] == _WORKSPACE
+
+    # host_id + workspace are persisted together (constraint respected);
+    # no runner is launched at PATCH time (launch-on-next-event).
+    bound = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert bound is not None
+    assert bound.host_id == _HOST_ID
+    assert bound.workspace == _WORKSPACE
+    assert bound.runner_id is None, "PATCH host-bind must not launch a runner itself"
+
+    # The previously-503 path is now recoverable: a message to the
+    # freshly-bound (still runner-less) session takes the host
+    # launch-on-demand branch instead of raising "no runner bound".
+    set_runner_client(None)
+    post_task = asyncio.create_task(
+        client.post(
+            f"/v1/sessions/{session_id}/events",
+            json={
+                "type": "message",
+                "data": {
+                    "role": "user",
+                    "content": [{"type": "input_text", "text": "hi"}],
+                },
+            },
+        )
+    )
+    try:
+        launch_frame = await _wait_for_launch(comm, budget_s=5.0)
+    finally:
+        # No runner ever connects, so cancel before the ~30s wait loop —
+        # the relaunch frame already proves recoverability.
+        post_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await post_task
+
+    assert launch_frame is not None, (
+        "after PATCH-binding a host, a message must trigger host.launch_runner "
+        "(create-then-bind is now completable) instead of the no-host 503"
+    )
+    assert launch_frame.workspace == _WORKSPACE, (
+        f"the launch should carry the bound workspace {_WORKSPACE!r}, "
+        f"got {launch_frame.workspace!r}"
+    )
+
+    # The launch-on-demand path minted a token-bound runner_id, so the
+    # session is now routable to the host's fresh runner.
+    relaunched = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert relaunched is not None
+    assert relaunched.runner_id is not None
+    assert relaunched.runner_id.startswith("runner_token_")
+
+
+async def test_message_to_hostless_session_503_points_to_late_bind(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+) -> None:
+    """A message to a fully-unbound session 503s with an honest, actionable message.
+
+    A create-then-bind session that was never bound has no host, so no
+    runner will ever spawn until one is attached. The 503 must say so —
+    and name the recovery path (PATCH host-bind) — instead of the generic
+    "No runner bound for session", which reads as a transient runner
+    outage the client should retry through.
+
+    Mutation check: collapse the two branches back to a single generic
+    raise and the honest-message assertions fail.
+    """
+    from omnicraft.runtime import set_runner_client
+
+    agent = await create_test_agent(client)
+    create_resp = await client.post("/v1/sessions", json={"agent_id": agent["id"]})
+    assert create_resp.status_code == 201, create_resp.text
+    session_id = create_resp.json()["id"]
+    assert create_resp.json()["host_id"] is None
+
+    # No runner resolves and the session has no host: post_event skips
+    # the relaunch branch entirely and raises the no-host 503.
+    set_runner_client(None)
+    resp = await client.post(
+        f"/v1/sessions/{session_id}/events",
+        json={
+            "type": "message",
+            "data": {"role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+        },
+    )
+
+    assert resp.status_code == 503, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "runner_unavailable"
+    # Honest + actionable: names the missing host and the recovery path.
+    assert "no host bound" in error["message"], error["message"]
+    assert "PATCH /v1/sessions/{id}" in error["message"], error["message"]
+    assert "host_id + workspace" in error["message"], error["message"]
+
+
+async def test_message_to_host_bound_offline_session_503_keeps_generic_message(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A host-bound session whose host is offline keeps the original 503 message.
+
+    Here a host IS bound — the runner is merely offline and the host is
+    unreachable right now, so a retry or a host reconnect can still
+    recover. That case must NOT get the "no host bound" message (which
+    would send the client down the wrong recovery path); it keeps the
+    generic "No runner bound for session".
+
+    Mutation check: widen the no-host branch to also cover host-bound
+    sessions and this assertion fails.
+    """
+    from omnicraft.runtime import set_runner_client
+    from omnicraft.server.routes import sessions as sessions_module
+
+    # Zero the connect grace + relaunch wait so the offline path resolves
+    # immediately instead of blocking on the real multi-second timeouts.
+    monkeypatch.setattr(sessions_module, "_HOST_BOUND_RUNNER_CONNECT_GRACE_S", 0.0)
+    monkeypatch.setattr(sessions_module, "_HOST_RELAUNCH_RUNNER_CONNECT_TIMEOUT_S", 0.0)
+
+    comm = await _connect_host(app)
+    session = await _inline_launch_session(client, comm)
+    session_id = session["id"]
+
+    # Take the host offline: drop it from the registry so the relaunch
+    # branch finds no host connection and falls through to the raise.
+    # The host row stays in the store, so host_id remains bound.
+    app.state.host_registry.deregister(_HOST_ID)
+    set_runner_client(None)
+
+    resp = await client.post(
+        f"/v1/sessions/{session_id}/events",
+        json={
+            "type": "message",
+            "data": {"role": "user", "content": [{"type": "input_text", "text": "hi"}]},
+        },
+    )
+
+    assert resp.status_code == 503, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "runner_unavailable"
+    # host_id IS bound → the "runner offline, retry/relaunch" case keeps
+    # its original message, distinct from the no-host one above.
+    assert error["message"] == "No runner bound for session", error["message"]
+
+
+async def _create_unbound_session(client: httpx.AsyncClient) -> str:
+    """Create a session with no host and return its id.
+
+    :param client: Test HTTP client bound to the host-wired app.
+    :returns: The new session's id.
+    """
+    agent = await create_test_agent(client)
+    resp = await client.post("/v1/sessions", json={"agent_id": agent["id"]})
+    assert resp.status_code == 201, resp.text
+    return resp.json()["id"]
+
+
+async def test_patch_host_bind_rejects_missing_workspace(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+) -> None:
+    """host_id without workspace is rejected and binds nothing.
+
+    Enforces the "host + workspace together" contract at PATCH: a bind
+    that omits workspace must fail before any mutation, leaving the
+    session unbound.
+    """
+    session_id = await _create_unbound_session(client)
+
+    resp = await client.patch(f"/v1/sessions/{session_id}", json={"host_id": _HOST_ID})
+
+    assert resp.status_code == 400, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "invalid_input"
+    assert "workspace required" in error["message"], error["message"]
+
+    conv = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert conv is not None
+    assert conv.host_id is None and conv.workspace is None
+
+
+async def test_patch_host_bind_rejects_relative_workspace(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+) -> None:
+    """A relative workspace path is rejected and binds nothing."""
+    session_id = await _create_unbound_session(client)
+
+    resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": "relative/path"},
+    )
+
+    assert resp.status_code == 400, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "invalid_input"
+    assert "absolute path" in error["message"], error["message"]
+
+    conv = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert conv is not None
+    assert conv.host_id is None and conv.workspace is None
+
+
+async def test_patch_host_bind_rejects_already_host_bound_session(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+) -> None:
+    """PATCH host_id on a session that already has a host is rejected.
+
+    Late host-bind is narrow — an already-bound session must not be
+    silently moved to another host (which would strand its runner). The
+    existing binding stays untouched.
+    """
+    comm = await _connect_host(app)
+    session = await _inline_launch_session(client, comm)
+    session_id = session["id"]
+
+    resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": "/some/other/dir"},
+    )
+
+    assert resp.status_code == 409, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "conflict"
+    assert "already bound" in error["message"], error["message"]
+
+    # The original binding (host + workspace) is unchanged.
+    conv = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert conv is not None
+    assert conv.host_id == _HOST_ID
+    assert conv.workspace == _WORKSPACE
+
+
+async def test_patch_host_bind_rejects_runner_bound_session(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+) -> None:
+    """PATCH host_id on a session that already has a runner is rejected.
+
+    A runner-bound but hostless session (in-process bind) must not gain
+    a host underneath its runner — that would split host and runner
+    across execution locations. No host is written.
+    """
+    session_id = await _create_unbound_session(client)
+    SqlAlchemyConversationStore(db_uri).replace_runner_id(session_id, "runner_token_manual")
+
+    resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": _WORKSPACE},
+    )
+
+    assert resp.status_code == 409, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "conflict"
+    assert "already bound" in error["message"], error["message"]
+
+    conv = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert conv is not None
+    assert conv.host_id is None
+    # The runner binding is left intact.
+    assert conv.runner_id == "runner_token_manual"
+
+
+async def test_patch_host_bind_rejects_managed_session_via_tracker(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+) -> None:
+    """A managed session mid-provisioning (tracked) rejects late host-bind.
+
+    A managed session is hostless+runnerless while its background
+    provisioning runs — the null-binding check alone would let an
+    external host bind and race the managed launch. The in-memory
+    managed-launch tracker (the same signal post_event uses) closes
+    that window.
+    """
+    session_id = await _create_unbound_session(client)
+    # Simulate the provisioning window: an in-flight managed launch.
+    app.state.managed_launches.begin(session_id)
+
+    resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": _WORKSPACE},
+    )
+
+    assert resp.status_code == 400, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "invalid_input"
+    assert "managed sessions cannot be host-bound" in error["message"], error["message"]
+
+    conv = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert conv is not None
+    assert conv.host_id is None
+
+
+async def test_patch_host_bind_rejects_managed_session_via_repo_label(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+) -> None:
+    """A managed session carrying the durable repo label rejects late host-bind.
+
+    Covers the restart case for repo-workspace managed sessions: the
+    in-memory tracker is gone, but the persisted ``omnicraft.sandbox.repo``
+    label still marks the session managed.
+    """
+    from omnicraft.server.managed_hosts import MANAGED_REPO_LABEL_KEY
+
+    session_id = await _create_unbound_session(client)
+    SqlAlchemyConversationStore(db_uri).set_labels(
+        session_id, {MANAGED_REPO_LABEL_KEY: "https://github.com/org/repo#main"}
+    )
+
+    resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": _WORKSPACE},
+    )
+
+    assert resp.status_code == 400, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "invalid_input"
+    assert "managed sessions cannot be host-bound" in error["message"], error["message"]
+
+    conv = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert conv is not None
+    assert conv.host_id is None
+
+
+async def test_patch_rejects_host_id_and_runner_id_together(
+    client: httpx.AsyncClient,
+    app: FastAPI,
+    db_uri: str,
+) -> None:
+    """Setting host_id and runner_id in one PATCH is rejected up front.
+
+    They are distinct binding flows; combining them is contradictory and
+    could leave a partial apply. The request is rejected before any field
+    mutates.
+    """
+    session_id = await _create_unbound_session(client)
+
+    resp = await client.patch(
+        f"/v1/sessions/{session_id}",
+        json={"host_id": _HOST_ID, "workspace": _WORKSPACE, "runner_id": "runner_token_x"},
+    )
+
+    assert resp.status_code == 400, resp.text
+    error = resp.json()["error"]
+    assert error["code"] == "invalid_input"
+    assert "cannot be set in the same request" in error["message"], error["message"]
+
+    conv = SqlAlchemyConversationStore(db_uri).get_conversation(session_id)
+    assert conv is not None
+    assert conv.host_id is None
+    assert conv.runner_id is None

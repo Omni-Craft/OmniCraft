@@ -1509,6 +1509,23 @@ def create_app(
                     _logger.warning("scheduled-agents: tick failed (%s)", exc)
 
         scheduled_agents_task = asyncio.create_task(_scheduled_agents_loop())
+
+        async def _unbound_session_sweep_loop() -> None:
+            """Periodically archive orphan unbound sessions past their TTL.
+
+            See :func:`omnicraft.server.unbound_session_sweep.sweep_unbound_sessions`
+            for the archival predicate and rationale.
+            """
+            from omnicraft.server.unbound_session_sweep import sweep_unbound_sessions
+
+            while True:
+                await asyncio.sleep(3600)
+                try:
+                    await asyncio.to_thread(sweep_unbound_sessions, conversation_store)
+                except Exception as exc:  # noqa: BLE001 — keep the loop alive across store errors
+                    _logger.warning("unbound-session-sweep: tick failed (%s)", exc)
+
+        unbound_session_sweep_task = asyncio.create_task(_unbound_session_sweep_loop())
         try:
             yield
         finally:
@@ -1518,6 +1535,14 @@ def create_app(
             scheduled_agents_task.cancel()
             with suppress(asyncio.CancelledError):
                 await scheduled_agents_task
+            unbound_session_sweep_task.cancel()
+            # Cancelling this task returns almost immediately even if a
+            # sweep tick is mid-flight inside asyncio.to_thread — the
+            # underlying OS thread can't be interrupted, so it just keeps
+            # running detached in the background (harmless: the archive
+            # write is self-contained and idempotent).
+            with suppress(asyncio.CancelledError):
+                await unbound_session_sweep_task
             for task in list(scheduled_delivery_tasks):
                 task.cancel()
                 with suppress(asyncio.CancelledError):

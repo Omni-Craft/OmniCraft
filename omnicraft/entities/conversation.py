@@ -180,6 +180,19 @@ class Conversation:
         listing (and the sidebar), surfacing only when the caller
         passes ``include_archived=True``. ``False`` for normal
         sessions; toggled via ``PATCH /v1/sessions/{id}``.
+    :param archived_reason: Provenance for the current ``archived``
+        state — ``None`` for a manual archive (``PATCH
+        /v1/sessions/{id}``) or a non-archived row. Set to
+        ``omnicraft.stores.conversation_store.UNBOUND_SWEEP_ARCHIVE_REASON``
+        only by the unbound-session-TTL sweep
+        (:func:`omnicraft.server.unbound_session_sweep.sweep_unbound_sessions`),
+        and read by ``set_host_id`` to decide whether a first host
+        bind may auto-unarchive the row — this keeps the sweep's
+        auto-unarchive from ever resurrecting a session a human
+        archived on purpose. Cleared (set back to ``None``) whenever
+        ``archived`` is set through the ordinary ``PATCH`` path, so
+        the marker only ever survives between a sweep archive and
+        that row's next explicit archive-state change.
     :param search_snippet: Transient, list-only excerpt of the chat
         content that matched a ``search_query`` — set by
         ``list_conversations`` whenever the query hit an item's body (even
@@ -211,6 +224,7 @@ class Conversation:
     workspace: str | None = None
     git_branch: str | None = None
     archived: bool = False
+    archived_reason: str | None = None
     # Transient: populated only by list_conversations on a content search;
     # never read from or written to the DB.
     search_snippet: str | None = None

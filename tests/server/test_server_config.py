@@ -16,6 +16,7 @@ from omnicraft.server.server_config import (
     config_str_list,
     load_server_config,
     resolve_config_path,
+    unbound_session_ttl_hours,
 )
 
 
@@ -110,3 +111,32 @@ def test_config_str_list_none_is_empty() -> None:
 
 def test_config_str_list_strips_and_drops_empty() -> None:
     assert config_str_list(["  a@x.com  ", "", "  "]) == ["a@x.com"]
+
+
+# ── unbound_session_ttl_hours ────────────────────────────────────────
+
+
+def test_unbound_session_ttl_hours_default_when_no_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """No config file → the generous 24h built-in default."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    assert unbound_session_ttl_hours() == 24
+
+
+def test_unbound_session_ttl_hours_reads_config_override(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The TTL is surfaced the same way as other server settings (config.yaml)."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    (tmp_path / "config.yaml").write_text("unbound_session_ttl_hours: 6\n")
+    assert unbound_session_ttl_hours() == 6
+
+
+def test_unbound_session_ttl_hours_invalid_falls_back_to_default(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A non-positive/non-numeric override degrades to the safe default."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    (tmp_path / "config.yaml").write_text("unbound_session_ttl_hours: -1\n")
+    assert unbound_session_ttl_hours() == 24

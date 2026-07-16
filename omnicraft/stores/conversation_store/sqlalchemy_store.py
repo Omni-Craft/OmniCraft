@@ -10,6 +10,7 @@ from sqlalchemy import (
     Select,
     and_,
     asc,
+    case,
     delete,
     desc,
     func,
@@ -74,6 +75,7 @@ from omnicraft.stores.conversation_store import (
     FORK_SOURCE_LABEL_KEY,
     PROJECT_LABEL_KEY,
     SWITCH_PREVIOUS_BUILTIN_LABEL_KEY,
+    UNBOUND_SWEEP_ARCHIVE_REASON,
     ConversationNotFoundError,
     ConversationStore,
     CreatedSession,
@@ -136,6 +138,7 @@ def _to_conversation(
         workspace=row.workspace,
         git_branch=row.git_branch,
         archived=row.archived,
+        archived_reason=row.archived_reason,
     )
 
 
@@ -2130,6 +2133,11 @@ class SqlAlchemyConversationStore(ConversationStore):
                 changed = True
             if archived is not None:
                 row.archived = archived
+                # This is the ordinary human/API archive path, distinct
+                # from archive_if_still_stale_unbound's sweep write —
+                # never leave behind a stale sweep-provenance marker
+                # that a later first host bind could misread.
+                row.archived_reason = None
                 changed = True
             if _unset_reasoning_effort:
                 row.reasoning_effort = None
@@ -2291,6 +2299,82 @@ class SqlAlchemyConversationStore(ConversationStore):
             )
             return [_to_conversation(row) for row in rows]
 
+    def list_stale_unbound_conversations(
+        self,
+        older_than: int,
+        limit: int = 500,
+    ) -> list[Conversation]:
+        """
+        Return orphan unbound sessions eligible for TTL archival.
+
+        :param older_than: Unix epoch seconds; only conversations
+            whose ``updated_at`` is strictly before this are
+            returned.
+        :param limit: Maximum rows to return.
+        :returns: List of :class:`Conversation` entities, oldest
+            ``updated_at`` first.
+        """
+        with self._session() as session:
+            rows = (
+                session.query(SqlConversation)
+                .filter(
+                    SqlConversation.workspace_id == current_workspace_id(),
+                    SqlConversation.kind == encode_conversation_kind("default"),
+                    SqlConversation.agent_id.isnot(None),
+                    SqlConversation.host_id.is_(None),
+                    SqlConversation.runner_id.is_(None),
+                    SqlConversation.archived.is_(False),
+                    SqlConversation.updated_at < older_than,
+                )
+                .order_by(asc(SqlConversation.updated_at))
+                .limit(limit)
+                .all()
+            )
+            return [_to_conversation(row) for row in rows]
+
+    def archive_if_still_stale_unbound(
+        self,
+        conversation_id: str,
+        older_than: int,
+    ) -> bool:
+        """
+        Atomically archive one session, but only if it is still stale
+        and unbound at write time.
+
+        See :meth:`ConversationStore.archive_if_still_stale_unbound`
+        for the TOCTOU rationale. A single ``UPDATE ... WHERE``
+        re-checks every predicate the read used, so a bind or event
+        append that landed since selection makes this a no-op. Also
+        stamps ``archived_reason`` with
+        :data:`~omnicraft.stores.conversation_store.UNBOUND_SWEEP_ARCHIVE_REASON`
+        so :meth:`set_host_id` can tell this archive apart from a
+        manual one before auto-unarchiving on a first bind.
+
+        :param conversation_id: Session/conversation identifier.
+        :param older_than: The cutoff used to select this row.
+        :returns: ``True`` if this call archived the row; ``False``
+            otherwise.
+        """
+        with self._session() as session:
+            stmt = (
+                update(SqlConversation)
+                .where(
+                    SqlConversation.workspace_id == current_workspace_id(),
+                    SqlConversation.id == conversation_id,
+                    SqlConversation.host_id.is_(None),
+                    SqlConversation.runner_id.is_(None),
+                    SqlConversation.archived.is_(False),
+                    SqlConversation.updated_at < older_than,
+                )
+                .values(
+                    archived=True,
+                    archived_reason=UNBOUND_SWEEP_ARCHIVE_REASON,
+                    updated_at=now_epoch(),
+                )
+            )
+            result = session.execute(stmt)
+            return result.rowcount == 1
+
     def set_host_id(
         self,
         conversation_id: str,
@@ -2308,6 +2392,33 @@ class SqlAlchemyConversationStore(ConversationStore):
         ``ck_conversations_workspace_required_for_host`` mid-update.
         Callers that already populated ``workspace`` at session
         create can pass ``None`` to leave it untouched.
+
+        Auto-unarchive: clears ``archived`` (and ``archived_reason``)
+        only when BOTH hold — this is a *first* bind (``host_id`` was
+        ``NULL`` before this call, the create-then-bind late-bind
+        path) AND ``archived_reason`` carries
+        :data:`~omnicraft.stores.conversation_store.UNBOUND_SWEEP_ARCHIVE_REASON`
+        (this row's current archived state was set by
+        :meth:`archive_if_still_stale_unbound`, not by a human).
+        ``archived`` alone carries no provenance, so checking only
+        "first bind" would still resurrect an intentionally-archived
+        row the sweep could never have touched — e.g. one with
+        ``runner_id`` set, a non-default ``kind``, or simply archived
+        by hand while unbound. A host *replacement* on an
+        already-bound row is excluded by the first-bind check alone
+        and never touches ``archived``.
+
+        Both the ``host_id`` write and the auto-unarchive decision
+        happen in a SINGLE ``UPDATE`` statement — the "was this a
+        first bind, does the sweep marker still hold" predicate is a
+        SQL ``CASE`` evaluated by the database against the row's
+        pre-update values, not a separate application-level read.
+        This closes a TOCTOU that a read-then-write split would leave
+        open: a concurrent manual archive
+        (:meth:`ConversationStore.update_conversation` clearing the
+        marker) landing between an app-level read and this write
+        could otherwise get silently overwritten by a bind decision
+        made against stale data. A single ``UPDATE`` has no such gap.
 
         :param conversation_id: Session/conversation identifier,
             e.g. ``"conv_abc123"``.
@@ -2332,17 +2443,48 @@ class SqlAlchemyConversationStore(ConversationStore):
             and the caller did not supply one).
         """
         with self._session() as session:
-            row = session.get(SqlConversation, (current_workspace_id(), conversation_id))
-            if row is None:
+            # True only when, at the instant this statement evaluates the
+            # row, host_id is still NULL (first bind) AND archived_reason
+            # still carries the sweep's marker — both read from the row's
+            # pre-update state within this one UPDATE, not from a
+            # separate SELECT a concurrent writer could invalidate.
+            may_auto_unarchive = and_(
+                SqlConversation.host_id.is_(None),
+                SqlConversation.archived.is_(True),
+                SqlConversation.archived_reason == UNBOUND_SWEEP_ARCHIVE_REASON,
+            )
+            values: dict[str, Any] = {
+                "host_id": host_id,
+                "archived": case((may_auto_unarchive, False), else_=SqlConversation.archived),
+                "archived_reason": case(
+                    (may_auto_unarchive, None), else_=SqlConversation.archived_reason
+                ),
+                "updated_at": now_epoch(),
+            }
+            if workspace is not None:
+                values["workspace"] = workspace
+            if git_branch is not None:
+                values["git_branch"] = git_branch
+
+            stmt = (
+                update(SqlConversation)
+                .where(
+                    SqlConversation.workspace_id == current_workspace_id(),
+                    SqlConversation.id == conversation_id,
+                )
+                .values(**values)
+            )
+            result = session.execute(stmt)
+            if result.rowcount == 0:
                 raise ConversationNotFoundError(
                     f"conversation {conversation_id!r} does not exist",
                 )
-            row.host_id = host_id
-            if workspace is not None:
-                row.workspace = workspace
-            if git_branch is not None:
-                row.git_branch = git_branch
-            row.updated_at = now_epoch()
+            # Re-read within the same transaction to build the return
+            # value — this reflects our own just-committed write, not a
+            # racing one (read-your-own-writes), so it's safe unlike a
+            # read used to *decide* the write above would have been.
+            row = session.get(SqlConversation, (current_workspace_id(), conversation_id))
+            assert row is not None
             return _to_conversation(row, _fetch_labels(session, conversation_id))
 
     def set_external_session_id(

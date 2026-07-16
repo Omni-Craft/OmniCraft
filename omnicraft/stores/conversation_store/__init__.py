@@ -217,6 +217,22 @@ def apply_session_usage_delta(current: dict[str, Any], delta: dict[str, Any]) ->
             current[key] = current.get(key, 0) + value
 
 
+# Provenance marker written to ``conversations.archived_reason`` ONLY by
+# the unbound-session-TTL sweep's atomic archive write
+# (:meth:`ConversationStore.archive_if_still_stale_unbound`, consumed by
+# :func:`omnicraft.server.unbound_session_sweep.sweep_unbound_sessions`).
+# ``archived`` alone carries no provenance — a manual ``PATCH
+# /v1/sessions/{id}`` archive and a sweep archive look identical on that
+# column. ``set_host_id`` reads this marker to decide whether a first
+# host bind may auto-unarchive the row: only a row this exact sweep
+# archived should ever be resurrected that way, never one a human
+# archived on purpose for an unrelated reason. Any ordinary
+# ``update_conversation(archived=...)`` write clears the marker, so it
+# only ever survives between a sweep archive and that row's next
+# explicit archive-state change.
+UNBOUND_SWEEP_ARCHIVE_REASON = "unbound_ttl_sweep"
+
+
 class ConversationStore(ABC):
     """
     Abstract base for conversation persistence.
@@ -686,7 +702,14 @@ class ConversationStore(ABC):
             append).
         :param archived: New archived state. ``True`` archives
             (hides from the default listing), ``False`` unarchives,
-            ``None`` leaves unchanged.
+            ``None`` leaves unchanged. Whenever this is not ``None``,
+            also clears ``archived_reason`` — this is the ordinary
+            human/API-driven archive path, distinct from
+            :meth:`archive_if_still_stale_unbound`'s sweep write, so
+            it must not leave behind a stale
+            :data:`UNBOUND_SWEEP_ARCHIVE_REASON` marker that a later
+            first host bind could misread as "the sweep archived
+            this."
         :returns: The updated :class:`Conversation`, or ``None``
             if the conversation does not exist.
         """
@@ -1074,6 +1097,77 @@ class ConversationStore(ABC):
         ...
 
     @abstractmethod
+    def list_stale_unbound_conversations(
+        self,
+        older_than: int,
+        limit: int = 500,
+    ) -> list[Conversation]:
+        """
+        Return orphan unbound sessions eligible for TTL archival.
+
+        A session is unbound when both ``host_id`` and ``runner_id``
+        are ``None`` — the same predicate the late host-bind path in
+        ``update_session`` (PATCH /v1/sessions/{id}) checks before
+        accepting a create-then-bind. This query is the read half of
+        the background sweep that archives sessions which sat unbound
+        past the configured TTL without ever receiving that bind (or
+        any other event): see
+        :func:`omnicraft.server.server_config.unbound_session_ttl_hours`.
+
+        :param older_than: Unix epoch seconds; only conversations
+            whose ``updated_at`` is strictly before this are
+            returned. ``updated_at`` is bumped on every item append,
+            so this doubles as "no events since".
+        :param limit: Maximum rows to return, bounding one sweep
+            tick's work.
+        :returns: Non-archived, unbound :class:`Conversation`
+            entities of ``kind="default"`` with ``agent_id`` set
+            (i.e. sessions created via ``POST /v1/sessions``),
+            oldest ``updated_at`` first.
+        """
+        ...
+
+    @abstractmethod
+    def archive_if_still_stale_unbound(
+        self,
+        conversation_id: str,
+        older_than: int,
+    ) -> bool:
+        """
+        Atomically archive one session, but only if it is still stale
+        and unbound at write time.
+
+        Closes the TOCTOU window between
+        :meth:`list_stale_unbound_conversations`'s read and the
+        sweep's write: a host bind, runner bind, or item append that
+        lands on the row *after* it was selected but *before* this
+        call must make the write a no-op, not archive a session that
+        just became legitimate. Implemented as a single
+        ``UPDATE ... WHERE`` that re-checks ``host_id IS NULL``,
+        ``runner_id IS NULL``, ``archived = false``, and
+        ``updated_at < older_than`` in the same statement — mirrors
+        the ``UPDATE ... WHERE runner_id IS NULL`` idiom
+        :meth:`set_runner_id` uses to close its own bind race.
+
+        Also stamps ``archived_reason`` with
+        :data:`UNBOUND_SWEEP_ARCHIVE_REASON` in the same atomic
+        write — the only place in the codebase that ever writes
+        this value. :meth:`set_host_id` reads it back to tell a
+        sweep archive apart from a manual one before auto-unarchiving
+        on a first bind.
+
+        :param conversation_id: Session/conversation identifier,
+            e.g. ``"conv_abc123"``.
+        :param older_than: The same cutoff passed to
+            :meth:`list_stale_unbound_conversations` for this sweep
+            tick — Unix epoch seconds.
+        :returns: ``True`` if this call archived the row; ``False``
+            if the row no longer matched (already bound, already
+            archived, or touched since selection) or doesn't exist.
+        """
+        ...
+
+    @abstractmethod
     def set_host_id(
         self,
         conversation_id: str,
@@ -1087,6 +1181,38 @@ class ConversationStore(ABC):
         Used when the server asks a host to spawn a runner for
         an existing session. Last-write-wins semantics (like
         :meth:`replace_runner_id`).
+
+        Auto-unarchive: clears ``archived`` (and ``archived_reason``)
+        only when BOTH hold:
+
+        - this is a *first* bind — the row's ``host_id`` was ``NULL``
+          before this call (the create-then-bind late-bind path); AND
+        - ``archived_reason == UNBOUND_SWEEP_ARCHIVE_REASON`` — the
+          row's current archived state was set by the unbound-
+          session-TTL sweep's :meth:`archive_if_still_stale_unbound`,
+          not by a human.
+
+        Either condition failing leaves ``archived`` exactly as it
+        was. This matters because the sweep marker alone isn't
+        enough: a row can have ``host_id IS NULL`` (satisfying "first
+        bind") while carrying ``runner_id`` set, a non-default
+        ``kind``, or simply having been archived by hand while
+        unbound — none of those could ever have been archived *by
+        the sweep* (:meth:`archive_if_still_stale_unbound`'s own
+        ``WHERE`` clause rules them out), so without the marker check
+        a first bind on any of them would wrongly resurrect a session
+        someone archived on purpose. A host *replacement* on an
+        already-bound row (``host_id`` was already set) is excluded
+        by the first condition alone and never touches ``archived``.
+
+        Both conditions and the ``host_id`` write happen in a single
+        ``UPDATE`` statement — implementations must evaluate the
+        predicate against the row's state at write time (e.g. a SQL
+        ``CASE`` over the target row), not via a separate read the
+        caller mutates from. A read-then-write split would let a
+        concurrent :meth:`update_conversation` archive-state change
+        land between the read and the write and get silently
+        overwritten by a decision made against stale data.
 
         :param conversation_id: Session/conversation identifier,
             e.g. ``"conv_abc123"``.

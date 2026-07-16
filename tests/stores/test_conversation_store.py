@@ -274,6 +274,205 @@ def test_update_archived_bumps_updated_at(
     )
 
 
+# ── list_stale_unbound_conversations ─────────────────
+
+
+def test_list_stale_unbound_conversations_returns_orphan_past_ttl(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unbound session with no events past the cutoff is returned."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_orphan")
+
+    stale = conversation_store.list_stale_unbound_conversations(older_than=2000)
+    assert [c.id for c in stale] == [conv.id]
+
+
+def test_list_stale_unbound_conversations_excludes_within_ttl(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session created inside the TTL window is left alone."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conversation_store.create_conversation(agent_id="ag_recent")
+
+    # older_than == updated_at is not "strictly before" — still inside the window.
+    stale = conversation_store.list_stale_unbound_conversations(older_than=1000)
+    assert stale == []
+
+
+def test_list_stale_unbound_conversations_excludes_host_bound_session(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session that completed create-then-bind (host_id set) is never swept."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_bound")
+    conversation_store.set_host_id(conv.id, "host_a", workspace="/tmp/ws")
+
+    stale = conversation_store.list_stale_unbound_conversations(older_than=2000)
+    assert stale == []
+
+
+def test_list_stale_unbound_conversations_excludes_runner_bound_session(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session with only a runner_id (no host_id) is also excluded."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_runner")
+    conversation_store.set_runner_id(conv.id, "runner_a")
+
+    stale = conversation_store.list_stale_unbound_conversations(older_than=2000)
+    assert stale == []
+
+
+def test_list_stale_unbound_conversations_excludes_already_archived(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A session already archived isn't re-surfaced by the sweep query."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_archived")
+    conversation_store.update_conversation(conv.id, archived=True)
+
+    stale = conversation_store.list_stale_unbound_conversations(older_than=2000)
+    assert stale == []
+
+
+def test_list_stale_unbound_conversations_excludes_no_agent_id(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Legacy rows with no agent binding aren't POST /v1/sessions orphans."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conversation_store.create_conversation()  # agent_id=None
+
+    stale = conversation_store.list_stale_unbound_conversations(older_than=2000)
+    assert stale == []
+
+
+# ── archive_if_still_stale_unbound ───────────────────
+
+
+def test_archive_if_still_stale_unbound_archives_matching_row(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A row that still matches the unbound/stale predicate is archived."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_archive_match")
+
+    archived = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=2000)
+    assert archived is True
+
+    fetched = conversation_store.get_conversation(conv.id)
+    assert fetched is not None
+    assert fetched.archived is True
+
+
+def test_archive_if_still_stale_unbound_skips_within_ttl(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A row still inside the TTL window (updated_at not < cutoff) is skipped."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_archive_recent")
+
+    archived = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=1000)
+    assert archived is False
+    assert conversation_store.get_conversation(conv.id).archived is False
+
+
+def test_archive_if_still_stale_unbound_skips_host_bound_row(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The TOCTOU guard: a row bound after selection is not archived."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_archive_bound")
+    conversation_store.set_host_id(conv.id, "host_a", workspace="/tmp/ws")
+
+    archived = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=2000)
+    assert archived is False
+    fetched = conversation_store.get_conversation(conv.id)
+    assert fetched is not None
+    assert fetched.archived is False
+    assert fetched.host_id == "host_a"
+
+
+def test_archive_if_still_stale_unbound_skips_runner_bound_row(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A row bound to a runner (no host_id) is also skipped."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_archive_runner")
+    conversation_store.set_runner_id(conv.id, "runner_a")
+
+    archived = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=2000)
+    assert archived is False
+    assert conversation_store.get_conversation(conv.id).archived is False
+
+
+def test_archive_if_still_stale_unbound_skips_already_archived_row(
+    conversation_store: SqlAlchemyConversationStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A row already archived returns False rather than re-archiving (idempotent)."""
+    monkeypatch.setattr(
+        "omnicraft.stores.conversation_store.sqlalchemy_store.now_epoch",
+        lambda: 1000,
+    )
+    conv = conversation_store.create_conversation(agent_id="ag_archive_twice")
+    first = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=2000)
+    assert first is True
+
+    second = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=2000)
+    assert second is False
+
+
+def test_archive_if_still_stale_unbound_missing_conversation_returns_false(
+    conversation_store: SqlAlchemyConversationStore,
+) -> None:
+    """A nonexistent row affects zero rows, so the call reports False, not an error."""
+    archived = conversation_store.archive_if_still_stale_unbound(
+        "conv_nonexistent", older_than=2000
+    )
+    assert archived is False
+
+
 # ── Append & list items ──────────────────────────────
 
 
@@ -2324,6 +2523,81 @@ def test_set_host_id(
     assert fetched is not None
     assert fetched.host_id == "host_def456"
     assert fetched.workspace == "/Users/corey/projects/myapp"
+
+
+def test_set_host_id_clears_archived_on_first_bind_of_sweep_archived_row(
+    conversation_store: SqlAlchemyConversationStore,
+    db_uri: str,
+) -> None:
+    """
+    A *first* host bind clears ``archived`` — but only for a row the
+    unbound-session-TTL sweep itself archived (via
+    ``archive_if_still_stale_unbound``, which stamps the sweep's
+    provenance marker in the same write). Binding a host is the
+    caller actively resuming the session; without this, a
+    successfully re-bound orphan would stay hidden from the default
+    session listing despite being live again.
+    """
+    _register_host(db_uri, "host_unarchive")
+    conv = conversation_store.create_conversation(
+        agent_id="ag_archived_then_bound",
+        workspace="/Users/corey/projects/myapp",
+    )
+    # The real sweep write, not a manual archive — a cutoff far in the
+    # future guarantees the row's real updated_at is "stale" for it,
+    # with no need to freeze the clock.
+    archived = conversation_store.archive_if_still_stale_unbound(conv.id, older_than=9_999_999_999)
+    assert archived is True
+    assert conversation_store.get_conversation(conv.id).archived is True
+
+    updated = conversation_store.set_host_id(conv.id, "host_unarchive")
+    assert updated.archived is False
+
+    fetched = conversation_store.get_conversation(conv.id)
+    assert fetched is not None
+    assert fetched.archived is False
+    assert fetched.archived_reason is None
+    assert fetched.host_id == "host_unarchive"
+
+
+def test_set_host_id_leaves_archived_on_host_replacement(
+    conversation_store: SqlAlchemyConversationStore,
+    db_uri: str,
+) -> None:
+    """
+    A host *replacement* on an already-bound row never touches ``archived``.
+
+    ``archived`` carries no provenance — it can't tell sweep archival
+    (only ever applied to unbound orphans) from an admin intentionally
+    archiving an already-bound, in-use session for an unrelated
+    reason. Changing that session's host later must not silently
+    resurrect it.
+    """
+    _register_host(db_uri, "host_original")
+    _register_host(db_uri, "host_replacement")
+    conv = conversation_store.create_conversation(
+        agent_id="ag_intentionally_archived",
+        workspace="/Users/corey/projects/myapp",
+    )
+    # First bind: host_id transitions NULL -> host_original.
+    conversation_store.set_host_id(conv.id, "host_original")
+    # An admin archives this already-bound session on purpose.
+    conversation_store.update_conversation(conv.id, archived=True)
+    assert conversation_store.get_conversation(conv.id).archived is True
+
+    # Host replacement: host_id was already set, so this is not a
+    # first bind and must not clear archived.
+    updated = conversation_store.set_host_id(conv.id, "host_replacement")
+    assert updated.host_id == "host_replacement"
+    assert updated.archived is True, (
+        "replacing the host of an intentionally-archived, already-bound "
+        "session must not resurrect it"
+    )
+
+    fetched = conversation_store.get_conversation(conv.id)
+    assert fetched is not None
+    assert fetched.archived is True
+    assert fetched.host_id == "host_replacement"
 
 
 def test_set_host_id_missing_conversation_raises(

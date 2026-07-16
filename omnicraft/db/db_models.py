@@ -426,6 +426,12 @@ class SqlConversation(Base):
         listing (and the sidebar); the listing returns them only when
         ``include_archived=True``. ``False`` for normal sessions.
         Reversible via ``PATCH /v1/sessions/{id}``.
+    :param archived_reason: Provenance for the current ``archived``
+        state. ``NULL`` for a manual archive or a non-archived row;
+        set to ``omnicraft.stores.conversation_store.UNBOUND_SWEEP_ARCHIVE_REASON``
+        only by the unbound-session-TTL sweep's atomic archive write,
+        and read back by ``set_host_id`` to gate auto-unarchive on a
+        first host bind. See ``entities.Conversation.archived_reason``.
     """
 
     __tablename__ = "conversations"
@@ -531,6 +537,13 @@ class SqlConversation(Base):
     archived: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default=false()
     )
+    # Provenance for the current `archived` state — NULL for a manual
+    # archive or a non-archived row. Only the unbound-session-TTL sweep's
+    # atomic archive write sets this (to UNBOUND_SWEEP_ARCHIVE_REASON in
+    # omnicraft.stores.conversation_store), and only set_host_id reads it,
+    # to gate auto-unarchive on a first host bind to sessions the sweep
+    # itself archived — never a session archived by a human on purpose.
+    archived_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
     __table_args__ = (
         CheckConstraint("kind IN (1, 2)", name="ck_conversations_kind"),

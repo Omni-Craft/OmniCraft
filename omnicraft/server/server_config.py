@@ -142,3 +142,24 @@ def copy_total_bytes_limit() -> int:
     from omnicraft.runtime.content_resolver import MAX_COPY_TOTAL_BYTES
 
     return _config_positive_int("copy_max_total_bytes", MAX_COPY_TOTAL_BYTES)
+
+
+# Default TTL for the unbound-session sweep: generous because a
+# legitimate create-then-bind (POST /v1/sessions without host_id, later
+# bound via PATCH) can sit idle for a while before the caller finishes
+# picking a host — see designs around late host-bind in
+# omnicraft/server/routes/sessions.py's update_session.
+_DEFAULT_UNBOUND_SESSION_TTL_HOURS = 24
+
+
+def unbound_session_ttl_hours() -> int:
+    """Hours an unbound session (no ``host_id``, no ``runner_id``) may sit
+    with no events before the background sweep archives it.
+
+    Config key ``unbound_session_ttl_hours``; defaults to
+    :data:`_DEFAULT_UNBOUND_SESSION_TTL_HOURS`. Archival is reversible —
+    the session shows up under ``include_archived=true`` and can be
+    unarchived via ``PATCH /v1/sessions/{id}`` like any other archived
+    session.
+    """
+    return _config_positive_int("unbound_session_ttl_hours", _DEFAULT_UNBOUND_SESSION_TTL_HOURS)

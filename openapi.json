@@ -193,6 +193,108 @@
         "title": "Body_upload_session_file_v1_sessions__session_id__resources_files_post",
         "type": "object"
       },
+      "BrowserActionRequest": {
+        "description": "Body for `POST /sessions/{id}/browser/actions` (runner-issued).",
+        "properties": {
+          "action": {
+            "title": "Action",
+            "type": "string"
+          },
+          "args": {
+            "additionalProperties": true,
+            "title": "Args",
+            "type": "object"
+          },
+          "timeout_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timeout S"
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "title": "BrowserActionRequest",
+        "type": "object"
+      },
+      "BrowserActionRequestEvent": {
+        "description": "An agent asked the embedded browser pane to run an action.\n\nEmitted on the session stream by the browser bridge\n(`omnicraft/server/routes/browser_actions.py`). Electron renderers\nrace to CLAIM the action (`POST .../browser/action_claim/{id}`);\nthe winner drives the WebContentsView and POSTs the result back.\nNon-Electron clients ignore it.",
+        "properties": {
+          "action": {
+            "description": "The bare verb, e.g. `\"navigate\"` or `\"click\"`.",
+            "title": "Action",
+            "type": "string"
+          },
+          "action_id": {
+            "description": "Server-minted id echoed on claim + result, e.g. `\"bact_0a1b2c\"`.",
+            "title": "Action Id",
+            "type": "string"
+          },
+          "args": {
+            "additionalProperties": true,
+            "description": "Action-specific arguments, e.g. `{\"url\": \"http://\u2026\"}`.",
+            "title": "Args",
+            "type": "object"
+          },
+          "conversation_id": {
+            "description": "The session whose browser pane is targeted, e.g. `\"conv_abc123\"`.",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "sequence_number": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Sequence Number"
+          },
+          "type": {
+            "const": "browser.action_request",
+            "default": "browser.action_request",
+            "description": "Always `\"browser.action_request\"`.",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "conversation_id",
+          "action_id",
+          "action"
+        ],
+        "title": "BrowserActionRequestEvent",
+        "type": "object"
+      },
+      "BrowserActionResultBody": {
+        "description": "Body the relay POSTs back with its claim token.",
+        "properties": {
+          "claim_token": {
+            "title": "Claim Token",
+            "type": "string"
+          },
+          "result": {
+            "additionalProperties": true,
+            "title": "Result",
+            "type": "object"
+          }
+        },
+        "required": [
+          "result",
+          "claim_token"
+        ],
+        "title": "BrowserActionResultBody",
+        "type": "object"
+      },
       "CancelledEvent": {
         "description": "Terminal event for a turn cancelled before completion.",
         "properties": {
@@ -2948,6 +3050,7 @@
       "ServerStreamEvent": {
         "discriminator": {
           "mapping": {
+            "browser.action_request": "#/components/schemas/BrowserActionRequestEvent",
             "response.cancelled": "#/components/schemas/CancelledEvent",
             "response.client_task.cancel": "#/components/schemas/ClientTaskCancelEvent",
             "response.compaction.completed": "#/components/schemas/CompactionCompletedEvent",
@@ -3052,6 +3155,9 @@
           },
           {
             "$ref": "#/components/schemas/SessionPresenceEvent"
+          },
+          {
+            "$ref": "#/components/schemas/BrowserActionRequestEvent"
           },
           {
             "$ref": "#/components/schemas/SessionResourceCreatedEvent"
@@ -9114,6 +9220,179 @@
         "summary": "Post Arena Merge",
         "tags": [
           "sessions"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/browser/action_claim/{action_id}": {
+      "post": {
+        "description": "Atomic check-and-set: exactly one renderer wins the action.",
+        "operationId": "claim_action_v1_sessions__session_id__browser_action_claim__action_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action_id",
+            "required": true,
+            "schema": {
+              "title": "Action Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Claim Action V1 Sessions  Session Id  Browser Action Claim  Action Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Claim Action",
+        "tags": [
+          "browser"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/browser/action_result/{action_id}": {
+      "post": {
+        "description": "Resolve the parked Future with the winning renderer's result.",
+        "operationId": "post_result_v1_sessions__session_id__browser_action_result__action_id__post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "action_id",
+            "required": true,
+            "schema": {
+              "title": "Action Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserActionResultBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Result V1 Sessions  Session Id  Browser Action Result  Action Id  Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Result",
+        "tags": [
+          "browser"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/browser/actions": {
+      "post": {
+        "description": "Mint an action, publish the SSE request, await the relay's result.",
+        "operationId": "run_action_v1_sessions__session_id__browser_actions_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BrowserActionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Action V1 Sessions  Session Id  Browser Actions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Run Action",
+        "tags": [
+          "browser"
         ]
       }
     },

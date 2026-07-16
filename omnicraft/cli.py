@@ -7850,7 +7850,11 @@ def host_stop(
     """
     if server is None:
         server = _host_group_option(ctx, "server")
-    records = _selected_daemon_records(server=server, all_targets=all_targets, default_all=False)
+    # No selector means "stop everything `host status` lists": status defaults
+    # to all known daemons, so stop must too. Defaulting to the config/local
+    # target instead would miss a live daemon registered under a different
+    # target (e.g. a local daemon when config points at a remote server).
+    records = _selected_daemon_records(server=server, all_targets=all_targets, default_all=True)
     if not records:
         click.echo("Nenhum daemon host correspondente encontrado.")
         return

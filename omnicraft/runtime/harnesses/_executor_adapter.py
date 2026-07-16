@@ -51,6 +51,7 @@ from omnicraft.inner.executor import (
     ExecutorConfig,
     ExecutorError,
     ExecutorEvent,
+    KeepAlive,
     Message,
     ReasoningChunk,
     TextChunk,
@@ -407,6 +408,15 @@ class ExecutorAdapter(HarnessApp):
                             agent_span = None
                         await executor.interrupt_session(self._session_key)
                         return
+                    if isinstance(event, KeepAlive):
+                        # Liveness-only: the executor is waiting on the
+                        # provider (request sent / stream opened / retry
+                        # started) with no output yet. Reset the idle
+                        # watchdog so a slow-but-alive turn isn't killed,
+                        # but emit nothing — there is no user-visible
+                        # payload to translate.
+                        ctx.notify_activity()
+                        continue
                     # --- Tracing: emit spans per event ---
                     if tctx is not None:
                         if isinstance(event, ToolCallRequest):

@@ -59,6 +59,7 @@ from .executor import (
     ExecutorConfig,
     ExecutorError,
     ExecutorEvent,
+    KeepAlive,
     Message,
     ReasoningChunk,
     TextChunk,
@@ -265,6 +266,10 @@ class _ResultMessageObj(Protocol):
 
     result: str | None
     usage: dict[str, Any] | None  # type: ignore[explicit-any]
+    is_error: bool | None
+    subtype: str | None
+    api_error_status: int | None
+    errors: list[str] | None
 
 
 class _SystemMessageObj(Protocol):
@@ -327,6 +332,43 @@ _QUERY_START_TIMEOUT_SECONDS = 30.0
 # but keep waiting — a long-running native tool can legitimately block
 # the stream far longer than any fixed deadline.
 _STREAM_IDLE_WARN_SECONDS = 600.0
+
+# Substrings that mark an API failure as a context-window overflow.
+# When present, the surfaced error carries an extra hint so the user
+# understands the session history — not a transient fault — is the cause.
+_CONTEXT_OVERFLOW_MARKERS = ("prompt is too long", "context length", "too many tokens")
+
+
+def _result_error_message(result_msg: _ResultMessageObj) -> str:
+    """
+    Build a legible executor error from a failed ``ResultMessage``.
+
+    The Claude CLI reports a failed turn as a ``ResultMessage`` with
+    ``is_error`` set rather than by raising, so this is the only place a
+    context overflow ("Prompt is too long", ``api_error_status=400``) or a
+    mid-turn API failure becomes visible. A context overflow gets an extra
+    hint pointing at the oversized session history.
+
+    :param result_msg: The failed result message.
+    :returns: A human-readable error string for :class:`ExecutorError`.
+    """
+    detail = (result_msg.result or "").strip()
+    errors = getattr(result_msg, "errors", None)
+    if not detail and isinstance(errors, list) and errors:
+        detail = "; ".join(str(e) for e in errors if e).strip()
+    status = getattr(result_msg, "api_error_status", None)
+    subtype = getattr(result_msg, "subtype", None)
+    if not detail:
+        detail = f"CLI turn failed (subtype={subtype!r}, api_error_status={status})"
+    probe = f"{detail} {status or ''}".lower()
+    if any(marker in probe for marker in _CONTEXT_OVERFLOW_MARKERS):
+        return (
+            "Claude SDK context overflow: the conversation history exceeds the "
+            f"model's context window ({detail}). The session is too large to "
+            "continue as-is — compact or summarize the history before retrying."
+        )
+    return f"Claude SDK turn failed: {detail}"
+
 
 # ── Multimodal content block conversion ──────────────────────
 
@@ -2171,6 +2213,12 @@ class ClaudeSDKExecutor(Executor):
                 raise TimeoutError(
                     f"Claude SDK query start timed out after {int(_QUERY_START_TIMEOUT_SECONDS)}s"
                 ) from exc
+            # Request is on the wire and the stream is open — signal
+            # liveness so the harness idle watchdog gives the first
+            # response a fresh window. In a large session the model can
+            # take minutes to emit its first token; without this the
+            # watchdog reads that legitimate wait as "no progress".
+            yield KeepAlive(reason="request_sent")
             message_stream = client.receive_response()
             try:
                 while True:
@@ -2382,6 +2430,19 @@ class ClaudeSDKExecutor(Executor):
                         claude_session_id = getattr(result_msg, "session_id", None)
                         if not response_text and result_msg.result:
                             response_text = result_msg.result
+                        # A ``ResultMessage`` with ``is_error`` means the CLI's
+                        # whole turn failed (a context overflow — "Prompt is too
+                        # long" — surfaces here as ``is_error`` +
+                        # ``api_error_status=400``, NOT as a raised exception).
+                        # Without this, the error text landed in
+                        # ``response_text`` and a broken turn shipped as a normal
+                        # ``TurnComplete`` — the session then wedged, re-sending
+                        # the same over-long history every turn with the failure
+                        # silently swallowed. Surface it as a terminal error so
+                        # the session shows a legible cause.
+                        if getattr(result_msg, "is_error", None):
+                            terminal_error = _result_error_message(result_msg)
+                            break
                         raw_usage = getattr(result_msg, "usage", None)
                         if isinstance(raw_usage, dict) and raw_usage:
                             # ``ResultMessage.usage`` is CUMULATIVE across every
@@ -2444,6 +2505,12 @@ class ClaudeSDKExecutor(Executor):
                             )
                             system_diagnostics.append(diagnostic)
                             logger.warning(diagnostic)
+                            # A retry is real SDK activity: the turn is
+                            # backing off and re-sending, not wedged.
+                            # Signal liveness so the harness idle watchdog
+                            # doesn't guillotine a turn that is patiently
+                            # retrying an overloaded/rate-limited provider.
+                            yield KeepAlive(reason="api_retry")
 
                             if (
                                 error_status in {401, 403}

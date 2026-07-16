@@ -446,6 +446,23 @@ class TurnContext:
             self._reset_idle_watchdog()
         self._event_queue.put_nowait(event)
 
+    def notify_activity(self) -> None:
+        """
+        Push the idle-watchdog deadline forward WITHOUT emitting an event.
+
+        For an executor legitimately waiting on the provider (first
+        response in a large session, a backing-off API retry), no
+        user-visible event flows for a while, so :meth:`emit` never fires
+        and the idle watchdog would kill a healthy turn. This lets the
+        executor signal liveness on discrete SDK milestones — request
+        sent, stream opened, retry started — so the deadline resets on
+        real activity, not only on token arrival. It is deliberately NOT
+        a keep-alive pulse: between two such milestones the watchdog still
+        fires, so a genuinely wedged subprocess is still caught.
+        """
+        if self._reset_idle_watchdog is not None:
+            self._reset_idle_watchdog()
+
     async def dispatch_tool(self, call_id: str, name: str, arguments: str, agent: str) -> str:
         """
         Emit a server-dispatched tool call and park until the result.

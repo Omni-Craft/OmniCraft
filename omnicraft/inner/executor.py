@@ -131,6 +131,24 @@ class ReasoningChunk(ExecutorEvent):
 
 
 @dataclass
+class KeepAlive(ExecutorEvent):
+    """Liveness signal: the executor is active but has no output yet.
+
+    Emitted while an executor is legitimately waiting on the provider —
+    the request was sent, the response stream opened, or an API retry
+    started — before any token arrives. It carries no user-visible
+    payload; the harness scaffold treats it as turn progress so its idle
+    watchdog doesn't kill a turn that is slow-but-alive (the first
+    response in a large session, or a backing-off retry).
+
+    :param reason: A short human-readable tag for logs, e.g.
+        ``"request_sent"`` or ``"api_retry"``.
+    """
+
+    reason: str = ""
+
+
+@dataclass
 class ToolCallRequest(ExecutorEvent):
     """The LLM wants to call a tool.
 

@@ -397,6 +397,34 @@ class _BusyProgressHarness(HarnessApp):
             await asyncio.sleep(self._tick_seconds)
 
 
+class _ActivityKeepAliveHarness(HarnessApp):
+    """
+    Emits NO visible events for longer than the watchdog window, but
+    calls ``ctx.notify_activity()`` on a steady sub-second cadence, then
+    completes.
+
+    Exercises the SDK-liveness path of the idle watchdog: an executor
+    legitimately waiting on the provider (a slow first response in a
+    large session, or a backing-off retry) produces no ``emit`` but IS
+    alive. ``notify_activity`` must reset the idle deadline so the turn
+    reaches ``response.completed`` instead of being killed as wedged —
+    while emitting nothing to the user.
+
+    Cadence: an activity ping every 0.1s for ~3s (30 pings) against the
+    2s watchdog the fixture sets — the ~3s duration comfortably exceeds
+    the window, so a turn that ISN'T reset would fail at 2s.
+    """
+
+    _tick_seconds: float = 0.1
+    _max_ticks: int = 30
+
+    async def run_turn(self, request: CreateResponseRequest, ctx: TurnContext) -> None:
+        del request
+        for _ in range(self._max_ticks):
+            ctx.notify_activity()
+            await asyncio.sleep(self._tick_seconds)
+
+
 class _WedgedFastHeartbeatHarness(HarnessApp):
     """
     Hangs forever in ``run_turn`` while emitting fast heartbeats.
@@ -429,6 +457,7 @@ _FIXTURES: dict[str, type[HarnessApp]] = {
     "echo": _EchoHarness,
     "wedged": _WedgedHarness,
     "busy_progress": _BusyProgressHarness,
+    "activity_keepalive": _ActivityKeepAliveHarness,
     "wedged_fast_heartbeat": _WedgedFastHeartbeatHarness,
     "usage": _UsageHarness,
     "tool_dispatch": _ToolDispatchHarness,

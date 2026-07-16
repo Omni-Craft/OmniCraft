@@ -576,3 +576,59 @@ def test_host_stop_treats_zombie_daemon_as_dead(
         "stale daemon record survived stop — a subsequent host start "
         "would be blocked by an 'already running' conflict"
     )
+
+
+def test_host_stop_no_selector_stops_local_daemon_despite_remote_config(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    Verify ``host stop`` (no selector) stops what ``host status`` lists.
+
+    ``host status`` with no selector lists every known daemon; ``host
+    stop`` must stop the same set. When config points at a remote server
+    but the live daemon is local, defaulting stop to the config target
+    misses it — the daemon shown by ``status`` reports "Nenhum daemon host
+    correspondente encontrado" from ``stop`` and never dies.
+    """
+    (tmp_path / "config.yaml").write_text("server: https://from-config.example.com\n")
+    monkeypatch.setenv("OMNICRAFT_CONFIG_HOME", str(tmp_path))
+    monkeypatch.setattr("omnicraft.cli._HOST_PID_PATH", tmp_path / "host.pid")
+
+    # A reaped child pid is reliably dead, so _terminate_daemon takes the
+    # "already gone" path and just deletes the record — no real process is
+    # signalled by the test.
+    dead_pid = os.fork()
+    if dead_pid == 0:
+        os._exit(0)
+    os.waitpid(dead_pid, 0)
+
+    daemons_dir = tmp_path / "daemons"
+    daemons_dir.mkdir()
+    record_path = daemons_dir / (hashlib.sha256(b"local").hexdigest()[:16] + ".json")
+    record_path.write_text(
+        json.dumps(
+            {
+                "pid": dead_pid,
+                "target": "local",
+                "mode": "local",
+                "server_url": None,
+                "log_path": None,
+                "started_at": 1781200000,
+                "host_id": "host_local_test",
+                "resolved_server_url": None,
+                "config_sig": None,
+            }
+        )
+    )
+
+    runner = CliRunner()
+    # No --server / --all: the bug is the no-selector default missing the
+    # local daemon. --daemon-only skips the session-stop HTTP calls.
+    result = runner.invoke(cli, ["host", "stop", "--daemon-only"])
+
+    assert result.exit_code == 0, result.output
+    assert "Nenhum daemon host correspondente encontrado" not in result.output, (
+        "host stop missed the local daemon that host status lists"
+    )
+    assert not record_path.exists(), "the local daemon record was not stopped"

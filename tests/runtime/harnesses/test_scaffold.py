@@ -358,6 +358,13 @@ def use_busy_progress(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
+def use_activity_keepalive(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Spawn the activity-keepalive harness; 2s idle watchdog (read at import)."""
+    monkeypatch.setenv("HARNESS_TEST_FIXTURE", "activity_keepalive")
+    monkeypatch.setenv("HARNESS_TURN_TIMEOUT_S", "2")
+
+
+@pytest.fixture
 def use_wedged_fast_heartbeat(monkeypatch: pytest.MonkeyPatch) -> None:
     """Spawn the wedged-with-fast-heartbeats harness; 2s idle watchdog."""
     monkeypatch.setenv("HARNESS_TEST_FIXTURE", "wedged_fast_heartbeat")
@@ -676,6 +683,49 @@ async def test_per_turn_watchdog_allows_active_turn_past_window(
     assert delta_count >= 25, (
         f"Expected ~30 progress deltas from the full cadence; got "
         f"{delta_count}. A low count means the turn was truncated."
+    )
+
+
+async def test_per_turn_watchdog_reset_by_notify_activity(
+    use_activity_keepalive: None,
+    manager: HarnessProcessManager,
+) -> None:
+    """
+    A turn that emits nothing but signals SDK liveness must survive the
+    idle watchdog.
+
+    ``notify_activity`` is how an executor waiting on the provider (a slow
+    first response in a large session, or a backing-off API retry) tells
+    the scaffold it is alive without emitting a user-visible event. The
+    ``activity_keepalive`` harness pings ``notify_activity`` every 0.1s for
+    ~3s against a 2s watchdog while emitting NO deltas. Before the fix
+    (watchdog reset only on ``emit``) this turn was killed at 2s as
+    "made no progress"; now it must complete.
+    """
+    conv_id = "conv_activity_keepalive"
+    client = await manager.get_client(conv_id, _TEST_HARNESS_NAME)
+    body = {"type": "message", "role": "user", "model": "test-agent", "content": []}
+    events: list[_ParsedSSEEvent] = []
+    # The ~3s turn must outlast the 2s watchdog; 20s caps a regression
+    # (an unreset watchdog still fails fast at 2s).
+    async with asyncio.timeout(20):
+        async with client.stream("POST", f"/v1/sessions/{conv_id}/events", json=body) as response:
+            async for event in _stream_iter(response):
+                events.append(event)
+
+    event_types = [e.event for e in events]
+    # response.completed proves notify_activity reset the idle deadline
+    # even though no output event ever flowed. response.failed means the
+    # watchdog fired — the liveness signal was ignored (the bug).
+    assert event_types[-1] == "response.completed", (
+        f"A turn that only calls notify_activity must complete, not be "
+        f"killed by the idle watchdog; got terminal {event_types[-1]!r} "
+        f"(full: {event_types!r})."
+    )
+    # No text deltas: the turn was liveness-only. If any appeared the
+    # fixture would be resetting via emit and wouldn't exercise the path.
+    assert "response.output_text.delta" not in event_types, (
+        f"Expected a liveness-only turn (no deltas); got {event_types!r}."
     )
 
 

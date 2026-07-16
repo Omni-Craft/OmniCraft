@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from omnicraft.inner.claude_sdk_executor import _to_anthropic_content_blocks
 from omnicraft.inner.executor import (
     ExecutorError,
+    KeepAlive,
     TextChunk,
     ToolCallComplete,
     ToolCallRequest,
@@ -1120,7 +1121,10 @@ class TestSystemMessages(unittest.TestCase):
                         "",
                     )
                 ]
-            self.assertEqual(len(events), 1)
+            # Liveness KeepAlive events are noise here; the turn produced
+            # exactly one real (content) event.
+            content = [e for e in events if not isinstance(e, KeepAlive)]
+            self.assertEqual(len(content), 1)
             # The gateway path routes the CLI through the local shim
             # (which restores thinking.display); record its target and
             # shut it down inside the loop that started it.
@@ -1216,13 +1220,16 @@ class TestSystemMessages(unittest.TestCase):
                         "",
                     )
                 ]
-            self.assertEqual(len(events), 1)
-            self.assertIsInstance(events[0], ExecutorError)
-            self.assertIn("authentication failed", events[0].message)
-            self.assertIn("401", events[0].message)
+            # An api_retry emits a liveness KeepAlive before the turn
+            # resolves; filter it and assert on the terminal error.
+            content = [e for e in events if not isinstance(e, KeepAlive)]
+            self.assertEqual(len(content), 1)
+            self.assertIsInstance(content[0], ExecutorError)
+            self.assertIn("authentication failed", content[0].message)
+            self.assertIn("401", content[0].message)
             # Non-gateway executor should suggest checking CLI login, not databrickscfg
-            self.assertIn("claude /status", events[0].message)
-            self.assertNotIn("databrickscfg", events[0].message)
+            self.assertIn("claude /status", content[0].message)
+            self.assertNotIn("databrickscfg", content[0].message)
 
         _run(_t())
 
@@ -1305,11 +1312,14 @@ class TestSystemMessages(unittest.TestCase):
                         "",
                     )
                 ]
-            self.assertEqual(len(events), 1)
-            self.assertIsInstance(events[0], ExecutorError)
-            self.assertIn("authentication failed", events[0].message)
+            # An api_retry emits a liveness KeepAlive before the turn
+            # resolves; filter it and assert on the terminal error.
+            content = [e for e in events if not isinstance(e, KeepAlive)]
+            self.assertEqual(len(content), 1)
+            self.assertIsInstance(content[0], ExecutorError)
+            self.assertIn("authentication failed", content[0].message)
             # Databricks gateway should mention databrickscfg
-            self.assertIn("databrickscfg", events[0].message)
+            self.assertIn("databrickscfg", content[0].message)
 
         _run(_t())
 
@@ -2027,6 +2037,185 @@ class TestStreamEventStreaming(unittest.TestCase):
             self.assertEqual(chunks[1].text, " world")
             self.assertIsInstance(events[-1], TurnComplete)
             self.assertEqual(events[-1].response, "Hello world")
+
+        _run(_t())
+
+    def test_error_result_message_yields_context_overflow_error(self):
+        """
+        A ``ResultMessage`` with ``is_error`` and a "Prompt is too long"
+        payload must surface as an :class:`ExecutorError`, NOT a silent
+        :class:`TurnComplete`.
+
+        The CLI reports a context overflow as a failed ``ResultMessage``
+        (``is_error=True``, ``api_error_status=400``) rather than by
+        raising. Before the fix the error text landed in the turn's
+        response and shipped as a normal completion, so the session
+        wedged — re-sending the same over-long history every turn with the
+        failure swallowed. The fix breaks the stream and yields a legible
+        context-overflow error instead.
+        """
+        from claude_agent_sdk.types import (
+            ClaudeAgentOptions as SDKClaudeAgentOptions,
+        )
+        from claude_agent_sdk.types import (
+            ResultMessage as SDKResultMessage,
+        )
+
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        class _Sentinel:
+            pass
+
+        class _FakeSDK:
+            AssistantMessage = _Sentinel
+            UserMessage = _Sentinel
+            SystemMessage = _Sentinel
+            StreamEvent = _Sentinel
+            ResultMessage = SDKResultMessage
+            ClaudeAgentOptions = SDKClaudeAgentOptions
+            messages = [
+                SDKResultMessage(
+                    subtype="error_during_execution",
+                    session_id="s1",
+                    result="API Error: 400 Prompt is too long",
+                    total_cost_usd=0.0,
+                    duration_ms=100,
+                    duration_api_ms=80,
+                    is_error=True,
+                    num_turns=1,
+                    api_error_status=400,
+                ),
+            ]
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def receive_response(self):
+                    for message in _FakeSDK.messages:
+                        yield message
+
+                async def disconnect(self):
+                    return None
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+                events = [
+                    e
+                    async for e in executor.run_turn(
+                        [{"role": "user", "content": "hi"}],
+                        [],
+                        "",
+                    )
+                ]
+            # The failed turn must NOT complete silently.
+            self.assertFalse(
+                any(isinstance(e, TurnComplete) for e in events),
+                "context overflow shipped as a TurnComplete — error swallowed",
+            )
+            errors = [e for e in events if isinstance(e, ExecutorError)]
+            self.assertEqual(len(errors), 1)
+            self.assertIn("context overflow", errors[0].message.lower())
+            self.assertIn("Prompt is too long", errors[0].message)
+
+        _run(_t())
+
+    def test_keepalive_emitted_before_first_token(self):
+        """
+        A turn must emit a ``KeepAlive`` once the request is on the wire,
+        BEFORE the first content token.
+
+        This is the SDK-liveness signal the harness idle watchdog needs:
+        in a large session the model can take minutes to emit its first
+        token, and without this the watchdog reads that legitimate wait as
+        "no progress" and kills a healthy turn (the parent of the 3
+        consecutive 240s-idle kills observed on a 146-message session).
+        """
+        from claude_agent_sdk.types import (
+            ClaudeAgentOptions as SDKClaudeAgentOptions,
+        )
+        from claude_agent_sdk.types import (
+            ResultMessage as SDKResultMessage,
+        )
+        from claude_agent_sdk.types import (
+            StreamEvent as SDKStreamEvent,
+        )
+
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        class _Sentinel:
+            pass
+
+        class _FakeSDK:
+            AssistantMessage = _Sentinel
+            UserMessage = _Sentinel
+            SystemMessage = _Sentinel
+            StreamEvent = SDKStreamEvent
+            ResultMessage = SDKResultMessage
+            ClaudeAgentOptions = SDKClaudeAgentOptions
+            messages = [
+                SDKStreamEvent(
+                    uuid="u1",
+                    session_id="s1",
+                    event={
+                        "type": "content_block_delta",
+                        "index": 0,
+                        "delta": {"type": "text_delta", "text": "hi"},
+                    },
+                ),
+                SDKResultMessage(
+                    subtype="result",
+                    session_id="s1",
+                    result="hi",
+                    total_cost_usd=0.0,
+                    duration_ms=1,
+                    duration_api_ms=1,
+                    is_error=False,
+                    num_turns=1,
+                ),
+            ]
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def receive_response(self):
+                    for message in _FakeSDK.messages:
+                        yield message
+
+                async def disconnect(self):
+                    return None
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+                events = [
+                    e
+                    async for e in executor.run_turn(
+                        [{"role": "user", "content": "hi"}],
+                        [],
+                        "",
+                    )
+                ]
+            keepalives = [e for e in events if isinstance(e, KeepAlive)]
+            self.assertTrue(keepalives, "no KeepAlive emitted — watchdog gets no liveness signal")
+            # The first KeepAlive must precede the first text token.
+            first_keepalive = next(i for i, e in enumerate(events) if isinstance(e, KeepAlive))
+            first_text = next(i for i, e in enumerate(events) if isinstance(e, TextChunk))
+            self.assertLess(first_keepalive, first_text)
 
         _run(_t())
 

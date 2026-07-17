@@ -1,7 +1,8 @@
 """S1: the harness ``/v1`` control channel is gated by a per-spawn bearer token.
 
 On Windows the harness IPC is a loopback-TCP listener reachable by any local
-process (POSIX uses a uid-isolated Unix socket), so ``process_manager`` mints a
+process (POSIX uses a Unix socket under a boot-validated owner-only parent), so
+``process_manager`` mints a
 per-spawn token, ships it to the harness via its private env, and presents it on
 every request. The scaffold rejects ``/v1`` requests whose bearer token does not
 match. The gate is keyed on ``app.state.harness_auth_token`` so it is inert when

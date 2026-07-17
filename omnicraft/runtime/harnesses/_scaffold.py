@@ -905,8 +905,9 @@ class HarnessApp:
         """
         Authenticate a ``/v1`` request with the per-spawn bearer token (S1).
 
-        The harness control channel is a uid-isolated Unix socket on POSIX but a
-        loopback-TCP listener on Windows, where any local process can connect.
+        The harness control channel is a Unix socket under a boot-validated
+        owner-only parent on POSIX but a loopback-TCP listener on Windows,
+        where any local process can connect.
         The ``/v1`` event endpoint starts turns, runs tools, and satisfies
         approval / policy verdicts, so it must not be reachable by an
         unauthenticated peer that merely learns the (non-secret)

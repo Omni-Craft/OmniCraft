@@ -28,6 +28,7 @@ import os
 import shutil
 import signal
 import socket
+import stat
 import sys
 import tempfile
 import time
@@ -44,6 +45,7 @@ from omnicraft.runtime.harnesses.process_manager import (
     HarnessProcessManager,
     NoLiveHarnessError,
     _default_tmp_parent,
+    _ensure_secure_socket_parent,
     _pid_alive,
     _pids_holding_socket,
     _posix_tmp_parent,
@@ -257,6 +259,113 @@ def test_longest_possible_socket_path_still_binds() -> None:
         if not parent_preexisted:
             with contextlib.suppress(OSError):
                 parent.rmdir()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="The /tmp socket-parent hijack is POSIX-only.",
+)
+async def test_start_rejects_symlinked_socket_parent(
+    tmp_path: Path,
+) -> None:
+    """Boot refuses a socket parent pre-created as a symlink.
+
+    A local peer can pre-create the predictable ``/tmp`` parent as a
+    symlink to a dir it controls; ``mkdir(exist_ok=True)`` would follow
+    it silently and land our sockets — and the POSIX-unauthenticated
+    harness control channel — under the peer's directory. ``start()``
+    must refuse instead. Behavioral guard: before the fix this raises
+    nothing (the symlink is followed); after, it raises ``RuntimeError``.
+    """
+    attacker_dir = tmp_path / "attacker"
+    attacker_dir.mkdir()
+    parent = tmp_path / "oc-parent"
+    parent.symlink_to(attacker_dir)
+
+    manager = HarnessProcessManager(tmp_parent=parent)
+    try:
+        with pytest.raises(RuntimeError, match="symlink"):
+            await manager.start()
+    finally:
+        await manager.shutdown()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Owner/mode checks are POSIX-only; Windows uses gettempdir().",
+)
+def test_secure_socket_parent_rejects_foreign_owner(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A pre-existing parent owned by another uid is rejected.
+
+    The ``st_uid`` mismatch is *simulated* via a patched ``os.lstat`` —
+    chown-ing a dir to another uid requires root, so the test cannot
+    create the real condition. The dir itself is real; only the
+    reported owner is forced to differ from ours.
+    """
+    parent = tmp_path / "oc-parent"
+    parent.mkdir(mode=0o700)
+
+    real_lstat = os.lstat
+
+    def fake_lstat(path: object, *args: object, **kwargs: object) -> os.stat_result:
+        info = real_lstat(path, *args, **kwargs)  # type: ignore[arg-type]
+        if os.fspath(path) == str(parent):
+            fields = list(info)
+            fields[stat.ST_UID] = info.st_uid + 4242  # a uid that isn't ours
+            return os.stat_result(fields)
+        return info
+
+    monkeypatch.setattr(os, "lstat", fake_lstat)
+
+    with pytest.raises(RuntimeError, match="owned by uid"):
+        _ensure_secure_socket_parent(parent)
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Owner/mode checks are POSIX-only; Windows uses gettempdir().",
+)
+def test_secure_socket_parent_rejects_group_accessible(
+    tmp_path: Path,
+) -> None:
+    """A pre-existing parent readable by group/other is rejected.
+
+    No simulation needed: the mode is a real property of a real dir.
+    A ``0755`` parent lets a co-tenant enumerate and connect to the
+    per-conversation sockets, so boot must refuse it.
+    """
+    parent = tmp_path / "oc-parent"
+    parent.mkdir(mode=0o700)
+    os.chmod(parent, 0o755)
+
+    with pytest.raises(RuntimeError, match="group/other-accessible"):
+        _ensure_secure_socket_parent(parent)
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Mode assertions are POSIX-only; Windows uses gettempdir().",
+)
+def test_secure_socket_parent_creates_fresh_then_revalidates(
+    tmp_path: Path,
+) -> None:
+    """A fresh parent is created ``0700``; a re-call validates and returns.
+
+    The second call exercises the ``EEXIST`` branch against a dir we
+    own at ``0700`` — the legitimate concurrent-same-uid case — and
+    must pass without raising.
+    """
+    parent = tmp_path / "oc-parent"
+
+    _ensure_secure_socket_parent(parent)
+    assert parent.is_dir()
+    assert stat.S_IMODE(parent.stat().st_mode) == 0o700
+
+    # Idempotent for the owner: an existing 0700 dir we own revalidates.
+    _ensure_secure_socket_parent(parent)
 
 
 async def test_shutdown_without_start_is_noop(

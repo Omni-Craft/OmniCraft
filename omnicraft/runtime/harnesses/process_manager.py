@@ -27,6 +27,7 @@ import secrets
 import shutil
 import signal
 import socket
+import stat
 import sys
 import tempfile
 import time
@@ -53,12 +54,13 @@ _logger = logging.getLogger(__name__)
 #
 # POSIX pins ``/tmp/oc-<uid>`` deliberately: Unix socket paths have a tight
 # length limit, so a short, predictable parent matters (gettempdir() can be a
-# long ``/var/folders/...`` path on macOS). The uid suffix stops runners of
-# different Unix users from colliding on one parent: whichever user's runner
-# starts first creates it ``0700``, and every other user's runner then fails —
-# either in ``_sweep_orphans`` iterating a parent it cannot read, or creating
-# its own instance dir inside it. The prefix is ``oc``, not ``omnicraft``, to
-# buy back the bytes the uid costs: ``_posix_tmp_parent`` documents the budget.
+# long ``/var/folders/...`` path on macOS). The uid suffix keeps each Unix
+# user's runners on their own parent. A single shared parent used to break
+# multi-user hosts: whichever user's runner started first created it ``0700``
+# and every other user's runner then failed — either in ``_sweep_orphans``
+# iterating a parent it could not read, or creating its instance dir inside it.
+# The suffix resolves that. The prefix is ``oc``, not ``omnicraft``, to buy
+# back the bytes the uid costs: ``_posix_tmp_parent`` documents the budget.
 # Windows uses TCP loopback for the harness IPC (no socket-path length concern)
 # and has no ``/tmp`` — a literal ``/tmp/omnicraft`` there resolves to
 # ``\tmp\omnicraft`` on the current drive — so use the real temp dir.
@@ -92,8 +94,10 @@ _TMP_PARENT_ENV_VAR = "OMNICRAFT_HARNESS_TMP_PARENT"
 # here (private to the parent/child pair), and presents it on every ``/v1``
 # request; the harness scaffold's auth middleware compares against it. This is
 # the access boundary on Windows, where the IPC is a loopback TCP listener
-# reachable by any local process; on POSIX (uid-isolated UDS) it is defence in
-# depth.
+# reachable by any local process; on POSIX the boundary is the boot-validated
+# owner-only socket parent (a real dir, our uid, no group/other access — see
+# ``_ensure_secure_socket_parent``) holding the ``0600`` socket, so this token
+# would only be defence in depth (and is not even set).
 _HARNESS_AUTH_TOKEN_ENV = "OMNICRAFT_HARNESS_AUTH_TOKEN"
 
 # Sentinel file the OmniCraft instance writes into its subdir on boot. The
@@ -225,6 +229,83 @@ def _default_tmp_parent() -> Path:
     if configured:
         return Path(configured).expanduser()
     return _TMP_PARENT
+
+
+def _ensure_secure_socket_parent(parent: Path) -> None:
+    """
+    Create the harness socket parent, or reject an unsafe pre-existing one.
+
+    The default POSIX parent lives in world-writable, sticky ``/tmp``
+    (:func:`_posix_tmp_parent`), and on POSIX the harness control
+    channel has no bearer token — the parent's filesystem permissions
+    are the whole auth boundary. A local peer could pre-create the
+    predictable path as a symlink (redirecting our sockets and the
+    ``AP_PID`` sweep) or as a directory they own (reading the control
+    channel). Both must fail the boot, not pass silently.
+
+    ``os.mkdir`` is an atomic create-or-``EEXIST`` that never follows a
+    symlink at the final component, so a fresh success means the dir is
+    ours at mode ``0700``. On ``EEXIST`` the dir already existed:
+    require it to be a real directory we own with no group/other
+    access, else refuse to boot. A hostile dir is never adopted or
+    "repaired". Ownership cannot be forged (chown to another uid needs
+    root), so a passing check means the dir is genuinely ours.
+
+    Against the default parent (``/tmp/oc-<uid>``, whose only ancestor
+    is sticky ``/tmp``) this closes the hijack with no check-then-use
+    race: the sticky bit stops a non-root peer from renaming or
+    swapping the dir after it is validated. Only the final component is
+    treated strictly, though — an operator override
+    (:envvar:`OMNICRAFT_HARNESS_TMP_PARENT`) whose *ancestors* an
+    attacker can substitute (a non-sticky world-writable parent dir, or
+    a symlink anywhere in the ancestry) reopens path resolution and is
+    the operator's responsibility.
+
+    :param parent: The socket-parent directory to create or validate.
+    :raises RuntimeError: If a pre-existing parent is a symlink, is not
+        a directory, is owned by another uid, or grants group/other
+        access.
+    """
+    if IS_WINDOWS:
+        # Windows roots the parent under a per-user ``gettempdir()`` and
+        # guards the loopback-TCP channel with a per-spawn bearer token,
+        # so the world-writable ``/tmp`` hijack does not apply. Keep the
+        # plain create.
+        parent.mkdir(mode=_DIR_MODE, parents=True, exist_ok=True)
+        return
+
+    # Ancestors of a relative override (e.g. ``.tmp/oa``) are created
+    # permissively; only the final, predictably-named component is the
+    # ``/tmp`` attack surface, so it alone gets the strict treatment.
+    parent.parent.mkdir(mode=_DIR_MODE, parents=True, exist_ok=True)
+    try:
+        parent.mkdir(mode=_DIR_MODE)
+    except FileExistsError:
+        pass
+    else:
+        return
+
+    info = os.lstat(parent)
+    if stat.S_ISLNK(info.st_mode):
+        raise RuntimeError(
+            f"harness socket parent {parent} is a symlink; refusing to boot "
+            "— a local peer may be redirecting the harness control channel"
+        )
+    if not stat.S_ISDIR(info.st_mode):
+        raise RuntimeError(
+            f"harness socket parent {parent} exists but is not a directory; refusing to boot"
+        )
+    euid = os.geteuid()
+    if info.st_uid != euid:
+        raise RuntimeError(
+            f"harness socket parent {parent} is owned by uid {info.st_uid}, "
+            f"not {euid}; refusing to boot — a local peer may control it"
+        )
+    if info.st_mode & 0o077:
+        raise RuntimeError(
+            f"harness socket parent {parent} is group/other-accessible "
+            f"(mode {oct(info.st_mode & 0o777)}); refusing to boot"
+        )
 
 
 def _socket_path(instance_dir: Path, conversation_id: str) -> Path:
@@ -646,7 +727,7 @@ class HarnessProcessManager:
         """
         if self._started:
             return
-        self._tmp_parent.mkdir(mode=_DIR_MODE, parents=True, exist_ok=True)
+        _ensure_secure_socket_parent(self._tmp_parent)
         # Sweep BEFORE creating our own dir, so a crashed prior
         # instance whose dir uuid happens to collide with ours
         # (vanishingly unlikely but possible) gets cleaned first.
@@ -1115,7 +1196,8 @@ class HarnessProcessManager:
         effective_env: dict[str, str] = _build_harness_spawn_env(env)
         # S1 (security): on Windows the harness IPC is a loopback-TCP listener
         # reachable by any local process, so mint a fresh per-spawn bearer token
-        # as the access boundary the uid-isolated UDS provides on POSIX. This is
+        # as the access boundary that the boot-validated owner-only socket
+        # parent (see ``_ensure_secure_socket_parent``) provides on POSIX. This is
         # Windows-only: POSIX keeps the UDS and sets no token, leaving the
         # scaffold's auth gate inert. The token is delivered via the harness's
         # private env and presented by our client (below) on every /v1 request.
@@ -1169,7 +1251,8 @@ class HarnessProcessManager:
             # S1 (security): present the per-spawn bearer token (Windows only)
             # so the harness scaffold accepts this client and rejects any
             # unauthenticated local peer on the loopback-TCP channel. Empty on
-            # POSIX, where the uid-isolated UDS is the access boundary.
+            # POSIX, where the boot-validated owner-only socket parent is
+            # the access boundary.
             headers=({"Authorization": f"Bearer {auth_token}"} if auth_token else {}),
             # See the comment above the constant for rationale.
             # Connect/write/pool keep the 5s default so a vanished

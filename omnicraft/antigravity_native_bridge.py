@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import logging
 import os
@@ -16,6 +15,8 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from omnicraft.native_bridge_gc import hashed_bridge_dir
 
 _logger = logging.getLogger(__name__)
 
@@ -205,8 +206,7 @@ def bridge_dir_for_bridge_id(bridge_id: str) -> Path:
     :returns: Absolute bridge directory under
         ``~/.omnicraft/antigravity-native``.
     """
-    digest = hashlib.sha256(bridge_id.encode("utf-8")).hexdigest()[:32]
-    return _BRIDGE_ROOT / digest
+    return hashed_bridge_dir(_BRIDGE_ROOT, bridge_id)
 
 
 def build_antigravity_native_spawn_env(
@@ -950,6 +950,26 @@ def read_tmux_info(bridge_dir: Path) -> dict[str, str] | None:
     ):
         return {"socket_path": socket_path, "tmux_target": tmux_target}
     return None
+
+
+def tmux_pane_alive(bridge_dir: Path) -> bool:
+    """
+    Return whether this session's advertised agy tmux pane is still alive.
+
+    Reads the advertised ``{socket_path, tmux_target}`` from ``tmux.json`` and
+    probes ``tmux has-session``. The runner-side GC uses this as the per-dir
+    process-liveness veto for antigravity (which has no crash-safe process
+    registry): a live pane means agy is running under it, so the dir must never
+    be reclaimed. No ``tmux.json`` (never launched, or cleared on teardown) means
+    the pane is gone.
+
+    :param bridge_dir: Native Antigravity bridge directory.
+    :returns: ``True`` when a live tmux pane hosts this session's agy.
+    """
+    info = read_tmux_info(bridge_dir)
+    if info is None:
+        return False
+    return _session_alive(info["socket_path"], info["tmux_target"])
 
 
 def _wait_for_tmux_info(bridge_dir: Path, *, timeout_s: float) -> dict[str, str]:

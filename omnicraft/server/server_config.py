@@ -122,6 +122,41 @@ def _config_positive_int(key: str, default: int) -> int:
     return value
 
 
+def _config_bool(key: str, default: bool) -> bool:
+    """Read a boolean setting from the server config, else *default*.
+
+    Accepts a native YAML bool, ``0``/``1``, or a truthy/falsey string
+    (``true``/``yes``/``on`` vs ``false``/``no``/``off``, case-insensitive). Any
+    other value logs a warning and falls back to *default* — an operator typo
+    should degrade to the safe built-in, not crash the entrypoint.
+
+    :param key: Top-level config key, e.g. ``"native_bridge_gc_enabled"``.
+    :param default: Value used when the key is absent or invalid.
+    :returns: The configured bool, or *default*.
+    """
+    raw = load_server_config().get(key)
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    # Strict, like _config_positive_int: only 0/1 (and the documented string
+    # forms) are valid. A stray 2/-1 is malformed and must degrade to the knob's
+    # default, never silently flip an opt-in removal flag on.
+    if isinstance(raw, int):
+        if raw == 1:
+            return True
+        if raw == 0:
+            return False
+    if isinstance(raw, str):
+        norm = raw.strip().lower()
+        if norm in {"true", "1", "yes", "on"}:
+            return True
+        if norm in {"false", "0", "no", "off"}:
+            return False
+    logger.warning("server config %s=%r is not a bool — using default %s", key, raw, default)
+    return default
+
+
 def copy_file_count_limit() -> int:
     """Max number of files a single copy-at-spawn request may copy.
 
@@ -163,3 +198,82 @@ def unbound_session_ttl_hours() -> int:
     session.
     """
     return _config_positive_int("unbound_session_ttl_hours", _DEFAULT_UNBOUND_SESSION_TTL_HOURS)
+
+
+# ── Native-harness bridge-dir garbage collector ──────────────────────────────
+#
+# The runner-side sweep (omnicraft.native_bridge_gc) reclaims stale per-session
+# state dirs under ~/.omnicraft/{codex,antigravity}-native/<hash> left behind by
+# crashed / never-explicitly-deleted sessions. Every removal is gated by an
+# absolute liveness veto; these knobs only widen or narrow WHAT is eligible and
+# whether the sweep actually deletes vs logs.
+
+# Generous default: an archived session can legitimately be resumed for a while.
+# A week of no activity (updated_at, bumped on every item append) before its dir
+# is even *eligible* for the opt-in archived-past-TTL removal.
+_DEFAULT_NATIVE_BRIDGE_GC_ARCHIVED_TTL_HOURS = 168
+# Sweep cadence: hourly, matching the unbound-session sweep loop.
+_DEFAULT_NATIVE_BRIDGE_GC_INTERVAL_SECONDS = 3600
+
+
+def native_bridge_gc_enabled() -> bool:
+    """Whether the runner-side native-bridge GC sweep runs at all.
+
+    Config key ``native_bridge_gc_enabled``; defaults to ``True``. Disabling it
+    stops both the startup and the periodic sweep (no dir is touched).
+    """
+    return _config_bool("native_bridge_gc_enabled", True)
+
+
+def native_bridge_gc_dry_run() -> bool:
+    """Whether the GC sweep only logs what it *would* remove, deleting nothing.
+
+    Config key ``native_bridge_gc_dry_run``; defaults to ``False`` (real
+    removal of orphans whose conversation no longer exists). Live dirs are
+    logged as skipped in either mode.
+    """
+    return _config_bool("native_bridge_gc_dry_run", False)
+
+
+def native_bridge_gc_archived_ttl_hours() -> int:
+    """Hours an archived conversation may sit inactive before its dir is
+    TTL-eligible (and the min age before an unknown-format dir may be removed).
+
+    Config key ``native_bridge_gc_archived_ttl_hours``; defaults to
+    :data:`_DEFAULT_NATIVE_BRIDGE_GC_ARCHIVED_TTL_HOURS`.
+    """
+    return _config_positive_int(
+        "native_bridge_gc_archived_ttl_hours", _DEFAULT_NATIVE_BRIDGE_GC_ARCHIVED_TTL_HOURS
+    )
+
+
+def native_bridge_gc_remove_archived() -> bool:
+    """Opt-in: also remove dirs of archived conversations past the TTL.
+
+    Config key ``native_bridge_gc_remove_archived``; defaults to ``False``. An
+    archived session is still resumable, so its dir is kept unless an operator
+    opts in.
+    """
+    return _config_bool("native_bridge_gc_remove_archived", False)
+
+
+def native_bridge_gc_remove_unknown() -> bool:
+    """Opt-in: also remove unknown-format dirs (missing/unreadable state.json).
+
+    Config key ``native_bridge_gc_remove_unknown``; defaults to ``False``. Such
+    a dir cannot be resolved to a conversation, so it is only removed when an
+    operator opts in — and even then only past the archived TTL age guard, so a
+    session mid-launch (state.json not yet written) is never nuked.
+    """
+    return _config_bool("native_bridge_gc_remove_unknown", False)
+
+
+def native_bridge_gc_interval_seconds() -> int:
+    """Seconds between periodic native-bridge GC sweeps.
+
+    Config key ``native_bridge_gc_interval_seconds``; defaults to
+    :data:`_DEFAULT_NATIVE_BRIDGE_GC_INTERVAL_SECONDS`.
+    """
+    return _config_positive_int(
+        "native_bridge_gc_interval_seconds", _DEFAULT_NATIVE_BRIDGE_GC_INTERVAL_SECONDS
+    )

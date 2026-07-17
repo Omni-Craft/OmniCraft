@@ -8,6 +8,9 @@ import pytest
 
 from omnicraft.codex_native_bridge import (
     CodexNativeBridgeState,
+    app_server_dir_live,
+    app_server_registry_owned,
+    app_server_socket_live,
     cancel_pending_mcp_startup,
     clear_active_turn_id_if_matches,
     clear_bridge_state,
@@ -324,3 +327,110 @@ def test_clear_bridge_state_removes_mcp_startup(bridge_dir: Path) -> None:
     clear_bridge_state(bridge_dir)
 
     assert read_mcp_startup(bridge_dir) == {}
+
+
+# ── app_server_socket_live (GC per-dir process-liveness veto) ─────────
+
+
+@pytest.fixture
+def short_bridge_dir() -> object:
+    """A short-path bridge dir usable for AF_UNIX sockets.
+
+    The default pytest ``tmp_path`` is too long for an AF_UNIX socket path
+    (~104-char limit) — production paths under ``~/.omnicraft`` are short — so
+    these socket probes need their own short dir under ``/tmp``.
+    """
+    import shutil
+    import tempfile
+
+    root = Path(tempfile.mkdtemp(prefix="oc-cx-", dir="/tmp"))
+    try:
+        yield root
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_app_server_socket_live_false_when_absent(short_bridge_dir: Path) -> None:
+    """No socket node → dead (reclaimable)."""
+    assert app_server_socket_live(short_bridge_dir) is False
+
+
+def test_app_server_socket_live_true_with_listener(short_bridge_dir: Path) -> None:
+    """A live listener on the app-server socket → live (veto)."""
+    import socket
+
+    sock_path = short_bridge_dir / "app-server.sock"
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        srv.bind(str(sock_path))
+        srv.listen(1)
+        assert app_server_socket_live(short_bridge_dir) is True
+    finally:
+        srv.close()
+
+
+def test_app_server_socket_live_false_for_stale_node(short_bridge_dir: Path) -> None:
+    """A stale socket node with no listener refuses connections → dead."""
+    import socket
+
+    sock_path = short_bridge_dir / "app-server.sock"
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    srv.bind(str(sock_path))
+    srv.close()  # node remains, but nothing is listening anymore
+    assert sock_path.exists()
+    assert app_server_socket_live(short_bridge_dir) is False
+
+
+def test_app_server_registry_owned_probes_dir_socket_path(
+    short_bridge_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``app_server_registry_owned`` asks the registry about THIS dir's socket path."""
+    import omnicraft.codex_native_process_registry as reg
+
+    seen: dict[str, str] = {}
+
+    def _fake(needle: str, **_kw: object) -> bool:
+        seen["needle"] = needle
+        return True
+
+    monkeypatch.setattr(reg, "live_owner_cmdline_contains", _fake)
+    assert app_server_registry_owned(short_bridge_dir) is True
+    assert seen["needle"] == str(short_bridge_dir / "app-server.sock")
+
+
+def test_app_server_dir_live_registry_owned_when_socket_dead(
+    short_bridge_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A live registry owner vetoes removal on its own, even with the socket down.
+
+    Covers the reviewer's #2: registry-positive + socket-negative ⇒ dir kept.
+    """
+    import omnicraft.codex_native_process_registry as reg
+
+    # No socket node → app_server_socket_live is False.
+    assert app_server_socket_live(short_bridge_dir) is False
+    monkeypatch.setattr(reg, "live_owner_cmdline_contains", lambda _needle, **_kw: True)
+    assert app_server_dir_live(short_bridge_dir) is True
+
+
+def test_app_server_dir_live_false_when_socket_and_registry_dead(
+    short_bridge_dir: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Socket dead AND no registry owner → reclaimable."""
+    import omnicraft.codex_native_process_registry as reg
+
+    monkeypatch.setattr(reg, "live_owner_cmdline_contains", lambda _needle, **_kw: False)
+    assert app_server_dir_live(short_bridge_dir) is False
+
+
+def test_app_server_dir_live_true_when_socket_live(short_bridge_dir: Path) -> None:
+    """A live socket is enough on its own (registry not consulted needn't matter)."""
+    import socket
+
+    srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        srv.bind(str(short_bridge_dir / "app-server.sock"))
+        srv.listen(1)
+        assert app_server_dir_live(short_bridge_dir) is True
+    finally:
+        srv.close()

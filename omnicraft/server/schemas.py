@@ -1589,6 +1589,10 @@ class SessionResponse(BaseModel):
         still running" even though the session has settled to ``"idle"``.
         ``None`` (the default / omitted) when no shells are tracked.
     :param created_at: Unix epoch seconds of creation.
+    :param updated_at: Unix epoch seconds of the last activity (bumped on
+        every item append), or ``None`` on builders that do not project it.
+        Read by the runner-side native-bridge GC to decide whether an
+        archived session's state dir is past its TTL.
     :param title: Optional human-readable title, e.g.
         ``"debugging auth flow"``. ``None`` when unset.
     :param labels: Session-scoped guardrails labels. Empty dict
@@ -1802,6 +1806,7 @@ class SessionResponse(BaseModel):
     status: Literal["idle", "running", "waiting", "failed"]
     background_task_count: int | None = None
     created_at: int
+    updated_at: int | None = None
     title: str | None = None
     labels: dict[str, str] = Field(default_factory=dict)
     runner_id: str | None = None

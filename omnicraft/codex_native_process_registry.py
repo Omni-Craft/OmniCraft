@@ -209,6 +209,62 @@ def reconcile_codex_native_process_registry(*, registry_path: Path | None = None
         _write_registry(path, survivors)
 
 
+def _live_owner_entries(
+    registry_path: Path | None = None,
+) -> list[CodexNativeProcessEntry]:
+    """Return registry entries a valid launcher still owns AND that are running.
+
+    An entry qualifies only when all three of ``reconcile``'s liveness gates
+    hold: the owner flock is still held (the launcher is alive), the child pid is
+    alive, and the child's command line still carries its crash-teardown tag
+    (guarding PID reuse). These are exactly the entries ``reconcile`` treats as
+    live siblings and never reaps.
+
+    :param registry_path: Test override for the registry file path.
+    :returns: The live, owned, tag-matching entries.
+    """
+    path = registry_path or codex_native_process_registry_path()
+    with _registry_lock(path):
+        entries = _read_registry(path)
+    live: list[CodexNativeProcessEntry] = []
+    for entry in entries:
+        if not _owner_lock_held(entry.owner_lock_path):
+            continue
+        if not _pid_alive(entry.pid):
+            continue
+        if not _process_cmdline_has_tag(entry.pid, entry.session_tag):
+            continue
+        live.append(entry)
+    return live
+
+
+def live_owner_cmdline_contains(
+    needle: str,
+    *,
+    registry_path: Path | None = None,
+) -> bool:
+    """Return whether a live, owned codex app-server has *needle* in its cmdline.
+
+    Used by the native-bridge GC as a per-dir liveness veto that is authoritative
+    on its own — independent of the socket probe. A registered owner whose
+    owner-flock is held (launcher alive), whose pid is alive, and whose cmdline
+    carries its crash-teardown tag is a running app-server, *even if* its Unix
+    socket is momentarily unconnectable or not yet created. Passing the dir's
+    ``--listen`` socket path (which the app-server carries in its argv) as
+    *needle* maps that ownership to a specific bridge dir.
+
+    :param needle: Substring to look for in each live owner's command line, e.g.
+        the dir's ``app-server.sock`` path.
+    :param registry_path: Test override for the registry file path.
+    :returns: ``True`` when some live owner's cmdline contains *needle*.
+    """
+    if not needle:
+        return False
+    return any(
+        needle in _process_cmdline(entry.pid) for entry in _live_owner_entries(registry_path)
+    )
+
+
 @contextlib.contextmanager
 def _registry_lock(path: Path) -> Generator[None, None, None]:
     """

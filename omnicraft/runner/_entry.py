@@ -1033,12 +1033,21 @@ def create_app(
         _pane_reaper = getattr(app.state, "native_pane_reaper", None)
         if _pane_reaper is not None:
             await _pane_reaper.start()
+        # Native-bridge dir GC: reclaims stale ~/.omnicraft/{codex,antigravity}
+        # -native/<hash> state dirs left by crashed / undeleted sessions (startup
+        # sweep + periodic).
+        _bridge_gc = getattr(app.state, "native_bridge_gc", None)
+        if _bridge_gc is not None:
+            await _bridge_gc.start()
 
     async def _stop_pm() -> None:
         """Stop runner-owned resources for graceful process exit.
 
         :returns: None.
         """
+        _bridge_gc = getattr(app.state, "native_bridge_gc", None)
+        if _bridge_gc is not None:
+            await _bridge_gc.shutdown()
         _pane_reaper = getattr(app.state, "native_pane_reaper", None)
         if _pane_reaper is not None:
             await _pane_reaper.shutdown()

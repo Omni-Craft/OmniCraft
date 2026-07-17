@@ -27,6 +27,7 @@ from omnicraft.antigravity_native_bridge import (
     read_tmux_info,
     seed_isolated_agy_home,
     send_interaction_keys_via_tui,
+    tmux_pane_alive,
     update_conversation_id,
     write_bridge_state,
     write_mcp_bridge_config,
@@ -1667,3 +1668,39 @@ def test_ensure_agy_feedback_survey_disabled_write_failure_never_raises(
     leftover = [p.name for p in settings.parent.iterdir() if p.name != settings.name]
     assert leftover == []
     assert "could not write" in caplog.text
+
+
+# ---------------------------------------------------------------------------
+# tmux_pane_alive (GC per-dir process-liveness veto)
+# ---------------------------------------------------------------------------
+
+
+def test_tmux_pane_alive_false_without_tmux_json(tmp_path: Path) -> None:
+    """No tmux.json (never launched / cleared on teardown) → pane gone."""
+    assert tmux_pane_alive(tmp_path) is False
+
+
+def test_tmux_pane_alive_true_when_session_alive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An advertised pane that has-session confirms → live (veto)."""
+    write_tmux_target(tmp_path, socket_path=tmp_path / "s.sock", tmux_target="main")
+    seen: dict[str, str] = {}
+
+    def _alive(socket_path: str, tmux_target: str) -> bool:
+        seen["socket_path"] = socket_path
+        seen["tmux_target"] = tmux_target
+        return True
+
+    monkeypatch.setattr(_mod, "_session_alive", _alive)
+    assert tmux_pane_alive(tmp_path) is True
+    assert seen == {"socket_path": str(tmp_path / "s.sock"), "tmux_target": "main"}
+
+
+def test_tmux_pane_alive_false_when_session_gone(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An advertised pane whose has-session fails → dead (reclaimable)."""
+    write_tmux_target(tmp_path, socket_path=tmp_path / "s.sock", tmux_target="main")
+    monkeypatch.setattr(_mod, "_session_alive", lambda *_a: False)
+    assert tmux_pane_alive(tmp_path) is False

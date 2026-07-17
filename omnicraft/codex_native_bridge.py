@@ -2,16 +2,18 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import secrets
+import socket
 import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 import tomllib
+
+from omnicraft.native_bridge_gc import hashed_bridge_dir
 
 CODEX_NATIVE_BRIDGE_ID_LABEL_KEY = "omnicraft.codex_native.bridge_id"
 CODEX_NATIVE_BRIDGE_DIR_ENV_VAR = "HARNESS_CODEX_NATIVE_BRIDGE_DIR"
@@ -91,8 +93,7 @@ def bridge_dir_for_bridge_id(bridge_id: str) -> Path:
     :returns: Absolute bridge directory under
         ``~/.omnicraft/codex-native``.
     """
-    digest = hashlib.sha256(bridge_id.encode("utf-8")).hexdigest()[:32]
-    return _BRIDGE_ROOT / digest
+    return hashed_bridge_dir(_BRIDGE_ROOT, bridge_id)
 
 
 def build_codex_native_spawn_env(
@@ -262,6 +263,81 @@ def socket_path_for_bridge_dir(bridge_dir: Path) -> Path:
     :returns: Absolute Unix socket path for the app-server.
     """
     return bridge_dir / "app-server.sock"
+
+
+def app_server_socket_live(bridge_dir: Path, *, timeout_s: float = 0.5) -> bool:
+    """
+    Return whether a live Codex app-server is listening on this dir's socket.
+
+    A crashed app-server leaves a stale ``app-server.sock`` node that refuses
+    connections; a live one accepts them. The runner-side GC uses this as the
+    per-dir process-liveness veto — a connectable socket means a running process
+    owns the dir, so the dir must never be reclaimed. The probe connects and
+    immediately closes; the app-server already multiplexes OmniCraft's observer
+    connection alongside the TUI, so an extra connect+close is harmless.
+
+    Conservative on ambiguity: a missing socket or a refused connection is
+    *dead* (reclaimable), but any other error is treated as *live* so the GC
+    never removes a dir it could not prove dead.
+
+    :param bridge_dir: Native Codex bridge directory.
+    :param timeout_s: Connect timeout in seconds.
+    :returns: ``True`` when the socket accepts a connection (or the liveness is
+        ambiguous), ``False`` when the socket is absent or refuses.
+    """
+    if not hasattr(socket, "AF_UNIX"):  # pragma: no cover - non-posix has no codex-native
+        return False
+    path = socket_path_for_bridge_dir(bridge_dir)
+    if not path.exists():
+        return False
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        sock.settimeout(timeout_s)
+        sock.connect(str(path))
+        return True
+    except (FileNotFoundError, ConnectionRefusedError):
+        return False
+    except OSError:
+        return True  # ambiguous — veto rather than risk removing a live dir
+    finally:
+        sock.close()
+
+
+def app_server_registry_owned(bridge_dir: Path) -> bool:
+    """
+    Return whether a live registered codex app-server owns this bridge dir.
+
+    Consults the crash-safe process registry: a dir is registry-owned when some
+    entry's owner-flock is still held (launcher alive), its pid is alive, and its
+    command line carries both the crash-teardown tag AND this dir's ``--listen``
+    socket path (which the app-server argv carries — see
+    ``codex_native_app_server``). This is an **authoritative liveness veto on its
+    own**, ORed with :func:`app_server_socket_live`: it spares a valid owner whose
+    socket is momentarily unconnectable or has not been created yet — a window the
+    socket probe alone would misread as dead.
+
+    :param bridge_dir: Native Codex bridge directory.
+    :returns: ``True`` when a live registry owner claims this dir.
+    """
+    from omnicraft.codex_native_process_registry import live_owner_cmdline_contains
+
+    return live_owner_cmdline_contains(str(socket_path_for_bridge_dir(bridge_dir)))
+
+
+def app_server_dir_live(bridge_dir: Path) -> bool:
+    """
+    Return whether a codex app-server is live for this bridge dir.
+
+    Live if EITHER the app-server socket accepts a connection
+    (:func:`app_server_socket_live`) OR a live registry owner claims the dir
+    (:func:`app_server_registry_owned`). The runner-side GC uses this composite
+    as the codex per-dir liveness veto so neither a temporarily-down socket nor a
+    not-yet-registered process can cause a running session's dir to be reclaimed.
+
+    :param bridge_dir: Native Codex bridge directory.
+    :returns: ``True`` when the socket is live or the registry owns the dir.
+    """
+    return app_server_socket_live(bridge_dir) or app_server_registry_owned(bridge_dir)
 
 
 def codex_home_for_bridge_dir(bridge_dir: Path) -> Path:

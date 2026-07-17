@@ -15,6 +15,12 @@ import pytest
 from omnicraft.server.server_config import (
     config_str_list,
     load_server_config,
+    native_bridge_gc_archived_ttl_hours,
+    native_bridge_gc_dry_run,
+    native_bridge_gc_enabled,
+    native_bridge_gc_interval_seconds,
+    native_bridge_gc_remove_archived,
+    native_bridge_gc_remove_unknown,
     resolve_config_path,
     unbound_session_ttl_hours,
 )
@@ -140,3 +146,101 @@ def test_unbound_session_ttl_hours_invalid_falls_back_to_default(
     _pin_data_dir(monkeypatch, tmp_path)
     (tmp_path / "config.yaml").write_text("unbound_session_ttl_hours: -1\n")
     assert unbound_session_ttl_hours() == 24
+
+
+# ── native-bridge GC knobs ───────────────────────────────────────────
+
+
+def test_native_bridge_gc_defaults(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """No config file → GC enabled, real removal, opt-ins off, 168h/3600s."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    assert native_bridge_gc_enabled() is True
+    assert native_bridge_gc_dry_run() is False
+    assert native_bridge_gc_remove_archived() is False
+    assert native_bridge_gc_remove_unknown() is False
+    assert native_bridge_gc_archived_ttl_hours() == 168
+    assert native_bridge_gc_interval_seconds() == 3600
+
+
+def test_native_bridge_gc_overrides(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Every knob is surfaced from config.yaml (native YAML bools + ints)."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    (tmp_path / "config.yaml").write_text(
+        "native_bridge_gc_enabled: false\n"
+        "native_bridge_gc_dry_run: true\n"
+        "native_bridge_gc_remove_archived: true\n"
+        "native_bridge_gc_remove_unknown: true\n"
+        "native_bridge_gc_archived_ttl_hours: 12\n"
+        "native_bridge_gc_interval_seconds: 900\n"
+    )
+    assert native_bridge_gc_enabled() is False
+    assert native_bridge_gc_dry_run() is True
+    assert native_bridge_gc_remove_archived() is True
+    assert native_bridge_gc_remove_unknown() is True
+    assert native_bridge_gc_archived_ttl_hours() == 12
+    assert native_bridge_gc_interval_seconds() == 900
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("true", True),
+        ("yes", True),
+        ("on", True),
+        ("1", True),
+        ("false", False),
+        ("no", False),
+        ("off", False),
+        ("0", False),
+    ],
+)
+def test_native_bridge_gc_bool_string_forms(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: str, expected: bool
+) -> None:
+    """String truthy/falsey forms are accepted for bool knobs."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    (tmp_path / "config.yaml").write_text(f'native_bridge_gc_dry_run: "{value}"\n')
+    assert native_bridge_gc_dry_run() is expected
+
+
+def test_native_bridge_gc_invalid_bool_falls_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A garbage bool value degrades to the built-in default (enabled=True)."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    (tmp_path / "config.yaml").write_text('native_bridge_gc_enabled: "maybe"\n')
+    assert native_bridge_gc_enabled() is True
+
+
+@pytest.mark.parametrize("value", [2, -1, 5])
+def test_native_bridge_gc_malformed_int_bool_falls_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, value: int
+) -> None:
+    """A stray int (2/-1/…) is malformed and must NOT flip an opt-in flag on.
+
+    Only 0/1 are valid ints; anything else degrades to the knob's default, so a
+    ``remove_unknown: 2`` typo never silently enables destructive removal.
+    """
+    _pin_data_dir(monkeypatch, tmp_path)
+    (tmp_path / "config.yaml").write_text(f"native_bridge_gc_remove_unknown: {value}\n")
+    assert native_bridge_gc_remove_unknown() is False
+
+
+def test_native_bridge_gc_int_bool_zero_one_accepted(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The two valid ints still work: 1 → True, 0 → False."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    (tmp_path / "config.yaml").write_text("native_bridge_gc_remove_unknown: 1\n")
+    assert native_bridge_gc_remove_unknown() is True
+    (tmp_path / "config.yaml").write_text("native_bridge_gc_remove_unknown: 0\n")
+    assert native_bridge_gc_remove_unknown() is False
+
+
+def test_native_bridge_gc_invalid_ttl_falls_back(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A non-positive TTL degrades to the safe default."""
+    _pin_data_dir(monkeypatch, tmp_path)
+    (tmp_path / "config.yaml").write_text("native_bridge_gc_archived_ttl_hours: 0\n")
+    assert native_bridge_gc_archived_ttl_hours() == 168

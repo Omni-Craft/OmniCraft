@@ -184,6 +184,23 @@ async def test_session_snapshot_reads_latest_items_then_returns_chronological() 
 
 
 @pytest.mark.asyncio
+async def test_session_snapshot_projects_updated_at() -> None:
+    """GET /sessions/{id} exposes conv.updated_at (the native-bridge GC's TTL key)."""
+    conv = Conversation(
+        id="conv_test",
+        created_at=1,
+        updated_at=987_654,
+        root_conversation_id="conv_test",
+        agent_id="ag_test",
+    )
+    conv_store = _ConversationStore([_message_item("item_1", "hi")], {"conv_test": conv})
+
+    snapshot = await _get_session_snapshot(conv_store, "conv_test")  # type: ignore[arg-type]
+
+    assert snapshot.updated_at == 987_654
+
+
+@pytest.mark.asyncio
 async def test_session_snapshot_populates_runner_online_from_session_lookup() -> None:
     """GET /sessions/{id} carries session-scoped runner + host liveness."""
     conv_store = _ConversationStore([_message_item("item_1", "hi")])

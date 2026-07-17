@@ -57,6 +57,19 @@ from omnicraft.llms.summarize import (
     extract_summary_text,
 )
 from omnicraft.model_override import validate_model_override
+from omnicraft.native_bridge_gc import (
+    BridgeFamily as NativeGcBridgeFamily,
+)
+from omnicraft.native_bridge_gc import (
+    ConversationState as NativeGcConversationState,
+)
+from omnicraft.native_bridge_gc import (
+    GcConfig as NativeGcConfig,
+)
+from omnicraft.native_bridge_gc import (
+    NativeBridgeGarbageCollector,
+    sweep_native_bridge_dirs,
+)
 from omnicraft.policies.types import FAIL_CLOSED_PHASES
 from omnicraft.runner import pending_approvals
 from omnicraft.runner.codex.goal import CodexGoalRunner
@@ -6329,6 +6342,10 @@ async def _antigravity_native_terminal_arrives_via_transfer(
 
 
 _SESSION_LABEL_LOOKUP_TIMEOUT_SECONDS = 1.0
+# The native-bridge GC resolves each on-disk dir's conversation via a full
+# session GET (heavier than the labels lookup), so it gets a more generous
+# timeout. A timeout resolves conservatively (dir kept), never removed.
+_NATIVE_BRIDGE_GC_LOOKUP_TIMEOUT_SECONDS = 5.0
 
 
 async def _session_labels_for_runner_spawn(
@@ -18844,6 +18861,107 @@ def create_runner_app(
         )
     else:
         app.state.native_pane_reaper = None
+
+    # Runner-side GC for stale native-harness state dirs (~/.omnicraft/
+    # {codex,antigravity}-native/<hash>). Crashed / never-explicitly-deleted
+    # sessions leave their dirs (each an isolated codex-home / agy-home) behind;
+    # across dead sessions they accumulate to ~1.2GB. The startup + periodic
+    # sweep reclaims them, gated by an absolute liveness veto: a dir is spared
+    # when this runner has an active turn for it, when the conversation is bound
+    # to a runner in the DB, or when a live vendor process/pane owns the dir.
+    async def _resolve_conversation_for_gc(session_id: str) -> NativeGcConversationState:
+        """Resolve a state dir's conversation for the GC via the server.
+
+        A clean ``404`` is the only signal that removes a dir (the conversation
+        is gone → orphan). Every ambiguous outcome — network error, a non-404
+        non-200 (e.g. 401/403 for a session this runner cannot read), or a
+        non-JSON body — resolves to ``exists=True, bound=True`` so the dir is
+        classified LIVE and never removed. Transient server trouble must never
+        cause deletion.
+        """
+        path = f"/v1/sessions/{urllib.parse.quote(session_id, safe='')}"
+        try:
+            resp = await server_client.get(
+                path,
+                params={"include_items": "false", "include_liveness": "false"},
+                timeout=_NATIVE_BRIDGE_GC_LOOKUP_TIMEOUT_SECONDS,
+            )
+        except httpx.HTTPError:
+            return NativeGcConversationState(exists=True, bound=True)
+        if resp.status_code == 404:
+            return NativeGcConversationState(exists=False)
+        if resp.status_code != 200:
+            return NativeGcConversationState(exists=True, bound=True)
+        try:
+            body = resp.json()
+        except ValueError:
+            return NativeGcConversationState(exists=True, bound=True)
+        if not isinstance(body, dict):
+            return NativeGcConversationState(exists=True, bound=True)
+        updated_at = body.get("updated_at")
+        return NativeGcConversationState(
+            exists=True,
+            archived=bool(body.get("archived")),
+            bound=bool(body.get("host_id") or body.get("runner_id")),
+            updated_at=updated_at if isinstance(updated_at, int) else None,
+        )
+
+    async def _run_native_bridge_gc_sweep() -> None:
+        """One GC tick: resolve config, build the families, sweep both roots."""
+        from omnicraft.server import server_config
+
+        config = NativeGcConfig(
+            enabled=server_config.native_bridge_gc_enabled(),
+            dry_run=server_config.native_bridge_gc_dry_run(),
+            archived_ttl_seconds=server_config.native_bridge_gc_archived_ttl_hours() * 3600,
+            remove_archived_expired=server_config.native_bridge_gc_remove_archived(),
+            remove_unknown=server_config.native_bridge_gc_remove_unknown(),
+        )
+        if not config.enabled:
+            return
+        from omnicraft.antigravity_native_bridge import bridge_root as _agy_root
+        from omnicraft.antigravity_native_bridge import tmux_pane_alive
+        from omnicraft.codex_native_bridge import app_server_dir_live
+        from omnicraft.codex_native_bridge import bridge_root as _codex_root
+        from omnicraft.codex_native_process_registry import (
+            reconcile_codex_native_process_registry,
+        )
+
+        families = [
+            NativeGcBridgeFamily(
+                name="codex",
+                root=_codex_root(),
+                # Live if the app-server socket is up OR a live registry owner
+                # (flock+pid+cmdline) claims the dir — the registry veto is
+                # authoritative on its own, sparing an owner whose socket is
+                # momentarily down / not yet created.
+                process_live=app_server_dir_live,
+                # Also reap crashed codex children first (hygiene): their entries
+                # leave the registry so they cannot linger as false owners.
+                pre_sweep=reconcile_codex_native_process_registry,
+            ),
+            NativeGcBridgeFamily(
+                name="antigravity",
+                root=_agy_root(),
+                process_live=tmux_pane_alive,
+            ),
+        ]
+        await sweep_native_bridge_dirs(
+            families=families,
+            config=config,
+            resolve_conversation=_resolve_conversation_for_gc,
+            # Zero-arg snapshot re-read at classify AND the pre-rmtree recheck so a
+            # turn that starts mid-sweep vetoes the removal.
+            active_turns=lambda: frozenset(_active_turns),
+            now=int(time.time()),
+        )
+
+    from omnicraft.server.server_config import native_bridge_gc_interval_seconds
+
+    app.state.native_bridge_gc = NativeBridgeGarbageCollector(
+        sweep=_run_native_bridge_gc_sweep,
+        interval_s=float(native_bridge_gc_interval_seconds()),
+    )
 
     return app
 

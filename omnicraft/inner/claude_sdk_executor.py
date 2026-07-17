@@ -950,9 +950,42 @@ def _claude_internal_write_files() -> list[pathlib.Path]:
     return [path for path in candidates if path.exists()]
 
 
+def _resolve_sandbox_cwd(
+    spec_cwd: str | None,
+    *,
+    harness_cwd: str | None = None,
+) -> pathlib.Path:
+    """Resolve the sandbox root, rooting relative paths at the session
+    workspace rather than the runner daemon's process cwd.
+
+    A relative ``os_env.cwd`` — notably the ``cwd: .`` that every
+    example agent config declaring ``os_env`` carries — resolved
+    against ``os.getcwd()`` lands on the runner daemon's launch dir,
+    typically ``$HOME``. That roots the sandbox at the whole home dir
+    and disagrees with the tmux terminal, which runs in the session
+    workspace.
+
+    Base precedence: the session's working folder (*harness_cwd*, from
+    ``HARNESS_CLAUDE_SDK_CWD``, which carries the per-session worktree
+    path), then the runner's global ``OMNICRAFT_RUNNER_WORKSPACE``, then
+    the process cwd. An absolute *spec_cwd* is honored verbatim.
+
+    :param spec_cwd: The spec's ``os_env.cwd``, or ``None``.
+    :param harness_cwd: The session working folder the harness runs in.
+    :returns: The resolved, absolute sandbox root.
+    """
+    base = harness_cwd or os.environ.get("OMNICRAFT_RUNNER_WORKSPACE") or os.getcwd()
+    path = pathlib.Path(spec_cwd) if spec_cwd else pathlib.Path(base)
+    if not path.is_absolute():
+        path = pathlib.Path(base) / path
+    return path.resolve(strict=False)
+
+
 def prepare_claude_cli_path(
     real_cli_path: str | None,
     spec: OSEnvSpec | None,
+    *,
+    harness_cwd: str | None = None,
 ) -> PreparedClaudeCli:
     """Wrap the Claude CLI in the agent's configured sandbox when possible.
 
@@ -960,6 +993,8 @@ def prepare_claude_cli_path(
         binary, or ``None`` when no CLI is available.
     :param spec: The agent's ``os_env`` spec.  Only ``caller_process`` specs
         with a compatible sandbox are eligible for wrapping.
+    :param harness_cwd: The session working folder, used to root a
+        relative ``os_env.cwd``. See :func:`_resolve_sandbox_cwd`.
     :returns: A :class:`PreparedClaudeCli` naming the effective CLI path and
         whether native tools should be enabled.
     """
@@ -974,7 +1009,7 @@ def prepare_claude_cli_path(
     if sandbox_spec.type == "none":
         return PreparedClaudeCli(cli_path=real_cli_path, enable_native_tools=True)
 
-    cwd = pathlib.Path(spec.cwd or os.getcwd()).resolve(strict=False)
+    cwd = _resolve_sandbox_cwd(spec.cwd, harness_cwd=harness_cwd)
     sandbox = resolve_sandbox(spec, cwd)
     if not sandbox.active:
         return PreparedClaudeCli(cli_path=real_cli_path, enable_native_tools=False)
@@ -1026,7 +1061,7 @@ def prepare_tight_cli_process_path(
         ),
     )
     try:
-        resolved_cwd = pathlib.Path(cwd or os.getcwd()).resolve(strict=False)
+        resolved_cwd = _resolve_sandbox_cwd(cwd)
         sandbox = resolve_sandbox(spec, resolved_cwd)
     except (OSError, NotImplementedError) as exc:
         logger.warning(
@@ -1295,6 +1330,7 @@ class ClaudeSDKExecutor(Executor):
                 prepared = prepare_claude_cli_path(
                     self._cli_path,
                     self._os_env_spec,
+                    harness_cwd=self._cwd,
                 )
                 self._os_env = prepared.enable_native_tools
                 if prepared.cli_path != self._cli_path:

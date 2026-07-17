@@ -141,6 +141,59 @@ def test_executor_factory_reads_env_vars(
     assert os_env_value.sandbox.type == "none"
 
 
+def test_executor_factory_cwd_falls_back_to_runner_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    With no ``HARNESS_CLAUDE_SDK_CWD``, the factory falls back to the
+    runner's ``OMNICRAFT_RUNNER_WORKSPACE`` (the folder the user
+    launched in, and what the tmux terminal uses) rather than leaving
+    cwd unset — which let the SDK run the CLI out of the runner
+    daemon's launch dir, disagreeing with the sandbox root. Mirrors the
+    kimi / pi / qwen harnesses.
+    """
+    monkeypatch.delenv("HARNESS_CLAUDE_SDK_CWD", raising=False)
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", "/tmp/runner-workspace")
+
+    captured: dict[str, Any] = {}
+
+    def _fake_init(self: Any, *, cwd: str | None, **_kwargs: Any) -> None:
+        captured["cwd"] = cwd
+
+    with patch(
+        "omnicraft.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        _fake_init,
+    ):
+        claude_sdk_harness._build_claude_sdk_executor()
+
+    assert captured["cwd"] == "/tmp/runner-workspace"
+
+
+def test_executor_factory_explicit_cwd_wins_over_runner_workspace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """
+    An explicit ``HARNESS_CLAUDE_SDK_CWD`` (the session's selected
+    working folder, worktree-aware) takes precedence over the runner's
+    global workspace.
+    """
+    monkeypatch.setenv("HARNESS_CLAUDE_SDK_CWD", "/tmp/worktree-feature-x")
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", "/tmp/runner-workspace")
+
+    captured: dict[str, Any] = {}
+
+    def _fake_init(self: Any, *, cwd: str | None, **_kwargs: Any) -> None:
+        captured["cwd"] = cwd
+
+    with patch(
+        "omnicraft.inner.claude_sdk_harness.ClaudeSDKExecutor.__init__",
+        _fake_init,
+    ):
+        claude_sdk_harness._build_claude_sdk_executor()
+
+    assert captured["cwd"] == "/tmp/worktree-feature-x"
+
+
 def test_executor_factory_decodes_os_env_json(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

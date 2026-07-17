@@ -272,7 +272,14 @@ def _build_claude_sdk_executor() -> Executor:
     agent_name_raw = os.environ.get(_ENV_AGENT_NAME, "").strip()
     agent_name = agent_name_raw or None
     return ClaudeSDKExecutor(
-        cwd=os.environ.get(_ENV_CWD),
+        # Run the CLI in the session workspace: an explicit
+        # HARNESS_CLAUDE_SDK_CWD wins, else the runner's
+        # OMNICRAFT_RUNNER_WORKSPACE (the cwd the user launched in, and the one
+        # the tmux terminal uses), else the process cwd. Without the workspace
+        # fallback the CLI ran out of the runner daemon's launch dir, so it
+        # disagreed with the terminal and with the sandbox root.
+        # Mirrors goose / kimi / pi / qwen / hermes harness cwd resolution.
+        cwd=os.environ.get(_ENV_CWD) or os.environ.get("OMNICRAFT_RUNNER_WORKSPACE") or None,
         os_env=_resolve_os_env(),
         model=os.environ.get(_ENV_MODEL),
         permission_mode=os.environ.get(_ENV_PERMISSION_MODE, _DEFAULT_PERMISSION_MODE),

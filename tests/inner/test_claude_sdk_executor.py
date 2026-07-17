@@ -2815,6 +2815,114 @@ async def test_get_or_create_client_surfaces_cli_stderr_on_connect_timeout(monke
     assert options.stderr is None
 
 
+def test_resolve_sandbox_cwd_roots_relative_at_session_workspace(monkeypatch, tmp_path) -> None:
+    """
+    A relative ``os_env.cwd`` — notably the ``cwd: .`` that every
+    example agent config declaring ``os_env`` carries — must resolve
+    against the session workspace, not the runner daemon's process cwd.
+
+    The harness cwd (``HARNESS_CLAUDE_SDK_CWD``, the session's selected
+    working folder, worktree-aware) wins; the runner's global
+    ``OMNICRAFT_RUNNER_WORKSPACE`` is the fallback; the process cwd is
+    the last resort.
+    """
+    from omnicraft.inner.claude_sdk_executor import _resolve_sandbox_cwd
+
+    workspace = tmp_path / "runner-workspace"
+    worktree = tmp_path / "worktree-feature-x"
+    daemon_home = tmp_path / "daemon-home"
+    for path in (workspace, worktree, daemon_home):
+        path.mkdir()
+    monkeypatch.chdir(daemon_home)
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
+
+    # The session workspace wins over the runner's global workspace.
+    assert _resolve_sandbox_cwd(".", harness_cwd=str(worktree)) == worktree.resolve()
+    assert _resolve_sandbox_cwd(None, harness_cwd=str(worktree)) == worktree.resolve()
+    assert _resolve_sandbox_cwd("src", harness_cwd=str(worktree)) == (worktree / "src").resolve()
+
+    # No session workspace → the runner's global workspace, never $HOME.
+    assert _resolve_sandbox_cwd(".", harness_cwd=None) == workspace.resolve()
+    assert _resolve_sandbox_cwd(None, harness_cwd=None) == workspace.resolve()
+
+    # An absolute os_env.cwd is honored verbatim.
+    assert (
+        _resolve_sandbox_cwd(str(tmp_path / "abs"), harness_cwd=str(worktree))
+        == (tmp_path / "abs").resolve()
+    )
+
+    # Neither workspace set → the process cwd, preserving prior behavior.
+    monkeypatch.delenv("OMNICRAFT_RUNNER_WORKSPACE", raising=False)
+    assert _resolve_sandbox_cwd(".", harness_cwd=None) == daemon_home.resolve()
+
+
+def test_prepare_claude_cli_path_roots_sandbox_at_workspace_not_daemon_cwd(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    With the pervasive ``os_env.cwd: '.'`` config, the bwrap sandbox
+    must be rooted at the session workspace. Resolving ``"."`` against
+    the runner daemon's process cwd rooted the sandbox at the daemon's
+    ``$HOME`` — exposing the whole home dir to the agent and
+    disagreeing with the tmux terminal, which uses the workspace.
+    """
+    from omnicraft.inner.claude_sdk_executor import prepare_claude_cli_path
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from omnicraft.inner.sandbox import SandboxPolicy
+
+    workspace = tmp_path / "workspace"
+    daemon_home = tmp_path / "daemon-home"
+    workspace.mkdir()
+    daemon_home.mkdir()
+    monkeypatch.chdir(daemon_home)
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
+    monkeypatch.delenv("OMNICRAFT_CLAUDE_SDK_NO_SANDBOX", raising=False)
+
+    captured: dict[str, Path] = {}
+
+    def _capture_resolve(_spec: OSEnvSpec, cwd: Path) -> SandboxPolicy:
+        captured["cwd"] = cwd
+        return SandboxPolicy(
+            backend_type="linux_bwrap",
+            active=True,
+            read_roots=[cwd],
+            write_roots=[cwd],
+            write_files=[],
+            allow_network=True,
+        )
+
+    spec = OSEnvSpec(
+        type="caller_process",
+        cwd=".",
+        sandbox=OSEnvSandboxSpec(type="linux_bwrap", allow_network=True),
+    )
+
+    with (
+        patch(
+            "omnicraft.inner.claude_sdk_executor.resolve_sandbox",
+            side_effect=_capture_resolve,
+        ),
+        patch(
+            "omnicraft.inner.claude_sdk_executor._claude_internal_write_roots",
+            return_value=[],
+        ),
+        patch(
+            "omnicraft.inner.claude_sdk_executor._claude_internal_write_files",
+            return_value=[],
+        ),
+        patch(
+            "omnicraft.inner.claude_sdk_executor.create_exec_launcher",
+            return_value="/tmp/launcher",
+        ),
+    ):
+        prepare_claude_cli_path("/usr/bin/claude", spec)
+
+    assert captured["cwd"] == workspace.resolve(), (
+        "The sandbox must be rooted at the session workspace, not the "
+        f"runner daemon's process cwd ({daemon_home})."
+    )
+
+
 @pytest.mark.parametrize("env_value", ["1", "true", "yes"])
 def test_prepare_claude_cli_path_bypasses_wrapper_when_env_set(
     monkeypatch, caplog, env_value: str
@@ -2878,6 +2986,69 @@ def test_prepare_tight_cli_process_path_bypasses_wrapper_when_env_set(monkeypatc
     )
 
     assert prepare_tight_cli_process_path("/usr/bin/claude") == "/usr/bin/claude"
+
+
+def test_prepare_tight_cli_process_path_roots_sandbox_at_runner_workspace(
+    monkeypatch, tmp_path
+) -> None:
+    """
+    The tight default sandbox (the no-``os_env`` path) must also root at
+    the workspace. With no harness cwd, ``None`` resolved against the
+    runner daemon's process cwd rooted the sandbox at the daemon's
+    ``$HOME``; it must use ``OMNICRAFT_RUNNER_WORKSPACE`` instead.
+    """
+    from omnicraft.inner.claude_sdk_executor import prepare_tight_cli_process_path
+    from omnicraft.inner.datamodel import OSEnvSpec
+    from omnicraft.inner.sandbox import SandboxPolicy
+
+    workspace = tmp_path / "workspace"
+    daemon_home = tmp_path / "daemon-home"
+    workspace.mkdir()
+    daemon_home.mkdir()
+    monkeypatch.chdir(daemon_home)
+    monkeypatch.setenv("OMNICRAFT_RUNNER_WORKSPACE", str(workspace))
+    monkeypatch.delenv("OMNICRAFT_CLAUDE_SDK_NO_SANDBOX", raising=False)
+    # The tight path no-ops off Linux, where its implicit ``linux_bwrap``
+    # backend cannot resolve; pin the platform so the cwd logic runs.
+    monkeypatch.setattr(sys, "platform", "linux")
+
+    captured: dict[str, Path] = {}
+
+    def _capture_resolve(_spec: OSEnvSpec, cwd: Path) -> SandboxPolicy:
+        captured["cwd"] = cwd
+        return SandboxPolicy(
+            backend_type="linux_bwrap",
+            active=True,
+            read_roots=[cwd],
+            write_roots=[cwd],
+            write_files=[],
+            allow_network=True,
+        )
+
+    with (
+        patch(
+            "omnicraft.inner.claude_sdk_executor.resolve_sandbox",
+            side_effect=_capture_resolve,
+        ),
+        patch(
+            "omnicraft.inner.claude_sdk_executor._claude_internal_write_roots",
+            return_value=[],
+        ),
+        patch(
+            "omnicraft.inner.claude_sdk_executor._claude_internal_write_files",
+            return_value=[],
+        ),
+        patch(
+            "omnicraft.inner.claude_sdk_executor.create_exec_launcher",
+            return_value="/tmp/launcher",
+        ),
+    ):
+        assert prepare_tight_cli_process_path("/usr/bin/claude", cwd=None) == "/tmp/launcher"
+
+    assert captured["cwd"] == workspace.resolve(), (
+        "The tight default sandbox must be rooted at the runner workspace, "
+        f"not the daemon's process cwd ({daemon_home})."
+    )
 
 
 # ---------------------------------------------------------------------------

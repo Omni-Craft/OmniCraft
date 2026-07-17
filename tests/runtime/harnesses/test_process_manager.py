@@ -27,6 +27,7 @@ import contextlib
 import os
 import shutil
 import signal
+import socket
 import sys
 import tempfile
 import time
@@ -42,8 +43,11 @@ from omnicraft.runtime.harnesses.process_manager import (
     _TMP_PARENT_ENV_VAR,
     HarnessProcessManager,
     NoLiveHarnessError,
+    _default_tmp_parent,
     _pid_alive,
     _pids_holding_socket,
+    _posix_tmp_parent,
+    _socket_path,
     _SubprocessEntry,
 )
 
@@ -196,6 +200,63 @@ async def test_start_uses_harness_tmp_parent_env(
         assert (manager.instance_dir / _AP_PID_FILE).read_text(encoding="utf-8")
     finally:
         await manager.shutdown()
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="Per-uid tmp parent is POSIX-only; Windows uses gettempdir().",
+)
+def test_posix_tmp_parent_differs_per_uid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Runners of different Unix uids get different socket parents.
+
+    A single shared parent breaks multi-user hosts: the first uid's
+    runner creates it ``0700`` and every other uid's runner then
+    fails to read it or to create its instance dir inside it. The
+    property that matters is that the paths differ, not the exact
+    spelling — this is an availability fix, not an access boundary.
+    """
+    assert _posix_tmp_parent(1000) != _posix_tmp_parent(1001)
+    # The live default must be one of these per-uid parents, not a
+    # single root every user on the host would share.
+    monkeypatch.delenv(_TMP_PARENT_ENV_VAR, raising=False)
+    assert _default_tmp_parent() == _posix_tmp_parent(os.getuid())
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="sun_path limits are POSIX-only; Windows uses TCP loopback.",
+)
+def test_longest_possible_socket_path_still_binds() -> None:
+    """The socket path fits ``sun_path`` for the largest possible uid.
+
+    The parent is kept short precisely because ``sun_path`` is tight
+    (103 usable bytes on macOS), so the uid suffix has to be paid for
+    out of that budget. Binds the real worst case — a 10-digit uid,
+    the 32-bit ``uid_t`` ceiling — rather than trusting arithmetic.
+    """
+    parent = _posix_tmp_parent(2**32 - 1)
+    # The parent is shared and predictable, so it may already hold
+    # another run's (or another user's) instance dirs — never rmtree it.
+    parent_preexisted = parent.exists()
+    instance_dir = parent / f"ap-{uuid.uuid4().hex}"
+    sock = _socket_path(instance_dir, f"conv_{uuid.uuid4().hex}")
+    instance_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    try:
+        # Raises OSError if the path exceeds the platform's sun_path.
+        server.bind(str(sock))
+    finally:
+        server.close()
+        # Remove only what this test created: the uuid-unique instance
+        # dir (and the socket under it). Drop the parent solely if this
+        # test created it and it is now empty — rmdir fails closed on a
+        # parent another run still occupies.
+        shutil.rmtree(instance_dir, ignore_errors=True)
+        if not parent_preexisted:
+            with contextlib.suppress(OSError):
+                parent.rmdir()
 
 
 async def test_shutdown_without_start_is_noop(

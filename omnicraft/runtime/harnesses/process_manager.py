@@ -51,16 +51,40 @@ _logger = logging.getLogger(__name__)
 # uuid-named subdir so concurrent OmniCraft processes (zero-downtime restarts,
 # multi-tenant single-machine deployments) don't step on each other.
 #
-# POSIX pins ``/tmp/omnicraft`` deliberately: Unix socket paths have a tight
+# POSIX pins ``/tmp/oc-<uid>`` deliberately: Unix socket paths have a tight
 # length limit, so a short, predictable parent matters (gettempdir() can be a
-# long ``/var/folders/...`` path on macOS). Windows uses TCP loopback for the
-# harness IPC (no socket-path length concern) and has no ``/tmp`` — a literal
-# ``/tmp/omnicraft`` there resolves to ``\tmp\omnicraft`` on the current drive —
-# so use the real temp dir.
+# long ``/var/folders/...`` path on macOS). The uid suffix stops runners of
+# different Unix users from colliding on one parent: whichever user's runner
+# starts first creates it ``0700``, and every other user's runner then fails —
+# either in ``_sweep_orphans`` iterating a parent it cannot read, or creating
+# its own instance dir inside it. The prefix is ``oc``, not ``omnicraft``, to
+# buy back the bytes the uid costs: ``_posix_tmp_parent`` documents the budget.
+# Windows uses TCP loopback for the harness IPC (no socket-path length concern)
+# and has no ``/tmp`` — a literal ``/tmp/omnicraft`` there resolves to
+# ``\tmp\omnicraft`` on the current drive — so use the real temp dir.
+
+
+def _posix_tmp_parent(uid: int) -> Path:
+    """
+    Build the POSIX socket-parent path for *uid*.
+
+    The whole socket path — ``<parent>/ap-<32 hex>/conv-conv_<32
+    hex>.sock`` — has to fit the platform's ``sun_path`` budget, which
+    is the tightest on macOS at 103 usable bytes. The fixed part below
+    the parent costs 84 bytes, leaving 19 for the parent: ``/tmp/oc-``
+    plus a uid of up to 10 digits (the 32-bit ``uid_t`` ceiling) is 18,
+    one byte inside the budget, so the longest possible path is 102.
+
+    :param uid: The Unix uid to embed in the parent path.
+    :returns: The parent path, e.g. ``/tmp/oc-501``.
+    """
+    return Path(f"/tmp/oc-{uid}")
+
+
 if IS_WINDOWS:
     _TMP_PARENT = Path(tempfile.gettempdir()) / "omnicraft"
 else:
-    _TMP_PARENT = Path("/tmp/omnicraft")
+    _TMP_PARENT = _posix_tmp_parent(os.getuid())
 _TMP_PARENT_ENV_VAR = "OMNICRAFT_HARNESS_TMP_PARENT"
 
 # S1 (security): env var carrying the per-spawn bearer token for the harness
@@ -194,8 +218,8 @@ def _default_tmp_parent() -> Path:
     length limits, and a short path such as ``.tmp/oa`` is useful
     for local worktrees whose absolute path is long.
 
-    :returns: Configured parent path, or the default
-        ``/tmp/omnicraft``.
+    :returns: Configured parent path, or the per-uid default
+        ``/tmp/oc-<uid>`` on POSIX.
     """
     configured = os.environ.get(_TMP_PARENT_ENV_VAR)
     if configured:

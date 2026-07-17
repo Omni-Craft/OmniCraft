@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "omnicraft-ui-sdk"
-version = "0.5.0a3"
+version = "0.5.0a4"
 description = "Terminal UI components (Rich + prompt_toolkit) for building omnicraft frontends"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -13,7 +13,7 @@ dependencies = [
     # at one version (release-omnicraft.yml verifies the pin). A `>=`
     # floor would also reject pre-releases (e.g. 0.1.0rc1 < 0.1.0 in
     # PEP 440).
-    "omnicraft-client==0.5.0a3",
+    "omnicraft-client==0.5.0a4",
     "rich>=13",
     "prompt_toolkit>=3",
     "pyyaml>=6.0,<7",

@@ -1,7 +1,7 @@
 {
   "name": "omnicraft-desktop-electron",
   "productName": "OmniCraft",
-  "version": "0.5.0-alpha.3",
+  "version": "0.5.0-alpha.4",
   "description": "Shell desktop do OmniCraft (edição Electron) — um wrapper nativo leve sobre a interface web servida pelo servidor.",
   "private": true,
   "main": "src/main.js",

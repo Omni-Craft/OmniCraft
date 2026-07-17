@@ -131,6 +131,12 @@ def prompt_policy(
         """
         Evaluate the policy event via LLM classification.
 
+        An empty classifier response, and a call or parse that raises,
+        return DENY here: abstaining is equivalent to ALLOW, which would
+        let the event through precisely when the policy cannot judge it.
+        A response that parses into a non-object raises out of this
+        function instead of returning a verdict.
+
         :param event: The policy event dict.
         :returns: A :class:`PolicyResponse` dict, or ``None``
             to abstain.
@@ -202,8 +208,11 @@ def prompt_policy(
             )
             raw_text = _extract_response_text(response)
             if not raw_text:
-                _log.warning("prompt_policy: empty LLM response, abstaining")
-                return None
+                _log.warning("prompt_policy: empty LLM response, failing closed (DENY)")
+                return {
+                    "result": "DENY",
+                    "reason": "Policy classifier returned an empty response (fail-closed).",
+                }
             raw_text = _strip_code_fences(raw_text)
             verdict = json.loads(raw_text)
         except Exception:  # noqa: BLE001 — catch-all for LLM/JSON failures; fail-closed

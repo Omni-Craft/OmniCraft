@@ -114,8 +114,8 @@ async def test_llm_error_fails_closed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_empty_response_abstains() -> None:
-    """Empty LLM response → abstain (None)."""
+async def test_empty_response_fails_closed() -> None:
+    """Empty LLM response → fail-closed DENY, not abstain."""
     evaluate = prompt_policy(prompt="Test.")
     client = AsyncMock()
     client.create.return_value = type("R", (), {"output_text": ""})()
@@ -128,7 +128,9 @@ async def test_empty_response_abstains() -> None:
         "llm_client": client,
     }
     result = await evaluate(event)
-    assert result is None
+    assert result is not None, "empty response abstained — abstain is ALLOW, so this fails open"
+    assert result["result"] == "DENY"
+    assert "fail-closed" in result["reason"]
 
 
 @pytest.mark.asyncio

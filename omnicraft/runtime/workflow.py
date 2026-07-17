@@ -1152,6 +1152,7 @@ def _add_claude_sdk_skills_env(
 def _build_claude_sdk_spawn_env(
     spec: AgentSpec,
     *,
+    cwd: Path | None = None,
     workdir: Path | None = None,
 ) -> dict[str, str]:
     """
@@ -1165,6 +1166,8 @@ def _build_claude_sdk_spawn_env(
     ``os.environ``.
 
     :param spec: The agent spec.
+    :param cwd: The session workspace — the working folder the turn runs
+        in, not the agent bundle workdir.
     :param workdir: The bundle's on-disk path (extracted by the
         agent cache). Threaded through as
         ``HARNESS_CLAUDE_SDK_BUNDLE_DIR`` so the harness wrap can
@@ -1176,6 +1179,11 @@ def _build_claude_sdk_spawn_env(
     model = _resolve_spec_model(spec)
     if model is not None:
         env["HARNESS_CLAUDE_SDK_MODEL"] = model
+    # Emit the session workspace (the selected working folder, not the bundle
+    # workdir) that the harness reads as ``HARNESS_CLAUDE_SDK_CWD`` — see
+    # claude_sdk_harness.py.
+    if cwd is not None:
+        env["HARNESS_CLAUDE_SDK_CWD"] = str(cwd)
 
     # ── Auth resolution ────────────────────────────────────────────────
     # Priority (highest first):
@@ -1256,6 +1264,7 @@ def _build_claude_sdk_spawn_env(
 def _build_codex_spawn_env(
     spec: AgentSpec,
     *,
+    cwd: Path | None = None,
     workdir: Path | None = None,
 ) -> dict[str, str]:
     """
@@ -1277,6 +1286,8 @@ def _build_codex_spawn_env(
     overrides only override, they don't filter).
 
     :param spec: The agent spec.
+    :param cwd: The session workspace — the working folder the turn runs
+        in, not the agent bundle workdir.
     :param workdir: The bundle's on-disk path (extracted by the
         agent cache). Threaded through as
         ``HARNESS_CODEX_BUNDLE_DIR`` so the harness wrap's executor
@@ -1312,6 +1323,11 @@ def _build_codex_spawn_env(
     env["HARNESS_CODEX_SKILLS_FILTER"] = json.dumps(spec.skills_filter)
     if spec.name:
         env["HARNESS_CODEX_AGENT_NAME"] = spec.name
+    # Emit the session workspace (the selected working folder, not the bundle
+    # workdir) that the harness reads as ``HARNESS_CODEX_CWD`` — see
+    # codex_harness.py.
+    if cwd is not None:
+        env["HARNESS_CODEX_CWD"] = str(cwd)
     if workdir is not None:
         env["HARNESS_CODEX_BUNDLE_DIR"] = str(workdir)
     os_env_payload = _serialize_os_env(spec.os_env)
@@ -1383,6 +1399,7 @@ def _build_pi_spawn_env(
 def _build_qwen_spawn_env(
     spec: AgentSpec,
     *,
+    cwd: Path | None = None,
     workdir: Path | None = None,
 ) -> dict[str, str]:
     """
@@ -1394,6 +1411,8 @@ def _build_qwen_spawn_env(
     :func:`_build_codex_spawn_env`.
 
     :param spec: The agent spec.
+    :param cwd: The session workspace — the working folder the turn runs
+        in, not the agent bundle workdir.
     :param workdir: The bundle's on-disk path (extracted by the agent
         cache). Accepted for signature parity with the other
         ``_build_*_spawn_env`` builders; the qwen wrap does not yet
@@ -1405,6 +1424,11 @@ def _build_qwen_spawn_env(
     model = _resolve_spec_model(spec)
     if model is not None:
         env["HARNESS_QWEN_MODEL"] = model
+    # Emit the session workspace (the selected working folder, not the bundle
+    # workdir) that the harness reads as ``HARNESS_QWEN_CWD`` — see
+    # qwen_harness.py.
+    if cwd is not None:
+        env["HARNESS_QWEN_CWD"] = str(cwd)
 
     # Generic-provider branch (slotted ahead of the legacy-profile /
     # databricks-prefix path): a ProviderAuth on the spec, or — when the spec
@@ -1435,6 +1459,7 @@ def _build_qwen_spawn_env(
 def _build_goose_spawn_env(
     spec: AgentSpec,
     *,
+    cwd: Path | None = None,
     workdir: Path | None = None,
 ) -> dict[str, str]:
     """
@@ -1449,6 +1474,8 @@ def _build_goose_spawn_env(
     user's Goose config), mirroring how the native CLIs handle gateway ids.
 
     :param spec: The agent spec.
+    :param cwd: The session workspace — the working folder the turn runs
+        in, not the agent bundle workdir.
     :param workdir: The bundle's on-disk path. Accepted for signature parity with
         the other ``_build_*_spawn_env`` builders; the goose wrap consumes no
         bundle dir yet (no skills bridge).
@@ -1458,6 +1485,11 @@ def _build_goose_spawn_env(
     model = _resolve_spec_model(spec)
     if model is not None and not model.startswith(("databricks-", "databricks/")):
         env["HARNESS_GOOSE_MODEL"] = model
+    # Emit the session workspace (the selected working folder, not the bundle
+    # workdir) that the harness reads as ``HARNESS_GOOSE_CWD`` — see
+    # goose_harness.py.
+    if cwd is not None:
+        env["HARNESS_GOOSE_CWD"] = str(cwd)
     os_env_payload = _serialize_os_env(spec.os_env)
     if os_env_payload is not None:
         env["HARNESS_GOOSE_OS_ENV"] = os_env_payload
@@ -1467,6 +1499,7 @@ def _build_goose_spawn_env(
 def _build_acp_spawn_env(
     spec: AgentSpec,
     *,
+    cwd: Path | None = None,
     workdir: Path | None = None,
 ) -> dict[str, str]:
     """Build the env-var dict the generic ACP harness wrap reads.
@@ -1483,6 +1516,8 @@ def _build_acp_spawn_env(
     first configured agent so a bare ``acp`` id still launches something.
 
     :param spec: The agent spec.
+    :param cwd: The session workspace — the working folder the turn runs
+        in, not the agent bundle workdir.
     :param workdir: Accepted for signature parity with the other builders; the
         ACP wrap consumes no bundle dir.
     :returns: A dict of ``HARNESS_ACP_*`` env-var overrides for the spawn.
@@ -1518,6 +1553,11 @@ def _build_acp_spawn_env(
     # else: no agent configured — leave HARNESS_ACP_COMMAND unset so the wrap
     # raises a clear request-time error pointing the user at `omnicraft setup`.
 
+    # Emit the session workspace (the selected working folder, not the bundle
+    # workdir) that the harness reads as ``HARNESS_ACP_CWD`` — see
+    # acp_harness.py.
+    if cwd is not None:
+        env["HARNESS_ACP_CWD"] = str(cwd)
     os_env_payload = _serialize_os_env(spec.os_env)
     if os_env_payload is not None:
         env["HARNESS_ACP_OS_ENV"] = os_env_payload
@@ -1707,6 +1747,7 @@ def _build_openai_agents_sdk_spawn_env(spec: AgentSpec) -> dict[str, str]:
 def _build_cursor_spawn_env(
     spec: AgentSpec,
     *,
+    cwd: Path | None = None,
     workdir: Path | None = None,
 ) -> dict[str, str]:
     """
@@ -1731,6 +1772,8 @@ def _build_cursor_spawn_env(
     profile does not apply to cursor and is ignored.
 
     :param spec: The agent spec.
+    :param cwd: The session workspace — the working folder the turn runs
+        in, not the agent bundle workdir.
     :param workdir: The bundle's on-disk path, threaded as
         ``HARNESS_CURSOR_BUNDLE_DIR``.
     :returns: A dict of env-var overrides for
@@ -1740,6 +1783,11 @@ def _build_cursor_spawn_env(
     model = _resolve_spec_model(spec)
     if model is not None:
         env["HARNESS_CURSOR_MODEL"] = model
+    # Emit the session workspace (the selected working folder, not the bundle
+    # workdir) that the harness reads as ``HARNESS_CURSOR_CWD`` — see
+    # cursor_harness.py.
+    if cwd is not None:
+        env["HARNESS_CURSOR_CWD"] = str(cwd)
     # Auth precedence: an explicit api-key auth on the spec wins; with NO spec
     # auth at all, fall back to a CURSOR_API_KEY registered once via
     # ``omnicraft setup`` (the dedicated ``cursor:`` config block), else an
@@ -1912,6 +1960,7 @@ def _build_antigravity_spawn_env(spec: AgentSpec) -> dict[str, str]:
 def _build_copilot_spawn_env(
     spec: AgentSpec,
     *,
+    cwd: Path | None = None,
     workdir: Path | None = None,
 ) -> dict[str, str]:
     """
@@ -1936,6 +1985,8 @@ def _build_copilot_spawn_env(
     ``DatabricksAuth`` profile does not apply to copilot and is ignored.
 
     :param spec: The agent spec.
+    :param cwd: The session workspace — the working folder the turn runs
+        in, not the agent bundle workdir.
     :param workdir: The bundle's on-disk path, threaded as
         ``HARNESS_COPILOT_BUNDLE_DIR``.
     :returns: A dict of env-var overrides for
@@ -1945,6 +1996,11 @@ def _build_copilot_spawn_env(
     model = _resolve_spec_model(spec)
     if model is not None:
         env["HARNESS_COPILOT_MODEL"] = model
+    # Emit the session workspace (the selected working folder, not the bundle
+    # workdir) that the harness reads as ``HARNESS_COPILOT_CWD`` — see
+    # copilot_harness.py.
+    if cwd is not None:
+        env["HARNESS_COPILOT_CWD"] = str(cwd)
     # Auth precedence: an explicit api-key auth on the spec wins (its ``api_key``
     # is the GitHub token); with NO spec auth at all, fall back to a token
     # registered once via ``omnicraft setup`` (the dedicated ``copilot:`` config

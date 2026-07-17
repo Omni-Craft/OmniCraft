@@ -14724,8 +14724,17 @@ def create_runner_app(
                     # bookkeeping can't hang on a result that never arrives —
                     # the running-zombie failure mode. Not gated on _response_id:
                     # a death before ``response.created`` also ends terminal-less
-                    # and must fail, not report idle.
-                    if not _saw_terminal and _stream_failed_error is None:
+                    # and must fail, not report idle. Two legitimate terminal-less
+                    # ends are exempt: native/terminal-backed harnesses (no
+                    # response.* lifecycle by design) and a stream paused on
+                    # action_required (_dispatch_tasks non-empty — the harness
+                    # resumes in a new stream after the tool result lands).
+                    if (
+                        not _saw_terminal
+                        and _stream_failed_error is None
+                        and not _dispatch_tasks
+                        and not _is_native_harness(conv_id)
+                    ):
                         _stream_failed_error = {
                             "code": "connection_error",
                             "message": "Harness stream ended unexpectedly.",

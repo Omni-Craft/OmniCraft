@@ -8878,7 +8878,16 @@ async def test_message_turn_lifecycle_status_suppressed_for_terminal_backed_harn
         executor=ExecutorSpec(type="omnicraft", config={"harness": harness}),
     )
     stream_finished = asyncio.Event()
-    harness_client = _ScriptedHarnessClient([], stream_finished=stream_finished)
+    # A non-terminal harness must close its stream with a terminal
+    # lifecycle event — an empty close now reads as a subprocess death
+    # and fails the turn. Terminal-backed harnesses end without the
+    # response.* lifecycle by design and stay scripted empty.
+    frames = (
+        []
+        if harness != "openai-agents"
+        else [_sse({"type": "response.completed", "response": {"id": "resp_1"}})]
+    )
+    harness_client = _ScriptedHarnessClient(frames, stream_finished=stream_finished)
     app = create_runner_app(
         process_manager=_FakeProcessManager(harness_client),  # type: ignore[arg-type]
         spec_resolver=await _spec_resolver_returning(spec),

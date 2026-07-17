@@ -119,7 +119,7 @@ Abra a web UI, escolha **Início** para conversar ou **Code** para executar —
 ou rode um agente direto no terminal:
 
 ```bash
-omnicraft run examples/capataz/   # o capataz das fábricas (orquestrador)
+omnicraft run examples/fucho/     # orquestradora multi-agente de código
 omnicraft claude                  # Claude Code embrulhado com sessões/políticas
 ```
 
@@ -159,13 +159,6 @@ desenvolvimento), somando **51 sub-agentes** e **133 skills**:
 
 | Agente | O que é | Sub-agentes | Skills |
 |---|---|---:|---:|
-| **capataz** | O capataz das fábricas: orquestra 6 harnesses de código com revisão cruzada, conduz OpenSpec e roteia para as skills das fábricas | 6 | 12 |
-| **mestre-de-obras** | Dirige uma cópia de fábrica sem improvisar: segue o `AGENTS.md`, as changes e os portões dela, e coloca cada especialista no modelo que ela pede (Claude constrói, Codex julga) | 4 | 2 |
-| **fabrica-completa** | Time web + Android + iOS (o superset) | 12 | 41 |
-| **fabrica-ios** | Time Apple nativo — Swift/SwiftUI/Vapor/macOS | 12 | 36 |
-| **fabrica-fullstack** | Time web — NestJS + Next.js + Prisma, Clean Architecture + DDD | 9 | 33 |
-| **fabrica-sites** | Time criativo — design, 3D, shaders, motion, SEO | 9 | 13 |
-| **fabrica-mobile** | Time de app mobile | 9 | 10 |
 | **fucho** | Orquestradora multi-agente de código (Claude Code · Codex · Gemini · Cursor · OpenCode · Hermes · Pi) com revisão de outro fornecedor | 7 | 4 |
 | **gemini** | O Gemini CLI do Google como agente, via ACP — usa o login do próprio CLI | — | — |
 | **maestro** | Testes/QA: escreve testes, delega execução, revisa o design da suíte | 2 | 3 |
@@ -372,9 +365,9 @@ prompt: |
 omnicraft run meu-agente/
 ```
 
-Os 16 agentes de [`examples/`](examples/) são o melhor material de estudo — do
-`chat` minimalista ao `capataz` (orquestrador completo com guardrails, spawn e
-OpenSpec). Especificação completa em
+Os 11 agentes de [`examples/`](examples/) são o melhor material de estudo — do
+`chat` minimalista à `fucho` (orquestradora completa com guardrails, spawn e
+revisão cross-vendor). Especificação completa em
 [`docs/AGENT_YAML_SPEC.md`](docs/AGENT_YAML_SPEC.md).
 
 ---
@@ -390,7 +383,7 @@ que não existem no upstream:
 | **Superfícies** | Abas **Início/Code** com históricos separados; **Chat sem filesystem** (garantia no servidor); **Craftwork** in-place estilo Cowork com frequência |
 | **Chat** | Memória local por projeto (sem chave), painel de **Artifacts** com "→ Code", "Discutir no Chat" no caminho inverso, mascote nadando 🐟 |
 | **Automação** | Agendador com cron+fuso+templates, **webhooks com templating** `{{...}}`, **resultado por push**, alerta de falhas, no-overlap, escopo por dono |
-| **Agentes** | Galeria instalável com 18 agentes: **5 fábricas** (51 especialistas, 133 skills), **capataz** e **mestre-de-obras**, a **fucho** (7 workers), maestro/atlas/polyglot/sculptor, e o chat |
+| **Agentes** | Galeria instalável com 11 agentes: a orquestradora **fucho** (7 workers), maestro/atlas/polyglot/sculptor/scribe/sentinel, o **lilo** (debate cross-vendor), o **remy** (memória) e o chat |
 | **Fornecedores** | **Três misturáveis num run**: Claude, Codex e Google — **Gemini CLI** (via ACP) e **Antigravity** somados aos harnesses do upstream. Skill de **roteamento** com tabela tarefa→(worker, modelo) e a regra que importa: quem julga nunca é quem construiu |
 | **Assets locais** | **ComfyUI** ligado aos agentes: imagens de site (RealVisXL em 1024px + upscale 2x por IA) e **3D texto→GLB** (Hunyuan3D) — sem nuvem, sem chave |
 | **Desktop** | Abrir o app **sobe o stack local sozinho** (servidor + host); instaladores **Windows (.exe)** e **macOS (.dmg)**; navegador embutido dirigível pelo agente (`browser_*`) |

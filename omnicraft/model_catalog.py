@@ -16,9 +16,10 @@ Enumeration is deterministic per provider kind:
   token minted from the profile (source ``"gateway"``).
 - ``key`` with the ``anthropic`` family → ``GET <base_url>/v1/models``
   with ``x-api-key`` headers (source ``"anthropic-api"``).
-- ``key`` (openai family) / ``gateway`` / ``local`` →
+- ``key`` (openai family) / ``gateway`` / ``local`` / ``cli-config`` →
   ``GET <base_url>/v1/models`` with a bearer token (source
-  ``"openai-compatible"``).
+  ``"openai-compatible"``). ``cli-config`` reads its base URL + token
+  command from the pinned ``~/.codex/config.toml`` provider table.
 - ``subscription`` → a curated static list (source ``"static"``,
   ``verified: false`` — CLI logins expose no listing API).
 - anything unresolvable → source ``"none"`` with an explanatory note,
@@ -43,6 +44,7 @@ from omnicraft._platform import default_shell_argv
 from omnicraft.model_override import model_family_mismatch
 from omnicraft.onboarding.provider_config import (
     ANTHROPIC_FAMILY,
+    CLI_CONFIG_KIND,
     DATABRICKS_KIND,
     KEY_KIND,
     OPENAI_FAMILY,
@@ -563,6 +565,47 @@ def _legacy_profile_only_provider(spec: Any, harness_type: str) -> ResolvedModel
     return ResolvedModelProvider(kind=NONE_KIND, detail="no model provider configured")
 
 
+def _provider_from_cli_config_entry(entry: ProviderEntry) -> ResolvedModelProvider:
+    """Resolve a ``cli-config`` provider from its pinned codex config table.
+
+    The provider definition and credential live in the user's
+    ``~/.codex/config.toml`` ``[model_providers.X]`` table (OpenAI-compatible),
+    so this reads that table's transport — base URL + bearer-token command —
+    and resolves to an openai-family provider the listing can enumerate.
+
+    :param entry: The resolved ``cli-config`` provider entry.
+    :returns: A :class:`ResolvedModelProvider`; ``kind="none"`` when the pinned
+        table resolves no ``base_url`` (the CLI credential is absent).
+    """
+    from omnicraft.onboarding.ambient import (
+        _codex_config_path,
+        codex_config_provider_transport,
+    )
+
+    if entry.cli != "codex" or not entry.model_provider:
+        return ResolvedModelProvider(
+            kind=NONE_KIND,
+            detail=f"cli-config provider {entry.name!r} pins no codex model_provider",
+        )
+    transport = codex_config_provider_transport(_codex_config_path(), entry.model_provider)
+    if transport is None or not transport.base_url:
+        return ResolvedModelProvider(
+            kind=NONE_KIND,
+            detail=(
+                f"cli-config provider {entry.name!r} pins "
+                f"[model_providers.{entry.model_provider}], which resolves no base_url "
+                "in ~/.codex/config.toml"
+            ),
+        )
+    return ResolvedModelProvider(
+        kind=CLI_CONFIG_KIND,
+        family=OPENAI_FAMILY,
+        base_url=transport.base_url,
+        auth_command=transport.auth_command,
+        detail=f"provider {entry.name!r} (cli-config {entry.model_provider!r})",
+    )
+
+
 def _provider_from_entry(entry: ProviderEntry, harness_type: str) -> ResolvedModelProvider:
     """Map a resolved :class:`ProviderEntry` to a provider descriptor.
 
@@ -581,6 +624,8 @@ def _provider_from_entry(entry: ProviderEntry, harness_type: str) -> ResolvedMod
         return ResolvedModelProvider(
             kind=SUBSCRIPTION_KIND, cli=entry.cli, detail=f"provider {entry.name!r}"
         )
+    if entry.kind == CLI_CONFIG_KIND:
+        return _provider_from_cli_config_entry(entry)
     # Inline-family kinds: single-family harnesses get exactly their family;
     # pi takes the first whose credential resolves, anthropic preferred.
     preferred = _KEY_AUTH_FAMILY[harness_type] if harness_type != "pi" else None

@@ -1155,3 +1155,132 @@ def test_keychain_credential_ref_degrades_not_crashes(
     assert listing.source == "none"
     assert not listing.models
     assert listing.note, "degraded keychain row must carry an explanatory note"
+
+
+# ── cli-config providers (codex config.toml-owned auth) ─────────────
+
+# A ``cli-config`` provider pins a ``[model_providers.X]`` table the codex CLI
+# owns in ~/.codex/config.toml; OmniCraft stores no inline family for it.
+_CLI_CONFIG_PROVIDER_CONFIG = (
+    "providers:\n"
+    "  isaac-codex:\n"
+    "    kind: cli-config\n"
+    "    cli: codex\n"
+    "    model_provider: Databricks\n"
+    "    display_name: Isaac Databricks\n"
+    "    default: openai\n"
+)
+
+
+def _isolate_codex_config(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, toml_text: str | None
+) -> None:
+    """Point the codex config reader at an isolated ``config.toml``.
+
+    The cli-config resolver reads ``~/.codex/config.toml`` via
+    :func:`omnicraft.onboarding.ambient._codex_config_path`; redirect it to a
+    per-test file (never the developer's real codex config) so resolution is
+    hermetic.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Per-test temp dir.
+    :param toml_text: The ``config.toml`` contents, or ``None`` to leave the
+        file absent (the "credential unconfigured" case).
+    """
+    codex_config = tmp_path / "codex" / "config.toml"
+    if toml_text is not None:
+        codex_config.parent.mkdir(parents=True, exist_ok=True)
+        codex_config.write_text(toml_text)
+    monkeypatch.setattr(
+        "omnicraft.onboarding.ambient._codex_config_path", lambda: codex_config
+    )
+
+
+def test_resolve_provider_cli_config_resolves_transport(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A cli-config worker resolves to a valid provider from its codex table.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Per-test temp dir.
+    """
+    _isolate_config(monkeypatch, tmp_path, _CLI_CONFIG_PROVIDER_CONFIG)
+    _isolate_codex_config(
+        monkeypatch,
+        tmp_path,
+        '[model_providers.Databricks]\n'
+        'base_url = "https://ws.ai-gateway.cloud.databricks.com/codex/v1"\n'
+        'wire_api = "chat"\n'
+        "[model_providers.Databricks.auth]\n"
+        'command = "printf"\n'
+        'args = ["sk-cli-test"]\n',
+    )
+
+    provider = resolve_model_provider(_worker_spec("codex-native"), "codex-native")
+
+    assert provider.kind == "cli-config"
+    assert provider.family == "openai"
+    assert provider.base_url == "https://ws.ai-gateway.cloud.databricks.com/codex/v1"
+    assert provider.auth_command == "printf sk-cli-test"
+
+
+def test_resolve_provider_cli_config_absent_credential_is_none(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A cli-config worker whose pinned table is missing resolves to ``none``.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Per-test temp dir.
+    """
+    _isolate_config(monkeypatch, tmp_path, _CLI_CONFIG_PROVIDER_CONFIG)
+    _isolate_codex_config(monkeypatch, tmp_path, None)
+
+    provider = resolve_model_provider(_worker_spec("codex-native"), "codex-native")
+
+    assert provider.kind == "none"
+    # The note must name why: the pinned codex table resolved no base_url.
+    assert "cli-config" in provider.detail
+    assert "base_url" in provider.detail
+
+
+def test_cli_config_listing_enumerates_via_openai_compatible(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A resolved cli-config worker lists models from the pinned gateway.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Per-test temp dir.
+    """
+    _isolate_config(monkeypatch, tmp_path, _CLI_CONFIG_PROVIDER_CONFIG)
+    _isolate_codex_config(
+        monkeypatch,
+        tmp_path,
+        '[model_providers.Databricks]\n'
+        'base_url = "https://ws.ai-gateway.cloud.databricks.com/codex/v1"\n'
+        "[model_providers.Databricks.auth]\n"
+        'command = "printf"\n'
+        'args = ["sk-cli-test"]\n',
+    )
+    requests_seen: list[httpx.Request] = []
+
+    def _handler(request: httpx.Request) -> httpx.Response:
+        """Serve a realistic gateway models page."""
+        requests_seen.append(request)
+        return httpx.Response(
+            200,
+            json={"data": [{"id": "databricks-gpt-5-4"}, {"id": "databricks-claude-opus-4-8"}]},
+        )
+
+    listing = list_models_for_worker(
+        _worker_spec("codex-native"), "codex-native", transport=httpx.MockTransport(_handler)
+    )
+
+    assert str(requests_seen[0].url) == (
+        "https://ws.ai-gateway.cloud.databricks.com/codex/v1/models"
+    )
+    # The token the codex table's auth command printed authenticated the call.
+    assert requests_seen[0].headers["authorization"] == "Bearer sk-cli-test"
+    assert listing.source == "openai-compatible"
+    assert listing.verified is True
+    # codex-native keeps only the GPT-family id from the gateway page.
+    assert {m.id for m in listing.models} == {"databricks-gpt-5-4"}

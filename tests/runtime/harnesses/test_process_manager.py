@@ -33,7 +33,7 @@ import sys
 import tempfile
 import time
 import uuid
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
@@ -1377,3 +1377,327 @@ async def test_orphan_sweep_escalates_to_sigkill(
 
     assert calls == 2
     assert killed == [(12345, signal.SIGTERM), (12345, signal.SIGKILL)]
+
+
+# ── Release / shutdown vs cold-spawn races ───────────────────────
+
+
+async def _cancel_pending(*tasks: asyncio.Task[object] | None) -> None:
+    """Cancel any still-pending tasks so a failed assertion cannot hang teardown."""
+    for task in tasks:
+        if task is not None and not task.done():
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, RuntimeError):
+                _settled = await task
+                del _settled
+
+
+def _lock_waiter_count(lock: asyncio.Lock) -> int:
+    """Number of pending acquisition futures queued on ``lock``.
+
+    ``asyncio.Lock`` exposes no public waiter count, but its private
+    ``_waiters`` deque of acquisition futures is the only observable proof
+    that a task has reached its ``async with spawn_lock`` await — as
+    opposed to merely being scheduled. The race tests wait on this instead
+    of a bare ``sleep(0)`` so the interleaving (holder → release queued →
+    getter queued behind release) is pinned deterministically, not left to
+    the scheduler. Cancelled futures are filtered so a torn-down waiter
+    from an earlier assertion failure is never counted.
+    """
+    waiters = getattr(lock, "_waiters", None)
+    if not waiters:
+        return 0
+    return sum(1 for waiter in waiters if not waiter.cancelled())
+
+
+async def _wait_until(
+    predicate: Callable[[], bool],
+    message: str,
+    *,
+    timeout_s: float = 5.0,
+    interval_s: float = 0.005,
+) -> None:
+    """Poll ``predicate`` on a real deadline until true; assert on timeout.
+
+    The deterministic ordering signal for the race tests: rather than a
+    single ``sleep(0)`` that cedes one scheduler turn (and can lose the
+    interleaving), poll an observable condition — typically a spawn-lock
+    waiter count — until it holds. Against pre-fix code the condition
+    never becomes true (``release`` never enqueues on the spawn lock), so
+    the poll deterministically times out and fails the test.
+    """
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if predicate():
+            return
+        await asyncio.sleep(interval_s)
+    raise AssertionError(message)
+
+
+async def test_release_during_spawn_leaves_no_live_process(
+    manager: HarnessProcessManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``release`` during cold spawn must not lose to a late registration.
+
+    ``get_client`` holds the per-conversation spawn lock across
+    ``_wait_for_bind``, but ``release`` used to only inspect ``_entries``
+    under the registry lock. A release that arrived mid-bind saw no entry
+    and returned; the spawn then registered a live process that nobody
+    owned. Barriers pin the race: release is queued while bind is gated,
+    then bind completes so both sides settle under the shared spawn lock.
+    """
+    from omnicraft.runtime.harnesses import process_manager as pm_mod
+
+    await manager.start()
+    get_task: asyncio.Task[object] | None = None
+    release_task: asyncio.Task[None] | None = None
+    allow_bind = asyncio.Event()
+    try:
+        spawned: list[asyncio.subprocess.Process] = []
+        real_exec = asyncio.create_subprocess_exec
+
+        async def capturing_exec(*args: object, **kwargs: object) -> asyncio.subprocess.Process:
+            process = await real_exec(*args, **kwargs)  # type: ignore[arg-type]
+            spawned.append(process)
+            return process
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", capturing_exec)
+
+        in_bind = asyncio.Event()
+        real_wait_for_bind = pm_mod._wait_for_bind
+
+        async def gated_bind(*args: object, **kwargs: object) -> None:
+            in_bind.set()
+            await allow_bind.wait()
+            await real_wait_for_bind(*args, **kwargs)
+
+        monkeypatch.setattr(pm_mod, "_wait_for_bind", gated_bind)
+
+        conv_id = "conv_release_during_spawn"
+        get_task = asyncio.create_task(manager.get_client(conv_id, _TEST_HARNESS_NAME))
+        await asyncio.wait_for(in_bind.wait(), timeout=10.0)
+        assert spawned, "spawn was never reached"
+        process = spawned[0]
+        pid = process.pid
+        # Same lock instance the holder acquired (per-conv lock-identity invariant).
+        spawn_lock = manager._spawn_locks[conv_id]
+
+        # Queued behind the spawn lock until bind is allowed to finish. Wait on
+        # the lock's waiter count, not ``sleep(0)``: pre-fix, ``release`` never
+        # takes the spawn lock, so this poll times out and fails the test.
+        release_task = asyncio.create_task(manager.release(conv_id))
+        await _wait_until(
+            lambda: _lock_waiter_count(spawn_lock) >= 1,
+            "release never enqueued on the spawn lock (returned before the spawn)",
+        )
+        assert not release_task.done(), "release returned before spawn released the lock"
+
+        allow_bind.set()
+        client = await get_task
+        assert client is not None
+        assert await release_task is None
+
+        socket_path = manager.instance_dir / f"conv-{conv_id}.sock"
+        assert not manager.has_session(conv_id)
+        assert conv_id not in manager._entries
+        assert not socket_path.exists()
+        for _ in range(40):
+            if not _pid_alive(pid):
+                break
+            await asyncio.sleep(0.05)
+        assert not _pid_alive(pid), "release-during-spawn left a live harness process"
+        assert process.returncode is not None
+    finally:
+        allow_bind.set()
+        await _cancel_pending(get_task, release_task)
+        await manager.shutdown()
+
+
+async def test_release_invalidates_queued_get_client(
+    manager: HarnessProcessManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``get_client`` queued behind ``release`` must not respawn after teardown.
+
+    Getter A holds the spawn lock mid-bind; ``release`` queues; getter B
+    queues behind release. Without a release generation, A registers,
+    release closes it, then B acquires the lock and spawns again —
+    leaving ``has_session`` True after release. B must fail; a fresh
+    ``get_client`` after release may still respawn.
+    """
+    from omnicraft.runtime.harnesses import process_manager as pm_mod
+
+    await manager.start()
+    get_a: asyncio.Task[object] | None = None
+    get_b: asyncio.Task[object] | None = None
+    release_task: asyncio.Task[None] | None = None
+    allow_bind = asyncio.Event()
+    try:
+        spawned: list[asyncio.subprocess.Process] = []
+        real_exec = asyncio.create_subprocess_exec
+
+        async def capturing_exec(*args: object, **kwargs: object) -> asyncio.subprocess.Process:
+            process = await real_exec(*args, **kwargs)  # type: ignore[arg-type]
+            spawned.append(process)
+            return process
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", capturing_exec)
+
+        in_bind = asyncio.Event()
+        real_wait_for_bind = pm_mod._wait_for_bind
+
+        async def gated_bind(*args: object, **kwargs: object) -> None:
+            in_bind.set()
+            await allow_bind.wait()
+            await real_wait_for_bind(*args, **kwargs)
+
+        monkeypatch.setattr(pm_mod, "_wait_for_bind", gated_bind)
+
+        conv_id = "conv_release_queued_waiter"
+        get_a = asyncio.create_task(manager.get_client(conv_id, _TEST_HARNESS_NAME))
+        await asyncio.wait_for(in_bind.wait(), timeout=10.0)
+        assert spawned, "first spawn was never reached"
+        # Same lock instance getter A acquired (per-conv lock-identity invariant).
+        spawn_lock = manager._spawn_locks[conv_id]
+
+        # Pin the interleaving deterministically via the spawn lock's waiter
+        # count rather than ``sleep(0)``: A holds the lock (gated in bind),
+        # release must be a queued waiter BEFORE B is created, and B must then
+        # queue BEHIND release. asyncio.Lock is FIFO, so waiter[0] is release
+        # and waiter[1] is B. Pre-fix, release never enqueues (it skips the
+        # spawn lock), so the first poll times out and the test fails.
+        release_task = asyncio.create_task(manager.release(conv_id))
+        await _wait_until(
+            lambda: _lock_waiter_count(spawn_lock) >= 1,
+            "release never enqueued on the spawn lock before get_b was created",
+        )
+        get_b = asyncio.create_task(manager.get_client(conv_id, _TEST_HARNESS_NAME))
+        await _wait_until(
+            lambda: _lock_waiter_count(spawn_lock) >= 2,
+            "get_b never enqueued behind release on the spawn lock",
+        )
+        assert not release_task.done()
+        assert not get_b.done()
+
+        allow_bind.set()
+        client_a = await get_a
+        assert client_a is not None
+        assert await release_task is None
+
+        done, pending = await asyncio.wait({get_b})
+        assert not pending
+        assert done == {get_b}
+        exc = get_b.exception()
+        assert isinstance(exc, RuntimeError)
+        assert "was released while get_client waited" in str(exc)
+
+        assert len(spawned) == 1, "queued get_client respawned after release"
+        assert not manager.has_session(conv_id)
+        assert conv_id not in manager._entries
+        for process in spawned:
+            for _ in range(40):
+                if process.returncode is not None and not _pid_alive(process.pid):
+                    break
+                await asyncio.sleep(0.05)
+            assert process.returncode is not None
+            assert not _pid_alive(process.pid)
+
+        # A call that starts after release must still be allowed to respawn.
+        client = await manager.get_client(conv_id, _TEST_HARNESS_NAME)
+        assert manager.has_session(conv_id)
+        await _ping_health(client)
+        assert len(spawned) == 2
+    finally:
+        allow_bind.set()
+        await _cancel_pending(get_a, get_b, release_task)
+        await manager.shutdown()
+
+
+async def test_shutdown_during_spawn_leaves_no_live_process(
+    manager: HarnessProcessManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``shutdown`` during cold spawn must not leave an unregistered process.
+
+    Shutdown used to walk only ``_entries``. A spawn still awaiting
+    readiness was invisible, so shutdown could finish and the spawn
+    could then register a live process against a torn-down manager.
+    Barriers pin the race; after both settle there must be no process,
+    socket, or ``_entries`` record.
+    """
+    from omnicraft.runtime.harnesses import process_manager as pm_mod
+
+    await manager.start()
+    get_task: asyncio.Task[object] | None = None
+    shutdown_task: asyncio.Task[None] | None = None
+    allow_bind = asyncio.Event()
+    try:
+        spawned: list[asyncio.subprocess.Process] = []
+        real_exec = asyncio.create_subprocess_exec
+
+        async def capturing_exec(*args: object, **kwargs: object) -> asyncio.subprocess.Process:
+            process = await real_exec(*args, **kwargs)  # type: ignore[arg-type]
+            spawned.append(process)
+            return process
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", capturing_exec)
+
+        in_bind = asyncio.Event()
+        real_wait_for_bind = pm_mod._wait_for_bind
+
+        async def gated_bind(*args: object, **kwargs: object) -> None:
+            in_bind.set()
+            await allow_bind.wait()
+            await real_wait_for_bind(*args, **kwargs)
+
+        monkeypatch.setattr(pm_mod, "_wait_for_bind", gated_bind)
+
+        conv_id = "conv_shutdown_during_spawn"
+        get_task = asyncio.create_task(manager.get_client(conv_id, _TEST_HARNESS_NAME))
+        await asyncio.wait_for(in_bind.wait(), timeout=10.0)
+        assert spawned, "spawn was never reached"
+        process = spawned[0]
+        pid = process.pid
+        socket_path = manager.instance_dir / f"conv-{conv_id}.sock"
+        # Same lock instance the holder acquired (per-conv lock-identity invariant).
+        spawn_lock = manager._spawn_locks[conv_id]
+
+        # Wait until shutdown is provably blocked on the in-flight spawn, via the
+        # spawn lock's waiter count, not a bare timing poll: shutdown includes
+        # the spawn-lock key, calls ``release``, and ``release`` queues on the
+        # held spawn lock. Pre-fix, shutdown walks only ``_entries`` (empty here)
+        # and never enqueues, so this poll times out and fails the test.
+        shutdown_task = asyncio.create_task(manager.shutdown())
+        await _wait_until(
+            lambda: _lock_waiter_count(spawn_lock) >= 1,
+            "shutdown never enqueued on the in-flight spawn (finished before draining it)",
+        )
+        assert not shutdown_task.done(), "shutdown finished before in-flight spawn drained"
+
+        allow_bind.set()
+        # ``_shutting_down`` is already set, so the pinned interleaving forces the
+        # post-bind discard path: the spawn never registers, and get_client
+        # raises the shutdown-specific error rather than returning a client.
+        done, pending = await asyncio.wait({get_task})
+        assert not pending
+        assert done == {get_task}
+        exc = get_task.exception()
+        assert isinstance(exc, RuntimeError)
+        assert "shutdown" in str(exc).lower()
+        assert await shutdown_task is None
+
+        assert not manager.has_session(conv_id)
+        assert conv_id not in manager._entries
+        assert not socket_path.exists()
+        for _ in range(40):
+            if not _pid_alive(pid):
+                break
+            await asyncio.sleep(0.05)
+        assert not _pid_alive(pid), "shutdown-during-spawn left a live harness process"
+        assert process.returncode is not None
+    finally:
+        allow_bind.set()
+        await _cancel_pending(get_task, shutdown_task)
+        # Idempotent if the test already shut down; still safe if it failed early.
+        await manager.shutdown()

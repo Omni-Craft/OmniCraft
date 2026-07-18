@@ -28,6 +28,7 @@ where the platform-gate assertions still hold.
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from unittest.mock import patch
@@ -48,6 +49,8 @@ from omnicraft.inner.seatbelt_sandbox import (
     _per_user_dyld_cache_subpath,
     _quote,
     _resolve_root,
+    _symlink_hop_literals,
+    _target_visibility_grants,
 )
 
 # ---------------------------------------------------------------------------
@@ -2080,3 +2083,421 @@ def test_s5_read_paths_dedup_skips_paths_under_cwd(tmp_path: Path) -> None:
         ".env masked more than once — the dedup that skips "
         "read_paths roots at-or-under cwd regressed."
     )
+
+
+# ---------------------------------------------------------------------------
+# Exec-chain symlink hops + launcher target visibility (bwrap parity)
+# ---------------------------------------------------------------------------
+
+
+def _uv_style_layout(base: Path) -> tuple[Path, Path, Path]:
+    """
+    Stage uv's tool-venv → versionless-hop → real-install layout.
+
+    Mirrors what ``uv tool install omnicraft`` produces: the tool
+    venv's ``bin/python`` symlinks to a path that traverses the
+    version-floating ``cpython-3.12`` directory symlink before
+    landing on the real ``cpython-3.12.13`` install. Both roots get
+    the venv/install shape (``bin/`` + ``lib/python3.12``) so the
+    narrow install-root fallback matches them.
+
+    :param base: Directory to stage the fake ``$HOME`` layout under.
+    :returns: ``(tool_exe, versionless_dir, real_install_root)``.
+    """
+    real_root = base / ".local" / "share" / "uv" / "python" / "cpython-3.12.13-macos"
+    (real_root / "bin").mkdir(parents=True)
+    (real_root / "lib" / "python3.12").mkdir(parents=True)
+    real_exe = real_root / "bin" / "python3.12"
+    real_exe.write_text("#!fake\n")
+    real_exe.chmod(0o755)
+    versionless = base / ".local" / "share" / "uv" / "python" / "cpython-3.12-macos"
+    versionless.symlink_to("cpython-3.12.13-macos")
+    tool_root = base / ".local" / "share" / "uv" / "tools" / "omnicraft"
+    (tool_root / "bin").mkdir(parents=True)
+    (tool_root / "lib" / "python3.12").mkdir(parents=True)
+    tool_exe = tool_root / "bin" / "python"
+    tool_exe.symlink_to(versionless / "bin" / "python3.12")
+    return tool_exe, versionless, real_root
+
+
+def test_wrap_launcher_argv_grants_uv_versionless_hop_literal(tmp_path: Path) -> None:
+    """
+    The uv boot regression: the helper interpreter is reached through
+    uv's version-floating directory symlink
+    (``cpython-3.12 -> cpython-3.12.13``). The profile grants a
+    subpath on the RESOLVED install root, but execve reads the
+    versionless symlink at its LITERAL path — without a literal
+    grant for the hop, ``sandbox-exec``'s execvp of the helper dies
+    with EPERM and every jailed helper spawn fails at boot.
+    """
+    tool_exe, versionless, real_root = _uv_style_layout(tmp_path / "fake-home")
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+
+    backend = _make_backend()
+    policy = _make_policy(cwd, allow_hidden=[".venv"])
+    argv = backend.wrap_launcher_argv(
+        [str(tool_exe), "-m", "omnicraft.inner.os_env", "helper", "X"], policy, cwd
+    )
+    profile = Path(argv[2]).read_text()
+
+    hop_literal = f"(allow file-read* (literal {_quote(str(versionless))}))"
+    assert hop_literal in profile, (
+        f"Missing literal read grant for the versionless symlink hop "
+        f"{str(versionless)!r}. Subpath rules match only canonical "
+        "paths, so without this literal the kernel denies reading the "
+        "symlink during execve resolution and the helper interpreter "
+        "never boots (execvp EPERM)."
+    )
+    resolved_subpath = (
+        f"(allow file-read* (subpath {_quote(str(real_root.resolve(strict=False)))}))"
+    )
+    assert resolved_subpath in profile, (
+        "The resolved install root must keep its narrow subpath grant "
+        "— the hop literal complements it, never replaces it."
+    )
+
+
+def test_wrap_launcher_argv_target_grants_claude_cli_install(tmp_path: Path) -> None:
+    """
+    The launcher target (e.g. the claude CLI wrapped by
+    ``prepare_claude_cli_path``) must be readable inside the sandbox:
+    the standalone installer puts a symlink at ``~/.local/bin/claude``
+    pointing into ``~/.local/share/claude/versions/<v>/``. The wrap
+    must grant a literal read on the symlink and a subpath on the
+    version directory — and nothing wider — instead of discarding
+    ``target`` (which crashed the whole native-tool wrap with
+    ``PermissionError`` at connect time).
+    """
+    fake_home = tmp_path / "fake-home"
+    version_dir = fake_home / ".local" / "share" / "claude" / "versions" / "1.0.61"
+    version_dir.mkdir(parents=True)
+    cli_real = version_dir / "claude"
+    cli_real.write_bytes(b"\x00fakebun")
+    cli_real.chmod(0o755)
+    bin_dir = fake_home / ".local" / "bin"
+    bin_dir.mkdir(parents=True)
+    cli_link = bin_dir / "claude"
+    cli_link.symlink_to(cli_real)
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+
+    backend = _make_backend()
+    policy = _make_policy(cwd, allow_hidden=[".venv"])
+    argv = backend.wrap_launcher_argv(_safe_helper_argv(cwd), policy, cwd, target=str(cli_link))
+    profile = Path(argv[2]).read_text()
+
+    assert f"(allow file-read* (literal {_quote(str(cli_link))}))" in profile, (
+        "The target symlink needs a literal read grant — the kernel "
+        "reads it at its literal path when the launcher execs the CLI."
+    )
+    assert f"(allow file-read* (subpath {_quote(str(version_dir))}))" in profile, (
+        "The resolved CLI's own directory needs a subpath grant so the "
+        "in-sandbox exec can read the binary."
+    )
+    dotlocal = fake_home / ".local"
+    assert f"(allow file-read* (subpath {_quote(str(dotlocal))}))" not in profile, (
+        "The grant must stay scoped to the CLI install — widening to "
+        "~/.local would expose sibling tool state."
+    )
+    assert f"(allow file-read-metadata (literal {_quote(str(bin_dir))}))" in profile, (
+        "The literal grant's ancestors need stat-only traversal allows "
+        "or realpath() walks to the CLI EPERM under deny-default."
+    )
+
+
+def test_wrap_launcher_argv_target_under_cwd_changes_nothing(tmp_path: Path) -> None:
+    """
+    A target already covered by the cwd subpath must not change the
+    profile — no redundant grants, profile contents byte-identical to
+    the no-target wrap (mirrors the bwrap no-op-target behaviour).
+    """
+    backend = _make_backend()
+    policy = _make_policy(tmp_path, allow_hidden=[".venv"])
+    tool = tmp_path / "tools" / "cli"
+    tool.parent.mkdir()
+    tool.write_text("#!fake\n")
+    tool.chmod(0o755)
+    helper_argv = _safe_helper_argv(tmp_path)
+
+    argv_no_target = backend.wrap_launcher_argv(helper_argv, policy, tmp_path)
+    argv_with_target = backend.wrap_launcher_argv(helper_argv, policy, tmp_path, target=str(tool))
+    assert Path(argv_no_target[2]).read_text() == Path(argv_with_target[2]).read_text(), (
+        "A cwd-covered target must be a no-op for the profile; extra "
+        "grants here mean the coverage check regressed."
+    )
+
+
+def test_wrap_launcher_argv_target_with_unsafe_parent_degrades_not_raises(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    The target lane must NEVER raise (parity with the crash-instead-
+    of-degrade complaint): when the resolved target's parent directory
+    is too broad to grant — an unsafe ancestor, ``$HOME``, or above —
+    the wrap degrades to a literal read on the binary plus an audit
+    WARNING instead of failing the spawn.
+    """
+    fake_home = tmp_path / "fake-home"
+    fake_home.mkdir()
+    binary = fake_home / "claude"
+    binary.write_bytes(b"\x00fakebun")
+    binary.chmod(0o755)
+    cwd = tmp_path / "workspace"
+    cwd.mkdir()
+
+    backend = _make_backend()
+    policy = _make_policy(cwd, allow_hidden=[".venv"])
+    with patch(
+        "omnicraft.inner.seatbelt_sandbox._UNSAFE_WIDEN_ANCESTORS",
+        frozenset({str(fake_home)}),
+    ):
+        with caplog.at_level("WARNING", logger="omnicraft.inner.seatbelt_sandbox"):
+            argv = backend.wrap_launcher_argv(
+                _safe_helper_argv(cwd), policy, cwd, target=str(binary)
+            )
+    profile = Path(argv[2]).read_text()
+
+    assert f"(allow file-read* (literal {_quote(str(binary))}))" in profile, (
+        "The degraded path must still grant a literal read on the "
+        "binary itself — best effort beats a guaranteed crash."
+    )
+    assert f"(allow file-read* (subpath {_quote(str(fake_home))}))" not in profile, (
+        "The refused parent must NOT get a subpath grant — that's the "
+        "sandbox-defeating widening the guard exists to prevent."
+    )
+    assert any("too broad" in record.message for record in caplog.records), (
+        "The degrade must be auditable via a WARNING naming the refused parent."
+    )
+
+
+def test_symlink_hop_literals_survives_cycles(tmp_path: Path) -> None:
+    """
+    A symlink cycle (``a -> b -> a``) must terminate (via the 40-follow
+    cap) and report each member exactly once (via the ``appended``
+    de-dup), never spinning or duplicating.
+    """
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.symlink_to(b)
+    b.symlink_to(a)
+
+    literals = _symlink_hop_literals(a, [])
+
+    assert a in literals and b in literals, (
+        f"Cycle members should each be collected once; got {literals!r}."
+    )
+    assert len(literals) == 2, f"Cycle must not duplicate entries or spin; got {literals!r}."
+
+
+def test_symlink_hop_literals_relative_dotdot_through_symlink(tmp_path: Path) -> None:
+    """
+    Round-3 review Bug 1: ``..`` must be applied AFTER symlink
+    resolution, not lexically collapsed on entry. Layout
+    ``/base/link -> /outside/deep``, ``start=/base/link/../x``: the
+    kernel reads ``/base/link``, resolves it to ``/outside/deep``, then
+    applies ``..`` → ``/outside/x``. An ``abspath``/``normpath`` on
+    entry would fold ``link/..`` to ``/base`` first, dropping the
+    ``/base/link`` grant and simulating the wrong destination.
+    """
+    outside = tmp_path / "outside" / "deep"
+    outside.mkdir(parents=True)
+    base = tmp_path / "base"
+    base.mkdir()
+    link = base / "link"
+    link.symlink_to(outside)  # /base/link -> /outside/deep
+
+    start = base / "link" / ".." / "x"
+    literals = _symlink_hop_literals(start, [])
+
+    assert link in literals, (
+        f"The symlink {str(link)!r} traversed BEFORE the ``..`` must be "
+        f"recorded — a lexical ``..`` collapse on entry drops it. Got "
+        f"{literals!r}."
+    )
+
+
+def test_symlink_hop_literals_legitimate_retraversal(tmp_path: Path) -> None:
+    """
+    Round-3 review NIT: the same symlink can be legitimately traversed
+    twice with a different remainder; the walk must NOT break the whole
+    resolution on the 2nd visit (that would drop a later symlink and
+    cause a visible EPERM). Layout: ``hub -> realhub``,
+    ``realhub/a -> hub/b`` (routes back through hub), ``realhub/b -> X``.
+    Resolving ``hub/a`` traverses ``hub`` twice; the downstream
+    ``realhub/b`` must still be collected.
+    """
+    realhub = tmp_path / "realhub"
+    realhub.mkdir()
+    hub = tmp_path / "hub"
+    hub.symlink_to(realhub)  # hub -> realhub
+    x = tmp_path / "x_target"
+    x.write_text("#!x\n")
+    (realhub / "a").symlink_to(hub / "b")  # realhub/a -> hub/b (back through hub)
+    (realhub / "b").symlink_to(x)  # realhub/b -> X
+
+    literals = _symlink_hop_literals(hub / "a", [])
+
+    assert (realhub / "b") in literals, (
+        "The downstream symlink reached only AFTER re-traversing ``hub`` "
+        f"must be collected; a whole-walk cycle-break would drop it. Got "
+        f"{literals!r}."
+    )
+
+
+def test_symlink_hop_literals_collects_target_of_intermediate_symlink(tmp_path: Path) -> None:
+    """
+    Round-2 review Bug 1: a symlink whose TARGET path traverses another
+    symlink must have BOTH recorded. Layout ``/a/link -> /b/link2``,
+    ``/b/link2 -> /c``, ``start=/a/link/bin/x``: the kernel reads both
+    ``/a/link`` and ``/b/link2`` during resolution, so both need literal
+    grants. A walk that only follows the final component's chain (the
+    bwrap / upstream-seatbelt shape) records ``/a/link`` but misses
+    ``/b/link2`` and leaves a real EPERM hole; the component-by-component
+    resolver closes it.
+    """
+    c = tmp_path / "c"
+    (c / "bin").mkdir(parents=True)
+    (c / "bin" / "x").write_text("#!bin\n")
+    b = tmp_path / "b"
+    b.mkdir()
+    link2 = b / "link2"
+    link2.symlink_to(c)  # /b/link2 -> /c
+    a = tmp_path / "a"
+    a.mkdir()
+    link = a / "link"
+    link.symlink_to(link2)  # /a/link -> /b/link2
+
+    literals = _symlink_hop_literals(a / "link" / "bin" / "x", [])
+
+    assert link in literals, f"The first hop {str(link)!r} must be recorded; got {literals!r}."
+    assert link2 in literals, (
+        f"The symlink {str(link2)!r} introduced by the FIRST hop's target "
+        f"is read by the kernel too and must be recorded; got {literals!r}. "
+        "A final-component-only walk misses it (Bug 1)."
+    )
+
+
+def test_target_visibility_grants_resolve_failure_degrades_not_raises(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    Round-2 review Bug 2: ``_target_visibility_grants`` must not raise
+    when ``Path.resolve`` blows up (symlink loop / bad path). The
+    forgiving lane degrades to a literal read on the absolute target
+    plus a WARNING — making the 'never raises' docstring true in fact.
+    """
+    target = tmp_path / "cli"
+
+    def _boom(self: Path, *a: object, **k: object) -> Path:
+        raise RuntimeError("ELOOP")
+
+    with patch.object(Path, "resolve", _boom):
+        with caplog.at_level("WARNING", logger="omnicraft.inner.seatbelt_sandbox"):
+            subpaths, literals = _target_visibility_grants(str(target), [], [])
+
+    assert subpaths == [], "A target that can't be resolved must grant no subpath."
+    assert Path(os.path.abspath(str(target))) in literals, (
+        "The degraded path must still grant a literal read on the absolute "
+        f"target; got {literals!r}."
+    )
+    assert any("could not be resolved" in r.message for r in caplog.records), (
+        "The resolve-failure degrade must be auditable via a WARNING."
+    )
+
+
+def test_target_visibility_grants_fails_closed_when_home_undeterminable(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    Round-2 review Bug 3 (fail-open → fail-closed): when ``$HOME`` can't
+    be determined, the parent-dir subpath MUST be refused — we can't
+    prove the parent isn't the home directory, so opening it would be
+    the exact fail-open we reject (cf. #2664 / #2647). The lane degrades
+    to a literal on the binary plus a WARNING.
+    """
+    # A target whose parent is NOT an unsafe ancestor and NOT home-shaped
+    # on its own, so the ONLY thing that can refuse the subpath is the
+    # home-undeterminable guard.
+    install = tmp_path / "opt-like" / "cli-install"
+    install.mkdir(parents=True)
+    binary = install / "cli"
+    binary.write_bytes(b"\x00bin")
+    binary.chmod(0o755)
+
+    # Force $HOME undeterminable: expanduser raising is caught and sets
+    # home=None inside the guard (the real "no HOME env, no passwd entry"
+    # condition).
+    def _no_home(_p: str) -> str:
+        raise OSError("no home")
+
+    with patch("os.path.expanduser", _no_home):
+        with caplog.at_level("WARNING", logger="omnicraft.inner.seatbelt_sandbox"):
+            subpaths, literals = _target_visibility_grants(str(binary), [], [])
+
+    assert subpaths == [], (
+        "With $HOME undeterminable the parent subpath must be refused "
+        f"(fail-closed); got subpaths={subpaths!r}."
+    )
+    assert binary.resolve(strict=False) in literals, (
+        f"The refused path must still grant a literal read on the binary; got {literals!r}."
+    )
+    assert any("too broad" in r.message for r in caplog.records), (
+        "The fail-closed refusal must be auditable via a WARNING."
+    )
+
+
+def test_target_visibility_grants_fails_closed_when_expanduser_returns_tilde(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    Round-3 review Bug 2: on Unix with no ``$HOME`` and no passwd entry,
+    ``os.path.expanduser("~")`` returns ``"~"`` UNCHANGED (it does not
+    raise). Resolving that yields ``<cwd>/~`` — absolute-looking but
+    bogus — which must NOT switch the fail-closed guard off. A still-
+    tilde result has to be treated as an undeterminable home so the
+    subpath is refused.
+    """
+    install = tmp_path / "opt-like" / "cli-install"
+    install.mkdir(parents=True)
+    binary = install / "cli"
+    binary.write_bytes(b"\x00bin")
+    binary.chmod(0o755)
+
+    # expanduser returns "~" verbatim (the no-HOME/no-passwd behaviour),
+    # NOT raising — the exact fail-open the round-2 fix missed.
+    with patch("os.path.expanduser", lambda _p: "~"):
+        with caplog.at_level("WARNING", logger="omnicraft.inner.seatbelt_sandbox"):
+            subpaths, literals = _target_visibility_grants(str(binary), [], [])
+
+    assert subpaths == [], (
+        "A still-tilde expanduser result must be treated as undeterminable "
+        f"$HOME and refuse the subpath (fail-closed); got {subpaths!r}."
+    )
+    assert binary.resolve(strict=False) in literals, (
+        f"The refused path must still grant a literal read; got {literals!r}."
+    )
+    assert any("too broad" in r.message for r in caplog.records), (
+        "The fail-closed refusal must be auditable via a WARNING."
+    )
+
+
+def test_target_visibility_grants_refuses_other_users_home(tmp_path: Path) -> None:
+    """
+    Round-2 review Bug 3 (home-shaped guard): a target whose resolved
+    parent is a direct child of ``/Users`` (another user's home) must be
+    refused even though the current ``$HOME`` check wouldn't catch it.
+    """
+    # /Users/<someoneelse> shape — patch the ancestor check's view by
+    # pointing the resolved parent at a synthetic /Users child via a
+    # patched _is_home_dir_shaped input. Here we assert the helper the
+    # guard relies on directly for the shape it must catch.
+    from omnicraft.inner.seatbelt_sandbox import _is_home_dir_shaped
+
+    assert _is_home_dir_shaped(Path("/Users/otheruser")) is True
+    assert _is_home_dir_shaped(Path("/home/otheruser")) is True
+    assert _is_home_dir_shaped(Path("/opt/tool/install")) is False

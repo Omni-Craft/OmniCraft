@@ -167,6 +167,9 @@ _UNSAFE_WIDEN_ANCESTORS: frozenset[str] = frozenset(
         "/Network",
         "/Applications",
         "/home",  # historical macOS HOME on some setups
+        "/cores",  # process core dumps
+        "/mnt",  # external / removable mount points
+        "/nix",  # Nix store: a subpath here exposes every package
     }
 )
 
@@ -491,7 +494,9 @@ class SeatbeltSandboxBackend(SandboxBackend):
             sandbox — when it lives outside the default RO subtrees
             and outside cwd (a typical pyenv / venv layout under
             ``$HOME``), extra ``allow file-read*`` rules are added so
-            the kernel can open the binary after the HOME deny.
+            the kernel can open the binary — ``$HOME`` is unreadable
+            only via the ``(deny default)`` baseline, not a blanket
+            HOME deny.
         :param policy: The :class:`SandboxPolicy` produced by
             :meth:`resolve`, possibly augmented by
             :func:`omnicraft.inner.sandbox.with_additional_write_roots`
@@ -504,6 +509,16 @@ class SeatbeltSandboxBackend(SandboxBackend):
         :param chdir: Ignored. Present for interface parity with
             :class:`SandboxBackend.wrap_launcher_argv`; the helper
             chdirs itself from its JSON config.
+        :param target: Absolute path to the binary the launcher will
+            exec as its final target after the re-exec (e.g. the
+            ``claude`` CLI). When set and not already covered by the
+            default subtrees / cwd / read roots, narrow read grants
+            are added for its symlink chain and its resolved parent
+            directory so the in-sandbox exec can read it — the same
+            treatment the bwrap backend gives its ``target``. This
+            lane never raises; un-grantable layouts degrade to
+            literal grants plus a WARNING
+            (see :func:`_target_visibility_grants`).
         :returns: A complete ``sandbox-exec`` argv ready for
             ``subprocess.Popen`` — never an empty list.
         :raises OSError: When the cwd-scan cap is hit and overflow is
@@ -513,15 +528,34 @@ class SeatbeltSandboxBackend(SandboxBackend):
             unsafe ancestor (see :func:`_ensure_executable_visible`).
         """
         del chdir  # See docstring — Seatbelt has no --chdir analog.
-        del target  # SBPL profile grants read access by subpath rules; the
-        # run_launcher target binary is typically covered by the cwd or default
-        # subpath allows.  A targeted seatbelt fix is tracked separately.
         cwd_resolved = cwd.resolve(strict=False)
         extra_read_paths = _ensure_executable_visible(
             argv, cwd_resolved, policy_read_roots=policy.read_roots or []
         )
+        covered_prefixes: list[Path] = [Path(p) for p in _DEFAULT_READ_SUBPATHS]
+        covered_prefixes.append(cwd_resolved)
+        covered_prefixes.extend(policy.read_roots or [])
+        # Symlink hops in the exec chain need explicit literal reads:
+        # execve reads each symlink at its literal path, and subpath
+        # rules match only the kernel-canonical path. Without these,
+        # uv's version-floating ``cpython-3.12 -> cpython-3.12.13``
+        # dir symlink EPERMs the helper interpreter's execvp even
+        # though the resolved install root has a subpath grant.
+        extra_read_literals: list[Path] = (
+            _symlink_hop_literals(Path(argv[0]), covered_prefixes) if argv else []
+        )
+        if target is not None:
+            target_subpaths, target_literals = _target_visibility_grants(
+                target, covered_prefixes, extra_read_paths
+            )
+            extra_read_paths.extend(target_subpaths)
+            extra_read_literals.extend(p for p in target_literals if p not in extra_read_literals)
         profile = _build_profile(
-            policy, cwd_resolved, extra_read_paths=extra_read_paths, argv=argv
+            policy,
+            cwd_resolved,
+            extra_read_paths=extra_read_paths,
+            extra_read_literals=extra_read_literals,
+            argv=argv,
         )
         if len(profile.encode("utf-8")) > _MAX_PROFILE_BYTES:
             raise OSError(
@@ -597,6 +631,7 @@ def _build_profile(
     cwd: Path,
     *,
     extra_read_paths: list[Path] | None = None,
+    extra_read_literals: list[Path] | None = None,
     argv: Sequence[str] | None = None,
 ) -> str:
     """
@@ -637,10 +672,23 @@ def _build_profile(
     :param extra_read_paths: Additional directories that must be
         readable for ``argv[0]`` (the helper interpreter) to be
         exec'd inside the sandbox — typically a venv ``bin/`` and
-        its parent when ``argv[0]`` lives under ``$HOME`` (which
-        the explicit HOME deny would otherwise block). Emitted as
-        ``(allow file-read* (subpath ...))`` AFTER the HOME deny so
-        last-match-wins re-allows the interpreter.
+        its parent when ``argv[0]`` lives under ``$HOME``. There is
+        no blanket HOME deny; ``$HOME`` is unreadable only by virtue
+        of the ``(deny default)`` baseline, so these
+        ``(allow file-read* (subpath ...))`` grants open just the
+        interpreter tree. The sensitive denies emitted later in the
+        profile (dotfile mask, ``$HOME/Library``) take precedence, so
+        this grant never exposes a masked area within that tree.
+    :param extra_read_literals: Individual paths — symlink hops in
+        the exec chain and, for un-grantable layouts, the launcher
+        target binary itself — emitted as
+        ``(allow file-read* (literal ...))``. Symlinks are read by
+        the kernel at their literal path during execve resolution,
+        which subpath rules (matched against canonical paths) never
+        cover. Like the subpaths above, they are overridden by the
+        later sensitive denies, so a literal can never re-open a
+        masked area. Also fed to the ancestor-traversal walker so
+        ``realpath()`` walks through their parent chains succeed.
     :returns: The SBPL profile text, ready to pass to
         ``sandbox-exec -p``. Always a non-empty string starting with
         ``(version 1)``.
@@ -797,6 +845,18 @@ def _build_profile(
             lines.append(f"(allow file-read* (subpath {_quote(str(path))}))")
 
     # ----------------------------------------------------------------
+    # Exec-chain symlink hops + launcher target. Literal (not subpath)
+    # because the kernel reads a symlink at its literal path during
+    # execve resolution while subpath rules match canonical paths; a
+    # literal on a symlink exposes only its target string.
+    # ----------------------------------------------------------------
+    if extra_read_literals:
+        lines.append("")
+        lines.append(";; Exec-chain symlink hops + launcher target (literal reads)")
+        for path in extra_read_literals:
+            lines.append(f"(allow file-read* (literal {_quote(str(path))}))")
+
+    # ----------------------------------------------------------------
     # Scratch tmpdir — always RW; surfaced via $TMPDIR for the helper.
     #
     # L2 (security): canonicalise the scratch path before emission so
@@ -883,7 +943,7 @@ def _build_profile(
         allowed_paths=_collect_allowed_paths(
             cwd=cwd,
             scratch=scratch,
-            extra_read_paths=extra_read_paths or [],
+            extra_read_paths=[*(extra_read_paths or []), *(extra_read_literals or [])],
             policy=policy,
             dyld_cache=dyld_cache,
         ),
@@ -1267,6 +1327,260 @@ def _ensure_executable_visible(
     if exe_resolved != exe_literal:
         _add_topmost(exe_resolved)
     return extras
+
+
+def _symlink_hop_literals(start: Path, covered_prefixes: Sequence[Path]) -> list[Path]:
+    """
+    Collect every symlink ``execve`` reads while resolving *start*.
+
+    Simulates the kernel's left-to-right path resolution: walk *start*
+    component by component against a symlink-free resolved prefix, and
+    whenever a component is a symlink, record it at its LITERAL path,
+    then splice its target back into the still-unresolved remainder and
+    keep going. Splicing (rather than only following the FINAL
+    component's chain, as the bwrap walk and the upstream seatbelt walk
+    do) is what makes this catch symlinks introduced by an intermediate
+    symlink's *target* — e.g. ``/a/link -> /b/link2``,
+    ``/b/link2 -> /c``, ``start=/a/link/bin/x`` records BOTH ``/a/link``
+    and ``/b/link2`` (the kernel reads both), where a final-component
+    walk would miss ``/b/link2`` and leave the jailed exec EPERM-ing.
+    This is an intentional divergence from the bwrap/upstream parity —
+    both share the same latent gap.
+
+    SBPL subpath rules match only the kernel-canonical path, so every
+    uncovered symlink needs an ``(allow file-read* (literal ...))``
+    grant. Reading a symlink exposes only its target string, so these
+    grants never widen the sandbox beyond the exec chain itself; the
+    profile's sensitive denies (dotfile mask, ``$HOME/Library``) are
+    emitted later and take precedence, so a literal here can never
+    re-open a masked area.
+
+    The canonical failure this closes: uv installs a version-floating
+    dir symlink (``cpython-3.12 -> cpython-3.12.13``) between a tool
+    venv's ``bin/python`` and the real interpreter. The resolved
+    install root gets a subpath grant, but the literal hop through
+    the versionless dir was denied — so ``sandbox-exec``'s execvp of
+    the helper interpreter failed with EPERM and every jailed helper
+    spawn died at boot.
+
+    Termination rides the 40-*follow* cap (MAXSYMLINKS / ELOOP parity):
+    like the kernel, the walk gives up after following 40 symlinks. The
+    output is de-duplicated via the ``appended`` set, so a
+    ``a -> b -> a`` cycle records each member once and then spins to the
+    follow cap harmlessly. The cap counts follows, not records, so a
+    non-cyclic chain can record up to 41 distinct symlinks — the 41st is
+    recorded, then the walk stops without following it (that 41st hop is
+    the one the kernel itself would ELOOP on). No whole-walk cycle-break
+    is used on purpose: breaking on the 2nd visit to a symlink pathname
+    would drop later symlinks a legitimate re-traversal (same symlink,
+    different remainder) still needs, turning a benign extra grant into
+    a visible EPERM.
+
+    :param start: The literal path execve will be called with
+        (``argv[0]`` or the launcher target).
+    :param covered_prefixes: Roots whose subtrees are already
+        readable at their literal paths (default RO subtrees + cwd +
+        spec read roots); symlinks under them need no extra grant.
+    :returns: De-duplicated literal symlink paths, in walk order.
+    """
+    literals: list[Path] = []
+    appended: set[Path] = set()
+
+    def _maybe_record(sym: Path) -> None:
+        if sym in appended:
+            return
+        if any(_is_within_literal(sym, root) for root in covered_prefixes):
+            return
+        appended.add(sym)
+        literals.append(sym)
+
+    # Make *start* absolute WITHOUT collapsing ``.`` / ``..``:
+    # ``abspath``/``normpath`` would fold ``..`` lexically, but the
+    # kernel applies each ``..`` only AFTER resolving any symlink to its
+    # left. Prepending cwd raw and letting the loop's ``resolved.pop()``
+    # process ``..`` in-order preserves that semantics.
+    start_str = str(start)
+    if not os.path.isabs(start_str):
+        start_str = os.path.join(os.getcwd(), start_str)
+    # ``resolved`` holds components confirmed real (never a symlink,
+    # never ``..``), so the candidate path built below always has a
+    # symlink-free, ``..``-free prefix — exactly what the kernel would
+    # have canonicalised so far. ``remaining`` is the still-unresolved
+    # tail (with ``''``/``.``/``..`` kept for the loop to handle), into
+    # which symlink targets are spliced.
+    resolved: list[str] = []
+    remaining: list[str] = start_str.split("/")
+    hops = 0
+    steps = 0
+    while remaining:
+        steps += 1
+        if steps > 4096:  # absolute backstop; the 40-follow cap is the terminator
+            break
+        comp = remaining.pop(0)
+        if comp in ("", "."):
+            continue
+        if comp == "..":
+            if resolved:
+                resolved.pop()
+            continue
+        candidate = Path("/" + "/".join([*resolved, comp]))
+        try:
+            is_link = candidate.is_symlink()
+        except OSError:
+            resolved.append(comp)
+            continue
+        if not is_link:
+            resolved.append(comp)
+            continue
+        # Symlink read at this literal path. ``_maybe_record`` de-dups
+        # via ``appended``, so a re-traversed symlink is not re-recorded;
+        # the follow cap below handles real cycles.
+        _maybe_record(candidate)
+        hops += 1
+        if hops > 40:  # MAXSYMLINKS / ELOOP parity — give up like the kernel
+            break
+        try:
+            link = os.readlink(str(candidate))
+        except OSError:
+            break
+        link_parts = Path(link).parts
+        if os.path.isabs(link):
+            # Absolute target: resolution restarts from '/'.
+            resolved = []
+            remaining[0:0] = list(link_parts[1:])  # drop the '/' anchor
+        else:
+            # Relative target: resolves against the symlink's own
+            # directory, which is exactly the current ``resolved``.
+            remaining[0:0] = list(link_parts)
+    return literals
+
+
+def _target_visibility_grants(
+    target: str,
+    covered_prefixes: Sequence[Path],
+    already_granted: Sequence[Path],
+) -> tuple[list[Path], list[Path]]:
+    """
+    Compute read grants so the launcher's final *target* binary is
+    exec-able inside the sandbox.
+
+    Parity with the bwrap backend, which bind-mounts the target's
+    directory chain when given (its ``wrap_launcher_argv`` calls
+    ``_ensure_executable_visible([target], ...)``). For seatbelt the
+    equivalent is: literal reads for the symlink chain to the binary
+    (:func:`_symlink_hop_literals`) plus a subpath grant on the
+    RESOLVED binary's parent directory — exec of a resolved binary
+    empirically requires a ``subpath`` rule on a parent, and the
+    binary's own directory is the narrowest one that works (e.g. the
+    claude CLI's ``~/.local/share/claude/versions/<v>/``).
+
+    Unlike the interpreter lane, this does not raise on the normal
+    FS/resolution failure modes: the target is harness-supplied (a CLI
+    being wrapped), so an un-grantable layout, a ``resolve()`` that
+    raises on a symlink loop, and an undeterminable ``$HOME`` each
+    degrade to a literal grant plus an audit WARNING instead of failing
+    the spawn.
+    The parent-dir subpath is refused, FAIL-CLOSED, when it would be
+    sandbox-defeating: ``/``, an entry of :data:`_UNSAFE_WIDEN_ANCESTORS`,
+    ``$HOME`` or an ancestor of it, a user-home-shaped path (a direct
+    child of ``/Users`` / ``/home``, catching OTHER users' homes the
+    ``$HOME`` check alone would miss), or — crucially — whenever
+    ``$HOME`` cannot be determined at all (we cannot prove the parent
+    is not the home directory, so we must not open it).
+
+    :param target: Absolute path to the final exec target.
+    :param covered_prefixes: Literal-coverage roots (default RO
+        subtrees + cwd + spec read roots).
+    :param already_granted: Subpath grants already computed for the
+        helper interpreter; a target (or symlink hop) inside one of
+        them adds nothing — it is filtered from both the subpath and
+        the literal grants.
+    :returns: ``(subpaths, literals)`` to merge into the profile's
+        extra read grants.
+    """
+    covered = [*covered_prefixes, *already_granted]
+    # Filter hop literals against the interpreter subpaths too, so a
+    # target reached through a symlink already under a granted install
+    # root emits no redundant literal.
+    literals = _symlink_hop_literals(Path(target), covered)
+    try:
+        resolved = Path(target).resolve(strict=False)
+    except (OSError, RuntimeError):
+        # ``resolve()`` can raise on a symlink loop / bad path. This is
+        # the forgiving lane — degrade to a literal on the best-effort
+        # absolute target plus a WARNING rather than propagating.
+        _LOGGER.warning(
+            "darwin_seatbelt: launcher target %r could not be resolved "
+            "(symlink loop or bad path); granting a literal read on its "
+            "absolute path only. If the exec fails with EPERM, add a "
+            "narrow read_paths entry covering the install tree.",
+            target,
+        )
+        fallback = Path(os.path.abspath(str(target)))
+        if fallback not in literals:
+            literals.append(fallback)
+        return [], literals
+    if any(_is_within_literal(resolved, root) for root in covered):
+        return [], literals
+    parent = resolved.parent
+    home: Path | None
+    try:
+        expanded = os.path.expanduser("~")
+        # On Unix with no ``$HOME`` and no passwd entry, ``expanduser``
+        # returns ``"~"`` UNCHANGED (it does not raise). Resolving that
+        # yields ``<cwd>/~`` — absolute-looking but bogus — which would
+        # switch the fail-closed guard OFF. Treat any still-tilde result
+        # as an undeterminable home so the guard below refuses the grant.
+        if expanded.startswith("~"):
+            home = None
+        else:
+            home = Path(expanded).resolve(strict=False)
+            if not home.is_absolute() or str(home) in ("", "/"):
+                home = None
+    except (OSError, RuntimeError):
+        home = None
+    # FAIL-CLOSED: ``home is None`` (undeterminable $HOME) refuses the
+    # subpath — we cannot prove ``parent`` isn't the home directory, so
+    # granting it would be the exact fail-open we reject elsewhere. The
+    # home-shaped check refuses any direct child of /Users or /home so
+    # a DIFFERENT user's home (which the $HOME check misses) is refused
+    # too.
+    parent_too_broad = (
+        str(parent) == "/"
+        or str(parent) in _UNSAFE_WIDEN_ANCESTORS
+        or home is None
+        or _is_within_literal(home, parent)
+        or _is_home_dir_shaped(parent)
+    )
+    if parent_too_broad:
+        _LOGGER.warning(
+            "darwin_seatbelt: launcher target %r resolves to %r whose parent "
+            "directory %r is too broad to grant (subpath) on. Granting a "
+            "literal read on the binary only; if the exec still fails with "
+            "EPERM, add a narrow read_paths entry covering the install tree.",
+            target,
+            str(resolved),
+            str(parent),
+        )
+        if resolved not in literals:
+            literals.append(resolved)
+        return [], literals
+    return [parent], literals
+
+
+def _is_home_dir_shaped(path: Path) -> bool:
+    """
+    Return whether *path* is a direct child of ``/Users`` or ``/home``
+    — i.e. a user home directory, too broad to grant a ``subpath`` on
+    regardless of whose it is. The ``$HOME`` containment check only
+    catches the CURRENT user's home; this catches every user's.
+
+    :param path: Candidate parent directory being considered for a
+        ``subpath`` grant.
+    :returns: ``True`` when *path*'s own parent is ``/Users`` or
+        ``/home``.
+    """
+    return str(Path(os.path.abspath(str(path))).parent) in ("/Users", "/home")
 
 
 def _interpreter_install_root(exe: Path) -> Path | None:

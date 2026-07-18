@@ -119,6 +119,17 @@ def test_tools_are_synchronous() -> None:
         ('{"seconds": 1, "repeat": "yes"}', "repeat must be a boolean"),
         # ``note`` MUST be a string when present.
         ('{"seconds": 1, "note": 5}', "note must be a string"),
+        # Only NaN bypasses the numeric guards (nan < 0 and nan > cap are
+        # both False), so without the finite check it would reach
+        # asyncio.sleep(nan). +Inf was already rejected by the cap and
+        # -Inf by the non-negative guard; the finite check just unifies
+        # all three under one message. json.loads accepts the bare
+        # ``NaN`` / ``Infinity`` / ``-Infinity`` tokens.
+        ('{"seconds": NaN}', "seconds must be a finite number"),
+        ('{"seconds": Infinity}', "seconds must be a finite number"),
+        ('{"seconds": -Infinity}', "seconds must be a finite number"),
+        # repeat=true + seconds=0 would busy-loop sleep(0)+POST forever.
+        ('{"seconds": 0, "repeat": true}', "seconds must be > 0 when repeat is true"),
     ],
 )
 def test_set_invalid_args_return_error(args_json: str, expected_error_substring: str) -> None:
@@ -206,6 +217,11 @@ def test_validate_timer_set_args_accepts_valid_shapes() -> None:
         True,
         "x",
     )
+    # seconds=0 stays valid for a one-shot timer (single immediate
+    # firing); only repeat=true with seconds=0 is the busy-loop that
+    # the guard rejects.
+    assert validate_timer_set_args({"seconds": 0}) == (0.0, False, None)
+    assert validate_timer_set_args({"seconds": 0, "repeat": False}) == (0.0, False, None)
 
 
 @pytest.mark.parametrize(
@@ -217,6 +233,13 @@ def test_validate_timer_set_args_accepts_valid_shapes() -> None:
         ({"seconds": True}, "seconds must be a number"),
         ({"seconds": 1, "repeat": "yes"}, "repeat must be a boolean"),
         ({"seconds": 1, "note": 5}, "note must be a string"),
+        # NaN is the one non-finite value that slips both numeric guards;
+        # ±Inf already failed the cap / non-negative checks, so the finite
+        # guard unifies all three under a single message.
+        ({"seconds": float("nan")}, "seconds must be a finite number"),
+        ({"seconds": float("inf")}, "seconds must be a finite number"),
+        ({"seconds": float("-inf")}, "seconds must be a finite number"),
+        ({"seconds": 0, "repeat": True}, "seconds must be > 0 when repeat is true"),
     ],
 )
 def test_validate_timer_set_args_rejects_bad_shapes(

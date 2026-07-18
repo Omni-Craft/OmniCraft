@@ -120,3 +120,29 @@ async def test_timer_set_rejects_invalid_args_via_shared_validator() -> None:
 
     assert json.loads(output) == {"error": "seconds must be non-negative"}
     assert recorder.posts == []
+
+
+@pytest.mark.asyncio
+async def test_timer_set_rejects_zero_delay_repeat() -> None:
+    """
+    A ``repeat=true`` timer with ``seconds=0`` is rejected at dispatch
+    and starts no timer task.
+
+    Left unguarded, ``_timer_loop`` would ``sleep(0)`` and POST in a
+    tight loop forever (a self-inflicted DoS on the session events
+    endpoint). We assert the value is refused — never run the loop —
+    and that no wake POST is emitted.
+    """
+    recorder = _TimerPostRecorder()
+    transport = httpx.MockTransport(recorder)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://server") as server_client:
+        output = await execute_tool(
+            tool_name="sys_timer_set",
+            arguments=json.dumps({"seconds": 0, "repeat": True}),
+            conversation_id="conv_parent",
+            server_client=server_client,
+        )
+
+    assert json.loads(output) == {"error": "seconds must be > 0 when repeat is true"}
+    assert recorder.posts == []

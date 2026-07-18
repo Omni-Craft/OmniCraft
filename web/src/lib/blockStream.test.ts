@@ -1224,6 +1224,44 @@ describe("BlockStream — terminal lifecycles", () => {
     expect(blockTypes(blocks)).toEqual(["response_start", "response_end"]);
   });
 
+  it("ignores a stale terminal, keeping the live turn's text open and continuous", () => {
+    const blocks = reduce([
+      { type: "response_created", response: makeResponse({ responseId: "resp_new" }) },
+      { type: "text_delta", delta: "live text " },
+      // A terminal from an earlier response arrives out of order.
+      { type: "response_completed", response: makeResponse({ responseId: "resp_old" }) },
+      { type: "text_delta", delta: "continues" },
+      { type: "response_completed", response: makeResponse({ responseId: "resp_new" }) },
+    ]);
+
+    // The live text was neither closed early nor split: one text_done
+    // carries the whole streamed run.
+    const dones = blocks.filter((b): b is TextDone => b.type === "text_done");
+    expect(dones).toHaveLength(1);
+    expect(dones[0]!.fullText).toBe("live text continues");
+    // Only the matching terminal produced a response_end.
+    const ends = blocks.filter((b): b is ResponseEndBlock => b.type === "response_end");
+    expect(ends).toHaveLength(1);
+    expect(ends[0]!.response?.id).toBe("resp_new");
+  });
+
+  it("ignores a stale terminal while reasoning is still open", () => {
+    const blocks = reduce([
+      { type: "response_created", response: makeResponse({ responseId: "resp_new" }) },
+      { type: "reasoning_delta", delta: "step one " },
+      { type: "response_completed", response: makeResponse({ responseId: "resp_old" }) },
+      { type: "reasoning_delta", delta: "step two" },
+      { type: "response_completed", response: makeResponse({ responseId: "resp_new" }) },
+    ]);
+
+    // The stale terminal did not close reasoning: one continuous section
+    // (a single start + a single joined chunk), not two split by the close.
+    expect(blocks.filter((b) => b.type === "reasoning_start")).toHaveLength(1);
+    const chunks = blocks.filter((b): b is ReasoningChunk => b.type === "reasoning_chunk");
+    expect(chunks.map((c) => c.text).join("")).toBe("step one step two");
+    expect(blocks.filter((b) => b.type === "response_end")).toHaveLength(1);
+  });
+
   it("cancellation surfaces as ResponseEnd with status='cancelled'", () => {
     const blocks = reduce([
       { type: "response_created", response: makeResponse() },

@@ -795,6 +795,13 @@ function* processEvent(state: ReducerState, event: StreamEvent): Generator<AnyBl
     case "response_failed":
     case "response_incomplete":
     case "response_cancelled": {
+      // A terminal for a superseded response (a late or duplicate event,
+      // e.g. after a reconnect) must not close the live turn's open
+      // reasoning/text: when a different response is active, ignore it whole.
+      const terminalId = event.response.id;
+      if (terminalId && state.responseId && terminalId !== state.responseId) {
+        return;
+      }
       yield* closeReasoning(state);
       yield* closeText(state);
       // Surface the error message from a failed response as an

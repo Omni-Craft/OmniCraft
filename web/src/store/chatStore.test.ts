@@ -5672,6 +5672,88 @@ describe("chatStore — pumpStreamEvents frame batching", () => {
     controller.abort();
   });
 
+  it("ignores a stale response terminal for a superseded response id", async () => {
+    useChatStore.setState({
+      conversationId: "conv_stale",
+      blocks: [],
+      activeResponse: null,
+      status: "idle",
+    });
+    const sink = pushableStream();
+    const controller = new AbortController();
+    const manual = manualScheduler();
+    void pumpStreamEvents(
+      "conv_stale",
+      sink.stream,
+      controller,
+      setState,
+      getState,
+      manual.scheduler,
+    );
+
+    // A new response is live and streaming.
+    sink.push(sse("response.created", { id: "resp_new", status: "in_progress", output: [] }));
+    sink.push(delta("N"));
+    await tick();
+    expect(useChatStore.getState().activeResponse?.responseId).toBe("resp_new");
+    expect(useChatStore.getState().status).toBe("streaming");
+
+    // A terminal from an earlier response arrives out of order: it must not
+    // close the live turn.
+    sink.push(sse("response.completed", { id: "resp_old", status: "completed", output: [] }));
+    await tick();
+
+    expect(useChatStore.getState().activeResponse).toEqual({
+      responseId: "resp_new",
+      state: "streaming",
+      error: null,
+    });
+    expect(useChatStore.getState().status).toBe("streaming");
+    expect(useChatStore.getState().blocks.some((b) => b.type === "response_end")).toBe(false);
+
+    controller.abort();
+  });
+
+  it("finalizes normally on the terminal for the active response id", async () => {
+    useChatStore.setState({
+      conversationId: "conv_match",
+      blocks: [],
+      activeResponse: null,
+      status: "idle",
+    });
+    const sink = pushableStream();
+    const controller = new AbortController();
+    const manual = manualScheduler();
+    void pumpStreamEvents(
+      "conv_match",
+      sink.stream,
+      controller,
+      setState,
+      getState,
+      manual.scheduler,
+    );
+
+    sink.push(sse("response.created", { id: "resp_match", status: "in_progress", output: [] }));
+    sink.push(delta("M"));
+    await tick();
+    expect(useChatStore.getState().activeResponse?.responseId).toBe("resp_match");
+
+    sink.push(sse("response.completed", { id: "resp_match", status: "completed", output: [] }));
+    sink.close();
+    await tick();
+    await tick();
+
+    expect(useChatStore.getState().activeResponse).toEqual({
+      responseId: "resp_match",
+      state: "completed",
+      error: null,
+    });
+    expect(useChatStore.getState().status).toBe("idle");
+    expect(useChatStore.getState().blocks.some((b) => b.type === "response_end")).toBe(true);
+
+    controller.abort();
+  });
+
   it("dedupes a stream block whose itemId already exists (snapshot collision)", async () => {
     // Seed a block as if the snapshot hydrated item "fc_dup" already.
     const seeded: AnyBlock = {

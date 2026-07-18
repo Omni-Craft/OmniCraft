@@ -6127,7 +6127,9 @@ async def test_forward_session_cost_backs_off_after_failure(
         await run()
         assert len(attempts) == 1
         assert dedupe.cost_backoff_s == pytest.approx(forwarder._COST_FORWARD_BACKOFF_BASE_S)
-        assert dedupe.cost_retry_at == pytest.approx(1000.0 + forwarder._COST_FORWARD_BACKOFF_BASE_S)
+        assert dedupe.cost_retry_at == pytest.approx(
+            1000.0 + forwarder._COST_FORWARD_BACKOFF_BASE_S
+        )
 
         # Next poll BEFORE the cooldown elapses: gated out, NO new POST even
         # though the cost advanced — the storm this fixes.
@@ -6141,7 +6143,9 @@ async def test_forward_session_cost_backs_off_after_failure(
         await run()
         assert len(attempts) == 2
         assert dedupe.cost_backoff_s == pytest.approx(forwarder._COST_FORWARD_BACKOFF_BASE_S * 2)
-        assert dedupe.cost_retry_at == pytest.approx(1001.0 + forwarder._COST_FORWARD_BACKOFF_BASE_S * 2)
+        assert dedupe.cost_retry_at == pytest.approx(
+            1001.0 + forwarder._COST_FORWARD_BACKOFF_BASE_S * 2
+        )
 
         # Endpoint recovers, but we're still inside the doubled cooldown → gated.
         outcome["status"] = 200

@@ -1191,9 +1191,7 @@ def _isolate_codex_config(
     if toml_text is not None:
         codex_config.parent.mkdir(parents=True, exist_ok=True)
         codex_config.write_text(toml_text)
-    monkeypatch.setattr(
-        "omnicraft.onboarding.ambient._codex_config_path", lambda: codex_config
-    )
+    monkeypatch.setattr("omnicraft.onboarding.ambient._codex_config_path", lambda: codex_config)
 
 
 def test_resolve_provider_cli_config_resolves_transport(
@@ -1208,7 +1206,7 @@ def test_resolve_provider_cli_config_resolves_transport(
     _isolate_codex_config(
         monkeypatch,
         tmp_path,
-        '[model_providers.Databricks]\n'
+        "[model_providers.Databricks]\n"
         'base_url = "https://ws.ai-gateway.cloud.databricks.com/codex/v1"\n'
         'wire_api = "chat"\n'
         "[model_providers.Databricks.auth]\n"
@@ -1255,7 +1253,7 @@ def test_cli_config_listing_enumerates_via_openai_compatible(
     _isolate_codex_config(
         monkeypatch,
         tmp_path,
-        '[model_providers.Databricks]\n'
+        "[model_providers.Databricks]\n"
         'base_url = "https://ws.ai-gateway.cloud.databricks.com/codex/v1"\n'
         "[model_providers.Databricks.auth]\n"
         'command = "printf"\n'

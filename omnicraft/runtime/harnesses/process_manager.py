@@ -173,6 +173,12 @@ def _resolve_harness_idle_timeout_s() -> float:
 # enough that a wedged subprocess doesn't block OmniCraft shutdown.
 _RELEASE_GRACE_S = 5.0
 
+# Bound on draining background corpse-wait tasks (from spawns cancelled
+# mid-bind) at shutdown. The process was sent SIGKILL, so the wait normally
+# settles quickly; the bound is what stops a pathological case (a wait that
+# does not settle) from blocking OmniCraft shutdown.
+_SPAWN_REAP_DRAIN_TIMEOUT_S = 5.0
+
 # Timeout for the per-conversation socket file to appear after
 # uvicorn boots inside the runner. Cold-start of an external SDK
 # (Claude Code, Codex, etc.) plus uvicorn is typically 1–3s; the
@@ -694,6 +700,11 @@ class HarnessProcessManager:
         # their per-conv locks).
         self._registry_lock = asyncio.Lock()
         self._reaper_task: asyncio.Task[None] | None = None
+        # Corpse-wait tasks for spawns cancelled mid-bind. ``_spawn_entry``
+        # SIGKILLs the process (synchronous) then collects its exit status in
+        # an owned task here so a second cancellation cannot detach it; drained
+        # bounded at shutdown. See ``_spawn_entry`` / ``_drain_spawn_reap_tasks``.
+        self._spawn_reap_tasks: set[asyncio.Task[int]] = set()
         self._started = False
         # Set at the start of ``shutdown`` so an in-flight cold spawn
         # cannot register a live process after teardown begins.
@@ -1202,6 +1213,9 @@ class HarnessProcessManager:
             conv_ids = list(set(self._entries) | set(self._spawn_locks))
         for conv_id in conv_ids:
             await self.release(conv_id)
+        # Drain corpse-wait tasks from spawns cancelled mid-bind (bounded) so
+        # none is left pending when the loop tears down.
+        await self._drain_spawn_reap_tasks()
         # Best-effort cleanup of our instance dir. If a subprocess
         # we couldn't kill is still holding a socket file, the
         # rmtree leaves it behind; the next OmniCraft boot's orphan
@@ -1303,42 +1317,121 @@ class HarnessProcessManager:
             stderr=None,
             env=effective_env,
         )
-        await _wait_for_bind(process, endpoint, harness, conversation_id)
+        try:
+            await _wait_for_bind(process, endpoint, harness, conversation_id)
 
-        # ``base_url`` is required for relative-URL routing; the
-        # actual host portion is irrelevant under uds transport,
-        # but httpx insists on a syntactically-valid URL. The
-        # default httpx read-timeout (5s) is too short for SSE
-        # streams that may pause for tens of seconds during
-        # tool dispatch round-trips (action_required → AP
-        # call_tool → PATCH → resume); use a generous fixed
-        # timeout that still surfaces a genuinely-stuck harness.
-        client = httpx.AsyncClient(
-            transport=endpoint.make_transport(),
-            base_url=endpoint.base_url,
-            # S1 (security): present the per-spawn bearer token (Windows only)
-            # so the harness scaffold accepts this client and rejects any
-            # unauthenticated local peer on the loopback-TCP channel. Empty on
-            # POSIX, where the boot-validated owner-only socket parent is
-            # the access boundary.
-            headers=({"Authorization": f"Bearer {auth_token}"} if auth_token else {}),
-            # See the comment above the constant for rationale.
-            # Connect/write/pool keep the 5s default so a vanished
-            # harness still surfaces quickly; read=None defers
-            # liveness to the heartbeat path.
-            timeout=httpx.Timeout(5.0, read=None),
-        )
-        return _SubprocessEntry(
-            process=process,
-            client=client,
-            endpoint=endpoint,
-            harness=harness,
-            # Record the model this subprocess was spawned with so a later
-            # turn requesting a different model (e.g. after ``/model``)
-            # triggers a respawn in ``get_client`` — the model is a fixed
-            # process env var, not re-read per turn.
-            model=(env or {}).get(_model_env_key(harness)),
-        )
+            # ``base_url`` is required for relative-URL routing; the
+            # actual host portion is irrelevant under uds transport,
+            # but httpx insists on a syntactically-valid URL. The
+            # default httpx read-timeout (5s) is too short for SSE
+            # streams that may pause for tens of seconds during
+            # tool dispatch round-trips (action_required → AP
+            # call_tool → PATCH → resume); use a generous fixed
+            # timeout that still surfaces a genuinely-stuck harness.
+            client = httpx.AsyncClient(
+                transport=endpoint.make_transport(),
+                base_url=endpoint.base_url,
+                # S1 (security): present the per-spawn bearer token (Windows only)
+                # so the harness scaffold accepts this client and rejects any
+                # unauthenticated local peer on the loopback-TCP channel. Empty on
+                # POSIX, where the boot-validated owner-only socket parent is
+                # the access boundary.
+                headers=({"Authorization": f"Bearer {auth_token}"} if auth_token else {}),
+                # See the comment above the constant for rationale.
+                # Connect/write/pool keep the 5s default so a vanished
+                # harness still surfaces quickly; read=None defers
+                # liveness to the heartbeat path.
+                timeout=httpx.Timeout(5.0, read=None),
+            )
+            return _SubprocessEntry(
+                process=process,
+                client=client,
+                endpoint=endpoint,
+                harness=harness,
+                # Record the model this subprocess was spawned with so a later
+                # turn requesting a different model (e.g. after ``/model``)
+                # triggers a respawn in ``get_client`` — the model is a fixed
+                # process env var, not re-read per turn.
+                model=(env or {}).get(_model_env_key(harness)),
+            )
+        except BaseException:
+            # A ``CancelledError`` landing in ``_wait_for_bind`` (the turn task
+            # cancelled during cold start) unwinds here with the process alive
+            # but not yet registered in ``_entries`` — so ``release`` no-ops on
+            # it and the idle reaper, which only walks ``_entries``, never sees
+            # it. ``kill`` sends SIGKILL synchronously; the process cannot catch
+            # or ignore it, so the kernel terminates it (asynchronously) and the
+            # live-runner leak is closed independently of what the wait below
+            # does. Catch ``BaseException`` because the leak we are closing is
+            # exactly the cancellation path.
+            if process.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    process.kill()
+                # Collect the exit status in an OWNED task, not inline: a second
+                # cancellation could abandon an inline await and detach the
+                # wait, surfacing later as "Task was destroyed but it is
+                # pending". The task is held in ``_spawn_reap_tasks`` and drained
+                # bounded at shutdown (a task that resists cancellation there is
+                # abandoned with a log, not left silently), and its result is
+                # consumed by the done callback. ``kill`` already signalled the
+                # process, so this only reaps the corpse (exit status).
+                reap_task = asyncio.create_task(process.wait())
+                self._spawn_reap_tasks.add(reap_task)
+                reap_task.add_done_callback(self._on_spawn_reap_done)
+                # Best-effort synchronous collection on the common single-cancel
+                # path so the corpse is usually reaped before we unwind. A
+                # second cancellation may abandon this await — that is why the
+                # task is owned above — so tolerate only ``CancelledError`` here
+                # (never swallow ``KeyboardInterrupt`` / ``SystemExit``).
+                with contextlib.suppress(asyncio.CancelledError):
+                    await asyncio.shield(reap_task)
+            # Best-effort cleanup. ``suppress(Exception)`` deliberately lets a
+            # ``BaseException`` (e.g. ``KeyboardInterrupt``) here propagate and
+            # supersede the original cancellation rather than mask a Ctrl-C.
+            with contextlib.suppress(Exception):
+                close_subprocess_transport(process)
+            # Remove the partial socket file this spawn created (no-op for TCP).
+            with contextlib.suppress(Exception):
+                endpoint.cleanup()
+            raise
+
+    def _on_spawn_reap_done(self, task: asyncio.Task[int]) -> None:
+        """Discard a finished corpse-wait task and consume its result.
+
+        Retrieving the result (or noting cancellation) keeps a failed wait
+        from surfacing as "Task exception was never retrieved". ``wait``
+        returns an int on success, so this is normally a plain discard.
+        """
+        self._spawn_reap_tasks.discard(task)
+        if not task.cancelled():
+            exc = task.exception()
+            if exc is not None:
+                _logger.warning("harness spawn-reap wait failed: %s", exc)
+
+    async def _drain_spawn_reap_tasks(self) -> None:
+        """Await outstanding corpse-wait tasks, bounded, at shutdown.
+
+        Each process was sent SIGKILL, so these normally settle at once. A
+        wait that outruns the bound is cancelled and logged rather than
+        blocking shutdown; the kernel terminates a SIGKILL'd process, so the
+        only cost is a delayed exit-status collection.
+        """
+        tasks = [task for task in self._spawn_reap_tasks if not task.done()]
+        if not tasks:
+            return
+        _, pending = await asyncio.wait(tasks, timeout=_SPAWN_REAP_DRAIN_TIMEOUT_S)
+        if not pending:
+            return
+        for task in pending:
+            task.cancel()
+        _, still_pending = await asyncio.wait(pending, timeout=_SPAWN_REAP_DRAIN_TIMEOUT_S)
+        if still_pending:
+            _logger.warning(
+                "%d harness spawn-reap wait task(s) did not settle within %.0fs at "
+                "shutdown; abandoning them (processes were already SIGKILL'd)",
+                len(still_pending),
+                _SPAWN_REAP_DRAIN_TIMEOUT_S,
+            )
 
     async def _close_entry(self, entry: _SubprocessEntry) -> None:
         """

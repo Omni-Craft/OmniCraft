@@ -1701,3 +1701,171 @@ async def test_shutdown_during_spawn_leaves_no_live_process(
         await _cancel_pending(get_task, shutdown_task)
         # Idempotent if the test already shut down; still safe if it failed early.
         await manager.shutdown()
+
+
+# ── Mid-spawn cancellation ──────────────────────────────────────
+
+
+async def test_mid_spawn_cancellation_reaps_subprocess(
+    manager: HarnessProcessManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cancelling ``get_client`` mid-bind must kill the just-spawned runner.
+
+    The subprocess exists from ``create_subprocess_exec`` onward but is
+    only registered in ``_entries`` after ``_spawn_entry`` returns, so a
+    ``CancelledError`` (session delete, sub-agent teardown, AP shutdown)
+    landing inside ``_wait_for_bind`` used to leak it — unregistered, so
+    ``release`` no-ops and the idle reaper, which only walks ``_entries``,
+    never sees it. Real subprocess so the assertion is that a real OS
+    process is reaped, not merely that reap code ran. Deterministic: the
+    ``in_bind`` event proves the spawn is parked in ``_wait_for_bind``
+    before the single cancel is issued (no ``sleep(0)`` racing it).
+    """
+    from omnicraft.runtime.harnesses import process_manager as pm_mod
+
+    await manager.start()
+    try:
+        spawned: list[asyncio.subprocess.Process] = []
+        real_exec = asyncio.create_subprocess_exec
+
+        async def capturing_exec(*args: object, **kwargs: object) -> asyncio.subprocess.Process:
+            process = await real_exec(*args, **kwargs)  # type: ignore[arg-type]
+            spawned.append(process)
+            return process
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", capturing_exec)
+
+        in_bind = asyncio.Event()
+
+        async def hanging_bind(*args: object, **kwargs: object) -> None:
+            in_bind.set()
+            await asyncio.sleep(3600)
+
+        monkeypatch.setattr(pm_mod, "_wait_for_bind", hanging_bind)
+
+        conv_id = "conv_cancel_leak"
+        task = asyncio.create_task(manager.get_client(conv_id, _TEST_HARNESS_NAME))
+        await asyncio.wait_for(in_bind.wait(), timeout=10.0)
+        assert spawned, "spawn was never reached"
+        process = spawned[0]
+        pid = process.pid
+
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        for _ in range(40):
+            if not _pid_alive(pid):
+                break
+            await asyncio.sleep(0.05)
+        assert not _pid_alive(pid), "mid-spawn cancellation left a live runner process"
+        assert process.returncode is not None
+        assert not manager.has_session(conv_id)
+        assert conv_id not in manager._entries
+    finally:
+        await manager.shutdown()
+
+
+class _GatedProc:
+    """Fake subprocess whose ``wait()`` blocks until the test releases it.
+
+    Lets the double-cancellation test pin, deterministically, that the
+    corpse-wait is parked when the second cancel arrives: ``wait_entered``
+    fires when the reap is inside ``wait()``, and ``wait_gate`` is what the
+    test sets to let it finish. Holding the gate closed keeps the reap task
+    observably pending in the owned set, so the test can prove it was not
+    detached — a real subprocess cannot expose that midpoint, and it avoids a
+    ``sleep(0)`` racing the cancel.
+    """
+
+    def __init__(self) -> None:
+        self.returncode: int | None = None
+        self.pid = -1
+        self.kill_count = 0
+        self.wait_entered = asyncio.Event()
+        self.wait_gate = asyncio.Event()
+
+    def kill(self) -> None:
+        self.kill_count += 1
+
+    async def wait(self) -> int:
+        self.wait_entered.set()
+        await self.wait_gate.wait()
+        self.returncode = -9
+        return self.returncode
+
+
+async def test_mid_spawn_double_cancellation_keeps_reap_owned(
+    manager: HarnessProcessManager,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second cancel during the corpse-wait must not DETACH the reap task.
+
+    ``_spawn_entry`` SIGKILLs the process synchronously, then collects the
+    exit status in an OWNED task (``_spawn_reap_tasks``) rather than inline,
+    so a second cancellation that abandons the best-effort synchronous await
+    cannot leave a detached, ownerless ``wait()`` task (which would surface
+    as "Task was destroyed but it is pending"). A gated fake process makes
+    the midpoint observable: with the gate held CLOSED, fire the second
+    cancel, let ``get_client`` unwind, and assert the corpse-wait is still a
+    pending member of the owned set — not detached. Then release the gate
+    and let ``shutdown`` drain the set, proving verifiable ownership. The
+    live-runner leak is already closed by the synchronous ``kill`` in either
+    case; what this pins is the task-ownership policy.
+    """
+    from omnicraft.runtime.harnesses import process_manager as pm_mod
+
+    await manager.start()
+    try:
+        fake = _GatedProc()
+
+        async def fake_exec(*args: object, **kwargs: object) -> _GatedProc:
+            return fake
+
+        monkeypatch.setattr(asyncio, "create_subprocess_exec", fake_exec)
+
+        in_bind = asyncio.Event()
+
+        async def hanging_bind(*args: object, **kwargs: object) -> None:
+            in_bind.set()
+            await asyncio.sleep(3600)
+
+        monkeypatch.setattr(pm_mod, "_wait_for_bind", hanging_bind)
+
+        conv_id = "conv_cancel_leak2"
+        task = asyncio.create_task(manager.get_client(conv_id, _TEST_HARNESS_NAME))
+        await asyncio.wait_for(in_bind.wait(), timeout=10.0)
+
+        # First cancel lands in ``_wait_for_bind``; the reap kills the fake
+        # (SIGKILL, synchronous) and parks in the best-effort corpse-wait.
+        task.cancel()
+        await asyncio.wait_for(fake.wait_entered.wait(), timeout=10.0)
+        assert fake.kill_count == 1
+
+        # Second cancel arrives while the corpse-wait is parked. The gate stays
+        # CLOSED so the window is observed, not hidden: get_client unwinds and
+        # re-raises the original cancellation.
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+        # The corpse-wait is OWNED, not detached: still a pending member of the
+        # set with its gate closed. Pre-ownership this would be a detached task
+        # with no set entry.
+        owned = [t for t in manager._spawn_reap_tasks if not t.done()]
+        assert len(owned) == 1, "corpse-wait task was not owned after the double cancel"
+        assert fake.returncode is None, "gate held closed but wait() somehow finished"
+
+        # Release the corpse-wait and let shutdown drain the owned set (bounded).
+        fake.wait_gate.set()
+        await manager.shutdown()
+
+        assert fake.returncode is not None, "owned corpse-wait never collected the exit status"
+        assert fake.kill_count == 1
+        assert not manager._spawn_reap_tasks, "owned corpse-wait was not drained at shutdown"
+        assert not manager.has_session(conv_id)
+        assert conv_id not in manager._entries
+    finally:
+        fake.wait_gate.set()
+        await manager.shutdown()

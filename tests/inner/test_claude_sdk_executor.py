@@ -1912,6 +1912,102 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         _run(_t())
 
+    def test_cancel_during_connect_force_closes_uncached_client(self):
+        """Cancel during ``connect()`` force-closes the built-but-uncached client.
+
+        A watchdog cancel can land inside ``_get_or_create_client``'s
+        ``connect()`` await — before the client is cached. The eviction path
+        (keyed on ``_clients``) can't reach it, so without a dedicated handler
+        the half-connected client leaks its transport/subprocess. The handler
+        must force-close it directly and re-raise the cancellation.
+        """
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        created = []
+        connect_reached = asyncio.Event()
+
+        class _Transport:
+            def __init__(self):
+                self._stdout_stream = None
+                self._stdin_stream = None
+                self._stderr_stream = None
+                self._process = None
+                self._stderr_task = None
+                self._ready = True
+
+        class _ResultMessage:
+            def __init__(self, session_id, result):
+                self.session_id = session_id
+                self.result = result
+
+        class _FakeSDK:
+            AssistantMessage = type("AssistantMessage", (), {})
+            UserMessage = type("UserMessage", (), {})
+            SystemMessage = type("SystemMessage", (), {})
+            ResultMessage = _ResultMessage
+            StreamEvent = type("StreamEvent", (), {})
+            ClaudeAgentOptions = type(
+                "ClaudeAgentOptions",
+                (),
+                {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
+            )
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+                    # Shape ``_force_close_client`` acts on: a live transport
+                    # whose ``_ready`` flip proves the close ran.
+                    self._query = None
+                    self._transport = _Transport()
+                    created.append(self)
+
+                async def connect(self):
+                    # Signal we are INSIDE connect, then block so the cancel
+                    # lands here deterministically (no sleep(0) racing it).
+                    connect_reached.set()
+                    await asyncio.Event().wait()
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def receive_response(self):
+                    yield _ResultMessage("s", "unused")
+
+                async def disconnect(self):
+                    return None
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            messages = [{"role": "user", "content": "hi", "session_id": "s"}]
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+
+                async def _consume():
+                    return [e async for e in executor.run_turn(messages, [], "")]
+
+                turn = asyncio.ensure_future(_consume())
+                await asyncio.wait_for(connect_reached.wait(), timeout=5)
+                # The client is built but not yet cached; grab the live
+                # transport before the close nulls it off the client.
+                self.assertEqual(len(created), 1)
+                self.assertEqual(executor._clients, {})
+                transport = created[0]._transport
+                self.assertIsNotNone(transport)
+                turn.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await turn
+
+                # Drain the detached force-close and assert the half-connected
+                # client's transport was actually closed and detached (not
+                # left alive/leaked).
+                await executor._drain_cancel_close_tasks()
+                self.assertFalse(transport._ready)
+                self.assertIsNone(created[0]._transport)
+                # Cache never held it, and no crash mark was left behind.
+                self.assertEqual(executor._clients, {})
+                self.assertNotIn("s", executor._crashed_sessions)
+
+        _run(_t())
+
     def test_cancel_during_request_policy_evicts_cached_client(self):
         """Cancel during LLM_REQUEST policy eval evicts the already-cached client.
 

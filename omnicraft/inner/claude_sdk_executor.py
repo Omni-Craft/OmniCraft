@@ -1500,6 +1500,19 @@ class ClaudeSDKExecutor(Executor):
                 # Claude CLI does not need an inherited Anthropic key.
                 with _unset_env_var("CLAUDECODE"), _unset_env_var("ANTHROPIC_API_KEY"):
                     await asyncio.wait_for(client.connect(), timeout=_CONNECT_TIMEOUT_SECONDS)
+            except asyncio.CancelledError:
+                # An external cancel (the turn task cancelled from outside) can
+                # land inside ``connect()`` — a ``BaseException`` the clauses
+                # below never catch (the internal ``wait_for`` timeout surfaces
+                # as ``TimeoutError``, handled above). The client is built with
+                # a possibly-live transport/subprocess but not yet cached, so
+                # ``_evict_client_on_cancel`` (keyed on ``_clients``) can't
+                # reach it. Force-close it directly, then re-raise so the
+                # cancellation still unwinds the turn. Detach the close rather
+                # than await it: a further cancel could interrupt an inline
+                # await and leak the CLI process.
+                self._spawn_force_close(client)
+                raise
             except asyncio.TimeoutError as exc:
                 await self._force_close_client(client)
                 tail = "\n".join(line.rstrip() for line in connect_stderr[-40:])
@@ -1606,7 +1619,17 @@ class ClaudeSDKExecutor(Executor):
         state = self._clients.pop(session_key, None)
         if state is None:
             return
-        task = asyncio.create_task(self._force_close_client(state.client))
+        self._spawn_force_close(state.client)
+
+    def _spawn_force_close(self, client: _ClaudeClient) -> None:
+        """Force-close *client* in a tracked background task.
+
+        For a client not (or no longer) in ``_clients`` — e.g. a cancel during
+        ``connect`` leaves a built-but-uncached client. A further cancel could
+        interrupt an inline await and leak the CLI process, so run the close
+        detached and drain it on shutdown via ``_drain_cancel_close_tasks``.
+        """
+        task = asyncio.create_task(self._force_close_client(client))
         self._cancel_close_tasks.add(task)
         task.add_done_callback(self._on_cancel_close_done)
 

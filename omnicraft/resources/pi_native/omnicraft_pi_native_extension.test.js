@@ -8,8 +8,10 @@
 //
 // This test drives the real extension through its public surface: it registers
 // the event handlers with a mock `pi`, and delivers interrupts through the real
-// inbox poller (a temp inbox directory). No network is used (postEvent fails
-// closed when config has no serverUrl).
+// inbox poller (a temp inbox directory). Most cases use no network at all
+// (postEvent fails closed when config has no serverUrl); the status-edge
+// pairing case (makeCapturingHarness) sets a serverUrl and stubs the global
+// fetch to capture posted events — still no real network.
 //
 // Run with: node omnicraft/resources/pi_native/omnicraft_pi_native_extension.test.js
 //
@@ -68,6 +70,54 @@ function makeCtx({ idle } = {}) {
   };
   if (idle !== undefined) ctx.isIdle = () => idle;
   return ctx;
+}
+
+// Build a harness whose config carries a serverUrl/sessionId and stub the
+// global fetch so postEvent actually fires and we can capture the posted
+// external_session_status edges. Returns { h, status, restore } where `status`
+// accumulates each status edge's `data`.
+function makeCapturingHarness() {
+  const inboxDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-native-cap-"));
+  const configPath = path.join(inboxDir, "config.json");
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({ inboxDir, serverUrl: "http://127.0.0.1:1", sessionId: "conv_cap" }),
+  );
+  process.env.OMNICRAFT_PI_NATIVE_CONFIG = configPath;
+
+  const status = [];
+  const prevFetch = globalThis.fetch;
+  globalThis.fetch = async (_url, opts) => {
+    try {
+      const body = JSON.parse(opts.body);
+      if (body.type === "external_session_status") status.push(body.data);
+    } catch (_e) {}
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return {};
+      },
+      async text() {
+        return "";
+      },
+    };
+  };
+
+  const handlers = {};
+  const pi = {
+    on: (name, fn) => {
+      handlers[name] = fn;
+    },
+    registerCommand: () => {},
+    sendUserMessage: () => {},
+  };
+  delete require.cache[EXT_PATH];
+  require(EXT_PATH)(pi);
+
+  const h = { pi, handlers, inboxDir };
+  harnesses.push(h);
+  return { h, status, restore: () => (globalThis.fetch = prevFetch) };
 }
 
 function sleep(ms) {
@@ -272,6 +322,45 @@ async function testAgentStartClearsStaleWindow() {
   );
 }
 
+async function testAgentStartEndShareResponseId() {
+  // This test asserts one thing: the agent loop's running (agent_start) and
+  // idle (agent_end) status edges carry the SAME response_id. It does not
+  // exercise the web UI. The reason the ids must match is that the UI only
+  // closes a streaming activeResponse when the terminal edge's id matches the
+  // running edge's (chatStore session_status) — a mismatch would leave the
+  // turn stuck on "Working…" — but that consequence is verified by the
+  // frontend code, not here.
+  const { h, status, restore } = makeCapturingHarness();
+  try {
+    const ctx = makeCtx({ idle: false });
+    await h.handlers.session_start({}, ctx);
+    status.length = 0; // drop the session_start idle edge
+    await h.handlers.agent_start({}, ctx);
+    await h.handlers.turn_start({ turnIndex: 1 }, ctx);
+    await h.handlers.agent_end({ messages: [] }, ctx);
+
+    const running = status.find((s) => s.status === "running");
+    const idle = status.find((s) => s.status === "idle");
+    assert(
+      "agent_start posts a running edge with a response_id",
+      !!(running && running.response_id),
+      JSON.stringify(running),
+    );
+    assert(
+      "agent_end posts an idle edge with a response_id",
+      !!(idle && idle.response_id),
+      JSON.stringify(idle),
+    );
+    assert(
+      "agent_start/agent_end share the SAME response_id (closes streaming)",
+      !!(running && idle && running.response_id === idle.response_id),
+      `running=${running && running.response_id} idle=${idle && idle.response_id}`,
+    );
+  } finally {
+    restore();
+  }
+}
+
 (async () => {
   try {
     await testIdleInterruptDoesNotPoisonNextTurn();
@@ -280,6 +369,7 @@ async function testAgentStartClearsStaleWindow() {
     await testAgentLoopInterruptFallbackNoIsIdleBeforeTurnStart();
     await testMidTurnInterruptFallbackNoIsIdle();
     await testAgentStartClearsStaleWindow();
+    await testAgentStartEndShareResponseId();
   } finally {
     for (const h of harnesses) {
       if (h.pi.__omnicraftInboxPoller) clearInterval(h.pi.__omnicraftInboxPoller);

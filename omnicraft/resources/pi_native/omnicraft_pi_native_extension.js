@@ -951,6 +951,19 @@ module.exports = function (pi) {
   let sequence = 0;
   let turnOrdinal = 0;
   let activeResponseId = null;
+  // Response id carried by the agent loop's status edges. agent_start's
+  // ``running`` edge and agent_end's ``idle`` edge MUST share it: the web UI
+  // only closes a streaming ``activeResponse`` when the terminal edge's
+  // response_id matches the one the running edge opened (chatStore
+  // session_status), so a fresh id on ``idle`` would leave the turn stuck on
+  // "Working…" and never drain the queued next turn. Distinct from
+  // ``activeResponseId`` (which keys per-turn conversation items and is unset
+  // until turn_start — the running edge fires earlier, at agent_start).
+  // A scalar suffices because agent lifecycles never overlap: Pi runs one
+  // agent_start→agent_end bracket per turn and loops via turn_start, so
+  // agent_start never nests (the same assumption the agentRunning flag below
+  // already relies on).
+  let agentStatusResponseId = null;
   // Dedicated loop-state flag, set on agent_start / cleared on agent_end. Used
   // as the no-isIdle() fallback for requestInterrupt instead of
   // !activeResponseId: agent_start resets activeResponseId to null and only
@@ -1367,11 +1380,12 @@ module.exports = function (pi) {
     streamedTextIndex.clear();
     finalizedTextBlocks.clear();
     streamingMessageOrdinal = 0;
+    agentStatusResponseId = `pi-${Date.now()}-${++sequence}`;
     await postEvent(config, {
       type: "external_session_status",
       data: {
         status: "running",
-        response_id: `pi-${Date.now()}-${++sequence}`,
+        response_id: agentStatusResponseId,
       },
     });
   });
@@ -1394,9 +1408,16 @@ module.exports = function (pi) {
       if (accumulateUsage(message)) changed = true;
     }
     if (changed) await postSessionUsage();
+    // Reuse the id agent_start opened so the terminal edge matches the web
+    // UI's streaming activeResponse and closes it. Fall back to a fresh id
+    // when no agent_start id is currently unmatched (e.g. a stray second
+    // agent_end, or an agent_end with no preceding agent_start).
+    const idleResponseId =
+      agentStatusResponseId || `pi-${Date.now()}-${++sequence}`;
+    agentStatusResponseId = null;
     await postEvent(config, {
       type: "external_session_status",
-      data: { status: "idle", response_id: `pi-${Date.now()}-${++sequence}` },
+      data: { status: "idle", response_id: idleResponseId },
     });
   });
 

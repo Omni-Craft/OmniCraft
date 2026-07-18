@@ -1628,6 +1628,22 @@ def _load_global_auth() -> ApiKeyAuth | DatabricksAuth | None:
     return None
 
 
+def _coerce_bool(value: object) -> bool:
+    """Coerce a spec-config value (native bool or string) to a real bool.
+
+    Executor ``config`` scalars are stringified at parse time, so a YAML
+    ``use_responses: false`` reaches here as the *truthy* string ``"False"``.
+    Relying on Python truthiness would flip the flag; interpret the common
+    textual forms explicitly instead. Unrecognised strings are treated as
+    falsy.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"true", "1", "yes", "on"}
+    return bool(value)
+
+
 def _build_openai_agents_sdk_spawn_env(spec: AgentSpec) -> dict[str, str]:
     """
     Build the env-var dict the openai-agents harness wrap reads.
@@ -1679,7 +1695,9 @@ def _build_openai_agents_sdk_spawn_env(spec: AgentSpec) -> dict[str, str]:
         configure_agent_harness_with_provider(env, provider, harness_type="openai-agents-sdk")
         use_responses = spec.executor.config.get("use_responses")
         if use_responses is not None:
-            env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] = "true" if use_responses else "false"
+            env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] = (
+                "true" if _coerce_bool(use_responses) else "false"
+            )
         return env
 
     # Global config auth is only consulted when the spec declares NO
@@ -1735,7 +1753,9 @@ def _build_openai_agents_sdk_spawn_env(spec: AgentSpec) -> dict[str, str]:
 
     use_responses = spec.executor.config.get("use_responses")
     if use_responses is not None:
-        env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] = "true" if use_responses else "false"
+        env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] = (
+            "true" if _coerce_bool(use_responses) else "false"
+        )
     configure_agent_harness_with_ucode(
         env,
         ucode_profile,

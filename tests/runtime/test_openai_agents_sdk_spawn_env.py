@@ -177,6 +177,46 @@ def test_use_responses_true_encodes_as_true_string() -> None:
     assert env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] == "true"
 
 
+def _make_spec_with_raw_use_responses(value: object) -> AgentSpec:
+    """Build a spec whose ``config["use_responses"]`` holds ``value`` verbatim.
+
+    The real parser stringifies executor-config scalars, so a YAML
+    ``use_responses: false`` reaches the spawn-env builder as the truthy
+    string ``"False"``. This bypasses ``_make_spec``'s ``bool | None`` typing
+    to reproduce that path.
+    """
+    return AgentSpec(
+        spec_version=1,
+        name="test-openai-agents",
+        instructions="You are a test agent.",
+        executor=ExecutorSpec(
+            type="omnicraft",
+            config={"harness": "openai-agents", "use_responses": value},
+            model="databricks-gpt-5-4-mini",
+        ),
+        llm=LLMConfig(model="databricks-gpt-5-4-mini"),
+    )
+
+
+@pytest.mark.parametrize("value", ["false", "False", "0", "no", "off", "FALSE"])
+def test_use_responses_falsy_strings_encode_as_false_string(value: str) -> None:
+    """Stringified falsy values (as the parser produces) encode as ``"false"``.
+
+    A YAML ``use_responses: false`` is stringified to ``"False"`` at parse
+    time — a truthy Python string. Without explicit coercion the flag would
+    flip to ``"true"`` and silently enable the Responses API.
+    """
+    env = _build_openai_agents_sdk_spawn_env(_make_spec_with_raw_use_responses(value))
+    assert env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] == "false"
+
+
+@pytest.mark.parametrize("value", ["true", "True", "1", "yes", "on", True])
+def test_use_responses_truthy_values_encode_as_true_string(value: object) -> None:
+    """Native ``True`` and its common string forms encode as ``"true"``."""
+    env = _build_openai_agents_sdk_spawn_env(_make_spec_with_raw_use_responses(value))
+    assert env["HARNESS_OPENAI_AGENTS_USE_RESPONSES"] == "true"
+
+
 def test_use_responses_absent_omits_env_var() -> None:
     """When ``use_responses`` is unset, the env var is omitted (harness default applies)."""
     env = _build_openai_agents_sdk_spawn_env(_make_spec(use_responses=None))

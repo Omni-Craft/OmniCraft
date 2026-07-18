@@ -123,14 +123,24 @@ def looks_like_test_db(db_uri: str) -> bool:
         return True
 
     path = _sqlite_path(db_uri)
-    # Only treat a ``test`` token as proof for file-backed SQLite paths.
-    # Non-SQLite authorities such as ``postgresql://prod-test-cluster/app``
-    # may contain ``test`` in a real host name and must not be silently
-    # accepted as throwaway DBs.
-    if path is not None and _sqlite_path_has_test_token(path):
-        return True
-    if path is not None and _under_temp_dir(path):
-        return True
+    if path is not None:
+        resolved = _resolve(path)
+        # A file in a world-writable dir like /tmp may be a symlink (a stale
+        # fixture, or a misconfigured OMNICRAFT_DATABASE_URI) pointing a
+        # ``test``-named path at a real DB, so the temp-dir check runs on the
+        # resolved target, not the link.
+        if _under_temp_dir(resolved):
+            return True
+        # A ``test`` token counts only for file-backed SQLite paths, and only
+        # when it is in the URI the caller wrote AND survives resolution. The
+        # "in the raw path" half keeps the CWD — which resolution prepends to a
+        # relative URI — from donating a token the URI never had; the "survives
+        # resolution" half keeps a ``test``-named symlink from laundering a real
+        # DB. Non-SQLite authorities such as ``postgresql://prod-test-cluster/app``
+        # never reach here (``path`` is ``None``). Fail-safe: an ambiguous DB is
+        # treated as non-throwaway.
+        if _sqlite_path_has_test_token(path) and _sqlite_path_has_test_token(resolved):
+            return True
 
     return False
 

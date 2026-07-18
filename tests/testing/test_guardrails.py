@@ -9,9 +9,11 @@ guardrail hook.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 
 import pytest
 
+from omnicraft.testing import guardrails
 from omnicraft.testing.guardrails import (
     DEV_PORTS,
     TestGuardrailError,
@@ -85,6 +87,47 @@ def test_looks_like_test_db_accepts_throwaway_uris(db_uri: str) -> None:
     ],
 )
 def test_looks_like_test_db_rejects_real_uris(db_uri: str) -> None:
+    assert looks_like_test_db(db_uri) is False
+
+
+def test_looks_like_test_db_rejects_symlink_to_real_db(tmp_path: Path) -> None:
+    """A test-named symlink in a writable dir must not launder a real DB.
+
+    A file in a world-writable dir like /tmp can be a symlink (a stale fixture,
+    or a misconfiguration) that points a ``test``-named path at a real database.
+    A ``test`` token only counts when it is in the URI the caller wrote AND
+    survives resolution, so the link's own ``test`` name — which the resolved
+    target does not carry — is not enough to classify it as throwaway.
+    """
+    # The link sits in a temp dir with a ``test`` name (both of which the
+    # classifier would otherwise trust); its target is a real DB outside any
+    # temp root. Without resolution this passes on name/location alone.
+    link = tmp_path / "test.db"
+    link.symlink_to("/opt/omnicraft/prod.db")
+    assert looks_like_test_db(f"sqlite:///{link}") is False
+
+
+@pytest.mark.parametrize("db_uri", ["sqlite:///rel.db", "sqlite:///session.db"])
+def test_looks_like_test_db_ignores_test_token_from_cwd(
+    db_uri: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A ``test``/``tests`` component of the CWD must not launder a relative,
+    non-test URI into a "test DB".
+
+    Resolving a relative path prepends the CWD, so a suite run from a
+    ``.../tests/`` directory would otherwise donate a ``test`` token the URI
+    never carried — flipping the verdict to throwaway and green-lighting the
+    destructive suite (the fail-safe-wrong direction). The token must come from
+    the URI the caller wrote.
+    """
+    workdir = tmp_path / "tests"
+    workdir.mkdir()
+    monkeypatch.chdir(workdir)
+    # Isolate the token path: pretend nothing is under a temp root (the real
+    # scenario is a checkout dir, not /tmp), so the ONLY thing that could flip
+    # the verdict to True is a leaked CWD token.
+    monkeypatch.setattr(guardrails, "_under_temp_dir", lambda _p: False)
+
     assert looks_like_test_db(db_uri) is False
 
 

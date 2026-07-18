@@ -260,6 +260,33 @@ describe("PoliciesPage actions", () => {
     );
   });
 
+  it("still offers a handler that is already applied", async () => {
+    // WHY: the backend enforces unique policy *names*, not unique handlers, so
+    // the same handler may be attached more than once (e.g. two distinct CEL
+    // policies). The add dialog must keep showing already-applied handlers.
+    setPolicies([policy()]); // block_canada already applied
+    vi.mocked(policies.usePolicyRegistry).mockReturnValue({
+      data: [
+        {
+          handler: "omnicraft.policies.block_canada",
+          kind: "callable",
+          name: "Block Canada",
+          description: "Deny anything mentioning Canada.",
+          params_schema: null,
+        },
+      ],
+    } as never);
+    renderPage();
+    await screen.findByRole("button", { name: /Adicionar política/ });
+
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar política/ }));
+    const dialog = await screen.findByRole("dialog");
+    expect(within(dialog).getByText("Block Canada")).toBeInTheDocument();
+    expect(
+      within(dialog).queryByText("Todas as políticas disponíveis já foram aplicadas."),
+    ).toBeNull();
+  });
+
   it("Cancel steps back to the policy list after a policy is selected", async () => {
     // WHY: once a policy is selected the dialog shows its config; Cancel must
     // return to the list so the user can pick a different policy (not close).

@@ -708,9 +708,10 @@ describe("SessionPoliciesSection", () => {
     expect(payload.factory_params).toEqual({ expensive_models: ["sonnet"] });
   });
 
-  it("shows the all-applied empty message when every registry policy is already added", () => {
-    // WHY: when appliedHandlers covers the whole registry the filtered list is
-    // empty AND available.length === 0, so the dialog says all are applied.
+  it("still offers a handler that is already applied", () => {
+    // WHY: the backend enforces unique policy *names*, not unique handlers, so
+    // the same handler may be attached more than once (e.g. two distinct CEL
+    // policies). The add dialog must keep showing already-applied handlers.
     registryData.current = [
       { handler: "h.alpha", kind: "callable", name: "Alpha Guard", description: "blocks alpha" },
     ];
@@ -721,9 +722,10 @@ describe("SessionPoliciesSection", () => {
 
     fireEvent.click(screen.getByTitle("Adicionar política"));
     const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Alpha Guard")).toBeInTheDocument();
     expect(
-      within(dialog).getByText("Todas as políticas disponíveis já foram aplicadas."),
-    ).toBeInTheDocument();
+      within(dialog).queryByText("Todas as políticas disponíveis já foram aplicadas."),
+    ).not.toBeInTheDocument();
   });
 });
 

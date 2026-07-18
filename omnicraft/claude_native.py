@@ -3667,7 +3667,7 @@ def _claude_transcript_record_from_session_item(
                 {
                     "type": "tool_result",
                     "tool_use_id": call_id,
-                    "content": output,
+                    "content": _tool_result_content_from_output(output),
                 }
             ],
         }
@@ -3789,6 +3789,126 @@ def _json_object_from_string(value: object) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _is_recognized_content_block_source(source: object) -> bool:
+    """
+    Report whether ``source`` is a recognized Anthropic block source.
+
+    An ``image`` / ``document`` block's ``source`` is a discriminated
+    union keyed on ``type``. Only the variants pinned in Anthropic's docs
+    are accepted, and each must carry its identifying payload field(s):
+
+    * ``base64`` — needs a string ``media_type`` and a string ``data``.
+    * ``url`` — needs a string ``url``.
+    * ``file`` — needs a string ``file_id``.
+
+    Byte content and MIME semantics are not validated — only the
+    discriminator and the presence/type of its identifying field(s). An
+    unknown discriminator (``{"type":"bogus"}``) or a variant missing its
+    field (``{"type":"base64"}``, ``{"type":"url"}``) is not recognized.
+    The document ``text``/``content`` source variants are intentionally
+    excluded: their required fields are not pinned in our reference, so a
+    block using one stays the verbatim string rather than being promoted
+    on a guessed shape.
+
+    :param source: The parsed ``source`` value of a content block.
+    :returns: ``True`` only for a recognized, well-formed source.
+    """
+    if not isinstance(source, dict):
+        return False
+    source_type = source.get("type")
+    if source_type == "base64":
+        return isinstance(source.get("media_type"), str) and isinstance(source.get("data"), str)
+    if source_type == "url":
+        return isinstance(source.get("url"), str)
+    if source_type == "file":
+        return isinstance(source.get("file_id"), str)
+    return False
+
+
+def _is_recognized_tool_result_block(block: object) -> bool:
+    """
+    Report whether ``block`` is a well-formed Claude tool-result block.
+
+    Recognizes the ``tool_result.content`` block types whose schema is
+    pinned in Anthropic's docs, validating the field the API keys each on:
+
+    * ``text`` — needs a string ``text``.
+    * ``image`` / ``document`` — need a ``source`` that is a recognized
+      discriminated-union variant with its identifying field(s), per
+      :func:`_is_recognized_content_block_source` (``base64`` with
+      ``media_type``+``data``, ``url`` with ``url``, ``file`` with
+      ``file_id``).
+
+    ``search_result`` blocks (beta) and the document ``text``/``content``
+    source variants are deliberately **not** recognized: their field
+    schema is not pinned in our reference, so such an array stays the
+    verbatim string rather than being promoted on a guessed shape.
+
+    A dict that merely carries a string ``type`` (e.g. ordinary tool data
+    like ``{"type":"file","path":"x"}``) or a block whose ``source`` is
+    absent, empty, or an unknown/underspecified variant
+    (``{"type":"image"}``, ``{"type":"image","source":{"type":"base64"}}``)
+    is not recognized.
+
+    :param block: One parsed element from a stored tool-result output.
+    :returns: ``True`` only for a recognized, well-formed block.
+    """
+    if not isinstance(block, dict):
+        return False
+    block_type = block.get("type")
+    if block_type == "text":
+        return isinstance(block.get("text"), str)
+    if block_type in ("image", "document"):
+        return _is_recognized_content_block_source(block.get("source"))
+    return False
+
+
+def _tool_result_content_from_output(output: str) -> str | list[dict[str, Any]]:
+    """
+    Rebuild a Claude ``tool_result.content`` value from a stored output.
+
+    The live bridge collapses structured tool-result content — notably a
+    screenshot's ``[{"type":"image","source":{...}}]`` block array or a
+    base64 ``document`` — into a JSON string via ``json.dumps`` before it
+    lands in an OmniCraft ``function_call_output`` item. Cold resume must
+    invert that: an array of recognized Anthropic tool-result blocks —
+    ``text`` (string ``text``), and ``image`` / ``document`` whose
+    ``source`` is a recognized discriminated-union variant with its
+    identifying field(s) (see :func:`_is_recognized_tool_result_block`) —
+    is restored to the structured list Claude's message schema expects
+    (``content`` is ``string | list[block]``), so an image or PDF result
+    stays a block instead of a ~250K-char raw string that overflows the
+    prompt ("Prompt is too long").
+
+    Everything else stays the verbatim string: plain text, error blobs,
+    any non-array payload, unpinned block types (``search_result``), and —
+    critically — a JSON array that only *looks* like blocks, whether it is
+    ordinary tool data (``[{"type":"file","path":"x"}]``) or a malformed
+    block missing its required field or using an unknown/underspecified
+    source variant (``[{"type":"image"}]``,
+    ``[{"type":"image","source":{"type":"base64"}}]``). Those must not be
+    promoted into message content, which would leave Claude to reject or
+    mangle the synthesized resume.
+
+    :param output: The stored ``function_call_output`` string, e.g.
+        ``"contents"`` or ``'[{"type":"image","source":{...}}]'``.
+    :returns: A structured content-block list when every element of
+        ``output`` is a recognized, well-formed block, otherwise the
+        verbatim string.
+    """
+    try:
+        parsed = json.loads(output)
+    except (json.JSONDecodeError, ValueError):
+        return output
+    if (
+        isinstance(parsed, list)
+        and parsed
+        and all(_is_recognized_tool_result_block(b) for b in parsed)
+    ):
+        return parsed
+    return output
 
 
 def _json_safe_tool_use_result(output: str) -> str:

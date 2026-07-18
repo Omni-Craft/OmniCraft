@@ -6246,7 +6246,7 @@ def test_claude_transcript_records_handles_compaction_item() -> None:
 
 
 @pytest.mark.parametrize(
-    ("output", "expected_parsed"),
+    ("output", "expected_parsed", "expected_content"),
     [
         # An angle-bracket display string (e.g. a TaskOutput result) is the
         # regression case: Claude's TaskOutput renderer JSON.parses
@@ -6254,25 +6254,126 @@ def test_claude_transcript_records_handles_compaction_item() -> None:
         (
             "<retrieval_status>timeout</retrieval_status>",
             "<retrieval_status>timeout</retrieval_status>",
+            "<retrieval_status>timeout</retrieval_status>",
         ),
         # A <tool_use_error> blob is the same hazard from a different tool.
         (
             "<tool_use_error>No task found</tool_use_error>",
             "<tool_use_error>No task found</tool_use_error>",
+            "<tool_use_error>No task found</tool_use_error>",
         ),
         # Ordinary plain text must also round-trip to a string.
-        ("plain text output", "plain text output"),
-        # Already-JSON output (e.g. an image content-block array) must pass
-        # through verbatim, not get double-encoded into a string literal.
+        ("plain text output", "plain text output", "plain text output"),
+        # A well-formed image content-block array (a base64 source with
+        # both ``media_type`` and ``data``) is restored to a structured
+        # list so a screenshot stays an image block instead of a giant raw
+        # string that overflows the prompt.
         (
-            '[{"type":"image","source":{"type":"base64","data":"AAA"}}]',
-            [{"type": "image", "source": {"type": "base64", "data": "AAA"}}],
+            '[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"AAA"}}]',
+            [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/png", "data": "AAA"},
+                }
+            ],
+            [
+                {
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/png", "data": "AAA"},
+                }
+            ],
+        ),
+        # A well-formed image with a ``url`` source is likewise restored.
+        (
+            '[{"type":"image","source":{"type":"url","url":"https://example.com/x.png"}}]',
+            [{"type": "image", "source": {"type": "url", "url": "https://example.com/x.png"}}],
+            [{"type": "image", "source": {"type": "url", "url": "https://example.com/x.png"}}],
+        ),
+        # A well-formed text content-block array is likewise restored.
+        (
+            '[{"type":"text","text":"hi"}]',
+            [{"type": "text", "text": "hi"}],
+            [{"type": "text", "text": "hi"}],
+        ),
+        # A well-formed document content-block array (e.g. a base64 PDF) is
+        # restored too, so a large document stays a block instead of a
+        # bloated raw string.
+        (
+            '[{"type":"document","source":{"type":"base64","media_type":"application/pdf","data":"AAA"}}]',
+            [
+                {
+                    "type": "document",
+                    "source": {"type": "base64", "media_type": "application/pdf", "data": "AAA"},
+                }
+            ],
+            [
+                {
+                    "type": "document",
+                    "source": {"type": "base64", "media_type": "application/pdf", "data": "AAA"},
+                }
+            ],
+        ),
+        # Negative: ordinary tool data that only *looks* like blocks (a
+        # tool whose textual output is a JSON array of typed dicts) must
+        # stay the verbatim string, not get promoted into message content.
+        (
+            '[{"type":"file","path":"x"}]',
+            [{"type": "file", "path": "x"}],
+            '[{"type":"file","path":"x"}]',
+        ),
+        # Negative: a malformed image block (missing ``source``) is not a
+        # valid Anthropic block, so it stays the verbatim string.
+        (
+            '[{"type":"image"}]',
+            [{"type": "image"}],
+            '[{"type":"image"}]',
+        ),
+        # Negative: an image block whose ``source`` is an empty object
+        # (no ``type`` discriminator) is not well-formed and stays a string.
+        (
+            '[{"type":"image","source":{}}]',
+            [{"type": "image", "source": {}}],
+            '[{"type":"image","source":{}}]',
+        ),
+        # Negative: an image ``source`` with keys but no ``type`` likewise
+        # stays the verbatim string.
+        (
+            '[{"type":"image","source":{"nope":1}}]',
+            [{"type": "image", "source": {"nope": 1}}],
+            '[{"type":"image","source":{"nope":1}}]',
+        ),
+        # Negative: a ``base64`` source missing its ``data``/``media_type``
+        # identifying fields is underspecified and stays a string.
+        (
+            '[{"type":"image","source":{"type":"base64"}}]',
+            [{"type": "image", "source": {"type": "base64"}}],
+            '[{"type":"image","source":{"type":"base64"}}]',
+        ),
+        # Negative: a ``url`` source missing its ``url`` field stays a string.
+        (
+            '[{"type":"image","source":{"type":"url"}}]',
+            [{"type": "image", "source": {"type": "url"}}],
+            '[{"type":"image","source":{"type":"url"}}]',
+        ),
+        # Negative: an unknown source discriminator stays the verbatim string.
+        (
+            '[{"type":"image","source":{"type":"bogus"}}]',
+            [{"type": "image", "source": {"type": "bogus"}}],
+            '[{"type":"image","source":{"type":"bogus"}}]',
+        ),
+        # Negative: a malformed text block (missing ``text``) likewise
+        # stays the verbatim string.
+        (
+            '[{"type":"text"}]',
+            [{"type": "text"}],
+            '[{"type":"text"}]',
         ),
     ],
 )
 def test_claude_transcript_tool_use_result_is_json_parseable(
     output: str,
     expected_parsed: object,
+    expected_content: object,
 ) -> None:
     """
     Synthesized ``toolUseResult`` must survive Claude's resume-time parse.
@@ -6280,9 +6381,12 @@ def test_claude_transcript_tool_use_result_is_json_parseable(
     Claude Code ``JSON.parse``s ``toolUseResult`` for some built-in
     renderers (``TaskOutput``). A raw ``<...>`` display string crashed
     the TUI at boot before the input prompt rendered, so the resume
-    failed. The synthesizer must always emit a JSON-parseable value,
-    while leaving the ``tool_result`` content block as the verbatim
-    string the model and web UI see.
+    failed. The synthesizer must always emit a JSON-parseable value. The
+    ``tool_result`` content block restores an array only when every
+    element is a well-formed recognized Anthropic block (an image array
+    with a ``source`` round-trips back to a list); plain text, error
+    blobs, tool data that merely looks like blocks, and malformed blocks
+    stay the verbatim string the model and web UI see.
     """
     items: list[dict[str, Any]] = [
         {
@@ -6303,8 +6407,11 @@ def test_claude_transcript_tool_use_result_is_json_parseable(
     record = records[0]
     # toolUseResult must parse without raising, and preserve the value.
     assert json.loads(record["toolUseResult"]) == expected_parsed
-    # The tool_result content block keeps the raw string unchanged.
-    assert record["message"]["content"][0]["content"] == output
+    # The tool_result content block restores only well-formed recognized
+    # blocks (e.g. a screenshot's image array); everything else — plain
+    # text, error blobs, look-alike tool data, malformed blocks — stays
+    # the verbatim string.
+    assert record["message"]["content"][0]["content"] == expected_content
 
 
 def test_json_safe_tool_use_result_wraps_non_json() -> None:

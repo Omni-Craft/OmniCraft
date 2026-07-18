@@ -278,6 +278,51 @@ def _read_databrickscfg_host(profile: str | None = None) -> str | None:
     return None
 
 
+def _databricks_gateway_host(profile: str | None = None) -> str | None:
+    """Resolve the gateway workspace host for *profile*, without env override.
+
+    Codex gateway launches derive the base URL from this host but mint the
+    bearer with ``databricks auth token --profile <profile>``, which resolves
+    credentials from the profile and ignores ``DATABRICKS_HOST``. The SDK
+    resolver (:func:`_read_databrickscfg`) instead lets ``DATABRICKS_HOST``
+    override the profile host, so on a machine whose environment points at a
+    different workspace the base URL and the token target two workspaces and
+    the gateway rejects the token ("Invalid Token").
+
+    So for an explicit profile, prefer the config-file host from
+    :func:`_read_databrickscfg_host`, which never reads ``DATABRICKS_HOST`` —
+    that closes the proven env-override divergence. This is the profile's
+    *resolved* host, not strictly its own section: stdlib ``ConfigParser``
+    merges ``[DEFAULT]`` keys into every section, so a token-only profile with
+    a ``[DEFAULT] host`` resolves to the DEFAULT host here. Fall back to the
+    SDK/ambient chain only when no host resolves (e.g. a profile absent on a
+    Databricks App container); that yields a host string only — the auth
+    command stays pinned to ``--profile``, so it does not imply the token
+    authenticates via ambient credentials. Without a profile there is no
+    profile-pinned token to diverge from, so the SDK path is used directly.
+
+    .. note::
+
+       Residual, parity with upstream: for a token-only profile plus a
+       ``[DEFAULT] host``, the base URL resolves to the DEFAULT host here while
+       ``databricks auth token --profile`` does not inherit ``[DEFAULT]`` (the
+       SDK reads the raw profile section). Closing that would mean changing the
+       shared :func:`_read_databrickscfg_host` (also used by pi-native); left
+       as-is pending an owner decision.
+
+    :param profile: Databricks config profile name, or ``None``.
+    :returns: Workspace host URL, or ``None`` when none can be resolved.
+    """
+    if profile is not None:
+        host = _read_databrickscfg_host(profile)
+        if host:
+            return host
+    creds = _read_databrickscfg(profile)
+    if creds is not None:
+        return creds.host
+    return _read_databrickscfg_host(profile)
+
+
 class DatabricksAuthError(OSError):
     """Raised when Databricks credential resolution or token refresh fails.
 

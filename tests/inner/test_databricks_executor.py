@@ -871,6 +871,105 @@ def test_read_databrickscfg_host_missing_named_profile_does_not_fallback(
     assert _read_databrickscfg_host("missing-profile") is None
 
 
+def test_databricks_gateway_host_ignores_env_override_for_explicit_profile(
+    tmp_path: _Path,
+    monkeypatch: pytest.MonkeyPatch,
+    clean_databricks_env: None,
+) -> None:
+    """An explicit profile's gateway host must match its ``--profile`` token.
+
+    ``databricks auth token --profile P`` mints a bearer for P's own workspace
+    and ignores ``DATABRICKS_HOST``. If the gateway base URL were resolved via
+    the SDK (which lets ``DATABRICKS_HOST`` override the profile host), the base
+    URL and the token would target different workspaces and the gateway rejects
+    the token. So the host must come from the resolved profile host (which is
+    ``[DEFAULT]``-inheriting, not strictly the profile's own section).
+    """
+    from omnicraft.inner.databricks_executor import _databricks_gateway_host
+
+    cfg_path = tmp_path / "databrickscfg"
+    cfg_path.write_text(
+        textwrap.dedent(
+            """
+        [oss]
+        host = https://profile-workspace.cloud.databricks.com
+        auth_type = databricks-cli
+        """
+        ).lstrip()
+    )
+    monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(cfg_path))
+    monkeypatch.setenv("DATABRICKS_HOST", "https://other-workspace.cloud.databricks.com")
+
+    assert _databricks_gateway_host("oss") == "https://profile-workspace.cloud.databricks.com"
+
+
+def test_databricks_gateway_host_missing_profile_falls_back_to_ambient(
+    tmp_path: _Path,
+    monkeypatch: pytest.MonkeyPatch,
+    clean_databricks_env: None,
+) -> None:
+    """A profile absent from the file falls back to the ambient/env chain.
+
+    Mirrors a spec authored with ``profile: P`` that now runs on a Databricks
+    App container with no matching section: with no host in the profile, the
+    helper falls back to the ambient ``DATABRICKS_HOST``. The auth command
+    stays pinned to ``--profile``, so this only supplies the host string.
+    """
+    from omnicraft.inner.databricks_executor import _databricks_gateway_host
+
+    # Stub the SDK's host-metadata probe (a real HTTP GET with retries) so the
+    # ambient-credential resolution stays offline and fast.
+    monkeypatch.setattr(
+        "databricks.sdk.config.get_host_metadata",
+        _raise_offline_host_metadata,
+    )
+    cfg_path = tmp_path / "databrickscfg"
+    cfg_path.write_text("# no matching profile\n")
+    monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(cfg_path))
+    monkeypatch.setenv("DATABRICKS_HOST", "https://ambient-workspace.cloud.databricks.com")
+    monkeypatch.setenv("DATABRICKS_TOKEN", "dapi-ambient-token")
+
+    assert _databricks_gateway_host("missing-profile") == (
+        "https://ambient-workspace.cloud.databricks.com"
+    )
+
+
+def test_databricks_gateway_host_inherits_default_section_for_token_only_profile(
+    tmp_path: _Path,
+    monkeypatch: pytest.MonkeyPatch,
+    clean_databricks_env: None,
+) -> None:
+    """Pin the ``[DEFAULT]`` inheritance in host resolution (parity w/ upstream).
+
+    A profile carrying only a token, with the host in ``[DEFAULT]``, resolves
+    the gateway host to the DEFAULT host: stdlib ``ConfigParser`` merges
+    ``[DEFAULT]`` keys into every section, so this is the profile's *resolved*
+    host, not strictly its own section. The ``databricks auth token --profile``
+    command does NOT inherit ``[DEFAULT]`` (the SDK reads the raw profile
+    section), so a token-only profile can still diverge here — a known residual
+    left pending an owner decision. This test records the true behavior, not
+    the desired one, so the inheritance can't silently change.
+    """
+    from omnicraft.inner.databricks_executor import _databricks_gateway_host
+
+    cfg_path = tmp_path / "databrickscfg"
+    cfg_path.write_text(
+        textwrap.dedent(
+            """
+        [DEFAULT]
+        host = https://default-workspace.cloud.databricks.com
+        [token-only]
+        token = dapi-token-only
+        """
+        ).lstrip()
+    )
+    monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(cfg_path))
+
+    assert _databricks_gateway_host("token-only") == (
+        "https://default-workspace.cloud.databricks.com"
+    )
+
+
 def test_codex_executor_gateway_uses_host_only_oauth_profile(
     tmp_path: _Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -894,10 +993,6 @@ def test_codex_executor_gateway_uses_host_only_oauth_profile(
         ).lstrip()
     )
     monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(cfg_path))
-    monkeypatch.setattr(
-        "omnicraft.inner.codex_executor._read_databrickscfg",
-        lambda _profile: None,
-    )
 
     from omnicraft.inner.codex_executor import CodexExecutor
 
@@ -910,6 +1005,53 @@ def test_codex_executor_gateway_uses_host_only_oauth_profile(
     overrides = "\n".join(executor._codex_config_overrides)
     assert "https://oauth-host.example.com/ai-gateway/codex/v1" in overrides
     assert 'databricks auth token --profile \\"oauth-profile\\"' in overrides
+
+
+def test_codex_executor_gateway_host_tracks_profile_not_env_override(
+    tmp_path: _Path,
+    monkeypatch: pytest.MonkeyPatch,
+    clean_databricks_env: None,
+) -> None:
+    """Codex gateway base URL must track the profile's own workspace host.
+
+    The bearer is minted with ``databricks auth token --profile P`` (P's own
+    workspace, ignoring ``DATABRICKS_HOST``). If the base URL were resolved via
+    the SDK — which lets ``DATABRICKS_HOST`` override the profile host — a
+    runner env pointing at another workspace would send P's token to a
+    different workspace's gateway (the token crosses a workspace boundary and
+    the gateway rejects it with a 400 "Invalid Token").
+    """
+    monkeypatch.setattr(
+        "databricks.sdk.config.get_host_metadata",
+        _raise_offline_host_metadata,
+    )
+    cfg_path = tmp_path / "databrickscfg"
+    cfg_path.write_text(
+        textwrap.dedent(
+            """
+        [wsA]
+        host = https://workspace-a.cloud.databricks.com
+        token = dapi-token-for-workspace-a
+        """
+        ).lstrip()
+    )
+    monkeypatch.setenv("DATABRICKS_CONFIG_FILE", str(cfg_path))
+    # A runner env whose DATABRICKS_HOST points at a *different* workspace: the
+    # SDK host resolver honors it, the --profile auth command does not.
+    monkeypatch.setenv("DATABRICKS_HOST", "https://workspace-b.cloud.databricks.com")
+
+    from omnicraft.inner.codex_executor import CodexExecutor
+
+    executor = CodexExecutor(
+        codex_path=sys.executable,
+        gateway=True,
+        databricks_profile="wsA",
+    )
+
+    assert executor._env["DATABRICKS_HOST"] == "https://workspace-a.cloud.databricks.com"
+    overrides = "\n".join(executor._codex_config_overrides)
+    assert "workspace-a.cloud.databricks.com" in overrides
+    assert "workspace-b" not in overrides
 
 
 def test_read_databrickscfg_no_config_file_returns_none(
@@ -1530,17 +1672,10 @@ def test_codex_executor_uses_cli_auth_command_not_env_token(
     def _counting_read(profile=None):
         nonlocal call_count
         call_count += 1
-        return type(
-            "Creds",
-            (),
-            {
-                "host": "https://host",
-                "token": f"tok-{call_count}",
-            },
-        )()
+        return "https://host"
 
     monkeypatch.setattr(
-        "omnicraft.inner.codex_executor._read_databrickscfg",
+        "omnicraft.inner.codex_executor._databricks_gateway_host",
         _counting_read,
     )
 

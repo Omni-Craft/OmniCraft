@@ -23,7 +23,6 @@ from omnicraft.inner.codex_executor import (
     _prompt_for_turn,
     _to_codex_input_items,
 )
-from omnicraft.inner.databricks_executor import DatabricksCredentials
 from omnicraft.inner.executor import (
     ExecutorError,
     ReasoningChunk,
@@ -177,11 +176,8 @@ class TestCodexExecutor(unittest.TestCase):
         with (
             patch("omnicraft.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch(
-                "omnicraft.inner.codex_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
+                "omnicraft.inner.codex_executor._databricks_gateway_host",
+                return_value="https://example.cloud.databricks.com",
             ),
         ):
             executor = CodexExecutor(gateway=True)
@@ -209,11 +205,8 @@ class TestCodexExecutor(unittest.TestCase):
             patch("omnicraft.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
             patch(
-                "omnicraft.inner.codex_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example-profile-workspace.cloud.databricks.com",
-                    token="profile_token",
-                ),
+                "omnicraft.inner.codex_executor._databricks_gateway_host",
+                return_value="https://example-profile-workspace.cloud.databricks.com",
             ),
         ):
             executor = CodexExecutor(
@@ -254,7 +247,7 @@ class TestCodexExecutor(unittest.TestCase):
         with (
             patch("omnicraft.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
-            patch("omnicraft.inner.codex_executor._read_databrickscfg") as read_cfg,
+            patch("omnicraft.inner.codex_executor._databricks_gateway_host") as gateway_host,
         ):
             executor = CodexExecutor(
                 gateway=True,
@@ -265,7 +258,7 @@ class TestCodexExecutor(unittest.TestCase):
                 model="databricks-gpt-5-4-mini",
             )
 
-        read_cfg.assert_not_called()
+        gateway_host.assert_not_called()
         self.assertEqual(
             executor._env["DATABRICKS_HOST"],
             "https://example.databricks.com",
@@ -308,8 +301,7 @@ class TestCodexExecutor(unittest.TestCase):
         with (
             patch("omnicraft.inner.codex_executor._find_codex_cli", return_value="/usr/bin/codex"),
             patch.dict("os.environ", {}, clear=True),
-            patch("omnicraft.inner.codex_executor._read_databrickscfg", return_value=None),
-            patch("omnicraft.inner.codex_executor._read_databrickscfg_host", return_value=None),
+            patch("omnicraft.inner.codex_executor._databricks_gateway_host", return_value=None),
         ):
             with self.assertRaises(EnvironmentError):
                 CodexExecutor(gateway=True)
@@ -405,11 +397,8 @@ class TestCodexExecutor(unittest.TestCase):
         async def _t():
             fake_session = _FakeAppSession([[TurnComplete(response="done")]])
             with patch(
-                "omnicraft.inner.codex_executor._read_databrickscfg",
-                return_value=DatabricksCredentials(
-                    host="https://example.cloud.databricks.com",
-                    token="dapi_test_token",
-                ),
+                "omnicraft.inner.codex_executor._databricks_gateway_host",
+                return_value="https://example.cloud.databricks.com",
             ):
                 executor = CodexExecutor(
                     codex_path="/bin/echo",

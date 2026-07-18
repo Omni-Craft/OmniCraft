@@ -5949,7 +5949,9 @@ def _dispatch_native_terminal_harness(
     terminal-mirror sessions whose turns originate in the TUI, so dispatch
     straight to the native wrapper (the same code ``omnicraft cursor`` /
     ``omnicraft claude`` / etc. run), keeping the TUI the single source of
-    turns. A top-level ``--model`` is forwarded as a passthrough CLI flag.
+    turns. A top-level ``--model`` is forwarded per the wrapper's convention:
+    first-class for codex/opencode/kiro/antigravity, else a ``--model``
+    passthrough flag.
 
     ``--continue`` is honored (not rejected): it resolves to this harness's
     most-recent conversation and hands that off to the wrapper, matching the
@@ -6050,6 +6052,28 @@ def _dispatch_native_terminal_harness(
         from omnicraft.kimi_native import run_kimi_native
 
         run_kimi_native(kimi_args=passthrough, **common)
+    elif native_agent.key == "kiro":
+        from omnicraft.kiro_native import run_kiro_native
+
+        # Kiro takes its model as a first-class arg, not a passthrough flag.
+        run_kiro_native(kiro_args=(), model=model, **common)
+    elif native_agent.key == "goose":
+        from omnicraft.goose_native import run_goose_native
+
+        run_goose_native(goose_args=passthrough, **common)
+    elif native_agent.key == "antigravity":
+        from omnicraft.antigravity_native import run_antigravity_native
+
+        # Antigravity takes its model as a first-class arg, not a passthrough flag.
+        run_antigravity_native(antigravity_args=(), model=model, **common)
+    elif native_agent.key == "qwen":
+        from omnicraft.qwen_native import run_qwen_native
+
+        run_qwen_native(qwen_args=passthrough, **common)
+    elif native_agent.key == "hermes":
+        from omnicraft.hermes_native import run_hermes_native
+
+        run_hermes_native(hermes_args=passthrough, **common)
     else:  # pragma: no cover - new native agent added without a dispatch arm
         raise click.ClickException(
             f"Nenhum lançador de terminal nativo ligado ao harness {harness!r}."

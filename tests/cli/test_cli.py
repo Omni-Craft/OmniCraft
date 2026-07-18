@@ -4782,6 +4782,71 @@ def test_dispatch_native_terminal_harness_continue_with_no_prior_fails_loud(
         _dispatch_native_terminal_harness(**_native_dispatch_kwargs(resume_latest=True))
 
 
+@pytest.mark.parametrize(
+    ("harness", "run_target", "expected_extra"),
+    [
+        # Model forwarded as a first-class arg (empty passthrough args).
+        (
+            "kiro-native",
+            "omnicraft.kiro_native.run_kiro_native",
+            {"model": "auto", "kiro_args": ()},
+        ),
+        (
+            "antigravity-native",
+            "omnicraft.antigravity_native.run_antigravity_native",
+            {"model": "auto", "antigravity_args": ()},
+        ),
+        # Model forwarded as a passthrough ``--model`` flag.
+        (
+            "goose-native",
+            "omnicraft.goose_native.run_goose_native",
+            {"goose_args": ("--model", "auto")},
+        ),
+        (
+            "qwen-native",
+            "omnicraft.qwen_native.run_qwen_native",
+            {"qwen_args": ("--model", "auto")},
+        ),
+        (
+            "hermes-native",
+            "omnicraft.hermes_native.run_hermes_native",
+            {"hermes_args": ("--model", "auto")},
+        ),
+    ],
+)
+def test_dispatch_native_terminal_harness_dispatches_previously_undispatched(
+    monkeypatch: pytest.MonkeyPatch,
+    harness: str,
+    run_target: str,
+    expected_extra: dict[str, object],
+) -> None:
+    """The five previously-undispatched native harnesses reach their wrappers.
+
+    ``kiro``/``goose``/``antigravity``/``qwen``/``hermes`` are registered in the
+    native-agent registry but had no dispatch arm, so ``run --harness X-native``
+    hit the ``else`` and died with "Nenhum lançador de terminal nativo ligado".
+    Each must now reach its wrapper, with ``--model`` forwarded per that
+    wrapper's convention (first-class arg vs passthrough flag).
+    """
+    monkeypatch.setattr("omnicraft.cli._ensure_backend", lambda _s: "http://localhost:0")
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(run_target, lambda **kwargs: captured.update(kwargs))
+
+    handled = _dispatch_native_terminal_harness(
+        **_native_dispatch_kwargs(harness=harness, model="auto")
+    )
+
+    assert handled is True
+    expected: dict[str, object] = {
+        "server": "http://localhost:0",
+        "session_id": None,
+        "resume_picker": False,
+        "auto_open_conversation": False,
+    }
+    expected.update(expected_extra)
+    assert captured == expected
+
+
 def test_dispatch_native_terminal_harness_explicit_id_skips_latest_lookup(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

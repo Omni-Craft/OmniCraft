@@ -1832,6 +1832,538 @@ class TestStreamEventStreaming(unittest.TestCase):
 
         _run(_t())
 
+    def test_cancelled_turn_evicts_wedged_client(self):
+        """A cancelled turn evicts the cached client so resume can recover.
+
+        The harness idle watchdog cancels a wedged ``run_turn`` by injecting
+        ``asyncio.CancelledError`` (a ``BaseException``), which bypasses
+        ``run_turn``'s ``except Exception`` boundary. Without eviction the
+        wedged client stays cached and every following turn reuses it, emits
+        nothing, and re-trips the watchdog — unrecoverable until restart.
+        """
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        created = []
+        wedge_reached = asyncio.Event()
+
+        class _ResultMessage:
+            def __init__(self, session_id, result):
+                self.session_id = session_id
+                self.result = result
+
+        class _FakeSDK:
+            AssistantMessage = type("AssistantMessage", (), {})
+            UserMessage = type("UserMessage", (), {})
+            SystemMessage = type("SystemMessage", (), {})
+            ResultMessage = _ResultMessage
+            StreamEvent = type("StreamEvent", (), {})
+            ClaudeAgentOptions = type(
+                "ClaudeAgentOptions",
+                (),
+                {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
+            )
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+                    self.index = len(created)
+                    created.append(self)
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def receive_response(self):
+                    if self.index == 0:
+                        # First client wedges like a stuck tool: no events.
+                        wedge_reached.set()
+                        await asyncio.Event().wait()
+                    yield _ResultMessage("claude-session-a", "recovered")
+
+                async def disconnect(self):
+                    return None
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            messages = [{"role": "user", "content": "hello", "session_id": "session-a"}]
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+
+                async def _consume():
+                    return [e async for e in executor.run_turn(messages, [], "")]
+
+                turn = asyncio.ensure_future(_consume())
+                await asyncio.wait_for(wedge_reached.wait(), timeout=5)
+                turn.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await turn
+
+                # Evicted without a crash mark so the next turn rebuilds
+                # a fresh client and replays history.
+                self.assertEqual(executor._clients, {})
+                self.assertNotIn("session-a", executor._crashed_sessions)
+
+                events = [e async for e in executor.run_turn(messages, [], "")]
+
+            self.assertEqual(len(created), 2)
+            self.assertIsInstance(events[-1], TurnComplete)
+            self.assertEqual(events[-1].response, "recovered")
+
+        _run(_t())
+
+    def test_cancel_during_request_policy_evicts_cached_client(self):
+        """Cancel during LLM_REQUEST policy eval evicts the already-cached client.
+
+        The client is cached by ``_get_or_create_client`` before the request
+        policy await, so a watchdog cancel there must not leave it behind.
+        """
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        policy_reached = asyncio.Event()
+
+        class _Verdict:
+            action = "ALLOW"
+            reason = ""
+
+        class _FakeSDK:
+            AssistantMessage = type("AssistantMessage", (), {})
+            UserMessage = type("UserMessage", (), {})
+            SystemMessage = type("SystemMessage", (), {})
+            ResultMessage = type("ResultMessage", (), {})
+            StreamEvent = type("StreamEvent", (), {})
+            ClaudeAgentOptions = type(
+                "ClaudeAgentOptions",
+                (),
+                {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
+            )
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def receive_response(self):
+                    yield None  # never reached — cancel lands in the policy await
+
+                async def disconnect(self):
+                    return None
+
+        async def _policy_eval(phase, data):
+            if phase == "PHASE_LLM_REQUEST":
+                policy_reached.set()
+                await asyncio.Event().wait()
+            return _Verdict()
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            executor._policy_evaluator = _policy_eval
+            messages = [{"role": "user", "content": "hi", "session_id": "s"}]
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+
+                async def _consume():
+                    return [e async for e in executor.run_turn(messages, [], "")]
+
+                turn = asyncio.ensure_future(_consume())
+                await asyncio.wait_for(policy_reached.wait(), timeout=5)
+                self.assertIn("s", executor._clients)
+                turn.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await turn
+                self.assertEqual(executor._clients, {})
+                self.assertNotIn("s", executor._crashed_sessions)
+
+        _run(_t())
+
+    def test_cancel_during_response_policy_evicts_cached_client(self):
+        """Cancel during LLM_RESPONSE policy eval (after the stream) evicts the client."""
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        policy_reached = asyncio.Event()
+
+        class _Verdict:
+            action = "ALLOW"
+            reason = ""
+
+        class _ResultMessage:
+            def __init__(self, session_id, result):
+                self.session_id = session_id
+                self.result = result
+
+        class _FakeSDK:
+            AssistantMessage = type("AssistantMessage", (), {})
+            UserMessage = type("UserMessage", (), {})
+            SystemMessage = type("SystemMessage", (), {})
+            ResultMessage = _ResultMessage
+            StreamEvent = type("StreamEvent", (), {})
+            ClaudeAgentOptions = type(
+                "ClaudeAgentOptions",
+                (),
+                {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
+            )
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def receive_response(self):
+                    yield _ResultMessage("s", "done")
+
+                async def disconnect(self):
+                    return None
+
+        async def _policy_eval(phase, data):
+            if phase == "PHASE_LLM_RESPONSE":
+                policy_reached.set()
+                await asyncio.Event().wait()
+            return _Verdict()
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            executor._policy_evaluator = _policy_eval
+            messages = [{"role": "user", "content": "hi", "session_id": "s"}]
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+
+                async def _consume():
+                    return [e async for e in executor.run_turn(messages, [], "")]
+
+                turn = asyncio.ensure_future(_consume())
+                await asyncio.wait_for(policy_reached.wait(), timeout=5)
+                self.assertIn("s", executor._clients)
+                turn.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await turn
+                self.assertEqual(executor._clients, {})
+                self.assertNotIn("s", executor._crashed_sessions)
+
+        _run(_t())
+
+    def test_cancel_during_set_model_evicts_cached_client(self):
+        """Cancel during the reuse-path ``set_model`` evicts the cached client."""
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+        from omnicraft.inner.executor import ExecutorConfig
+
+        set_model_reached = asyncio.Event()
+
+        class _ResultMessage:
+            def __init__(self, session_id, result):
+                self.session_id = session_id
+                self.result = result
+
+        class _FakeSDK:
+            AssistantMessage = type("AssistantMessage", (), {})
+            UserMessage = type("UserMessage", (), {})
+            SystemMessage = type("SystemMessage", (), {})
+            ResultMessage = _ResultMessage
+            StreamEvent = type("StreamEvent", (), {})
+            ClaudeAgentOptions = type(
+                "ClaudeAgentOptions",
+                (),
+                {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
+            )
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                async def set_model(self, model):
+                    set_model_reached.set()
+                    await asyncio.Event().wait()
+
+                async def receive_response(self):
+                    yield _ResultMessage("s", "ok")
+
+                async def disconnect(self):
+                    return None
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            messages = [{"role": "user", "content": "hi", "session_id": "s"}]
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+                # Turn 1 caches the client with model "A".
+                _ = [
+                    e async for e in executor.run_turn(messages, [], "", ExecutorConfig(model="A"))
+                ]
+                self.assertIn("s", executor._clients)
+
+                # Turn 2 pins model "B", so the reuse path awaits set_model,
+                # which wedges. Cancelling must evict the cached client.
+                async def _consume():
+                    return [
+                        e
+                        async for e in executor.run_turn(
+                            messages, [], "", ExecutorConfig(model="B")
+                        )
+                    ]
+
+                turn = asyncio.ensure_future(_consume())
+                await asyncio.wait_for(set_model_reached.wait(), timeout=5)
+                turn.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await turn
+                self.assertEqual(executor._clients, {})
+                self.assertNotIn("s", executor._crashed_sessions)
+
+        _run(_t())
+
+    def test_cancel_with_stuck_aclose_still_evicts(self):
+        """A wedged ``aclose`` on the teardown path does not strand the eviction.
+
+        The eviction is scheduled BEFORE the ``finally`` runs ``aclose``, so the
+        background force-close (here a fake that sets an event) unblocks a stuck
+        aclose in this test.
+        """
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        wedge_reached = asyncio.Event()
+        force_close_ran = asyncio.Event()
+        aclose_completed = asyncio.Event()
+
+        class _Stream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                wedge_reached.set()
+                await asyncio.Event().wait()
+
+            async def aclose(self):
+                # Block until the evicted client's force-close runs — proves
+                # the eviction is scheduled before aclose, not after it.
+                await force_close_ran.wait()
+                aclose_completed.set()
+
+        class _FakeSDK:
+            AssistantMessage = type("AssistantMessage", (), {})
+            UserMessage = type("UserMessage", (), {})
+            SystemMessage = type("SystemMessage", (), {})
+            ResultMessage = type("ResultMessage", (), {})
+            StreamEvent = type("StreamEvent", (), {})
+            ClaudeAgentOptions = type(
+                "ClaudeAgentOptions",
+                (),
+                {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
+            )
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                def receive_response(self):
+                    return _Stream()
+
+                async def disconnect(self):
+                    return None
+
+        async def _fake_force_close(client):
+            force_close_ran.set()
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            executor._force_close_client = _fake_force_close
+            messages = [{"role": "user", "content": "hi", "session_id": "s"}]
+            with patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK):
+
+                async def _consume():
+                    return [e async for e in executor.run_turn(messages, [], "")]
+
+                turn = asyncio.ensure_future(_consume())
+                await asyncio.wait_for(wedge_reached.wait(), timeout=5)
+                turn.cancel()
+                with self.assertRaises(asyncio.CancelledError):
+                    await turn
+                self.assertEqual(executor._clients, {})
+                self.assertTrue(force_close_ran.is_set())
+                self.assertTrue(aclose_completed.is_set())
+
+        _run(_t())
+
+    def test_close_drains_pending_force_close(self):
+        """``close()`` drains (and bounds) a still-running force-close task."""
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
+
+        gate = asyncio.Event()  # never set — the force-close blocks forever
+
+        async def _fake_force_close(client):
+            await gate.wait()
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            executor._force_close_client = _fake_force_close
+            executor._clients["s"] = _ClaudeClientState(client=object(), model=None)
+
+            executor._evict_client_on_cancel("s")
+            self.assertEqual(executor._clients, {})
+            self.assertEqual(len(executor._cancel_close_tasks), 1)
+            task = next(iter(executor._cancel_close_tasks))
+
+            with patch("omnicraft.inner.claude_sdk_executor._CANCEL_CLOSE_DRAIN_TIMEOUT_S", 0.05):
+                await asyncio.wait_for(executor.close(), timeout=5)
+
+            self.assertTrue(task.cancelled())
+            self.assertEqual(executor._cancel_close_tasks, set())
+
+        _run(_t())
+
+    def test_close_returns_when_force_close_swallows_cancel(self):
+        """``close()`` returns within the bounds even if a force-close ignores cancel."""
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
+
+        release = asyncio.Event()
+
+        async def _swallowing_force_close(client):
+            # Simulate a force-close that defensively swallows cancellation and
+            # stays blocked until the test releases it.
+            while True:
+                try:
+                    await release.wait()
+                    return
+                except asyncio.CancelledError:
+                    continue
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            executor._force_close_client = _swallowing_force_close
+            executor._clients["s"] = _ClaudeClientState(client=object(), model=None)
+
+            executor._evict_client_on_cancel("s")
+            task = next(iter(executor._cancel_close_tasks))
+
+            # Both drain bounds shrunk so the test is fast; close() must still
+            # return rather than block on the cancel-swallowing force-close.
+            with (
+                patch("omnicraft.inner.claude_sdk_executor._CANCEL_CLOSE_DRAIN_TIMEOUT_S", 0.05),
+                patch(
+                    "omnicraft.inner.claude_sdk_executor._CANCEL_CLOSE_CANCEL_SETTLE_TIMEOUT_S",
+                    0.05,
+                ),
+            ):
+                await asyncio.wait_for(executor.close(), timeout=5)
+
+            # Abandoned (still running because it swallowed the cancel).
+            self.assertFalse(task.done())
+
+            # Cleanup: release it so the loop doesn't warn about a pending task.
+            release.set()
+            await asyncio.wait_for(task, timeout=5)
+
+        _run(_t())
+
+    def test_stuck_aclose_does_not_block_unwind(self):
+        """An aclose that swallows its cancellation does not stall run_turn's unwind.
+
+        The ``finally`` bounds the aclose with ``asyncio.wait`` and abandons it,
+        so the CancelledError still reaches the caller within the bound.
+        """
+        from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor
+
+        wedge_reached = asyncio.Event()
+        aclose_started = asyncio.Event()
+        release_aclose = asyncio.Event()
+
+        class _Stream:
+            def __aiter__(self):
+                return self
+
+            async def __anext__(self):
+                wedge_reached.set()
+                await asyncio.Event().wait()
+
+            async def aclose(self):
+                aclose_started.set()
+                # Swallow the bound's cancel and stay blocked until released.
+                while True:
+                    try:
+                        await release_aclose.wait()
+                        return
+                    except asyncio.CancelledError:
+                        continue
+
+        class _FakeSDK:
+            AssistantMessage = type("AssistantMessage", (), {})
+            UserMessage = type("UserMessage", (), {})
+            SystemMessage = type("SystemMessage", (), {})
+            ResultMessage = type("ResultMessage", (), {})
+            StreamEvent = type("StreamEvent", (), {})
+            ClaudeAgentOptions = type(
+                "ClaudeAgentOptions",
+                (),
+                {"__init__": lambda self, **kwargs: self.__dict__.update(kwargs)},
+            )
+
+            class ClaudeSDKClient:
+                def __init__(self, options):
+                    self.options = options
+
+                async def connect(self):
+                    return None
+
+                async def query(self, prompt, session_id="default"):
+                    return None
+
+                def receive_response(self):
+                    return _Stream()
+
+                async def disconnect(self):
+                    return None
+
+        async def _fake_force_close(client):
+            return None
+
+        async def _t():
+            executor = ClaudeSDKExecutor()
+            executor._force_close_client = _fake_force_close
+            messages = [{"role": "user", "content": "hi", "session_id": "s"}]
+            with (
+                patch("omnicraft.inner.claude_sdk_executor._ensure_sdk", return_value=_FakeSDK),
+                patch("omnicraft.inner.claude_sdk_executor._CANCEL_ACLOSE_TIMEOUT_S", 0.05),
+            ):
+
+                async def _consume():
+                    return [e async for e in executor.run_turn(messages, [], "")]
+
+                turn = asyncio.ensure_future(_consume())
+                await asyncio.wait_for(wedge_reached.wait(), timeout=5)
+                turn.cancel()
+                # The unwind must complete (and surface CancelledError) within
+                # the bound, not block on the cancel-swallowing aclose.
+                with self.assertRaises(asyncio.CancelledError):
+                    await asyncio.wait_for(turn, timeout=5)
+                self.assertTrue(aclose_started.is_set())
+                self.assertEqual(executor._clients, {})
+
+            # Cleanup: release the abandoned aclose task so the loop doesn't
+            # warn about a pending task.
+            release_aclose.set()
+            pending = [t for t in asyncio.all_tasks() if t is not asyncio.current_task()]
+            if pending:
+                await asyncio.wait(pending, timeout=5)
+
+        _run(_t())
+
     def test_close_session_disconnects_live_client(self):
         from omnicraft.inner.claude_sdk_executor import ClaudeSDKExecutor, _ClaudeClientState
 

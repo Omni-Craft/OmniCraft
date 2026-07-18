@@ -41,7 +41,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import contextmanager, suppress
 from dataclasses import dataclass
 from types import ModuleType
-from typing import Any, Protocol, TypeAlias, cast
+from typing import Any, Protocol, TypeAlias, TypeVar, cast
 
 from omnicraft._platform import stable_user_id
 from omnicraft.inner import _proc
@@ -105,6 +105,8 @@ McpResponse: TypeAlias = dict[str, Any]  # type: ignore[explicit-any]
 
 # Tool executor callable wired in by ``omnicraft.Session``.
 ToolExecutor: TypeAlias = Callable[[str, ToolArgs], Awaitable[ToolResult]]
+
+_T = TypeVar("_T")
 
 # Elicitation handler wired in by :class:`ExecutorAdapter`. Kept SDK-agnostic
 # so the adapter does not import ``claude_agent_sdk`` types.
@@ -332,6 +334,18 @@ _QUERY_START_TIMEOUT_SECONDS = 30.0
 # but keep waiting — a long-running native tool can legitimately block
 # the stream far longer than any fixed deadline.
 _STREAM_IDLE_WARN_SECONDS = 600.0
+# Rigid bound on the stream ``aclose()`` at teardown. The client eviction
+# already ran before the ``finally``, so this bound exists only to keep a
+# wedged aclose (the CLI transport can hang mid-cancel) from stalling
+# run_turn's unwind; the aclose is abandoned once it expires.
+_CANCEL_ACLOSE_TIMEOUT_S = 5.0
+# First bound when draining background force-close tasks at executor
+# shutdown: how long to wait for them to finish on their own.
+_CANCEL_CLOSE_DRAIN_TIMEOUT_S = 10.0
+# Second bound: after cancelling still-running force-close tasks, how long
+# to wait for the cancellations to settle before giving up and logging, so a
+# force-close that swallows its cancellation does not hang shutdown.
+_CANCEL_CLOSE_CANCEL_SETTLE_TIMEOUT_S = 2.0
 
 # Substrings that mark an API failure as a context-window overflow.
 # When present, the surfaced error carries an extra hint so the user
@@ -582,6 +596,17 @@ def _unset_env_var(name: str) -> Iterator[None]:
 _CLOSE_ATTR: str = "close"
 _TRANSPORT_ATTR: str = "transport"
 _ACLOSE_ATTR: str = "aclose"
+
+
+def _consume_task_result(task: asyncio.Task[Any]) -> None:
+    """Retrieve a finished task's exception so it isn't logged as unretrieved.
+
+    Attached as a done-callback to an abandoned task; a task that swallowed its
+    cancellation and later raised would otherwise surface a spurious "Task
+    exception was never retrieved" warning.
+    """
+    if not task.cancelled():
+        task.exception()
 
 
 def _call_optional_method(obj: Any, name: str) -> None:  # type: ignore[explicit-any]
@@ -1319,6 +1344,9 @@ class ClaudeSDKExecutor(Executor):
         self._clients: dict[str, _ClaudeClientState] = {}
         # Session keys whose Claude harness process crashed and must not be reused.
         self._crashed_sessions: dict[str, str] = {}
+        # Force-close tasks for clients evicted on turn cancellation, kept
+        # referenced so they are not GC'd mid-close.
+        self._cancel_close_tasks: set[asyncio.Task[None]] = set()
 
         # Prefer system-installed claude over the SDK's bundled CLI.
         # The bundled CLI may be older and send beta flags that the
@@ -1567,10 +1595,79 @@ class ClaudeSDKExecutor(Executor):
         # the loop tears down.
         await self._force_close_client(state.client)
 
+    def _evict_client_on_cancel(self, session_key: str) -> None:
+        """Drop the cached client for *session_key* and force-close it.
+
+        Idempotent: a second call for the same key is a no-op. Safe to call
+        from any cancel-handling path — the caller is being cancelled, so the
+        force-close runs in a background task (awaiting it here could itself be
+        cancelled, leaking the CLI process).
+        """
+        state = self._clients.pop(session_key, None)
+        if state is None:
+            return
+        task = asyncio.create_task(self._force_close_client(state.client))
+        self._cancel_close_tasks.add(task)
+        task.add_done_callback(self._on_cancel_close_done)
+
+    def _on_cancel_close_done(self, task: asyncio.Task[None]) -> None:
+        # Consume the result so a force-close failure isn't reported as
+        # "Task exception was never retrieved"; log it instead.
+        self._cancel_close_tasks.discard(task)
+        if not task.cancelled():
+            exc = task.exception()
+            if exc is not None:
+                logger.warning("Force-close of evicted Claude client failed: %s", exc)
+
+    async def _await_cancel_safe(self, awaitable: Awaitable[_T], session_key: str) -> _T:
+        """Await *awaitable*, evicting the cached client if the turn is cancelled.
+
+        ``CancelledError`` is a ``BaseException`` that bypasses ``run_turn``'s
+        ``except Exception`` boundary, so every await made while a client is
+        cached must funnel through here (or an equivalent cancel handler).
+        Otherwise a watchdog-cancelled turn leaves the wedged client cached
+        and the next turn reuses it and re-trips the watchdog.
+        """
+        try:
+            return await awaitable
+        except asyncio.CancelledError:
+            self._evict_client_on_cancel(session_key)
+            raise
+
+    async def _drain_cancel_close_tasks(self) -> None:
+        tasks = [t for t in self._cancel_close_tasks if not t.done()]
+        if not tasks:
+            return
+        _, pending = await asyncio.wait(tasks, timeout=_CANCEL_CLOSE_DRAIN_TIMEOUT_S)
+        if not pending:
+            return
+        # A force-close that outran the drain bound: cancel it so shutdown
+        # doesn't block on it.
+        for task in pending:
+            task.cancel()
+        # Second bound: wait only briefly for the cancellations to settle. A
+        # force-close that swallows its own cancellation would otherwise hang
+        # close() forever, so give up and log rather than block shutdown.
+        _, still_pending = await asyncio.wait(
+            pending, timeout=_CANCEL_CLOSE_CANCEL_SETTLE_TIMEOUT_S
+        )
+        if still_pending:
+            logger.warning(
+                "%d evicted-client force-close task(s) did not settle within %.0fs of "
+                "cancellation at shutdown; abandoning them",
+                len(still_pending),
+                _CANCEL_CLOSE_CANCEL_SETTLE_TIMEOUT_S,
+            )
+
     async def close(self) -> None:
         session_keys = list(self._clients)
         for session_key in session_keys:
             await self.close_session(session_key)
+        # Drain in-flight force-close tasks from cancelled turns, bounded: a
+        # resistant force-close is abandoned and logged rather than blocking
+        # shutdown, so this reduces — but does not guarantee against — an
+        # orphaned CLI transport.
+        await self._drain_cancel_close_tasks()
         if self._gateway_shim is not None:
             await self._gateway_shim.aclose()
             self._gateway_shim = None
@@ -2214,11 +2311,19 @@ class ClaudeSDKExecutor(Executor):
         # for ``context_tokens``. ``None`` until the first call starts.
         last_call_usage: dict[str, Any] | None = None  # type: ignore[explicit-any]
 
-        client = await self._get_or_create_client(
-            sdk,
-            session_key=session_key,
-            options=options,
-            model=model,
+        # Funnel through ``_await_cancel_safe``: on the reuse path
+        # ``_get_or_create_client`` awaits ``set_model`` on an already-cached
+        # client, so a cancel there must evict it (a cancel during a fresh
+        # ``connect`` leaves a not-yet-cached client — a separate leak, not
+        # this eviction's concern).
+        client = await self._await_cancel_safe(
+            self._get_or_create_client(
+                sdk,
+                session_key=session_key,
+                options=options,
+                model=model,
+            ),
+            session_key,
         )
 
         # ── LLM_REQUEST policy evaluation ────────────────────────
@@ -2245,7 +2350,9 @@ class ClaudeSDKExecutor(Executor):
                 "system_prompt_preview": (system_prompt[:200] if system_prompt else ""),
                 "last_user_message": _last_user_msg,
             }
-            _req_verdict = await _policy_eval("PHASE_LLM_REQUEST", _req_data)
+            _req_verdict = await self._await_cancel_safe(
+                _policy_eval("PHASE_LLM_REQUEST", _req_data), session_key
+            )
             if _req_verdict.action == "POLICY_ACTION_DENY":
                 _deny_reason = _req_verdict.reason or "no reason given"
                 yield ExecutorError(message=f"LLM call denied by policy: {_deny_reason}")
@@ -2609,14 +2716,53 @@ class ClaudeSDKExecutor(Executor):
                             logger.info("Claude SDK compaction detected (PreCompact hook)")
                         else:
                             logger.info("Claude CLI system message: %s", data)
+            except asyncio.CancelledError:
+                # Evict here — BEFORE the ``finally`` below runs ``aclose()``.
+                # ``aclose`` reads the CLI transport and can itself wedge during
+                # a cancel unwind; evicting first schedules the background
+                # force-close that attempts to tear the transport down.
+                # Idempotent with the outer handler.
+                self._evict_client_on_cancel(session_key)
+                raise
             finally:
                 # ``receive_response`` returns an async generator, which
                 # always has ``aclose``; guard anyway for duck-typed test
                 # doubles that implement the iterator protocol without it.
                 aclose = getattr(message_stream, _ACLOSE_ATTR, None)
                 if aclose is not None:
-                    await aclose()
+                    # Rigid bound: run aclose as a task and wait at most
+                    # ``_CANCEL_ACLOSE_TIMEOUT_S``. ``asyncio.wait`` (unlike
+                    # ``wait_for``) does not wait on the task after the timeout,
+                    # so an aclose that swallows its cancellation does not stall
+                    # the unwind — the eviction already ran, so the background
+                    # force-close is what attempts to tear the transport down;
+                    # the abandoned aclose is left to that.
+                    aclose_task = asyncio.ensure_future(aclose())
+                    _done, _pending = await asyncio.wait(
+                        {aclose_task}, timeout=_CANCEL_ACLOSE_TIMEOUT_S
+                    )
+                    if _pending:
+                        aclose_task.cancel()
+                        aclose_task.add_done_callback(_consume_task_result)
+                        logger.warning(
+                            "Claude receive_response aclose did not finish within %.0fs; "
+                            "abandoning it (the evicted client is force-closed separately)",
+                            _CANCEL_ACLOSE_TIMEOUT_S,
+                        )
+                    else:
+                        # Completed within the bound — surface a real aclose
+                        # error the way the prior unbounded ``await`` did.
+                        aclose_task.result()
 
+        except asyncio.CancelledError:
+            # A watchdog-cancelled turn raises CancelledError, a BaseException
+            # that skips the ``except Exception`` boundary below. Evict the
+            # cached client (no crash mark) so it isn't reused by the next turn
+            # and made to re-trip the watchdog. Covers the query await here; the
+            # receive loop and the policy/get-client awaits evict at their own
+            # cancel-safe points.
+            self._evict_client_on_cancel(session_key)
+            raise
         except Exception as exc:  # noqa: BLE001 — top-level executor error boundary; records crash and surfaces to caller
             self._crashed_sessions[session_key] = str(exc)
             await self._close_live_client(session_key)
@@ -2684,7 +2830,9 @@ class ClaudeSDKExecutor(Executor):
             }
             if turn_usage is not None:
                 _resp_data["usage"] = turn_usage
-            _resp_verdict = await _policy_eval("PHASE_LLM_RESPONSE", _resp_data)
+            _resp_verdict = await self._await_cancel_safe(
+                _policy_eval("PHASE_LLM_RESPONSE", _resp_data), session_key
+            )
             if _resp_verdict.action == "POLICY_ACTION_DENY":
                 _deny_reason = _resp_verdict.reason or "no reason given"
                 yield ExecutorError(message=(f"LLM response denied by policy: {_deny_reason}"))

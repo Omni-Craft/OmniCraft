@@ -14,6 +14,7 @@ App OAuth dance, host registration) lives in ``bootstrap``.
 
 from __future__ import annotations
 
+import secrets
 import shlex
 from abc import ABC, abstractmethod
 from contextlib import AbstractContextManager
@@ -73,6 +74,99 @@ def host_image_wheel_install_command(remote_tgz_path: str) -> str:
         f"tar xzf {remote_tgz_path} -C oa-wheels --warning=no-unknown-keyword && "
         "pip install --quiet --force-reinstall --no-deps "
         "--no-warn-script-location oa-wheels/*.whl"
+    )
+
+
+# Prefix for the run dir a launcher creates under ``/tmp`` to record the pid
+# of an exec'd foreground process (several providers' SDKs expose no kill
+# handle for exec'd processes, so the pid is recorded and a second exec
+# signals it on detach). The dir carries an unpredictable random suffix and is
+# created mode 700 with a bare ``mkdir`` (no ``-p``) that fails closed if the
+# path already exists.
+#
+# Threat model: within a sandbox the foreground (``omnicraft host``) and the
+# untrusted agent workload run as the SAME uid (root on the root-based
+# providers, ``sandbox`` on OpenShell), and a same-uid process can already
+# signal/ptrace/read the foreground directly — so this is NOT a same-uid
+# boundary and doesn't pretend to be one. The hardening bites only if a
+# *less-privileged* process ever shares this ``/tmp``: the old fixed path let
+# it pre-seed a symlink the (more-privileged) foreground would write its pid
+# through, or overwrite the pid the detach path later signals. Defense in
+# depth — no such lower-privileged co-resident is reachable in the shipped
+# architecture today (agent code is either same-uid or bwrap-isolated onto a
+# fresh tmpfs ``/tmp``).
+_FOREGROUND_RUNDIR_PREFIX: str = "/tmp/oa-foreground-"
+
+
+def foreground_pidfile() -> tuple[str, str]:
+    """Allocate an unpredictably-named pidfile under ``/tmp``.
+
+    Used by :meth:`SandboxLauncher.exec_foreground` implementations whose
+    SDK cannot kill an exec'd process through its handle (Modal,
+    CoreWeave, OpenShell). The caller records the remote pid with
+    :func:`foreground_record_prefix` and tears it down with
+    :func:`foreground_kill_command`, both of which operate on the paths
+    returned here.
+
+    The pidfile lives in a fresh dir created ``mode 700`` with a bare
+    ``mkdir`` (no ``-p``) so it **fails closed** if the path already
+    exists. With the unpredictable name this hardens the cross-privilege
+    case — a *less-privileged* co-resident process can't pre-seed a
+    symlink the (more-privileged) foreground would write its pid through.
+    It is **not** a same-uid boundary (a same-uid process can already
+    signal or read the foreground directly); see the module-level note on
+    ``_FOREGROUND_RUNDIR_PREFIX`` for the full threat model.
+
+    :returns: A ``(run_dir, pidfile)`` pair of absolute ``/tmp`` paths.
+        ``run_dir`` is ``/tmp/oa-foreground-<32 hex chars>`` and
+        ``pidfile`` is ``<run_dir>/pid``.
+    """
+    run_dir = f"{_FOREGROUND_RUNDIR_PREFIX}{secrets.token_hex(16)}"
+    return run_dir, f"{run_dir}/pid"
+
+
+def foreground_record_prefix(pidfile: str) -> str:
+    """Shell prefix that creates the run dir and records the shell pid.
+
+    ``mkdir -m 700`` (no ``-p``) fails closed if the path exists, and
+    ``echo $$`` writes the shell pid before the caller swaps in the real
+    command via ``exec`` (which keeps the pid across the swap). Both
+    paths are :func:`shlex.quote`-d before interpolation so the function
+    stays safe even if a future caller passes a non-hex path; the
+    standard hex paths from :func:`foreground_pidfile` quote harmlessly.
+
+    :param pidfile: The pidfile path returned by :func:`foreground_pidfile`.
+    :returns: A shell fragment such as
+        ``"mkdir -m 700 /tmp/… && echo $$ > /tmp/…/pid && "`` to prepend
+        before the foreground command.
+    """
+    run_dir = pidfile.rsplit("/", 1)[0]
+    q_dir = shlex.quote(run_dir)
+    q_pid = shlex.quote(pidfile)
+    return f"mkdir -m 700 {q_dir} && echo $$ > {q_pid} && "
+
+
+def foreground_kill_command(pidfile: str) -> str:
+    """Shell command that signals the recorded pid and drops the run dir.
+
+    Only a plausible pid read back from the pidfile is ever signalled —
+    the ``case`` rejects empty, non-numeric, and leading-zero content, so
+    unvalidated file contents never reach ``kill``. Rejecting a leading
+    zero rules out ``kill 0`` (which would signal every process in the
+    detach shell's process group) and ``00``/``0``; real pids are printed
+    without a leading zero, so none are lost. The run dir is then removed
+    so a successful foreground run leaves nothing behind in ``/tmp``.
+
+    :param pidfile: The pidfile path returned by :func:`foreground_pidfile`.
+    :returns: A self-contained shell command string for a second exec.
+    """
+    run_dir = pidfile.rsplit("/", 1)[0]
+    q_dir = shlex.quote(run_dir)
+    q_pid = shlex.quote(pidfile)
+    return (
+        f"pid=$(cat {q_pid} 2>/dev/null); "
+        f'case "$pid" in ""|0*|*[!0-9]*) ;; *) kill "$pid" 2>/dev/null ;; esac; '
+        f"rm -rf {q_dir}"
     )
 
 

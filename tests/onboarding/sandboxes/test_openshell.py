@@ -61,6 +61,7 @@ class _FakeOpenShellAPI:
     foreground_calls: list[tuple[str, list[str]]] = field(default_factory=list)
     foreground_exit_code: int = 0
     foreground_raises: BaseException | None = None
+    execute_raises: BaseException | None = None
 
     def exec_background(self, name: str, command: list[str], *, timeout: int) -> None:
         self.background_calls.append((name, list(command)))
@@ -84,6 +85,8 @@ class _FakeOpenShellAPI:
         timeout: int = 300,
     ) -> _FakeExecResult:
         self.exec_calls.append((name, list(command), stdin))
+        if self.execute_raises is not None:
+            raise self.execute_raises
         return self.exec_result
 
     def get_status(self, name: str) -> None:
@@ -311,8 +314,17 @@ def test_exec_foreground_returns_exit_code(monkeypatch: pytest.MonkeyPatch) -> N
     [(name, command)] = fake.foreground_calls
     assert name == "sb-1"
     assert command[:2] == ["bash", "-lc"]
-    assert command[2].startswith("echo $$ >")
+    # The pidfile lives in an unpredictably-named dir created mode 700 (fails
+    # closed if it already exists), which closes the cross-privilege symlink
+    # pre-seed vector — not a same-uid boundary.
+    assert command[2].startswith("mkdir -m 700 /tmp/oa-foreground-")
+    assert "echo $$ > /tmp/oa-foreground-" in command[2] and "/pid" in command[2]
     assert "exec omnicraft host --server https://s" in command[2]
+    # A normal exit cleans up the run dir so it isn't orphaned in /tmp.
+    assert len(fake.exec_calls) == 1
+    cleanup = fake.exec_calls[0][1]
+    assert cleanup[:2] == ["bash", "-c"]
+    assert cleanup[2].startswith("rm -rf /tmp/oa-foreground-")
 
 
 def test_exec_foreground_ctrl_c_kills_remote(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -324,8 +336,29 @@ def test_exec_foreground_ctrl_c_kills_remote(monkeypatch: pytest.MonkeyPatch) ->
     with pytest.raises(KeyboardInterrupt):
         launcher.exec_foreground("sb-1", "omnicraft host --server https://s")
 
-    # The interrupt handler issued a best-effort kill of the recorded pid.
-    assert any("kill $(cat" in command[2] for _name, command, _stdin in fake.exec_calls)
+    # The interrupt handler signals only a plausible pid read back from the
+    # pidfile, then drops the dir.
+    assert len(fake.exec_calls) == 1
+    kill = fake.exec_calls[0][1][2]
+    assert 'case "$pid" in' in kill and 'kill "$pid"' in kill
+    assert "rm -rf /tmp/oa-foreground-" in kill
+
+
+def test_exec_foreground_cleanup_failure_preserves_exit_code(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A transport error tearing down the normal-exit cleanup exec must not
+    mask the exit code the foreground command already returned."""
+    fake = _FakeOpenShellAPI(foreground_exit_code=3, execute_raises=RuntimeError("transport gone"))
+    launcher = OpenShellSandboxLauncher()
+    monkeypatch.setattr(launcher, "_openshell", lambda: fake)
+
+    # The only execute() in the normal path is the cleanup, and it blows up.
+    rc = launcher.exec_foreground("sb-1", "omnicraft host --server https://s")
+
+    # The foreground rc survives the failed cleanup.
+    assert rc == 3
+    assert len(fake.exec_calls) == 1
 
 
 # ── _OpenShellClient wrapper against a faked SDK ────────────

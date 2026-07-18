@@ -26,6 +26,7 @@ Notes that shape this launcher:
 
 from __future__ import annotations
 
+import contextlib
 import os
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, ClassVar
@@ -37,6 +38,9 @@ from omnicraft.onboarding.sandboxes.base import (
     RemoteCommandResult,
     RemoteProcess,
     SandboxLauncher,
+    foreground_kill_command,
+    foreground_pidfile,
+    foreground_record_prefix,
     host_image_wheel_install_command,
 )
 
@@ -56,9 +60,6 @@ _SANDBOX_RESOURCES = {"cpu": "2", "memory": "4Gi"}
 # Slack the managed launch-token TTL is set above the sandbox lifetime, so a
 # live sandbox can always re-authenticate its tunnel across reconnects.
 _TOKEN_TTL_SLACK_S = 3600
-# Where exec_foreground records the remote pid so Ctrl-C can kill it — the
-# SDK's process.cancel() only cancels the local future, not the remote exec.
-_FOREGROUND_PIDFILE = "/tmp/oa-foreground.pid"
 
 
 def resolve_max_lifetime_s() -> int:
@@ -279,19 +280,34 @@ class CWSandboxLauncher(SandboxLauncher):
     def exec_foreground(self, sandbox_id: str, command: str) -> int:
         """Run *command*, echo its output locally until exit; Ctrl-C kills it."""
         handle = self._resolve(sandbox_id)
-        # Record the remote pid (process.cancel() can't kill the remote exec):
-        # `echo $$ … && exec` keeps the pid across the shell swap, so the
-        # interrupt path can kill it with a second exec.
-        remote = f"echo $$ > {_FOREGROUND_PIDFILE} && exec {command} 2>&1"
+        # Record the remote pid (process.cancel() only cancels the local
+        # future, not the remote exec) in an unpredictably-named dir under
+        # /tmp: `mkdir -m 700` (no -p) fails closed if the path already exists,
+        # so a less-privileged co-resident process can't pre-seed a symlink the
+        # (more-privileged) foreground would write its pid through. `echo $$ …
+        # && exec` keeps the pid across the shell swap, so the interrupt path
+        # can kill it with a second exec. See :func:`foreground_pidfile` for
+        # the shared rationale (and why this is not a same-uid boundary).
+        run_dir, pidfile = foreground_pidfile()
+        remote = f"{foreground_record_prefix(pidfile)}exec {command} 2>&1"
         process = handle.exec(["bash", "-lc", remote])
         try:
             for line in process.stdout:
                 click.echo(line, nl=False)
-            return process.wait()
+            rc = process.wait()
         except KeyboardInterrupt:
             click.echo("\n  → detaching; stopping the remote process")
-            handle.exec(["bash", "-lc", f"kill $(cat {_FOREGROUND_PIDFILE}) 2>/dev/null"]).wait()
+            # Signal only a plausible pid read back from the pidfile (the
+            # helper rejects empty / non-numeric / leading-zero), then drop the
+            # dir; never feed unvalidated file contents to kill.
+            handle.exec(["bash", "-lc", foreground_kill_command(pidfile)]).wait()
             raise
+        # Normal exit: drop the run dir so we don't orphan a mode-700 dir in
+        # /tmp. Best-effort — a transport error tearing down the cleanup exec
+        # must not mask the exit code we already have.
+        with contextlib.suppress(Exception):
+            handle.exec(["bash", "-c", f"rm -rf {run_dir} 2>/dev/null"]).wait()
+        return rc
 
     def wheel_install_command(self, remote_tgz_path: str) -> str:
         """Overlay shipped wheels onto the prebaked host image."""

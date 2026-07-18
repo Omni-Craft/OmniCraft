@@ -12,8 +12,13 @@ import sys
 
 from omnicraft.inner.sandbox import (
     SandboxPolicy,
+    _adopt_or_mint_scratch,
+    _is_own_scratch_tmpdir,
+    cleanup_private_tmpdir,
     create_exec_launcher,
+    create_private_tmpdir,
     run_launcher,
+    with_additional_write_roots,
 )
 from omnicraft.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
 
@@ -371,3 +376,178 @@ def test_exec_launcher_without_allowlist_keeps_inherited_env(tmp_path) -> None:
     child_env = json.loads(out_file.read_text())
     # Opt-in contract: no allowlist, no prune.
     assert child_env.get("DELIBERATE_EXTRA") == "kept"
+
+
+# ---------------------------------------------------------------------------
+# Private scratch tmpdir: ownership validation + adopt-vs-mint safety.
+# Regression for the marker-driven arbitrary-path rmtree (#2759 round 2).
+# ---------------------------------------------------------------------------
+
+
+def _active_policy(backend_type: str) -> SandboxPolicy:
+    """An active policy on *backend_type* (kernel activation not exercised)."""
+    return SandboxPolicy(
+        backend_type=backend_type,
+        active=True,
+        read_roots=None,
+        write_roots=[],
+        write_files=[],
+        allow_network=True,
+    )
+
+
+def test_is_own_scratch_tmpdir_accepts_freshly_minted() -> None:
+    d = create_private_tmpdir()
+    try:
+        assert _is_own_scratch_tmpdir(d) is True
+    finally:
+        cleanup_private_tmpdir(d)
+
+
+def test_is_own_scratch_tmpdir_rejects_wrong_prefix(tmp_path) -> None:
+    d = tmp_path / "not-osenv"
+    d.mkdir(mode=0o700)
+    assert _is_own_scratch_tmpdir(d) is False
+
+
+def test_is_own_scratch_tmpdir_rejects_wrong_mode() -> None:
+    d = create_private_tmpdir()
+    try:
+        os.chmod(d, 0o755)
+        assert _is_own_scratch_tmpdir(d) is False
+    finally:
+        cleanup_private_tmpdir(d)
+
+
+def test_is_own_scratch_tmpdir_rejects_symlink(tmp_path) -> None:
+    real = create_private_tmpdir()
+    try:
+        # A symlink whose NAME carries the prefix but whose lstat is a
+        # symlink, not a dir, must be refused (lstat, not stat).
+        link = tmp_path / "omnicraft-osenv-link"
+        link.symlink_to(real)
+        assert _is_own_scratch_tmpdir(link) is False
+    finally:
+        cleanup_private_tmpdir(real)
+
+
+def test_is_own_scratch_tmpdir_rejects_missing(tmp_path) -> None:
+    assert _is_own_scratch_tmpdir(tmp_path / "omnicraft-osenv-gone") is False
+
+
+# ---------------------------------------------------------------------------
+# adopt-vs-mint: scratch identity comes from the host-controlled inline argv
+# (run_launcher's ``adopted_scratch``), never the environment. Regression for
+# the marker-driven arbitrary-path rmtree (#2759 rounds 2-4).
+# ---------------------------------------------------------------------------
+
+
+def test_adopt_or_mint_none_mints() -> None:
+    """No handoff (single-pass backend, or the host pass before the
+    re-exec): ``adopted_scratch=None`` → mint a fresh dir."""
+    tmpdir, minted = _adopt_or_mint_scratch(_active_policy("windows_jobobject"), None)
+    try:
+        assert minted is True
+        assert _is_own_scratch_tmpdir(tmpdir)
+    finally:
+        cleanup_private_tmpdir(tmpdir)
+
+
+def test_adopt_or_mint_adopts_host_delivered_argv_scratch() -> None:
+    """Happy path: the host names its minted scratch over argv AND grants
+    it in the policy → adopt it verbatim (``minted=False``)."""
+    owned = create_private_tmpdir()
+    try:
+        policy = with_additional_write_roots(_active_policy("darwin_seatbelt"), [owned])
+        tmpdir, minted = _adopt_or_mint_scratch(policy, str(owned))
+        assert minted is False
+        assert tmpdir == owned
+    finally:
+        cleanup_private_tmpdir(owned)
+
+
+def test_adopt_or_mint_adopts_only_argv_scratch_not_spec_writeroot() -> None:
+    """
+    The root-cause vector: the spec grants ANOTHER valid ``omnicraft-osenv-*``
+    dir as a write root, but the argv identity names ``ours``. The in-wrap
+    must adopt ONLY the argv ``adopted_scratch`` — never the spec's
+    scratch-shaped write root.
+    """
+    spec_other = create_private_tmpdir()  # spec-granted, valid scratch shape
+    (spec_other / "in-use.txt").write_text("another run's data")
+    ours = create_private_tmpdir()
+    try:
+        # Both are write roots of this policy; only ``ours`` is the argv id.
+        policy = with_additional_write_roots(_active_policy("darwin_seatbelt"), [spec_other, ours])
+        tmpdir, minted = _adopt_or_mint_scratch(policy, str(ours))
+        assert minted is False
+        assert tmpdir == ours, "must adopt the argv-named dir, not the spec write root"
+        assert tmpdir != spec_other
+    finally:
+        cleanup_private_tmpdir(spec_other)
+        cleanup_private_tmpdir(ours)
+
+
+def test_adopt_or_mint_none_never_adopts_spec_scratch_writeroot() -> None:
+    """
+    With no argv handoff, a scratch-shaped spec write root must NOT be
+    adopted (the old env marker could point at it; now nothing can). Mint
+    fresh; the spec dir is never returned and so never rmtree'd.
+    """
+    spec_other = create_private_tmpdir()
+    (spec_other / "in-use.txt").write_text("precious")
+    try:
+        policy = with_additional_write_roots(_active_policy("darwin_seatbelt"), [spec_other])
+        tmpdir, minted = _adopt_or_mint_scratch(policy, None)
+        try:
+            assert minted is True
+            assert tmpdir != spec_other
+            cleanup_private_tmpdir(tmpdir)  # simulate exit cleanup on the returned dir
+            assert spec_other.exists() and (spec_other / "in-use.txt").exists(), (
+                "a spec-granted scratch-shaped dir must never be rmtree'd"
+            )
+        finally:
+            cleanup_private_tmpdir(tmpdir)
+    finally:
+        cleanup_private_tmpdir(spec_other)
+
+
+def test_adopt_or_mint_argv_scratch_not_in_writeroots_refused() -> None:
+    """
+    Defense in depth: an ``adopted_scratch`` that is a valid owned scratch
+    but is NOT granted by this policy (a host-side inconsistency) is
+    refused by the write-root consistency check → mint fresh.
+    """
+    stray = create_private_tmpdir()  # valid shape, but not in the policy
+    minted_dir = None
+    try:
+        policy = _active_policy("darwin_seatbelt")  # empty write_roots
+        minted_dir, minted = _adopt_or_mint_scratch(policy, str(stray))
+        assert minted is True
+        assert minted_dir != stray
+    finally:
+        cleanup_private_tmpdir(stray)
+        cleanup_private_tmpdir(minted_dir)
+
+
+def test_adopt_or_mint_argv_scratch_bad_ownership_refused(tmp_path) -> None:
+    """
+    An ``adopted_scratch`` that is granted by the policy but fails the
+    ownership shape (wrong prefix / mode) is refused → mint fresh, never
+    rmtree the non-scratch path.
+    """
+    external = tmp_path / "some-shared-dir"  # not omnicraft-osenv-, mode 0755
+    external.mkdir(mode=0o755)
+    (external / "keep.txt").write_text("precious")
+    minted_dir = None
+    try:
+        policy = with_additional_write_roots(_active_policy("darwin_seatbelt"), [external])
+        minted_dir, minted = _adopt_or_mint_scratch(policy, str(external))
+        assert minted is True
+        assert minted_dir != external
+        cleanup_private_tmpdir(minted_dir)
+        minted_dir = None
+        assert external.exists() and (external / "keep.txt").exists()
+    finally:
+        cleanup_private_tmpdir(minted_dir)
+        cleanup_private_tmpdir(external)

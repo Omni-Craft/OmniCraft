@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,10 @@ _SANDBOX_STRACE_ENV = "OMNICRAFT_SANDBOX_STRACE"
 # must NOT re-exec itself again. Set right before the re-exec call
 # and inherited by the wrapped process.
 _LAUNCHER_WRAPPED_ENV = "OMNICRAFT_LAUNCHER_SPAWN_WRAPPED"
+
+# Basename prefix for private scratch tmpdirs; shared by the minter
+# (create_private_tmpdir) and the ownership check (_is_own_scratch_tmpdir).
+_PRIVATE_TMPDIR_PREFIX = "omnicraft-osenv-"
 
 # Backends that need a spawn-time wrap (parent-side ``bwrap`` /
 # ``sandbox-exec`` invocation) in addition to whatever in-process
@@ -568,19 +573,123 @@ def _prune_environ_to_spawn_allowlist(sandbox: SandboxPolicy) -> None:
 
     :param sandbox: The decoded launcher policy. No-op when its
         ``spawn_env_allowlist`` is ``None``. The internal launcher
-        markers (:data:`_LAUNCHER_WRAPPED_ENV`,
-        :data:`_SANDBOX_STRACE_ENV`) are always retained.
+        markers (:data:`_LAUNCHER_WRAPPED_ENV`, :data:`_SANDBOX_STRACE_ENV`)
+        are always retained. The scratch dir is NOT carried in the env —
+        its identity travels via the host-controlled inline argv
+        (``run_launcher``'s ``adopted_scratch`` parameter), so nothing
+        tmpdir-related needs to survive the prune.
     """
     if sandbox.spawn_env_allowlist is None:
         return
-    allowed = set(sandbox.spawn_env_allowlist) | {_LAUNCHER_WRAPPED_ENV, _SANDBOX_STRACE_ENV}
+    allowed = set(sandbox.spawn_env_allowlist) | {
+        _LAUNCHER_WRAPPED_ENV,
+        _SANDBOX_STRACE_ENV,
+    }
     for name in list(os.environ):
         if name not in allowed:
             del os.environ[name]
 
 
 def create_private_tmpdir() -> Path:
-    return Path(tempfile.mkdtemp(prefix="omnicraft-osenv-"))
+    return Path(tempfile.mkdtemp(prefix=_PRIVATE_TMPDIR_PREFIX))
+
+
+def _is_own_scratch_tmpdir(path: Path) -> bool:
+    """
+    Return whether *path* has the SHAPE of a private scratch tmpdir
+    minted by :func:`create_private_tmpdir` — a real directory (``lstat``,
+    so a symlink can't pass), owned by the current uid, mode ``0700``,
+    with the ``omnicraft-osenv-`` basename prefix.
+
+    This is an ownership-SHAPE heuristic, not proof this process minted
+    *path*: any ``omnicraft-osenv-*`` 0700 dir of the same uid (e.g.
+    another OmniCraft run's scratch) also passes. Adoption therefore
+    additionally binds the marker to the host pass via
+    :func:`_marker_matches_policy_scratch`; a path failing either check
+    is neither adopted nor deleted (fail-safe).
+    """
+    getuid = getattr(os, "getuid", None)
+    if getuid is None:  # non-POSIX: can't check ownership → refuse
+        return False
+    if not path.name.startswith(_PRIVATE_TMPDIR_PREFIX):
+        return False
+    try:
+        info = os.lstat(str(path))
+    except OSError:
+        return False
+    return (
+        stat.S_ISDIR(info.st_mode)
+        and info.st_uid == getuid()
+        and stat.S_IMODE(info.st_mode) == 0o700
+    )
+
+
+def _marker_matches_policy_scratch(marked: Path, sandbox: SandboxPolicy) -> bool:
+    """
+    Return whether *marked* resolves to one of the policy's write roots —
+    a consistency check that the dir the host named over argv is one the
+    baked profile actually grants as writable. This is NOT the identity
+    source (the argv ``adopted_scratch`` value is); it is defense in
+    depth against a host pass that named a dir it never granted.
+
+    :param marked: The host-delivered scratch path (argv identity).
+    :param sandbox: The policy decoded from the argv-delivered payload.
+    :returns: ``True`` iff *marked* resolves to one of the policy's
+        write roots.
+    """
+    try:
+        target = marked.resolve(strict=False)
+    except (OSError, RuntimeError):
+        return False
+    for root in sandbox.write_roots:
+        try:
+            if target == root.resolve(strict=False):
+                return True
+        except (OSError, RuntimeError):
+            continue
+    return False
+
+
+def _adopt_or_mint_scratch(
+    sandbox: SandboxPolicy, adopted_scratch: str | None
+) -> tuple[Path, bool]:
+    """
+    Decide the scratch tmpdir for the active-sandbox path.
+
+    *adopted_scratch* is the scratch path the host pass minted, passed to
+    this in-wrap pass through the host-built inline ``python -c`` argv —
+    a channel the confined target cannot alter (it can set env vars, but
+    not a function argument the host interpolated). Its presence IS the
+    genuine-handoff signal, and its value IS the identity of the dir to
+    adopt. There is no env marker; identity does not come from the
+    environment at all.
+
+    When *adopted_scratch* is given it is adopted after two defensive
+    checks: :func:`_is_own_scratch_tmpdir` (ownership shape — uid/mode/
+    prefix) and :func:`_marker_matches_policy_scratch` (it is a write
+    root of the argv-delivered policy, i.e. consistent with the profile
+    the host baked). Either failing, or *adopted_scratch* being absent
+    (single-pass backends, or a first host pass before the re-exec),
+    mints a fresh dir. So the exit-time ``rmtree`` only ever sees the
+    exact dir the host named over argv, or one this call just created.
+
+    :param sandbox: The policy decoded from the argv-delivered payload.
+    :param adopted_scratch: Host-minted scratch path from the inline
+        argv, or ``None`` when there is no handoff to adopt.
+    :returns: ``(tmpdir, minted)`` — *minted* is ``True`` when this call
+        created the dir (the caller must then grant it as a write root);
+        ``False`` when the host-named dir was adopted.
+    """
+    if adopted_scratch is not None:
+        marked = Path(adopted_scratch)
+        if _is_own_scratch_tmpdir(marked) and _marker_matches_policy_scratch(marked, sandbox):
+            return marked, False
+        logger.warning(
+            "[omnicraft-sandbox] host-delivered scratch %r failed validation "
+            "(ownership shape / write-root consistency); minting a fresh one",
+            adopted_scratch,
+        )
+    return create_private_tmpdir(), True
 
 
 def set_temp_env(env: MutableMapping[str, str], tmpdir: Path) -> None:
@@ -595,7 +704,12 @@ def cleanup_private_tmpdir(tmpdir: Path | None) -> None:
     shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def run_launcher(encoded_sandbox: str, target_path: str, argv: list[str]) -> int:
+def run_launcher(
+    encoded_sandbox: str,
+    target_path: str,
+    argv: list[str],
+    adopted_scratch: str | None = None,
+) -> int:
     """
     Activate the sandbox and exec the wrapped target inside it.
 
@@ -616,8 +730,28 @@ def run_launcher(encoded_sandbox: str, target_path: str, argv: list[str]) -> int
         inside the sandbox, e.g. ``"/usr/bin/python3"``.
     :param argv: Arguments passed to *target_path* (the launcher's own
         ``sys.argv[1:]``).
+    :param adopted_scratch: For the in-wrap pass of a spawn-wrap backend,
+        the scratch tmpdir the host pass minted, delivered over the
+        host-built inline argv (never the environment). The in-wrap pass
+        adopts exactly this dir instead of minting its own. ``None`` on
+        the first (host) pass and for single-pass backends.
     :returns: The target process's exit code.
     :raises ValueError: If *encoded_sandbox* does not decode to a dict.
+
+    .. note::
+
+       Known scratch-tmpdir leak window. For spawn-wrap backends the
+       host pass mints the scratch dir, then ``execvp``s into the wrap;
+       the in-wrap pass owns the ``finally`` that removes it. If the wrap
+       hands off (execvp succeeds) but the wrapped process dies before
+       that ``finally`` runs, the dir is orphaned — the host is already
+       gone and there is no OmniCraft sweep for ``omnicraft-osenv-*``
+       scratch dirs. The window extends until that ``finally`` would have
+       run, during which the target may have written arbitrary data into
+       the scratch, so a leaked dir can hold real (possibly sensitive)
+       contents and consume disk. What IS guaranteed: the dir is mode
+       0700, and the OS tmp-reaper eventually clears it. A background
+       sweep is a possible follow-up.
     """
     for secret_name in RUNNER_AUTH_SECRET_ENV_VARS:
         os.environ.pop(secret_name, None)
@@ -654,49 +788,70 @@ def run_launcher(encoded_sandbox: str, target_path: str, argv: list[str]) -> int
         and os.environ.get(_LAUNCHER_WRAPPED_ENV) != "1"
     ):
         backend = get_backend(sandbox.backend_type)
-        # Re-invoke run_launcher via an INLINE python -c script
-        # rather than re-running the launcher tempfile. Reason:
-        # bwrap mounts ``/tmp`` as a fresh tmpfs, so the host's
-        # ``/tmp/omnicraft-sandbox-*.py`` written by
-        # ``create_exec_launcher`` is invisible inside the wrap.
-        # ``python -c '<inline>'`` doesn't need a script file in
-        # the sandbox view — the inline string travels through
-        # argv. Bwrap's ``_ensure_executable_visible`` already
-        # ensures ``sys.executable`` is reachable. The project
-        # root is added to sys.path inside the inline so
-        # ``omnicraft.inner.sandbox`` imports succeed even when
-        # the cwd is outside the project tree (terminal case).
-        project_root = repr(str(_project_root()))
-        inline = (
-            "import sys; "
-            f"sys.path.insert(0, {project_root}); "
-            "from omnicraft.inner.sandbox import run_launcher; "
-            f"raise SystemExit(run_launcher({encoded_sandbox!r}, "
-            f"{target_path!r}, sys.argv[1:]))"
-        )
-        launcher_argv = [sys.executable, "-c", inline, *argv]
-        wrapped = list(
-            backend.wrap_launcher_argv(
-                launcher_argv,
-                sandbox,
-                Path(os.getcwd()),
-                target=target_path,
+        # Mint the scratch tmpdir on the host BEFORE building the wrap:
+        # the wrap bakes the profile from ``sandbox`` now, so the dir must
+        # be a granted write root first or the in-jail mkdtemp lands
+        # outside every grant (the FileNotFoundError this fixes).
+        tmpdir = create_private_tmpdir()
+        try:
+            sandbox = with_additional_write_roots(sandbox, [tmpdir])
+            set_temp_env(os.environ, tmpdir)
+            encoded_sandbox = _encode_json_arg(sandbox.to_jsonable())
+            # Re-invoke run_launcher via an INLINE python -c script
+            # rather than re-running the launcher tempfile. Reason:
+            # bwrap mounts ``/tmp`` as a fresh tmpfs, so the host's
+            # ``/tmp/omnicraft-sandbox-*.py`` written by
+            # ``create_exec_launcher`` is invisible inside the wrap.
+            # ``python -c '<inline>'`` doesn't need a script file in
+            # the sandbox view — the inline string travels through
+            # argv. Bwrap's ``_ensure_executable_visible`` already
+            # ensures ``sys.executable`` is reachable. The project
+            # root is added to sys.path inside the inline so
+            # ``omnicraft.inner.sandbox`` imports succeed even when
+            # the cwd is outside the project tree (terminal case).
+            # The inline carries the RE-ENCODED policy AND the scratch
+            # path as ``adopted_scratch`` — both host-controlled argv the
+            # confined target can't forge, so the in-wrap pass adopts this
+            # exact dir without trusting the environment.
+            project_root = repr(str(_project_root()))
+            inline = (
+                "import sys; "
+                f"sys.path.insert(0, {project_root}); "
+                "from omnicraft.inner.sandbox import run_launcher; "
+                f"raise SystemExit(run_launcher({encoded_sandbox!r}, "
+                f"{target_path!r}, sys.argv[1:], adopted_scratch={str(tmpdir)!r}))"
             )
-        )
-        os.environ[_LAUNCHER_WRAPPED_ENV] = "1"
-        logger.info(
-            "[omnicraft-sandbox] spawn-time wrap re-exec backend=%s wrap_head=%s",
-            sandbox.backend_type,
-            wrapped[:3],
-        )
-        # ``os.execvp`` replaces the process; nothing after this
-        # line runs unless the exec fails (which raises).
-        os.execvp(wrapped[0], wrapped)
+            launcher_argv = [sys.executable, "-c", inline, *argv]
+            wrapped = list(
+                backend.wrap_launcher_argv(
+                    launcher_argv,
+                    sandbox,
+                    Path(os.getcwd()),
+                    target=target_path,
+                )
+            )
+            os.environ[_LAUNCHER_WRAPPED_ENV] = "1"
+            logger.info(
+                "[omnicraft-sandbox] spawn-time wrap re-exec backend=%s wrap_head=%s",
+                sandbox.backend_type,
+                wrapped[:3],
+            )
+            # execvp replaces the process; the ``except`` below only fires
+            # if the wrap never handed off. Known leak window if it DOES
+            # hand off but the wrapped process then dies before the in-wrap
+            # ``finally`` runs — see the run_launcher docstring.
+            os.execvp(wrapped[0], wrapped)
+        except BaseException:
+            cleanup_private_tmpdir(tmpdir)
+            raise
 
     tmpdir: Path | None = None
     if sandbox.active:
-        tmpdir = create_private_tmpdir()
-        sandbox = with_additional_write_roots(sandbox, [tmpdir])
+        # Adopt the host-named scratch (argv identity) after validation,
+        # else mint our own; a minted dir must be granted as a write root.
+        tmpdir, minted = _adopt_or_mint_scratch(sandbox, adopted_scratch)
+        if minted:
+            sandbox = with_additional_write_roots(sandbox, [tmpdir])
         set_temp_env(os.environ, tmpdir)
     # Checkpoints around activate + spawn so a hang in either step is
     # visible in the wrapper's stderr (the wrapper template enables INFO).

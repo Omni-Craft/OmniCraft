@@ -6242,11 +6242,51 @@ describe("chatStore — startStreamPump reconnect loop", () => {
     expect(useChatStore.getState().abortController).toBeNull();
   });
 
-  it("gives up and marks the session failed on a permanent 404", async () => {
-    seedSession("conv_404", []);
+  it("retries a transient 404 within the bound and reconnects without failing", async () => {
+    seedSession("conv_404t", []);
+    const sinks: StreamSink[] = [];
+    let opens = 0;
     fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : input.toString();
       if (/\/v1\/sessions\/[^/]+\/stream$/.test(url)) {
+        opens += 1;
+        // A restart blip: the first few opens 404, then the route returns.
+        if (opens <= 3) return mockResponse({}, { ok: false, status: 404 });
+        const sink = pushableStream();
+        sinks.push(sink);
+        return mockResponse(null, { bodyStream: sink.stream });
+      }
+      return defaultFetchHandler(input, init);
+    });
+    const controller = new AbortController();
+    useChatStore.setState({
+      conversationId: "conv_404t",
+      abortController: controller,
+      sessionStatus: "running",
+    });
+
+    const loop = startStreamPump("conv_404t", controller, setState, getState);
+    // Drain the backoff between the 404 retries until the 4th open succeeds
+    // (~1.75s of cumulative backoff for the first three retries).
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(sinks).toHaveLength(1);
+    // The session survived the blip — never flipped to failed.
+    expect(useChatStore.getState().sessionStatus).not.toBe("failed");
+
+    // Clean up: a [DONE] close ends the loop.
+    sinks[0]!.push("data: [DONE]\n\n");
+    sinks[0]!.close();
+    await vi.advanceTimersByTimeAsync(1);
+    await loop;
+  });
+
+  it("gives up and marks the session failed on a persistent 404 past the bound", async () => {
+    seedSession("conv_404", []);
+    let opens = 0;
+    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input.toString();
+      if (/\/v1\/sessions\/[^/]+\/stream$/.test(url)) {
+        opens += 1;
         return mockResponse({}, { ok: false, status: 404 });
       }
       return defaultFetchHandler(input, init);
@@ -6259,9 +6299,14 @@ describe("chatStore — startStreamPump reconnect loop", () => {
     });
 
     const loop = startStreamPump("conv_404", controller, setState, getState);
-    await vi.advanceTimersByTimeAsync(1);
+    // Drain all bounded retries' backoff (~7.75s total) until it gives up.
+    await vi.advanceTimersByTimeAsync(30_000);
     await loop;
 
+    // It retried the bound (STREAM_RECONNECT_MAX_404_RETRIES = 5) before
+    // failing — i.e. 5 retries + the final over-cap open — not a give-up on
+    // the first 404.
+    expect(opens).toBe(6);
     expect(useChatStore.getState().sessionStatus).toBe("failed");
     expect(useChatStore.getState().abortController).toBeNull();
   });

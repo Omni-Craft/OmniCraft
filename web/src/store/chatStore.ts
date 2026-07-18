@@ -734,6 +734,11 @@ const WORKSPACE_INVALIDATION_DEBOUNCE_MS = 750;
 const STREAM_RECONNECT_BASE_MS = 250;
 const STREAM_RECONNECT_MAX_MS = 5_000;
 
+// A 404 on stream open is usually permanent, but also transient while the
+// backend restarts behind the ingress. Bound the retries so a live session
+// survives a rolling restart without spinning forever on a route that stays gone.
+const STREAM_RECONNECT_MAX_404_RETRIES = 5;
+
 // Sticky picker prefs — persisted so a new chat inherits the user's
 // last pick across reloads and across sessions.
 const PICKER_PREF_EFFORT_KEY = "omnicraft.picker.effort";
@@ -2968,6 +2973,9 @@ export async function startStreamPump(
   get: Getter,
 ): Promise<void> {
   let failedOpens = 0;
+  // Consecutive 404s on open. Bounded so a transient 404 (backend restarting
+  // behind the ingress) is retried, but a genuinely gone session still fails.
+  let notFoundRetries = 0;
   // True once we've had at least one SUCCESSFUL open. Drives reconnect-only
   // behavior (drop in-flight + reconcile), which must NOT run on the first
   // established stream — failed opens leave it false so a recovered first
@@ -3017,13 +3025,32 @@ export async function startStreamPump(
           // Release the unconsumed error-response body so the underlying fetch
           // connection is freed promptly rather than lingering across retries.
           void streamRes.body?.cancel().catch(() => {});
-          // 401/403/404 won't fix themselves by retrying — give up and mark
-          // the session failed so the user isn't left on a silent spinner.
-          if (streamRes.status === 401 || streamRes.status === 403 || streamRes.status === 404) {
+          // 401/403 won't fix themselves by retrying — give up and mark the
+          // session failed so the user isn't left on a silent spinner.
+          if (streamRes.status === 401 || streamRes.status === 403) {
             console.warn(`Session ${id}: stream unavailable (${streamRes.status}), giving up`);
             finalizeActive(set, "failed", `stream unavailable (${streamRes.status})`, null);
             set({ sessionStatus: "failed", status: "idle" });
             break;
+          }
+          // A 404 is retried a bounded number of times (a restart blip clears
+          // itself) but a session that stays gone still fails once the cap is
+          // hit — otherwise the user spins forever on a route that won't return.
+          if (streamRes.status === 404) {
+            notFoundRetries += 1;
+            if (notFoundRetries > STREAM_RECONNECT_MAX_404_RETRIES) {
+              console.warn(
+                `Session ${id}: stream 404 after ${STREAM_RECONNECT_MAX_404_RETRIES} retries, giving up`,
+              );
+              finalizeActive(set, "failed", "stream unavailable (404)", null);
+              set({ sessionStatus: "failed", status: "idle" });
+              break;
+            }
+            console.warn(
+              `Session ${id}: stream 404 (attempt ${notFoundRetries}/${STREAM_RECONNECT_MAX_404_RETRIES}), will retry`,
+            );
+            failedOpens += 1;
+            continue;
           }
           console.warn(`Session ${id}: stream open failed (${streamRes.status}), will retry`);
           failedOpens += 1;
@@ -3033,6 +3060,7 @@ export async function startStreamPump(
         const reconnecting = hasConnected;
         hasConnected = true;
         failedOpens = 0;
+        notFoundRetries = 0;
         presenceIdle.noteReported(idle);
         if (reconnecting) {
           dropEphemeralInFlightBlocks(id, set);

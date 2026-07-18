@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from typing import Any
 
 import httpx
@@ -146,3 +147,55 @@ async def test_timer_set_rejects_zero_delay_repeat() -> None:
 
     assert json.loads(output) == {"error": "seconds must be > 0 when repeat is true"}
     assert recorder.posts == []
+
+
+class _FailingPostRecorder(_TimerPostRecorder):
+    """Timer POST handler that replies 500 to exercise the error path."""
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        """Record the request then return a server error response."""
+        await super().__call__(request)
+        return httpx.Response(500, json={"error": "boom"})
+
+
+@pytest.mark.asyncio
+async def test_timer_firing_surfaces_http_delivery_failure(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """
+    A 4xx/5xx wake response is treated as a delivery failure and logged.
+
+    ``httpx`` does not raise on error status by default, so without the
+    ``raise_for_status`` guard a failed firing would be silently
+    swallowed. A one-shot timer still makes exactly one POST; the fix
+    routes the 500 into the existing warning path.
+    """
+    recorder = _FailingPostRecorder()
+    transport = httpx.MockTransport(recorder)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://server") as server_client:
+        with caplog.at_level(logging.WARNING, logger="omnicraft.runner.tool_dispatch"):
+            output = await execute_tool(
+                tool_name="sys_timer_set",
+                arguments=json.dumps({"seconds": 0}),
+                conversation_id="conv_parent",
+                server_client=server_client,
+            )
+            assert json.loads(output)["status"] == "scheduled"
+            await asyncio.wait_for(recorder.post_seen.wait(), timeout=1.0)
+
+            # The warning is logged after the 500 returns and
+            # ``raise_for_status`` fires, which happens a few event-loop
+            # hops past ``post_seen``. Poll with a real deadline rather
+            # than a fixed ``sleep(0)`` drain, which races the loop and
+            # flakes in CI.
+            def _warning_logged() -> bool:
+                return any("firing persist failed" in rec.message for rec in caplog.records)
+
+            loop = asyncio.get_running_loop()
+            deadline = loop.time() + 1.0
+            while not _warning_logged() and loop.time() < deadline:
+                await asyncio.sleep(0.01)
+
+    assert len(recorder.posts) == 1
+    assert _warning_logged()

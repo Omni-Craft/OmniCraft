@@ -3041,7 +3041,7 @@ async def _timer_loop(
             if note:
                 text += f"\nnote: {note!r}"
             try:
-                await server_client.post(
+                resp = await server_client.post(
                     f"/v1/sessions/{conversation_id}/events",
                     json={
                         "type": "message",
@@ -3053,6 +3053,9 @@ async def _timer_loop(
                     },
                     timeout=30.0,
                 )
+                # httpx does not raise on 4xx/5xx by default; treat those
+                # as delivery failures so they share the warning path below.
+                resp.raise_for_status()
             except (httpx.HTTPError, asyncio.TimeoutError):
                 _logger.warning(
                     "Timer %s firing persist failed for %s",

@@ -6070,6 +6070,95 @@ async def test_forward_session_cost_posts_status_when_no_subagents(
     assert dedupe.posted_policy_cost == pytest.approx(0.25)
 
 
+@pytest.mark.asyncio
+async def test_forward_session_cost_backs_off_after_failure(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """
+    A failed cost POST arms a backoff so the next poll doesn't retry at once.
+
+    The forward runs on the ~0.25s transcript poll; without a gate a 429
+    from the cost endpoint would be retried every tick — a request storm.
+    After a failure the forward skips polls until the cooldown (doubling up
+    to the cap) elapses, then retries; the first success clears it.
+    """
+    bridge_dir = tmp_path / "bridge"
+    bridge_dir.mkdir()
+    parent = tmp_path / "sess.jsonl"
+    parent.write_text("parent", encoding="utf-8")
+
+    # No sub-agents → policy == display == statusLine total S; drive S so a
+    # fresh (monotonically higher) payload is built on every attempt, proving
+    # the skip is the backoff gate and not the steady-value dedupe.
+    status_box = {"value": 0.10}
+    monkeypatch.setattr(
+        forwarder,
+        "read_claude_context_state",
+        lambda _bridge: {"total_cost_usd": status_box["value"]},
+    )
+    clock = {"now": 1000.0}
+    monkeypatch.setattr(forwarder, "_cost_forward_monotonic", lambda: clock["now"])
+
+    dedupe = forwarder._ForwardDedupeState()
+    attempts: list[float | None] = []
+    outcome = {"status": 429}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        if body.get("type") == "external_session_usage":
+            attempts.append(body["data"].get("cumulative_cost_usd"))
+        return httpx.Response(outcome["status"], json={})
+
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport, base_url="http://ap") as client:
+
+        async def run() -> None:
+            await forwarder._forward_session_cost(
+                client=client,
+                session_id="conv_parent",
+                bridge_dir=bridge_dir,
+                parent_transcript_path=parent,
+                subagent_state=forwarder.SubagentForwardState(subagents={}),
+                dedupe=dedupe,
+                cost_cache={},
+            )
+
+        # First poll fails (429): one POST attempted, backoff armed at base.
+        await run()
+        assert len(attempts) == 1
+        assert dedupe.cost_backoff_s == pytest.approx(forwarder._COST_FORWARD_BACKOFF_BASE_S)
+        assert dedupe.cost_retry_at == pytest.approx(1000.0 + forwarder._COST_FORWARD_BACKOFF_BASE_S)
+
+        # Next poll BEFORE the cooldown elapses: gated out, NO new POST even
+        # though the cost advanced — the storm this fixes.
+        clock["now"] = 1000.5
+        status_box["value"] = 0.20
+        await run()
+        assert len(attempts) == 1
+
+        # Still failing once the deadline passes → second failure doubles it.
+        clock["now"] = 1001.0
+        await run()
+        assert len(attempts) == 2
+        assert dedupe.cost_backoff_s == pytest.approx(forwarder._COST_FORWARD_BACKOFF_BASE_S * 2)
+        assert dedupe.cost_retry_at == pytest.approx(1001.0 + forwarder._COST_FORWARD_BACKOFF_BASE_S * 2)
+
+        # Endpoint recovers, but we're still inside the doubled cooldown → gated.
+        outcome["status"] = 200
+        clock["now"] = 1002.0
+        await run()
+        assert len(attempts) == 2
+
+        # After the cooldown: retry succeeds, the POST goes through, and the
+        # backoff resets so steady-state polling resumes.
+        clock["now"] = 1003.0
+        await run()
+        assert len(attempts) == 3
+        assert dedupe.cost_retry_at is None
+        assert dedupe.cost_backoff_s is None
+        assert dedupe.posted_cost == pytest.approx(0.20)
+
+
 def test_parse_json_response_returns_value_on_valid_json() -> None:
     """
     A normal JSON body parses through ``_parse_json_response`` unchanged.

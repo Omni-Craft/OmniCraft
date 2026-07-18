@@ -228,6 +228,11 @@ _HTTP_POST_MAX_PERMANENT_FAILURES = 3
 _HTTP_POST_RETRY_BASE_DELAY_S = 1.0
 _HTTP_POST_RETRY_MAX_DELAY_S = 30.0
 _HTTP_TRANSIENT_STATUS_CODES = {408, 409, 425, 429}
+# Cooldown window for cost forwarding after a failed POST: skip polls,
+# doubling from the base up to the cap, so the ~0.25s poll doesn't hammer a
+# failing cost endpoint.
+_COST_FORWARD_BACKOFF_BASE_S = 1.0
+_COST_FORWARD_BACKOFF_MAX_S = 30.0
 _SUPERVISOR_INITIAL_BACKOFF_S = 1.0
 _SUPERVISOR_MAX_BACKOFF_S = 30.0
 _SUPERVISOR_HEALTHY_UPTIME_S = 60.0
@@ -521,6 +526,12 @@ class _ForwardDedupeState:
     # sub-agent spend so the gate can block mid-turn. Separate baseline
     # because it can advance while ``posted_cost`` (S) is frozen.
     posted_policy_cost: float | None = None
+    # Monotonic deadline before which the next cost POST is skipped. ``None``
+    # when no cost-forward backoff is active.
+    cost_retry_at: float | None = None
+    # Current cost-forward backoff window (seconds), doubled per consecutive
+    # failure up to the cap. ``None`` when no backoff is active.
+    cost_backoff_s: float | None = None
     # Response id of the last turn-start ``running`` status POSTed, so the
     # id-bearing running edge fires exactly once per turn even when an
     # assistant item is held across polls for delta ordering (which leaves
@@ -1745,8 +1756,12 @@ async def _forward_session_cost(
     gate uses the higher live ``C``) is intentional and reconciles at the
     turn boundary when ``S`` jumps; ``max`` keeps both monotonic.
 
-    Best-effort, like the other forwarder posts: a failed POST is retried
-    on the next poll (the ``dedupe`` baselines advance only on success).
+    Best-effort, like the other forwarder posts: the ``dedupe`` baselines
+    and backoff reset only when the post returns without raising. A raised
+    error (even after the bytes are sent) keeps the baselines frozen and
+    arms a cooldown on ``dedupe`` before the next attempt; a re-POST is safe
+    because the value is cumulative/idempotent (the absolute total, no
+    double charge).
 
     :param client: OmniCraft HTTP client.
     :param session_id: Parent (claude-native) conversation id the cost is
@@ -1759,11 +1774,17 @@ async def _forward_session_cost(
         sub-agents' transcripts contribute to ``C``.
     :param dedupe: Carries ``posted_cost`` (display ``S``) and
         ``posted_policy_cost`` (``max(S, C)``) so steady values aren't
-        re-POSTed each poll; mutated in place on a successful post.
+        re-POSTed each poll, plus the ``cost_retry_at`` / ``cost_backoff_s``
+        backoff window used to gate retries after a failed post; mutated in
+        place on both success and failure.
     :param cost_cache: Per-session size-keyed transcript cost cache,
         mutated in place.
     :returns: None.
     """
+    # Within the cooldown armed by a prior failure: skip this poll (and the
+    # expensive transcript read below) until it elapses.
+    if dedupe.cost_retry_at is not None and _cost_forward_monotonic() < dedupe.cost_retry_at:
+        return
     status_state = await asyncio.to_thread(read_claude_context_state, bridge_dir)
     status_cost = _cumulative_cost_from_status_state(status_state)
     active_subagents = [
@@ -1818,14 +1839,28 @@ async def _forward_session_cost(
             usage=payload,
         )
     except httpx.HTTPError as exc:
+        # Arm/advance the cooldown: double from the base up to the cap.
+        prev = dedupe.cost_backoff_s
+        next_backoff = (
+            _COST_FORWARD_BACKOFF_BASE_S
+            if prev is None
+            else min(prev * 2, _COST_FORWARD_BACKOFF_MAX_S)
+        )
+        dedupe.cost_backoff_s = next_backoff
+        dedupe.cost_retry_at = _cost_forward_monotonic() + next_backoff
         _logger.warning(
-            "Failed to forward Claude session cost; session=%s bridge_dir=%s http_status=%s",
+            "Failed to forward Claude session cost; backing off %.3fs "
+            "session=%s bridge_dir=%s http_status=%s",
+            next_backoff,
             session_id,
             bridge_dir,
             _http_status_for_log(exc),
             exc_info=True,
         )
         return
+    # Post returned without raising — clear any cooldown from a prior failure.
+    dedupe.cost_retry_at = None
+    dedupe.cost_backoff_s = None
     if "cumulative_cost_usd" in payload:
         dedupe.posted_cost = display_cost
     if "policy_cost_usd" in payload:
@@ -1853,6 +1888,19 @@ def _supervisor_monotonic() -> float:
     healthy-uptime branch deterministically without touching the
     global ``time.monotonic`` (same module-singleton hazard as
     ``asyncio.sleep``).
+
+    :returns: Seconds from an unspecified monotonic epoch.
+    """
+    return time.monotonic()
+
+
+def _cost_forward_monotonic() -> float:
+    """
+    Monotonic clock reading used to gate cost-forward backoff.
+
+    Private indirection so tests can drive the cost backoff cooldown
+    deterministically without patching the global ``time.monotonic``
+    (same module-singleton hazard as ``asyncio.sleep``).
 
     :returns: Seconds from an unspecified monotonic epoch.
     """

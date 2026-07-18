@@ -432,9 +432,9 @@ def _anthropic_to_chat(resp: dict[str, Any]) -> dict[str, Any]:
         "usage": {
             "prompt_tokens": usage.get("input_tokens"),
             "completion_tokens": usage.get("output_tokens"),
-            "total_tokens": (
-                (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0) or None
-            ),
+            # No trailing ``or None``: it would collapse a genuine 0+0 total to
+            # None. Per-operand ``or 0`` still treats a missing count as zero.
+            "total_tokens": (usage.get("input_tokens") or 0) + (usage.get("output_tokens") or 0),
         },
     }
 

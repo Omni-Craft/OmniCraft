@@ -7,6 +7,8 @@ import shutil
 import tracemalloc
 from pathlib import Path
 
+import pytest
+
 from omnicraft.inner.os_env import _read_impl, _shell_impl, build_helper_env
 from omnicraft.inner.sandbox import SandboxPolicy
 from omnicraft.runner.identity import (
@@ -294,3 +296,149 @@ def test_read_impl_nul_byte_file_classified_binary(tmp_path: Path) -> None:
 
     assert result["encoding"] == "base64"
     assert result["total_bytes"] == 10
+
+
+# ---------------------------------------------------------------------------
+# _child_shell_env — OmniCraft's own package root must not leak onto the
+# PYTHONPATH of agent shell commands (an untrusted command would inherit our
+# import path, and a tool-install root would shadow the project's packages).
+# ---------------------------------------------------------------------------
+
+
+def test_child_shell_env_strips_project_root_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """OmniCraft's project root is removed; a project entry is preserved.
+
+    The helper prepends its project root to ``PYTHONPATH`` so it can import
+    omnicraft at startup. Commands the agent runs must not inherit that entry,
+    or OmniCraft's ``site-packages`` shadows the project venv's own packages.
+
+    :returns: None.
+    """
+    import os
+
+    from omnicraft.inner.os_env import _child_shell_env, _project_root
+
+    project_entry = "/opt/venvs/proj/lib/python3.13/site-packages"
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(_project_root()), project_entry]))
+
+    env = _child_shell_env()
+
+    assert env["PYTHONPATH"] == project_entry
+
+
+def test_child_shell_env_strips_case_insensitive_alias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A different-casing spelling of the root is stripped, not preserved.
+
+    On a case-insensitive filesystem (macOS/Windows default) a PYTHONPATH
+    entry like ``/…/OMNICRAFT`` names the very same directory as
+    ``/…/OmniCraft``. A casing-preserving comparison (``Path.resolve()``
+    equality, or ``posixpath.normcase`` which is a no-op on macOS) would let
+    that alias survive — exactly the entry the strip is meant to remove.
+    Skipped on a case-sensitive filesystem, where the alias is a genuinely
+    distinct path and must NOT be stripped.
+
+    :returns: None.
+    """
+    import os
+
+    from omnicraft.inner.os_env import _child_shell_env, _project_root
+
+    root = _project_root()
+    alias = str(root).swapcase()
+    # Only meaningful where the alias resolves to the same directory. On a
+    # case-sensitive filesystem it does not exist (or is a different file),
+    # so there is nothing to prove.
+    if not (os.path.exists(alias) and os.path.samefile(alias, str(root))):
+        pytest.skip("case-sensitive filesystem: alternate-casing alias is a distinct path")
+
+    project_entry = "/opt/venvs/proj/site-packages"
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([alias, project_entry]))
+
+    env = _child_shell_env()
+
+    assert env["PYTHONPATH"] == project_entry
+
+
+def test_child_shell_env_drops_var_when_only_project_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the sole entry is OmniCraft's root, ``PYTHONPATH`` is dropped, not blanked.
+
+    Once the root is stripped nothing is left to keep, so the variable is
+    removed rather than left set to an empty string — the child env carries no
+    redundant, empty ``PYTHONPATH``.
+
+    :returns: None.
+    """
+    from omnicraft.inner.os_env import _child_shell_env, _project_root
+
+    monkeypatch.setenv("PYTHONPATH", str(_project_root()))
+
+    env = _child_shell_env()
+
+    assert "PYTHONPATH" not in env
+
+
+def test_child_shell_env_noop_without_pythonpath(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No ``PYTHONPATH`` in the parent env means nothing to strip.
+
+    :returns: None.
+    """
+    from omnicraft.inner.os_env import _child_shell_env
+
+    monkeypatch.delenv("PYTHONPATH", raising=False)
+    monkeypatch.setenv("PATH", "/usr/bin")
+
+    env = _child_shell_env()
+
+    assert "PYTHONPATH" not in env
+    assert env["PATH"] == "/usr/bin"
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: the real helper must not leak OmniCraft's package root into a
+# sys_os_shell command's PYTHONPATH. Guards the wiring in _shell_impl.
+# ---------------------------------------------------------------------------
+
+
+def test_shell_command_does_not_see_omnicraft_project_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A shell command's ``PYTHONPATH`` drops OmniCraft's root, keeps the rest.
+
+    Spawns a real ``caller_process`` helper (``sandbox: none`` so it runs on
+    every platform) with OmniCraft's root pre-seeded on ``PYTHONPATH`` — the
+    same shape the helper spawn produces — and asserts the agent's command
+    sees the sibling project entry but not OmniCraft's, so project subprocesses
+    resolve their own packages and untrusted commands can't import our
+    internals off the leaked path.
+
+    :returns: None.
+    """
+    import asyncio
+    import os
+
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from omnicraft.inner.os_env import _project_root, create_os_environment
+
+    project_entry = "/opt/venvs/proj/site-packages"
+    monkeypatch.setenv("PYTHONPATH", os.pathsep.join([str(_project_root()), project_entry]))
+
+    os_env = create_os_environment(
+        OSEnvSpec(type="caller_process", sandbox=OSEnvSandboxSpec(type="none"))
+    )
+    assert os_env is not None
+    try:
+        result = asyncio.run(os_env.shell("echo PP=$PYTHONPATH"))
+    finally:
+        os_env.close()
+
+    out = result.get("stdout", "")
+    assert project_entry in out
+    assert str(_project_root()) not in out

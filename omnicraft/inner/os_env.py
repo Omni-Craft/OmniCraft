@@ -1333,6 +1333,7 @@ def _shell_impl(
         completed = subprocess.run(
             argv,
             cwd=str(cwd),
+            env=_child_shell_env(),
             text=True,
             capture_output=True,
             timeout=timeout,
@@ -1423,6 +1424,61 @@ def _project_root() -> Path:
     # File lives at omnicraft/inner/os_env.py; climb two levels to the
     # repo root that hosts `omnicraft/` as a package.
     return Path(__file__).resolve().parents[2]
+
+
+def _same_path(entry: str, root: Path) -> bool:
+    """True when ``entry`` names the same directory as ``root``.
+
+    Compares by inode identity via ``os.path.samefile``, which collapses a
+    case-insensitive spelling (``/…/OMNICRAFT`` vs ``/…/OmniCraft`` on
+    macOS/Windows) or a hardlink to the same file. ``Path.resolve()``
+    equality can't: ``realpath`` preserves the casing you passed, and
+    ``posixpath.normcase`` is a no-op on macOS, so a lowercased/uppercased
+    alias of the root would slip through unstripped.
+
+    ``samefile`` stats both sides, so it can raise ``OSError`` for any stat
+    failure — a missing ``entry``, but also EACCES (no traversal
+    permission), ENAMETOOLONG, or ELOOP even when the path exists. The
+    ``OSError`` branch handles all of them with a best-effort lexical
+    comparison that does not attempt a case-fold; it keeps the function
+    total without claiming to know why the stat failed. Best-effort means
+    imperfect: under EACCES ``entry`` could in fact be the root and escape
+    the lexical match (so escape stripping), which we accept over crashing.
+    """
+    try:
+        return os.path.samefile(entry, root)
+    except OSError:
+        return os.path.normcase(os.path.abspath(entry)) == os.path.normcase(
+            os.path.abspath(str(root))
+        )
+
+
+def _child_shell_env() -> dict[str, str]:
+    """
+    Environment for agent shell commands, minus OmniCraft's own package root.
+
+    The helper prepends its project root to ``PYTHONPATH`` at spawn (see
+    ``_HelperProcessClient._start_locked``) purely so ``python -m
+    omnicraft.inner.os_env`` can import omnicraft. That entry has no business in
+    the commands the agent runs: an untrusted command inherits our import path
+    and can import (or merely see) OmniCraft internals it shouldn't, and under a
+    tool install the root points at OmniCraft's ``site-packages`` and shadows
+    the project venv's own packages on ``sys.path`` (e.g. a 3.12
+    ``pydantic_core`` failing to load under a 3.13 project). Strip only
+    OmniCraft's entry — any other ``PYTHONPATH`` the caller set is preserved,
+    in order.
+    """
+    env = os.environ.copy()
+    raw = env.get("PYTHONPATH")
+    if not raw:
+        return env
+    root = _project_root()
+    kept = [entry for entry in raw.split(os.pathsep) if not (entry and _same_path(entry, root))]
+    if kept:
+        env["PYTHONPATH"] = os.pathsep.join(kept)
+    else:
+        env.pop("PYTHONPATH", None)
+    return env
 
 
 def _read_config_from_fd(fd: int) -> JsonValue:

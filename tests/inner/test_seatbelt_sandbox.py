@@ -523,6 +523,26 @@ def test_profile_no_explicit_home_deny(tmp_path: Path) -> None:
     )
 
 
+def test_profile_no_global_file_read_metadata(tmp_path: Path) -> None:
+    """
+    ``file-read-metadata`` is only ever granted path-scoped
+    (``(allow file-read-metadata (literal ...))`` from the ancestor
+    walker). A bare, unfiltered ``(allow file-read-metadata)`` would
+    turn the sandbox into a stat-oracle over the whole filesystem — a
+    sandboxed agent could confirm the existence of any path (it still
+    couldn't read contents). We intentionally do NOT grant it globally;
+    if a bundled runtime's startup fstat needs it, scope it to the
+    inherited fds or the sandbox's own tree, never the whole tree.
+    """
+    policy = _make_policy(tmp_path)
+    profile = _build_profile(policy, tmp_path.resolve(strict=False))
+    assert "(allow file-read-metadata)" not in profile.splitlines(), (
+        "Profile emits a GLOBAL (allow file-read-metadata) with no path "
+        "filter, opening a filesystem-wide stat-oracle. Metadata allows "
+        "must stay path-scoped ((literal ...)/(subpath ...))."
+    )
+
+
 def test_profile_scratch_tmpdir_gets_read_and_write_allows(tmp_path: Path) -> None:
     """
     A ``write_root`` under the system tempdir is treated as the

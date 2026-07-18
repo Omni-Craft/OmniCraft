@@ -252,6 +252,43 @@ def test_build_host_daemon_env_local_forwards_bedrock_skip_auth(
     assert env["CLAUDE_CODE_SKIP_BEDROCK_AUTH"] == "1"
 
 
+def test_build_host_daemon_env_local_forwards_claude_oauth_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """CLAUDE_CODE_OAUTH_TOKEN survives the cli->daemon env strip.
+
+    The token is a ``claude setup-token`` subscription credential. It is in
+    HARNESS_CREDENTIAL_ENV_VARS so ``_build_runner_env`` forwards it host->runner,
+    but the daemon env is built earlier and keeps only allowlisted names. Absent
+    from the allowlist, the canonical token was dropped before the runner could
+    see it, so a subscription-auth claude-sdk run behaved as if it had no
+    credentials.
+    """
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "test-oauth-token")
+
+    env = _build_host_daemon_env(server_url=None)
+
+    assert env["CLAUDE_CODE_OAUTH_TOKEN"] == "test-oauth-token"
+
+
+def test_build_host_daemon_env_remote_strips_claude_oauth_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The OAuth token stays local-only and never reaches a remote daemon.
+
+    The allowlist is consulted only in local mode; the remote branch admits
+    just process essentials + Databricks auth, so adding the credential to the
+    local allowlist must not widen the remote daemon's environment.
+    """
+    monkeypatch.setenv("PATH", "/usr/bin")
+    monkeypatch.setenv("CLAUDE_CODE_OAUTH_TOKEN", "test-oauth-token")
+
+    env = _build_host_daemon_env(server_url="https://example.databricksapps.com")
+
+    assert "CLAUDE_CODE_OAUTH_TOKEN" not in env
+
+
 def test_build_host_daemon_env_remote_strips_provider_credentials(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

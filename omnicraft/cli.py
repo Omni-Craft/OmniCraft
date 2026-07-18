@@ -261,6 +261,9 @@ _LOCAL_DAEMON_ENV_ALLOWLIST: frozenset[str] = frozenset(
         "ANTHROPIC_BASE_URL",
         "ANTHROPIC_BEDROCK_BASE_URL",
         "AWS_BEARER_TOKEN_BEDROCK",
+        # claude setup-token subscription credential; same class as
+        # ANTHROPIC_API_KEY — must survive the daemon env strip.
+        "CLAUDE_CODE_OAUTH_TOKEN",
         "CLAUDE_CODE_USE_BEDROCK",
         "CLAUDE_CODE_SKIP_BEDROCK_AUTH",
         "COHERE_API_KEY",

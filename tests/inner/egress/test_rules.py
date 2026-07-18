@@ -78,11 +78,52 @@ def test_parse_rule_valid(
         ("GET", "must be 'METHODS host/path'"),
         ("INVALID api.github.com/**", "Invalid HTTP method"),
         ("GET,INVALID api.github.com/**", "Invalid HTTP method"),
+        # Empty method tokens from a stray/double/leading comma are
+        # rejected rather than silently dropped. Pre-fix these parsed
+        # into a rule with a subset of the written methods and no error.
+        ("GET, api.github.com/**", "Empty HTTP method"),
+        ("GET,,POST api.github.com/**", "Empty HTTP method"),
+        (",GET api.github.com/**", "Empty HTTP method"),
     ],
 )
 def test_parse_rule_invalid(rule_str: str, expected_fragment: str) -> None:
     with pytest.raises(ValueError, match=expected_fragment):
         parse_rule(rule_str)
+
+
+def test_empty_method_token_is_not_silently_dropped() -> None:
+    """
+    A malformed methods list (``"GET,POST,"``) is rejected at parse time,
+    not accepted silently.
+
+    Pre-fix ``parse_rule`` filtered empty tokens with ``if m.strip()``, so
+    ``"GET,POST, host/**"`` loaded as a malformed rule — the trailing
+    comma was swallowed with no error and a method typed empty would
+    simply vanish from the rule. The parser now raises so the typo
+    surfaces at load time instead of silently altering the rule.
+    """
+    with pytest.raises(ValueError, match="Empty HTTP method"):
+        parse_rule("GET,POST, api.github.com/**")
+
+
+def test_valid_multi_method_rule_unaffected() -> None:
+    """
+    A well-formed comma-separated methods list still parses to the full
+    set — the empty-token guard only rejects the malformed case, no
+    regression for legitimate rules.
+    """
+    rule = parse_rule("GET,POST,DELETE api.github.com/**")
+    assert rule.methods == frozenset({"GET", "POST", "DELETE"})
+
+
+def test_lowercase_method_is_normalized() -> None:
+    """
+    Methods are upper-cased at parse time, so a lowercase token still
+    matches the canonical verb.
+    """
+    rule = parse_rule("get api.github.com/**")
+    assert rule.methods == frozenset({"GET"})
+    assert rule.matches("GET", "api.github.com", "/x")
 
 
 # ------------------------------------------------------------------

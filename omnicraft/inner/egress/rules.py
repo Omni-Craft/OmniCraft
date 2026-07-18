@@ -144,9 +144,12 @@ def parse_rule(rule_str: str) -> EgressRule:
 
     methods_str, url_part = parts
 
-    methods = frozenset(m.strip().upper() for m in methods_str.split(",") if m.strip())
-    if not methods:
-        raise ValueError(f"No methods specified in rule: {rule_str!r}")
+    # Reject empty method tokens ("GET,", "GET,,POST") rather than
+    # dropping them: a method typed empty would vanish with no warning.
+    method_parts = [m.strip() for m in methods_str.split(",")]
+    if any(not m for m in method_parts):
+        raise ValueError(f"Empty HTTP method in rule: {rule_str!r}")
+    methods = frozenset(m.upper() for m in method_parts)
     bad = methods - _VALID_METHODS
     if bad:
         raise ValueError(f"Invalid HTTP method(s) {bad} in rule: {rule_str!r}")

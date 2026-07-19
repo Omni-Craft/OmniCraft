@@ -1,7 +1,7 @@
 """
 SDK SSE-parser coverage for the async-dispatch protocol.
 
-Two parser surfaces this file pins:
+Three parser surfaces this file pins:
 
 1. ``response.client_task.cancel`` — the server emits this when an
    in-flight ``kind="client_tool"`` task is cancelled (direct or
@@ -15,6 +15,12 @@ Two parser surfaces this file pins:
    downstream consumers parse it to extract ``task_id``. The
    parser additions for the async-dispatch protocol must not
    regress that path.
+3. ``response.compaction.completed`` / ``response.compaction.failed``
+   — the terminal events for a compaction cycle started by
+   ``response.compaction.in_progress``. The parser must surface
+   both as typed events (:class:`CompactionCompleted` /
+   :class:`CompactionFailed`) or a stream consumer waiting on
+   ``on_compaction_end`` hangs forever.
 
 Historical note: this file used to also pin the SDK's
 ``build_tool_handler`` schema-injection behavior for
@@ -29,7 +35,13 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 
 import pytest
-from omnicraft_client._events import ClientTaskCancel, ToolCall, ToolResult
+from omnicraft_client._events import (
+    ClientTaskCancel,
+    CompactionCompleted,
+    CompactionFailed,
+    ToolCall,
+    ToolResult,
+)
 from omnicraft_client._sse import parse_sse_stream
 
 
@@ -133,6 +145,51 @@ async def test_sse_parser_terminates_on_bare_done_sentinel() -> None:
     # delta. A non-empty list means [DONE] wasn't detected without an
     # ``event:`` line (the prior bug).
     assert events == [], f"Bare [DONE] must terminate parsing; got {events!r}"
+
+
+# ── Compaction terminal events ──────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_sse_parser_emits_compaction_completed_with_total_tokens() -> None:
+    """
+    ``response.compaction.completed`` must surface as a typed event
+    with the server's optional ``total_tokens`` payload preserved.
+    Otherwise a stream consumer that started a compaction spinner
+    on ``response.compaction.in_progress`` never receives the
+    terminal success signal and ``on_compaction_end`` never fires.
+    """
+    frame = (
+        b"event: response.compaction.completed\n"
+        b'data: {"type": "response.compaction.completed", "total_tokens": 8421}\n'
+        b"\n"
+    )
+
+    events = []
+    async for event in parse_sse_stream(_bytes(frame)):
+        events.append(event)
+
+    assert len(events) == 1, f"Expected one compaction event; got {events!r}"
+    assert isinstance(events[0], CompactionCompleted)
+    assert events[0].total_tokens == 8421
+
+
+@pytest.mark.asyncio
+async def test_sse_parser_emits_compaction_failed() -> None:
+    """
+    ``response.compaction.failed`` must surface as a typed event so
+    clients can dismiss in-progress compaction state (and fire
+    ``on_compaction_end``) instead of hanging forever, since the
+    conversation history was left unchanged.
+    """
+    frame = b'event: response.compaction.failed\ndata: {"type": "response.compaction.failed"}\n\n'
+
+    events = []
+    async for event in parse_sse_stream(_bytes(frame)):
+        events.append(event)
+
+    assert len(events) == 1, f"Expected one compaction event; got {events!r}"
+    assert isinstance(events[0], CompactionFailed)
 
 
 # ── Sanity: existing event shapes still parse ──────────────

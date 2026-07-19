@@ -21,6 +21,8 @@ import httpx
 from ._errors import ToolCallDenied, raise_for_status, require_json_object, response_body
 from ._events import (
     ClientTaskCancel,
+    CompactionCompleted,
+    CompactionFailed,
     CompactionInProgress,
     ElicitationRequest,
     ErrorEvent,
@@ -43,6 +45,7 @@ from ._events import (
 )
 from ._sse import parse_sse_stream
 from ._tool_handler import (
+    CompactionEndCtx,
     CompactionStartCtx,
     ElicitationRequestCtx,
     FileOutputCtx,
@@ -275,6 +278,31 @@ class ResponsesNamespace:
 
                     elif isinstance(event, CompactionInProgress):
                         await _call_hook(hooks.on_compaction_start, CompactionStartCtx())
+
+                    elif isinstance(event, CompactionCompleted):
+                        item: dict[str, object] = {
+                            "type": "response.compaction.completed",
+                            "status": "completed",
+                            "total_tokens": event.total_tokens,
+                        }
+                        if event.summary is not None:
+                            item["summary"] = event.summary
+                        if event.summary_model is not None:
+                            item["summary_model"] = event.summary_model
+                        if event.compacted_messages is not None:
+                            item["compacted_messages"] = event.compacted_messages
+                        await _call_hook(hooks.on_compaction_end, CompactionEndCtx(item=item))
+
+                    elif isinstance(event, CompactionFailed):
+                        await _call_hook(
+                            hooks.on_compaction_end,
+                            CompactionEndCtx(
+                                item={
+                                    "type": "response.compaction.failed",
+                                    "status": "failed",
+                                },
+                            ),
+                        )
 
                     elif isinstance(event, ToolCall):
                         is_client_side = (

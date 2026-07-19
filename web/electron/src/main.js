@@ -33,7 +33,7 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { execFile } = require("node:child_process");
 const { registerLocalhostCors } = require("./localhost_cors");
-const { normalizeUrl, expandDatabricksWorkspaceUrl } = require("./url");
+const { normalizeUrl, expandDatabricksWorkspaceUrl, hudRouteUrl } = require("./url");
 const { registerWorkspaceChromeHide } = require("./workspace-chrome");
 const { createBrowserViewRegistry } = require("./browserViewRegistry");
 const { createBrowserViewBoundsController } = require("./browserViewBounds");
@@ -58,6 +58,23 @@ const FIND_PAGE_URL = pathToFileURL(FIND_PAGE);
 const FIND_BAR_WIDTH = 320;
 const FIND_BAR_HEIGHT = 44;
 const FIND_BAR_INSET = 16;
+
+/** Absolute path to the floating HUD's preload script. */
+const HUD_PRELOAD = path.join(__dirname, "hud_preload.js");
+
+/**
+ * The two HUD footprints. The main process picks between them (the renderer
+ * only says which one it wants) — collapsed is the counts pill, expanded is
+ * the session list, whose height is capped here and scrolls internally rather
+ * than growing with the feed.
+ */
+const HUD_COLLAPSED_WIDTH = 320;
+const HUD_COLLAPSED_HEIGHT = 44;
+const HUD_EXPANDED_WIDTH = 420;
+const HUD_EXPANDED_MAX_HEIGHT = 460;
+
+/** Gap between the HUD and the top of the display's work area. */
+const HUD_TOP_INSET = 12;
 
 /**
  * Chromium net error for a cancelled/superseded navigation (ERR_ABORTED) —
@@ -1075,6 +1092,10 @@ function createWindow(targetUrl, opts = {}) {
     }
     windows.delete(win);
     updateBadge(); // drop this window's contribution from the app-wide badge
+    // The HUD is independent, so it would otherwise outlive the last shell
+    // window — keeping an invisible app alive and holding back
+    // "window-all-closed".
+    if (windows.size === 0) closeHud();
   });
   attachContextMenu(win);
   cascadeIfCovering(win);
@@ -1294,6 +1315,164 @@ function isFindBarSender(event) {
     return false;
   }
   return url.protocol === "file:" && url.pathname === FIND_PAGE_URL.pathname;
+}
+
+// ---------------------------------------------------------------------------
+// Floating HUD. A frameless, transparent, always-on-top strip pinned to the top
+// of the primary display that answers "what is running, and what needs me"
+// without bringing the app forward.
+//
+// It borrows the find bar's shape — bundled preload, main-process-verified IPC,
+// show on ready-to-show — but is deliberately NOT a child window. A child is
+// clipped to its parent's lifetime and can only float above that parent; the
+// HUD has to outlive any single shell window and sit above OTHER apps, which
+// only an independent always-on-top window does.
+//
+// Its content is the server's own `/hud` route: same origin and same bundle as
+// the main window, so the existing HttpOnly session cookie authenticates it and
+// no token ever crosses IPC or a query string.
+// ---------------------------------------------------------------------------
+
+/**
+ * The open HUD, or null when none. A singleton rather than the find bar's
+ * per-window Map: the feed already spans every session on the server, so a
+ * second HUD would only render the same rows twice.
+ * @type {BrowserWindow | null}
+ */
+let hudWindow = null;
+
+/** Whether the open HUD shows the expanded list rather than the counts pill. */
+let hudExpanded = false;
+
+/**
+ * Where the HUD sits: horizontally centered on the primary display's work
+ * area, just below its top edge. Recomputed on every display change and on
+ * every expand/collapse, so the pill and the list stay centered on the same
+ * axis.
+ *
+ * @returns {Electron.Rectangle}
+ */
+function hudBounds() {
+  const area = screen.getPrimaryDisplay().workArea;
+  const width = hudExpanded ? HUD_EXPANDED_WIDTH : HUD_COLLAPSED_WIDTH;
+  // Never taller than the work area allows — on a short display the list
+  // scrolls inside the window instead of running off the bottom.
+  const height = hudExpanded
+    ? Math.max(
+        HUD_COLLAPSED_HEIGHT,
+        Math.min(HUD_EXPANDED_MAX_HEIGHT, area.height - HUD_TOP_INSET * 2),
+      )
+    : HUD_COLLAPSED_HEIGHT;
+  return {
+    x: Math.round(area.x + (area.width - width) / 2),
+    y: area.y + HUD_TOP_INSET,
+    width,
+    height,
+  };
+}
+
+/** Re-apply `hudBounds()` to the open HUD. No-op when none is open. */
+function positionHud() {
+  if (!hudWindow || hudWindow.isDestroyed()) return;
+  hudWindow.setBounds(hudBounds());
+}
+
+/**
+ * The server the HUD should point at: the active shell window's connection
+ * (so a window on a mounted deploy keeps its mount prefix), falling back to
+ * the saved URL when no window is connected yet.
+ *
+ * @returns {string | null}
+ */
+function hudServerUrl() {
+  const active = activeWindow();
+  const fromWindow = active ? windows.get(active)?.serverUrl : null;
+  return fromWindow || loadSettings().server_url || null;
+}
+
+/** Open the HUD, or focus the one already open. */
+function openHud() {
+  if (hudWindow && !hudWindow.isDestroyed()) {
+    hudWindow.show();
+    return;
+  }
+  const serverUrl = hudServerUrl();
+  let target;
+  try {
+    target = hudRouteUrl(serverUrl ?? "");
+  } catch {
+    // No server connected (or a corrupt saved URL): there is no feed to show.
+    console.warn("[omnicraft] HUD needs a connected server; none resolved");
+    return;
+  }
+
+  const hud = new BrowserWindow({
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    resizable: false,
+    // The main process owns the geometry (see hudBounds), so the window is
+    // not user-movable — a dragged HUD would snap back on the next display
+    // change anyway.
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    show: false,
+    webPreferences: {
+      preload: HUD_PRELOAD,
+      contextIsolation: true,
+      nodeIntegration: false,
+    },
+  });
+  hudWindow = hud;
+  hudExpanded = false;
+  if (process.platform === "darwin") {
+    // "floating" keeps it above ordinary windows without the screen-saver
+    // level's aggressiveness, and following the user across Spaces (incl.
+    // fullscreen apps) is the whole point of a monitor you glance at.
+    hud.setAlwaysOnTop(true, "floating");
+    hud.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  }
+  positionHud();
+  void hud.loadURL(target);
+
+  const reposition = () => positionHud();
+  screen.on("display-metrics-changed", reposition);
+  screen.on("display-added", reposition);
+  screen.on("display-removed", reposition);
+
+  hud.once("ready-to-show", () => {
+    positionHud();
+    // Inactive: glancing at the monitor must not steal focus from whatever
+    // the user is typing in.
+    hud.showInactive();
+  });
+  hud.on("closed", () => {
+    screen.removeListener("display-metrics-changed", reposition);
+    screen.removeListener("display-added", reposition);
+    screen.removeListener("display-removed", reposition);
+    hudWindow = null;
+    hudExpanded = false;
+  });
+}
+
+/** Close the HUD if one is open. */
+function closeHud() {
+  if (hudWindow && !hudWindow.isDestroyed()) hudWindow.close();
+}
+
+/**
+ * Menu / programmatic entry point: open the HUD, or close the open one. Until
+ * the Settings toggle lands this is the only way in.
+ */
+function toggleHud() {
+  if (hudWindow && !hudWindow.isDestroyed()) {
+    closeHud();
+    return;
+  }
+  openHud();
 }
 
 /**
@@ -1747,6 +1926,13 @@ function buildMenu() {
       { role: "zoomOut" },
       { type: "separator" },
       { role: "togglefullscreen" },
+      { type: "separator" },
+      {
+        id: "hud",
+        label: "Floating HUD",
+        accelerator: "CmdOrCtrl+Shift+H",
+        click: () => toggleHud(),
+      },
     ],
   });
   template.push({ role: "windowMenu" });
@@ -2042,6 +2228,20 @@ function registerIpc() {
     }
     const bar = BrowserWindow.fromWebContents(event.sender);
     if (bar && !bar.isDestroyed()) bar.close();
+  });
+
+  // HUD → collapse / expand. The message carries INTENT only; the bounds for
+  // each state are chosen here (hudBounds), never sent by the renderer — the
+  // HUD's page is server-controlled, and an always-on-top window that could be
+  // resized from the page could be grown to cover the screen. The sender must
+  // be the live HUD's own webContents, so the bridge is inert anywhere else.
+  ipcMain.on("omnicraft:hud-set-expanded", (event, expanded) => {
+    if (!hudWindow || hudWindow.isDestroyed() || event.sender !== hudWindow.webContents) {
+      console.warn("[omnicraft] hud-set-expanded from untrusted sender dropped");
+      return;
+    }
+    hudExpanded = expanded === true;
+    positionHud();
   });
 
   // Dock/taskbar badge. Each window's SPA reports ITS unread count; the

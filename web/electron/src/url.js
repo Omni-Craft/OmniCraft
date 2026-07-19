@@ -185,11 +185,34 @@
     return `${url.origin}${WORKSPACE_UI_PATH}`;
   }
 
+  /**
+   * The floating HUD's route on the server a window is connected to.
+   *
+   * The HUD renders the SAME SPA the shell already loads, so its URL has to
+   * keep whatever mount prefix the connection carries (e.g. a Databricks
+   * ``…/ml/omnicrafts`` mount): the route table declares `/hud` UNDER that
+   * prefix, and dropping it would land on the workspace's own 404. Query and
+   * hash are stripped — the route is reached by path, never hash routing, and
+   * nothing about auth may ride in the URL (the HUD is same-origin, so the
+   * server's HttpOnly session cookie is already sent).
+   *
+   * @param {string} serverUrl The full server URL the window connected with.
+   * @returns {string} Absolute http(s) URL of the HUD route.
+   */
+  function hudRouteUrl(serverUrl) {
+    const url = new URL(normalizeUrl(serverUrl));
+    url.pathname = `${url.pathname.replace(/\/+$/, "")}/hud`;
+    url.search = "";
+    url.hash = "";
+    return url.toString();
+  }
+
   return {
     LOCAL_HOSTS,
     defaultSchemeFor,
     normalizeUrl,
     isPlainHttpRemote,
+    hudRouteUrl,
     WORKSPACE_UI_PATH,
     WORKSPACE_PROBE_TIMEOUT_MS,
     expandDatabricksWorkspaceUrl,

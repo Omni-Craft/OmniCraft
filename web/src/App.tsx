@@ -29,6 +29,7 @@ const GithubPage = lazy(() =>
 const SettingsPage = lazy(() =>
   import("@/pages/SettingsPage").then((m) => ({ default: m.SettingsPage })),
 );
+const HudPage = lazy(() => import("@/pages/HudPage").then((m) => ({ default: m.HudPage })));
 const CraftworkPage = lazy(() =>
   import("@/pages/CraftworkPage").then((m) => ({ default: m.CraftworkPage })),
 );
@@ -122,6 +123,11 @@ function App({ basename }: AppProps = {}) {
           </>
         )}
         <Route path={`${prefix}/approve/:sessionId/:elicitationId`} element={<ApprovePage />} />
+        {/* The floating HUD's own window (Electron loads this route directly).
+            Outside the shell for the same reason /login is: a 320px
+            always-on-top strip has no use for the sidebar, the conversation
+            list, or the runner-health hooks. */}
+        <Route path={`${prefix}/hud`} element={<HudPage />} />
         <Route element={<AppShell />}>
           <Route path={prefix || "/"} element={<ChatPage />} />
           <Route path={`${prefix}/c/:conversationId`} element={<ChatPage />} />

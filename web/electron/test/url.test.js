@@ -11,8 +11,37 @@ const {
   normalizeUrl,
   isPlainHttpRemote,
   expandDatabricksWorkspaceUrl,
+  hudRouteUrl,
   WORKSPACE_UI_PATH,
 } = require("../src/url");
+
+describe("hudRouteUrl", () => {
+  it("appends /hud to a root server URL", () => {
+    assert.equal(hudRouteUrl("http://localhost:6767"), "http://localhost:6767/hud");
+    assert.equal(hudRouteUrl("http://localhost:6767/"), "http://localhost:6767/hud");
+  });
+
+  it("preserves a mount prefix", () => {
+    // The route table declares /hud UNDER the mount; dropping the prefix
+    // would land on the workspace's own 404 instead of the SPA.
+    assert.equal(
+      hudRouteUrl("https://dbc-x.cloud.databricks.com/ml/omnicrafts/"),
+      "https://dbc-x.cloud.databricks.com/ml/omnicrafts/hud",
+    );
+  });
+
+  it("drops query and hash so nothing about auth can ride in the URL", () => {
+    assert.equal(
+      hudRouteUrl("http://localhost:6767/?token=secret#/x"),
+      "http://localhost:6767/hud",
+    );
+  });
+
+  it("throws on an unusable server URL rather than navigating to garbage", () => {
+    assert.throws(() => hudRouteUrl(""));
+    assert.throws(() => hudRouteUrl("ftp://example.com"));
+  });
+});
 
 describe("defaultSchemeFor", () => {
   it("defaults remote hosts to https", () => {

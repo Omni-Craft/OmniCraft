@@ -51,6 +51,17 @@ _MAX_PR_COMMITS = 20
 _MAX_PR_LOOKUP_PAGES = 5
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
+# GitHub's documented check-run vocabulary. A value outside these sets is
+# a shape this code cannot read, so it reports "unknown" rather than
+# guessing which side of the fence it falls on.
+_CHECK_RUN_STATUSES = frozenset(
+    {"queued", "in_progress", "completed", "waiting", "requested", "pending"}
+)
+_FAILING_CONCLUSIONS = frozenset(
+    {"failure", "timed_out", "cancelled", "action_required", "startup_failure", "stale"}
+)
+_PASSING_CONCLUSIONS = frozenset({"success", "neutral", "skipped"})
+
 # Sentinel so the ``gh``-derived token is resolved at most once per process
 # (env is re-read every call so an operator can set it without a restart).
 _UNSET: Any = object()
@@ -223,10 +234,13 @@ async def _commit_ci_status(
     GitHub Actions reports.
 
     "No CI at all" and "we could not ask" are different answers and are
-    kept apart: ``"none"`` means GitHub was asked and reported no checks,
-    ``"unknown"`` means the question went unanswered — the request failed
-    or came back in a shape we do not recognize. Neither ever means
-    "failing".
+    kept apart: ``"none"`` means GitHub was asked and gave a well-formed
+    answer saying there are no checks, ``"unknown"`` means the question
+    went unanswered — the request failed, or the body was not one this
+    code can read. Anything unrecognized — a missing count, a scalar
+    where a check-run belongs, a status or conclusion outside GitHub's
+    documented vocabulary — is ``"unknown"``; it is never rounded to
+    ``"none"``, ``"pending"`` or ``"success"``.
 
     :param repo: ``owner/name`` slug.
     :param sha: Head commit SHA of the pull request.
@@ -240,7 +254,12 @@ async def _commit_ci_status(
         return "unknown"
     if not isinstance(combined, dict):
         return "unknown"
-    if combined.get("total_count"):
+    total = combined.get("total_count")
+    # A body with no readable count says nothing — not even "zero", which
+    # is what licenses the fall-through to check-runs below.
+    if not isinstance(total, int) or isinstance(total, bool):
+        return "unknown"
+    if total:
         state = combined.get("state")
         if state in {"error", "failure"}:
             return "failure"
@@ -250,18 +269,40 @@ async def _commit_ci_status(
         checks = await _github_get(f"/repos/{repo}/commits/{sha}/check-runs", client=client)
     except OmniCraftError:
         return "unknown"
-    raw_runs = checks.get("check_runs") if isinstance(checks, dict) else None
-    if not isinstance(raw_runs, list):
+    runs = checks.get("check_runs") if isinstance(checks, dict) else None
+    if not isinstance(runs, list) or not all(isinstance(r, dict) for r in runs):
         return "unknown"
-    runs = [r for r in raw_runs if isinstance(r, dict)]
     if not runs:
         return "none"
-    if any(r.get("status") != "completed" for r in runs):
+
+    statuses = {r.get("status") for r in runs}
+    if not statuses <= _CHECK_RUN_STATUSES:
+        return "unknown"
+    if statuses != {"completed"}:
         return "pending"
     conclusions = {r.get("conclusion") for r in runs}
-    if conclusions & {"failure", "timed_out", "cancelled", "action_required"}:
+    # A failed run is a fact even if a sibling is unreadable; claiming
+    # success is not, so that needs every conclusion recognized.
+    if conclusions & _FAILING_CONCLUSIONS:
         return "failure"
+    if not conclusions <= _PASSING_CONCLUSIONS:
+        return "unknown"
     return "success"
+
+
+def _is_readable_pr_row(item: Any) -> bool:
+    """Whether a raw pulls row carries the fields a card is built from.
+
+    A row missing them cannot be matched to a branch, so dropping it
+    silently would shrink the list without the caller ever knowing.
+
+    :param item: One entry from the pulls endpoint.
+    :returns: ``True`` when the row can be read.
+    """
+    if not isinstance(item, dict) or not isinstance(item.get("number"), int):
+        return False
+    head = item.get("head")
+    return isinstance(head, dict) and isinstance(head.get("ref"), str)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -271,10 +312,12 @@ class BranchPullRequests:
     :param cards: Card dicts with ``number``, ``title``, ``state``,
         ``ci_status``, and ``url``.
     :param status: ``"ok"`` when the list is everything GitHub has,
-        ``"partial"`` when a full page came back and more may exist, and
-        ``"unavailable"`` when the lookup never produced an answer — an
-        unconfigured, unreachable or refusing GitHub. An empty
-        ``"unavailable"`` list means "cannot tell", never "no PRs".
+        ``"partial"`` when PRs are known to be missing from it — more
+        than one page exists, or a row came back unreadable — and
+        ``"unavailable"`` when the lookup never produced an answer at
+        all: an unconfigured, unreachable or refusing GitHub, or a body
+        nothing could be read from. An empty ``"unavailable"`` list means
+        "cannot tell", never "no PRs".
     """
 
     cards: list[dict[str, Any]]
@@ -313,21 +356,32 @@ async def github_pull_requests_for_branch(repo: str, branch: str) -> BranchPullR
     owner = repo.split("/")[0]
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
+            # Ask for one row past the page so a full page can be told
+            # apart from a truncated one: the extra row is only a "there
+            # is more" signal and never reaches the caller. Exactly a
+            # page's worth of PRs would otherwise always read as
+            # truncated, and the status bar would distrust a list that
+            # was in fact complete.
             raw = await _github_get(
                 f"/repos/{repo}/pulls",
-                {"state": "all", "head": f"{owner}:{branch}", "per_page": _PAGE_SIZE},
+                {"state": "all", "head": f"{owner}:{branch}", "per_page": _PAGE_SIZE + 1},
                 client=client,
             )
-            if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
+            if not isinstance(raw, list):
                 return _PRS_UNAVAILABLE
-            # A full page means GitHub may be holding more on page two,
-            # which this single-request lookup never fetches.
-            status = "partial" if len(raw) >= _PAGE_SIZE else "ok"
+            truncated = len(raw) > _PAGE_SIZE
+            page = raw[:_PAGE_SIZE]
+            readable = [item for item in page if _is_readable_pr_row(item)]
+            # Nothing legible in a non-empty body: the answer is no
+            # answer, not "this branch has no pull request".
+            if page and not readable:
+                return _PRS_UNAVAILABLE
+            # A row we could not read may have been a PR for this branch,
+            # so the list is knowingly short.
+            status = "partial" if truncated or len(readable) < len(page) else "ok"
             matches = [
                 card
-                for card, item in (
-                    (_normalize(item), item) for item in raw if isinstance(item, dict)
-                )
+                for card, item in ((_normalize(item), item) for item in readable)
                 # GitHub's ``head`` filter is owner-scoped, so a fork's
                 # same-named branch comes back too; keep only PRs whose
                 # head repo is this one (``None`` = head repo deleted,

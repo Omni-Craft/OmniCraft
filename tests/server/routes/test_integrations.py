@@ -9,6 +9,7 @@ import pytest
 from omnicraft.errors import OmniCraftError
 from omnicraft.server.routes import integrations
 from omnicraft.server.routes.integrations import (
+    _commit_ci_status,
     _normalize,
     _validate_repo,
     github_pull_requests_for_branch,
@@ -212,22 +213,25 @@ async def test_ci_state_falls_back_to_check_runs(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("raw", "expected_status"),
+    "raw",
     [
-        pytest.param({"message": "Not Found"}, "unavailable", id="object_instead_of_list"),
-        pytest.param(None, "unavailable", id="null_body"),
-        pytest.param(["nonsense"], "unavailable", id="list_of_scalars"),
-        # A well-formed list whose one row cannot be matched to the
-        # branch is a real (if useless) answer, not a broken lookup.
-        pytest.param([{"number": 1, "head": "not-an-object"}], "ok", id="head_is_a_string"),
+        pytest.param({"message": "Not Found"}, id="object_instead_of_list"),
+        pytest.param(None, id="null_body"),
+        pytest.param(["nonsense"], id="list_of_scalars"),
+        pytest.param([{"number": 1, "head": "not-an-object"}], id="head_is_a_string"),
+        pytest.param([{"head": {"ref": "feature"}}], id="number_is_missing"),
     ],
 )
 async def test_branch_pull_requests_degrades_on_unexpected_shapes(
     monkeypatch: pytest.MonkeyPatch,
     raw: object,
-    expected_status: str,
 ) -> None:
-    """An unexpected GitHub body yields an unavailable list, not an exception."""
+    """An unreadable GitHub body is "cannot tell", not "this branch has no PR".
+
+    Every row here is unreadable, so there is nothing to build a list
+    from — reporting an empty ``"ok"`` list would let a client conclude
+    the branch has no pull request and drop one it really has.
+    """
 
     async def _token() -> str:
         return "t"
@@ -240,7 +244,41 @@ async def test_branch_pull_requests_degrades_on_unexpected_shapes(
     monkeypatch.setattr(integrations, "_github_get", _get)
 
     found = await github_pull_requests_for_branch("o/r", "feature")
-    assert (found.cards, found.status) == ([], expected_status)
+    assert (found.cards, found.status) == ([], "unavailable")
+
+
+@pytest.mark.asyncio
+async def test_an_unreadable_row_among_good_ones_degrades_the_list(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A dropped row is confessed: the readable PRs ship, marked incomplete."""
+
+    async def _token() -> str:
+        return "t"
+
+    async def _get(path: str, params: dict[str, object] | None = None, **_kw: object) -> object:
+        del params
+        if path.endswith("/pulls"):
+            return [
+                {
+                    "number": 7,
+                    "title": "Readable",
+                    "html_url": "https://github.com/o/r/pull/7",
+                    "state": "open",
+                    "head": {"ref": "feature", "sha": "abc", "repo": {"full_name": "o/r"}},
+                },
+                # Could be a PR for this very branch — no way to know.
+                {"number": 8, "head": "not-an-object"},
+            ]
+        return {"total_count": 1, "state": "success"}
+
+    monkeypatch.setattr(integrations, "_github_token", _token)
+    monkeypatch.setattr(integrations, "_github_get", _get)
+
+    found = await github_pull_requests_for_branch("o/r", "feature")
+    assert [c["number"] for c in found.cards] == [7]
+    # Never "ok": one row was lost, so the list is known to be short.
+    assert found.status == "partial"
 
 
 @pytest.mark.asyncio
@@ -350,6 +388,94 @@ async def test_ci_status_is_none_when_the_commit_has_no_checks(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("combined", "checks", "expected"),
+    [
+        # A combined status with no readable count says nothing at all —
+        # not even the zero that would license asking check-runs.
+        pytest.param({}, None, "unknown", id="combined_without_a_count"),
+        pytest.param({"total_count": "two"}, None, "unknown", id="combined_count_is_a_string"),
+        pytest.param(
+            {"total_count": 3, "state": "reticulating"},
+            None,
+            "unknown",
+            id="combined_state_is_unknown",
+        ),
+        pytest.param({"total_count": 0}, {}, "unknown", id="checks_without_the_list"),
+        pytest.param(
+            {"total_count": 0},
+            {"check_runs": ["nonsense"]},
+            "unknown",
+            id="check_run_is_a_scalar",
+        ),
+        pytest.param(
+            {"total_count": 0},
+            {"check_runs": [{"status": "reticulating"}]},
+            "unknown",
+            id="check_run_status_is_unknown",
+        ),
+        # Completed with a conclusion we cannot read: it is not a pass.
+        pytest.param(
+            {"total_count": 0},
+            {"check_runs": [{"status": "completed", "conclusion": None}]},
+            "unknown",
+            id="conclusion_is_missing",
+        ),
+        pytest.param(
+            {"total_count": 0},
+            {"check_runs": [{"status": "completed", "conclusion": "mystery"}]},
+            "unknown",
+            id="conclusion_is_unknown",
+        ),
+        # Recognized non-failing conclusions still add up to a pass.
+        pytest.param(
+            {"total_count": 0},
+            {
+                "check_runs": [
+                    {"status": "completed", "conclusion": "neutral"},
+                    {"status": "completed", "conclusion": "skipped"},
+                ]
+            },
+            "success",
+            id="neutral_and_skipped_are_a_pass",
+        ),
+        # A run that definitely failed is a fact, even next to a sibling
+        # we cannot read.
+        pytest.param(
+            {"total_count": 0},
+            {
+                "check_runs": [
+                    {"status": "completed", "conclusion": "failure"},
+                    {"status": "completed", "conclusion": "mystery"},
+                ]
+            },
+            "failure",
+            id="a_real_failure_outranks_an_unreadable_sibling",
+        ),
+    ],
+)
+async def test_malformed_ci_bodies_are_unknown_not_a_verdict(
+    monkeypatch: pytest.MonkeyPatch,
+    combined: object,
+    checks: object,
+    expected: str,
+) -> None:
+    """A CI body this code cannot read never becomes "no CI" or a pass."""
+
+    async def _get(path: str, params: dict[str, object] | None = None, **_kw: object) -> object:
+        del params
+        if path.endswith("/status"):
+            return combined
+        if checks is None:
+            raise AssertionError("check-runs must not be asked without a readable count")
+        return checks
+
+    monkeypatch.setattr(integrations, "_github_get", _get)
+
+    assert await _commit_ci_status("o/r", "abc") == expected
+
+
+@pytest.mark.asyncio
 async def test_ci_status_is_unknown_when_the_checks_call_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -382,18 +508,33 @@ async def test_ci_status_is_unknown_when_the_checks_call_fails(
 
 
 @pytest.mark.asyncio
-async def test_branch_pull_requests_reports_a_full_page_as_partial(
+@pytest.mark.parametrize(
+    ("available", "expected_cards", "expected_status"),
+    [
+        # Exactly a page's worth and nothing beyond it: complete, and the
+        # status bar has no reason to distrust the list.
+        pytest.param(30, 30, "ok", id="exactly_one_page"),
+        # One PR past the page: the list really is short, and says so.
+        pytest.param(31, 30, "partial", id="more_than_one_page"),
+    ],
+)
+async def test_a_full_page_is_told_apart_from_a_truncated_one(
     monkeypatch: pytest.MonkeyPatch,
+    available: int,
+    expected_cards: int,
+    expected_status: str,
 ) -> None:
-    """A page-sized answer may be hiding more PRs, and says so."""
+    """The over-fetched row decides truncation, so 30 PRs are not called partial."""
 
     async def _token() -> str:
         return "t"
 
+    asked: list[object] = []
+
     async def _get(path: str, params: dict[str, object] | None = None, **_kw: object) -> object:
-        del params
         if path.endswith("/pulls"):
-            return [
+            asked.append((params or {}).get("per_page"))
+            rows = [
                 {
                     "number": n,
                     "title": f"PR {n}",
@@ -401,16 +542,20 @@ async def test_branch_pull_requests_reports_a_full_page_as_partial(
                     "state": "open",
                     "head": {"ref": "feature", "sha": f"sha{n}", "repo": {"full_name": "o/r"}},
                 }
-                for n in range(integrations._PAGE_SIZE)
+                for n in range(available)
             ]
+            return rows[: int((params or {}).get("per_page") or available)]
         return {"total_count": 1, "state": "success"}
 
     monkeypatch.setattr(integrations, "_github_token", _token)
     monkeypatch.setattr(integrations, "_github_get", _get)
 
     found = await github_pull_requests_for_branch("o/r", "feature")
-    assert len(found.cards) == integrations._PAGE_SIZE
-    assert found.status == "partial"
+    # One row over the page is fetched purely as a truncation signal and
+    # is never handed to the caller.
+    assert asked == [integrations._PAGE_SIZE + 1]
+    assert len(found.cards) == expected_cards
+    assert found.status == expected_status
 
 
 @pytest.mark.asyncio

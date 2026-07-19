@@ -178,6 +178,13 @@ export function HudPanel({
   // shell hides on IDLE, and neither of those is idle.
   const counts = feed?.counts ?? null;
   const feedReadable = !unreadable && !loading && counts !== null;
+  // Attention's IDENTITY, so the shell can tell a session that just started
+  // waiting from one the user has already seen and closed the panel on. Named
+  // the same way the tallies count it — a parked prompt — so the shell can
+  // check the list accounts for every awaiting session.
+  const awaitingIds = (feed?.sessions ?? [])
+    .filter((session) => (session.pendingElicitationsCount ?? 0) > 0)
+    .map((session) => session.sessionId);
   const report: HudFeedReport = {
     readable: feedReadable,
     exact: feedReadable && !feed?.countsPartial,
@@ -185,6 +192,7 @@ export function HudPanel({
     active: counts?.active ?? 0,
     awaiting: counts?.awaiting ?? 0,
     unresolved: (counts?.unknown ?? 0) + (counts?.omitted ?? 0),
+    awaitingIds,
   };
   // Serialized so an unchanged snapshot doesn't re-fire on every render tick
   // (the staleness clock re-renders once a second).

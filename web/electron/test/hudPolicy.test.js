@@ -21,8 +21,14 @@ function report(overrides = {}) {
     active: 1,
     awaiting: 0,
     unresolved: 0,
+    awaitingIds: [],
     ...overrides,
   };
+}
+
+/** A report naming the sessions blocked on a human. */
+function waitingOn(...ids) {
+  return report({ active: ids.length, awaiting: ids.length, awaitingIds: ids });
 }
 
 /**
@@ -139,6 +145,83 @@ describe("hudPolicy — the shell only undoes what the shell did", () => {
   });
 });
 
+describe("hudPolicy — attention the user has already seen", () => {
+  it("does not re-open the panel while the SAME permission stays pending", () => {
+    // A pending approval sits there across polls. Collapsing the panel says "I
+    // have seen this"; re-expanding it three seconds later takes that back.
+    const { state, policy } = harness();
+    state.arrive();
+
+    policy.setFeedReport(waitingOn("s1"));
+    assert.equal(state.expanded, true, "new attention expands");
+
+    policy.setUserExpanded(false);
+    assert.equal(state.expanded, false);
+
+    policy.setFeedReport(waitingOn("s1"));
+    policy.setFeedReport(waitingOn("s1"));
+    assert.equal(state.expanded, false, "the shell re-opened what the user closed");
+    assert.equal(state.visible, true, "still on screen — something IS waiting");
+  });
+
+  it("re-opens for a session that starts waiting after the user collapsed", () => {
+    const { state, policy } = harness();
+    state.arrive();
+
+    policy.setFeedReport(waitingOn("s1"));
+    policy.setUserExpanded(false);
+    policy.setFeedReport(waitingOn("s1"));
+    assert.equal(state.expanded, false);
+
+    policy.setFeedReport(waitingOn("s1", "s2"));
+    assert.equal(state.expanded, true, "a session the user never saw waiting must surface");
+  });
+
+  it("re-opens when the same session blocks again after clearing", () => {
+    const { state, policy } = harness();
+    state.arrive();
+
+    policy.setFeedReport(waitingOn("s1"));
+    policy.setUserExpanded(false);
+    policy.setFeedReport(report({ awaiting: 0 })); // answered — proven gone
+    policy.setFeedReport(waitingOn("s1"));
+    assert.equal(state.expanded, true);
+  });
+
+  it("does not re-open on attention it cannot name", () => {
+    // A floor, a stale snapshot or a list that accounts for nothing cannot tell
+    // a new prompt from the one the user dismissed. Uncertainty keeps the HUD
+    // visible; it does not re-open it.
+    for (const overrides of [
+      { exact: false },
+      { stale: true },
+      { awaitingIds: undefined },
+      { awaitingIds: [] },
+    ]) {
+      const { state, policy } = harness();
+      state.arrive();
+      policy.setFeedReport(waitingOn("s1"));
+      policy.setUserExpanded(false);
+
+      policy.setFeedReport(report({ awaiting: 1, awaitingIds: ["s1"], ...overrides }));
+      assert.equal(
+        state.expanded,
+        false,
+        `${JSON.stringify(overrides)} re-opened a panel the user closed`,
+      );
+      assert.equal(state.visible, true);
+    }
+  });
+
+  it("expands on attention the user never dismissed, named or not", () => {
+    const { state, policy } = harness();
+    state.arrive();
+
+    policy.setFeedReport(report({ awaiting: 1, exact: false }));
+    assert.equal(state.expanded, true, "an uncertain feed still surfaces attention");
+  });
+});
+
 describe("hudPolicy — showing and hiding", () => {
   it("never shows a window that has not painted (no startup flicker)", () => {
     const { state, policy } = harness({ ready: false });
@@ -217,7 +300,47 @@ describe("hudPolicy — the menu toggle", () => {
 
     policy.toggle();
     assert.equal(state.settings.enabled, true, "asking to see it must not persist off");
+    assert.equal(state.settings.mode, "always", "the mode that was hiding it must give way");
     assert.equal(state.visible, true);
+  });
+
+  it("keeps the HUD on screen after the next feed report", () => {
+    // The regression this replaces: the reveal was an in-memory flag the first
+    // report consumed, so the HUD appeared and vanished a poll later.
+    const { state, policy } = harness({
+      settings: { readable: true, enabled: true, mode: "attention-only" },
+    });
+    state.arrive();
+    policy.setFeedReport(report({ active: 2, awaiting: 0 }));
+    assert.equal(state.visible, false);
+
+    policy.toggle();
+    assert.equal(state.visible, true);
+
+    policy.setFeedReport(report({ active: 2, awaiting: 0 }));
+    assert.equal(state.visible, true, "the HUD the user asked for vanished on the next poll");
+    policy.setFeedReport(report({ active: 0, awaiting: 0 }));
+    assert.equal(state.visible, true, "…and on an idle one");
+    // And the choice is one the user can see and undo in Settings.
+    assert.equal(state.settings.mode, "always");
+  });
+
+  it("turns a HUD that was OFF back on, and it STAYS on under a hiding mode", () => {
+    // Turning it on while the stored mode hides idle machines used to put the
+    // window up and let the very next report take it away again: the user asked
+    // to see the HUD and watched it flash. The mode gives way instead — it is
+    // still there in Settings for them to put back.
+    const { state, policy } = harness({
+      settings: { readable: true, enabled: false, mode: "hide-when-idle" },
+    });
+
+    policy.toggle();
+    assert.equal(state.settings.enabled, true);
+    assert.equal(state.visible, true);
+
+    policy.setFeedReport(report({ active: 0, awaiting: 0 }));
+    assert.equal(state.visible, true, "the HUD the user asked for vanished on the next poll");
+    assert.equal(state.settings.mode, "always");
   });
 
   it("turns the HUD OFF when it is on screen, and persists that", () => {
@@ -228,20 +351,6 @@ describe("hudPolicy — the menu toggle", () => {
     policy.toggle();
     assert.equal(state.settings.enabled, false);
     assert.ok(state.calls.includes("close"));
-  });
-
-  it("hands control back to the mode once the feed shows the HUD by itself", () => {
-    const { state, policy } = harness({
-      settings: { readable: true, enabled: true, mode: "attention-only" },
-    });
-    state.arrive();
-    policy.setFeedReport(report({ awaiting: 0 }));
-    policy.toggle(); // manual reveal
-    assert.equal(state.visible, true);
-
-    policy.setFeedReport(report({ awaiting: 1 })); // the feed shows it on its own
-    policy.setFeedReport(report({ awaiting: 0 })); // …and it settles again
-    assert.equal(state.visible, false, "the reveal outlived the mode");
   });
 
   it("does not act on a toggle it could not persist", () => {
@@ -325,7 +434,31 @@ describe("hudPolicy — the window going away", () => {
       expanded: false,
       autoExpanded: false,
       report: null,
-      revealed: false,
+      acknowledged: null,
     });
+  });
+});
+
+describe("hudPolicy — the toggle's choice is the settings, and nothing else", () => {
+  it("lets Settings undo what the toggle did", () => {
+    // The behaviour that says the toggle left NO state of its own behind: what
+    // put the HUD on screen is the stored mode, so putting the mode back takes
+    // it off again. A HUD held up by an in-memory reveal would sit there
+    // through a mode the user just restored, with nothing to switch off.
+    const { state, policy } = harness({
+      settings: { readable: true, enabled: true, mode: "attention-only" },
+    });
+    state.arrive();
+    policy.setFeedReport(report({ active: 2, awaiting: 0 }));
+    assert.equal(state.visible, false);
+
+    policy.toggle();
+    assert.equal(state.visible, true);
+
+    // Settings → Desktop → HUD, back to "only on attention" (the SPA writes the
+    // setting and re-runs the policy — see hudIpc).
+    state.settings.mode = "attention-only";
+    policy.applyPolicy();
+    assert.equal(state.visible, false, "the HUD outlived the setting that was showing it");
   });
 });

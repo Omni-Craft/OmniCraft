@@ -17,6 +17,9 @@ const {
   readHudSettings,
   mergeHudSettings,
   summarizeFeedReport,
+  awaitingSignature,
+  acknowledgeAttention,
+  carryAcknowledged,
   decideHud,
 } = require("../src/hudVisibility");
 
@@ -29,8 +32,19 @@ function report(overrides = {}) {
     active: 0,
     awaiting: 0,
     unresolved: 0,
+    awaitingIds: [],
     ...overrides,
   };
+}
+
+/** A report with `n` named sessions blocked on a human. */
+function waitingOn(...ids) {
+  return report({ awaiting: ids.length, awaitingIds: ids });
+}
+
+/** What collapsing the panel on those sessions records. */
+function dismissalOf(...ids) {
+  return acknowledgeAttention(waitingOn(...ids));
 }
 
 describe("readHudSettings", () => {
@@ -270,6 +284,142 @@ describe("decideHud", () => {
       autoExpanded: false,
     });
     assert.equal(decision.expanded, null, "no auto-expand to undo → no opinion");
+  });
+
+  it("does not re-expand for attention the user already dismissed", () => {
+    // The persistent-permission case: one prompt sits there for minutes, and
+    // every poll used to re-open the panel the user had just closed.
+    const decision = decideHud({
+      enabled: true,
+      mode: "always",
+      report: waitingOn("s1"),
+      expanded: false,
+      acknowledged: dismissalOf("s1"),
+    });
+    assert.deepEqual(decision, { visible: true, expanded: null, autoExpanded: false });
+  });
+
+  it("expands for a session the user has NOT seen waiting yet", () => {
+    const decision = decideHud({
+      enabled: true,
+      mode: "always",
+      report: waitingOn("s1", "s2"),
+      expanded: false,
+      acknowledged: dismissalOf("s1"),
+    });
+    assert.deepEqual(decision, { visible: true, expanded: true, autoExpanded: true });
+  });
+
+  it("re-expands when the same session blocks again after really clearing", () => {
+    // "s1" left the waiting list on a report we could READ, so its return is
+    // new attention, not the one already dismissed.
+    const cleared = carryAcknowledged(dismissalOf("s1"), report());
+    assert.deepEqual(cleared, { named: true, ids: [] });
+    assert.equal(
+      decideHud({
+        enabled: true,
+        mode: "always",
+        report: waitingOn("s1"),
+        acknowledged: cleared,
+      }).expanded,
+      true,
+    );
+  });
+
+  it("never re-expands on attention it cannot name", () => {
+    // The mirror of the visibility rule: not-knowing keeps the HUD on screen,
+    // but it may not re-open a panel the user closed — an unreadable list
+    // cannot tell a new prompt from the one already dismissed.
+    for (const overrides of [
+      { exact: false },
+      { stale: true },
+      { readable: false },
+      { unresolved: 1 },
+      { awaitingIds: undefined },
+      { awaitingIds: "s1" },
+      { awaitingIds: [1] },
+      { awaitingIds: ["s1", "s1"] }, // two entries, one identity
+      { awaitingIds: [] }, // names none of the sessions it counts
+      { awaitingIds: ["s1", "s2"] }, // names more than it counts
+    ]) {
+      const decision = decideHud({
+        enabled: true,
+        mode: "always",
+        report: report({ awaiting: 1, awaitingIds: ["s1"], ...overrides }),
+        expanded: false,
+        acknowledged: dismissalOf("s9"),
+      });
+      assert.deepEqual(
+        decision,
+        { visible: true, expanded: null, autoExpanded: false },
+        `${JSON.stringify(overrides)} must stay visible without re-expanding`,
+      );
+    }
+  });
+
+  it("expands on attention while the user has dismissed nothing", () => {
+    // No acknowledgement at all: an unnameable report still auto-expands, which
+    // is the pre-existing behaviour and the reason uncertainty is not enough to
+    // SUPPRESS the first expansion either.
+    assert.equal(
+      decideHud({ enabled: true, mode: "always", report: report({ awaiting: 1 }) }).expanded,
+      true,
+    );
+  });
+
+  it("keeps an unnameable dismissal until the feed can name what is waiting", () => {
+    // The user closed the panel while the feed was stale. Nothing is proven
+    // gone, so the dismissal stands…
+    const dismissed = acknowledgeAttention(report({ awaiting: 1, stale: true }));
+    assert.equal(
+      decideHud({
+        enabled: true,
+        mode: "always",
+        report: report({ awaiting: 1, stale: true }),
+        acknowledged: dismissed,
+      }).expanded,
+      null,
+    );
+    // …and once the feed recovers, it is the list it can now name that was
+    // dismissed — not an all-clear that re-opens the panel.
+    const named = carryAcknowledged(dismissed, waitingOn("s1"));
+    assert.deepEqual(named, { named: true, ids: ["s1"] });
+    assert.equal(
+      decideHud({ enabled: true, mode: "always", report: waitingOn("s1"), acknowledged: named })
+        .expanded,
+      null,
+    );
+  });
+
+  it("cannot be deafened by a session named like an internal marker", () => {
+    // A dismissal the feed could not name is its own STATE, not a reserved id.
+    // Held as a magic string, a session actually called that would read as
+    // "the user dismissed something unnameable" — and the next real prompt
+    // would be swallowed as already-seen.
+    for (const impostor of ["<unnamed attention>", "named", "false", "[object Object]"]) {
+      const dismissed = dismissalOf(impostor);
+      const carried = carryAcknowledged(dismissed, waitingOn(impostor, "s_new"));
+      assert.deepEqual(
+        decideHud({
+          enabled: true,
+          mode: "always",
+          report: waitingOn(impostor, "s_new"),
+          acknowledged: carried,
+        }),
+        { visible: true, expanded: true, autoExpanded: true },
+        `a session called "${impostor}" hid a new prompt`,
+      );
+    }
+  });
+
+  it("names the waiting sessions only from a report that proves the list", () => {
+    assert.deepEqual(awaitingSignature(waitingOn("s1", "s2")), ["s1", "s2"]);
+    assert.deepEqual(awaitingSignature(report()), []);
+    assert.equal(awaitingSignature(null), null);
+    assert.equal(
+      awaitingSignature(report({ awaiting: 1, awaitingIds: ["s1"], exact: false })),
+      null,
+    );
   });
 
   it("does not collapse an auto-expansion while attention is merely unknown", () => {

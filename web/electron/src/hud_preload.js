@@ -33,9 +33,19 @@ contextBridge.exposeInMainWorld("omnicraftHud", {
    * counts are not an answer, and the shell must not read them as "idle".
    *
    * @param {{readable: boolean, exact: boolean, stale: boolean,
-   *   active: number, awaiting: number, unresolved: number}} report
+   *   active: number, awaiting: number, unresolved: number,
+   *   awaitingIds: string[]}} report
    */
   reportFeed: (report) => {
+    // Who is waiting, not just how many — the shell re-expands the HUD only for
+    // attention the user has not already seen. A list of anything other than
+    // strings travels as `null` rather than as a filtered one: a list missing an
+    // entry would let a waiting session pass as new for ever.
+    const awaitingIds = report?.awaitingIds;
+    const named =
+      Array.isArray(awaitingIds) && awaitingIds.every((id) => typeof id === "string")
+        ? [...awaitingIds]
+        : null;
     ipcRenderer.send("omnicraft:hud-report-feed", {
       readable: report?.readable === true,
       exact: report?.exact === true,
@@ -43,6 +53,7 @@ contextBridge.exposeInMainWorld("omnicraftHud", {
       active: Number(report?.active),
       awaiting: Number(report?.awaiting),
       unresolved: Number(report?.unresolved),
+      awaitingIds: named,
     });
   },
 

@@ -15,7 +15,7 @@
 
 "use strict";
 
-const { decideHud } = require("./hudVisibility");
+const { acknowledgeAttention, carryAcknowledged, decideHud } = require("./hudVisibility");
 
 /**
  * @typedef {object} HudWindowHandle
@@ -50,11 +50,12 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
   /** The renderer's last word on the feed; null means "we have not been told". */
   let report = null;
   /**
-   * The user asked to see a HUD their mode would otherwise keep hidden. It
-   * suppresses hiding until the feed brings the HUD back on its own — at which
-   * point the modes are in charge again.
+   * The attention the user dismissed by collapsing the panel; `null` when they
+   * have dismissed nothing. Only a session that is NOT in here re-expands the
+   * HUD, so a permission that stays pending stops re-opening what was closed
+   * on it.
    */
-  let revealed = false;
+  let acknowledged = null;
   /** True when the SHELL asked for the pending close (quit, disable, teardown). */
   let shellInitiatedClose = false;
 
@@ -63,7 +64,7 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
     expanded = false;
     autoExpanded = false;
     report = null;
-    revealed = false;
+    acknowledged = null;
   }
 
   /**
@@ -80,7 +81,7 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
       // Unknown settings neither open an always-on-top window nor close one the
       // user already has: only an explicit `false` closes.
       autoExpanded = false;
-      revealed = false;
+      acknowledged = null;
       if (enabled === false && win) {
         shellInitiatedClose = true;
         win.close();
@@ -92,7 +93,12 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
       return;
     }
 
-    const decision = decideHud({ enabled, mode, report, expanded, autoExpanded });
+    // A dismissal only survives while the feed still shows the same attention:
+    // a session it PROVES is no longer waiting drops out, so the same session
+    // blocking again later is new attention.
+    acknowledged = carryAcknowledged(acknowledged, report);
+
+    const decision = decideHud({ enabled, mode, report, expanded, autoExpanded, acknowledged });
     autoExpanded = decision.autoExpanded;
     if (decision.expanded !== null && decision.expanded !== expanded) {
       expanded = decision.expanded;
@@ -103,10 +109,8 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
     // first and disappear after.
     if (!win.isReady()) return;
     if (decision.visible) {
-      // A HUD the feed brings back is in the modes' hands again.
-      revealed = false;
       if (!win.isVisible()) win.show();
-    } else if (win.isVisible() && !revealed) {
+    } else if (win.isVisible()) {
       win.hide();
     }
   }
@@ -127,10 +131,14 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
     /**
      * The user expanded or collapsed the HUD from its own page. Their choice —
      * so it is explicitly NOT the shell's to undo later.
+     *
+     * Collapsing also ACKNOWLEDGES the attention on screen: whatever is waiting
+     * right now has been seen, and must not re-open the panel on the next poll.
      */
     setUserExpanded(next) {
       expanded = next === true;
       autoExpanded = false;
+      acknowledged = expanded ? null : acknowledgeAttention(report);
       const win = getWindow();
       if (win) win.setExpanded(expanded, false);
     },
@@ -144,17 +152,18 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
     toggle() {
       const win = getWindow();
       const showing = Boolean(win && win.isVisible());
+      // Asking to SEE the HUD is asking for a HUD that stays: turning it on
+      // under a mode that hides it would put the window up and let the next
+      // report take it away. So the mode gives way too. Losing the stored mode
+      // is the smaller loss — it is right there in Settings → Desktop → HUD,
+      // visible and editable, where a HUD that flashes and vanishes explains
+      // itself nowhere.
+      const patch = showing ? { enabled: false } : { enabled: true, mode: "always" };
       try {
-        writeSettings({ enabled: !showing });
+        writeSettings(patch);
       } catch (err) {
         reportError("could not persist the HUD toggle", err);
         return;
-      }
-      if (!showing) {
-        // Asked for on: the mode may still say "hide" (nothing is running), but
-        // the user just asked to look at it. Show it until the feed itself
-        // brings the HUD back, which hands the modes control again.
-        revealed = true;
       }
       apply();
       const after = getWindow();
@@ -199,7 +208,7 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
 
     /** Test/introspection seam: the state the decisions run on. */
     state() {
-      return { expanded, autoExpanded, report, revealed };
+      return { expanded, autoExpanded, report, acknowledged };
     },
   };
 }

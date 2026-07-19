@@ -22,6 +22,14 @@ export interface HudFeedReport {
   awaiting: number;
   /** Sessions the feed could not resolve or had to leave out. */
   unresolved: number;
+  /**
+   * WHICH sessions are blocked on a human, not just how many. The shell needs
+   * the identity to tell attention it has already shown the user from attention
+   * that just arrived — a count cannot: a permission that stays pending would
+   * otherwise re-open the panel on every poll. Only trustworthy alongside
+   * `readable && exact && !stale`; the shell checks that for itself.
+   */
+  awaitingIds: string[];
 }
 
 interface HudShellApi {

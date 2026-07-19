@@ -989,6 +989,30 @@ describe("HudPanel — what it reports to the shell", () => {
     );
   });
 
+  it("names WHICH sessions are waiting, not just how many", async () => {
+    // The shell re-expands the HUD only for attention the user has not already
+    // dismissed, and a count cannot tell one prompt from another. The list is
+    // named the way the tallies count it — a parked prompt — so the shell can
+    // check it accounts for every awaiting session.
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 2, awaiting: 1 }),
+        sessions: [
+          wireSession({ session_id: "conv_busy" }),
+          wireSession({ session_id: "conv_blocked", pending_elicitations_count: 2 }),
+        ],
+      }),
+    );
+    const onFeedReport = vi.fn();
+    renderPanel({ onFeedReport });
+
+    await waitFor(() =>
+      expect(onFeedReport).toHaveBeenCalledWith(
+        expect.objectContaining({ awaiting: 1, awaitingIds: ["conv_blocked"] }),
+      ),
+    );
+  });
+
   it("reports an unbuildable feed as unreadable, not as zeros", async () => {
     serveFeed(wireFeed({ degraded: ["internal_error"], counts: null }));
     const onFeedReport = vi.fn();

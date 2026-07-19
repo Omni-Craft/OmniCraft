@@ -113,6 +113,108 @@ function summarizeFeedReport(report) {
 }
 
 /**
+ * @typedef {{named: true, ids: string[]} | {named: false}} Dismissal
+ *   What the user dismissed by collapsing the panel: the sessions they saw
+ *   waiting, or the fact that they dismissed something the feed could not name.
+ *
+ *   The unnameable case is its own STATE, not a reserved id: a magic string
+ *   would live in the same namespace as the ids off the wire, so a session that
+ *   happened to be called that would read as "the user dismissed something
+ *   unnameable" and swallow the next new prompt.
+ */
+
+/** The user dismissed attention the feed could not name. */
+const UNNAMED_DISMISSAL = Object.freeze({ named: false });
+
+/** Whether a value is a dismissal at all — `null` is "nothing was dismissed". */
+function isDismissal(value) {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
+ * The ids of the sessions the report PROVES are waiting on a human, or `null`
+ * when it proves nothing.
+ *
+ * This is the mirror image of the visibility rule, and on purpose. To SHOW the
+ * window, not-knowing is enough — an unresolved feed stays on screen. To REOPEN
+ * a panel the user just collapsed, not-knowing is NOT enough: a list we cannot
+ * fully read cannot tell new attention from the attention already dismissed,
+ * and guessing means re-expanding the HUD on every poll.
+ *
+ * So the identity only counts when the snapshot is readable, exact and fresh,
+ * the ids are really there, and they ACCOUNT for every session the tallies say
+ * is waiting — one waiting session the list cannot name is one we would fail to
+ * recognize the next time around.
+ *
+ * @param {unknown} report
+ * @returns {string[] | null}
+ */
+function awaitingSignature(report) {
+  if (report === null || typeof report !== "object") return null;
+  if (report.readable !== true || report.exact !== true || report.stale === true) return null;
+  if (report.unresolved !== 0) return null;
+  const ids = report.awaitingIds;
+  if (!Array.isArray(ids) || !ids.every((id) => typeof id === "string" && id.length > 0)) {
+    return null;
+  }
+  if (new Set(ids).size !== ids.length || ids.length !== report.awaiting) return null;
+  return ids;
+}
+
+/**
+ * The attention the user dismisses by collapsing the panel. When the feed
+ * cannot name it, the dismissal is recorded as unnameable rather than as
+ * nothing — collapsing under a stale feed still means "I have seen this".
+ *
+ * @param {unknown} report
+ * @returns {Dismissal}
+ */
+function acknowledgeAttention(report) {
+  const ids = awaitingSignature(report);
+  return ids === null ? UNNAMED_DISMISSAL : { named: true, ids: [...ids] };
+}
+
+/**
+ * Carry a dismissal onto the next report: an id the feed proves is no longer
+ * waiting drops off, so attention that really went away and came back counts as
+ * new. A feed that proves nothing changes nothing — that a session vanished
+ * from a list we could not read is not evidence it was answered.
+ *
+ * Idempotent, so applying it before `decideHud` and inside it is the same
+ * thing.
+ *
+ * @param {Dismissal | null} acknowledged
+ * @param {unknown} report
+ * @returns {Dismissal | null}
+ */
+function carryAcknowledged(acknowledged, report) {
+  if (!isDismissal(acknowledged)) return null;
+  const ids = awaitingSignature(report);
+  if (ids === null) return acknowledged;
+  // The user dismissed something we could not name; now that we can, that is
+  // what they dismissed.
+  if (acknowledged.named !== true) return { named: true, ids: [...ids] };
+  return { named: true, ids: acknowledged.ids.filter((id) => ids.includes(id)) };
+}
+
+/**
+ * Whether the report names attention the user has NOT already dismissed —
+ * the only thing allowed to re-expand a panel they collapsed.
+ *
+ * @param {unknown} report
+ * @param {Dismissal | null} acknowledged `null` = the user dismissed nothing.
+ * @returns {boolean}
+ */
+function hasNewAttention(report, acknowledged) {
+  if (!isDismissal(acknowledged)) return true;
+  const ids = awaitingSignature(report);
+  // A dismissal stands until the feed can prove what is waiting now — an
+  // unnameable one included (`carryAcknowledged` gives it names first).
+  if (ids === null || acknowledged.named !== true) return false;
+  return ids.some((id) => !acknowledged.ids.includes(id));
+}
+
+/**
  * Decide the HUD's window state for one feed report.
  *
  * `expanded: null` means "leave it as the user (or the last decision) left it"
@@ -123,11 +225,23 @@ function summarizeFeedReport(report) {
  * showing right now, which is what tells attention whether it CAUSED the
  * expansion it is about to claim.
  *
+ * `acknowledged` is the attention the user dismissed by collapsing the panel:
+ * persistent attention re-expands nothing, only a session they have not seen
+ * does.
+ *
  * @param {{enabled: boolean | null, mode: string | null, report: unknown,
- *   expanded?: boolean, autoExpanded?: boolean}} input
+ *   expanded?: boolean, autoExpanded?: boolean,
+ *   acknowledged?: Dismissal | null}} input
  * @returns {{visible: boolean, expanded: boolean | null, autoExpanded: boolean}}
  */
-function decideHud({ enabled, mode, report, expanded = false, autoExpanded = false }) {
+function decideHud({
+  enabled,
+  mode,
+  report,
+  expanded = false,
+  autoExpanded = false,
+  acknowledged = null,
+}) {
   // Only an explicit `true` opens the HUD: unknown settings must not silently
   // put an always-on-top window on the user's screen.
   if (enabled !== true) return { visible: false, expanded: false, autoExpanded: false };
@@ -138,6 +252,11 @@ function decideHud({ enabled, mode, report, expanded = false, autoExpanded = fal
     // already opened by hand there is nothing to expand, and claiming it would
     // hand the shell a manual expansion to collapse later.
     if (expanded) return { visible: true, expanded: null, autoExpanded };
+    // A pending permission stays pending: without this, every poll would
+    // re-open the panel the user just closed on it.
+    if (!hasNewAttention(report, carryAcknowledged(acknowledged, report))) {
+      return { visible: true, expanded: null, autoExpanded };
+    }
     return { visible: true, expanded: true, autoExpanded: true };
   }
 
@@ -185,8 +304,13 @@ function isRestingCertain(report) {
 module.exports = {
   HUD_VISIBILITY_MODES,
   DEFAULT_HUD_VISIBILITY,
+  UNNAMED_DISMISSAL,
   readHudSettings,
   mergeHudSettings,
   summarizeFeedReport,
+  awaitingSignature,
+  acknowledgeAttention,
+  carryAcknowledged,
+  hasNewAttention,
   decideHud,
 };

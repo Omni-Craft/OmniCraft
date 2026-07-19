@@ -325,13 +325,24 @@ class _Degradation:
     them eventually forgets to also set ``partial`` and an incomplete
     count ships as a total. Here that combination is unreachable.
 
+    The slug list is read-only from the outside (:attr:`slugs` hands
+    back a tuple, and there is no setter) so the invariant is enforced
+    by the type rather than by every call site remembering it: there is
+    no ``degradation.slugs.append(...)`` that could record a failure
+    while leaving the tallies looking complete.
+
     :param slugs: Feed-level degradation slugs, in first-seen order.
     :param partial: Whether anything at all went unresolved.
     """
 
     def __init__(self) -> None:
-        self.slugs: list[str] = []
+        self._slugs: list[str] = []
         self.partial: bool = False
+
+    @property
+    def slugs(self) -> tuple[str, ...]:
+        """Feed-level slugs recorded so far, in first-seen order."""
+        return tuple(self._slugs)
 
     def note(self, slug: str) -> None:
         """
@@ -339,8 +350,8 @@ class _Degradation:
 
         :param slug: Stable slug, e.g. ``"child_sessions_unavailable"``.
         """
-        if slug not in self.slugs:
-            self.slugs.append(slug)
+        if slug not in self._slugs:
+            self._slugs.append(slug)
         self.partial = True
 
     def note_floor(self) -> None:
@@ -351,6 +362,26 @@ class _Degradation:
         duplicate the row's own marker.
         """
         self.partial = True
+
+
+def _unreadable_feed(host_id: str | None, degradation: _Degradation) -> MonitorFeedResponse:
+    """
+    The terminal answer when the feed could not be built at all.
+
+    :param host_id: The requested host filter, echoed back.
+    :param degradation: Accumulator carrying whatever was already noted.
+    :returns: An empty feed marked ``internal_error``. The tallies are
+        zero but flagged ``partial``: the server doesn't know what is
+        running, so zero is a floor, never a total.
+    """
+    degradation.note("internal_error")
+    return MonitorFeedResponse(
+        generated_at=int(time.time()),
+        host_id=host_id,
+        counts=MonitorCounts(partial=degradation.partial),
+        truncated=True,
+        degraded=list(degradation.slugs),
+    )
 
 
 def create_monitor_router(
@@ -661,7 +692,7 @@ def create_monitor_router(
                 host_id=host_id,
                 counts=MonitorCounts(omitted=unresolved_attention, partial=degradation.partial),
                 truncated=page.has_more or unresolved_attention > 0,
-                degraded=degradation.slugs,
+                degraded=list(degradation.slugs),
             )
 
         conv_ids = [conv.id for conv in convs]
@@ -793,7 +824,7 @@ def create_monitor_router(
             sessions=rows[:_MAX_ROWS],
             counts=counts,
             truncated=page.has_more or counts.omitted > 0,
-            degraded=degradation.slugs,
+            degraded=list(degradation.slugs),
         )
 
     @router.get(
@@ -834,31 +865,32 @@ def create_monitor_router(
             watching it, so a crash is reported as an unreadable feed
             (and logged with a traceback for whoever owns the bug).
         """
-        # Fail closed on auth: ``accessible_by=None`` means "no ACL
-        # filter", so an unauthenticated caller slipping through as
-        # ``None`` would monitor every user's sessions.
-        user_id = require_user(request, auth_provider)
         degradation = _Degradation()
         try:
+            # Inside the boundary: auth resolution is code like any other
+            # and can fail unexpectedly. Its deliberate verdicts (401 /
+            # 403) pass through below; a crash in it must not become the
+            # 500 this route promises never to emit.
+            #
+            # Fail closed on auth: ``accessible_by=None`` means "no ACL
+            # filter", so an unauthenticated caller slipping through as
+            # ``None`` would monitor every user's sessions.
+            user_id = require_user(request, auth_provider)
             if host_id is not None:
                 await _validate_host(host_id, user_id)
             return await _build_feed(user_id, host_id, only_active, degradation)
-        except OmniCraftError:
-            # Typed answers about the request itself (auth, host filter)
-            # are the caller's business and keep their status.
-            raise
+        except OmniCraftError as exc:
+            # Deliberate verdicts about the request itself — unauthorized,
+            # forbidden, a bad or unverifiable host — are the caller's
+            # business and keep their status. An OmniCraftError that maps
+            # to 5xx is a failure to answer, not an answer, so it degrades
+            # like any other crash rather than leaking the 500.
+            if exc.http_status < 500 or exc.code == ErrorCode.HOST_UNVERIFIABLE:
+                raise
+            _logger.exception("Monitor feed build failed")
+            return _unreadable_feed(host_id, degradation)
         except Exception:
             _logger.exception("Monitor feed build failed")
-            degradation.note("internal_error")
-            return MonitorFeedResponse(
-                generated_at=int(time.time()),
-                host_id=host_id,
-                # Zeroed tallies here would be an assertion the server
-                # cannot make: it doesn't know what is running, so the
-                # counts are a floor of zero, not a total of zero.
-                counts=MonitorCounts(partial=degradation.partial),
-                truncated=True,
-                degraded=degradation.slugs,
-            )
+            return _unreadable_feed(host_id, degradation)
 
     return router

@@ -18,7 +18,7 @@ from fastapi.responses import JSONResponse
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 
-from omnicraft.errors import OmniCraftError
+from omnicraft.errors import ErrorCode, OmniCraftError
 from omnicraft.runtime import pending_elicitations
 from omnicraft.server.auth import LEVEL_OWNER, UnifiedAuthProvider
 from omnicraft.server.routes import monitor as monitor_module
@@ -79,6 +79,7 @@ def _app(
     conversation_store: Any = None,
     agent_store: Any = None,
     permission_store: Any = -1,
+    auth_provider: Any = -1,
 ) -> FastAPI:
     """Header-auth app mounting only the monitor router at ``/v1``."""
     app = FastAPI()
@@ -95,7 +96,9 @@ def _app(
         create_monitor_router(
             conversation_store or SqlAlchemyConversationStore(db_uri),
             agent_store or SqlAlchemyAgentStore(db_uri),
-            auth_provider=UnifiedAuthProvider(source="header"),
+            auth_provider=(
+                UnifiedAuthProvider(source="header") if auth_provider == -1 else auth_provider
+            ),
             permission_store=(
                 SqlAlchemyPermissionStore(db_uri) if permission_store == -1 else permission_store
             ),
@@ -972,6 +975,104 @@ def test_unexpected_host_lookup_error_is_contained_as_503(db_uri: str) -> None:
 
     assert resp.status_code == 503
     assert resp.json()["error"]["code"] == "host_unverifiable"
+
+
+def test_auth_crash_is_contained_instead_of_leaking_a_500(db_uri: str) -> None:
+    """Auth resolution sits inside the route's boundary.
+
+    It is code like any other and can fail unexpectedly (a malformed
+    cookie, an unreachable identity backend). A crash there must not
+    become the 500 this route promises never to emit — and it must not
+    hand back a clean-looking feed either.
+    """
+
+    class _BrokenAuthProvider:
+        def get_user_id(self, request: Any) -> str | None:
+            raise RuntimeError("identity backend exploded")
+
+    app = _app(db_uri, auth_provider=_BrokenAuthProvider())
+
+    resp = TestClient(app).get("/v1/monitor/sessions", headers={"X-Forwarded-Email": ALICE})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["degraded"] == ["internal_error"]
+    assert body["sessions"] == []
+    assert body["counts"]["partial"] is True
+
+
+def test_deliberate_auth_verdicts_keep_their_status(db_uri: str) -> None:
+    """Containment is not blanket: 401 stays 401.
+
+    Degrading an unauthorized request into a 200 would tell the caller
+    "nothing needs you" when the real answer is "you are not allowed to
+    ask" — a different lie, same family.
+    """
+
+    class _AnonymousAuthProvider:
+        def get_user_id(self, request: Any) -> str | None:
+            return None
+
+    app = _app(db_uri, auth_provider=_AnonymousAuthProvider())
+
+    resp = TestClient(app).get("/v1/monitor/sessions", headers={"X-Forwarded-Email": ALICE})
+
+    assert resp.status_code == 401
+
+
+def test_internal_omnicraft_error_degrades_instead_of_leaking_a_500(db_uri: str) -> None:
+    """An OmniCraftError that maps to 5xx is a failure to answer, not an
+    answer, so it degrades like any other crash rather than passing
+    through as the 500 the contract rules out."""
+
+    class _ExplodingStore:
+        def list_conversations(self, **kwargs: Any) -> Any:
+            raise OmniCraftError("index is corrupt", code=ErrorCode.INTERNAL_ERROR)
+
+    app = _app(db_uri, conversation_store=_ExplodingStore(), permission_store=None)
+
+    resp = TestClient(app).get("/v1/monitor/sessions", headers={"X-Forwarded-Email": ALICE})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["degraded"] == ["internal_error"]
+    assert body["counts"]["partial"] is True
+
+
+def test_typed_host_verdicts_still_pass_through(db_uri: str) -> None:
+    """The narrowed re-raise must not swallow the host filter's answers:
+    400 / 404 / 503 are deliberate verdicts about the request."""
+    app = _app(db_uri, host_store=_FakeHostStore({"host_bob": BOB}))
+    client = TestClient(app)
+    headers = {"X-Forwarded-Email": ALICE}
+
+    assert client.get("/v1/monitor/sessions?host_id=%20", headers=headers).status_code == 400
+    assert client.get("/v1/monitor/sessions?host_id=nope", headers=headers).status_code == 404
+    no_registry = TestClient(_app(db_uri)).get(
+        "/v1/monitor/sessions?host_id=host_a", headers=headers
+    )
+    assert no_registry.status_code == 503
+
+
+def test_degradation_slugs_cannot_be_appended_to_from_outside() -> None:
+    """The invariant "degrading and marking the floor are one act" is
+    enforced by the type, not by call-site discipline: there is no
+    mutable list to append a slug to while leaving ``partial`` clear."""
+    degradation = monitor_module._Degradation()
+
+    assert isinstance(degradation.slugs, tuple)
+    with pytest.raises(AttributeError):
+        degradation.slugs = ["sneaked_in"]  # type: ignore[misc]
+    # A handle taken from the property is a copy — mutating it changes
+    # nothing, so a slug cannot land without ``note()`` setting the floor.
+    escaped = list(degradation.slugs)
+    escaped.append("sneaked_in")
+    assert degradation.slugs == ()
+    assert degradation.partial is False
+
+    degradation.note("scan_truncated")
+    assert degradation.slugs == ("scan_truncated",)
+    assert degradation.partial is True
 
 
 def test_caller_without_identity_sees_no_one_elses_sessions(db_uri: str) -> None:

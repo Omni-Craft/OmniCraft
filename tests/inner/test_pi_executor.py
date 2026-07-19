@@ -1376,9 +1376,20 @@ class TestPiExecutorConstructor(unittest.TestCase):
         self.assertTrue(executor.supports_live_message_queue())
 
     def test_no_tools_flag_in_extra_args(self):
-        with patch("omnicraft.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"):
+        with (
+            patch("omnicraft.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
+            patch("omnicraft.pi_native.pi_supports_approve", return_value=False),
+        ):
             executor = PiExecutor()
         self.assertIn("--no-tools", executor._extra_args)
+
+    def test_approve_flag_is_gated_by_pi_capability(self):
+        with (
+            patch("omnicraft.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"),
+            patch("omnicraft.pi_native.pi_supports_approve", return_value=True),
+        ):
+            executor = PiExecutor()
+        self.assertIn("--approve", executor._extra_args)
 
 
 # ---------------------------------------------------------------------------

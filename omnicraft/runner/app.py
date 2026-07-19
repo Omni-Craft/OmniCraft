@@ -1719,6 +1719,7 @@ def _build_pi_native_args(
     extension_path: Path,
     session_dir: Path,
     external_session_id: str | None,
+    approve: bool = False,
 ) -> list[str]:
     """
     Build Pi CLI args for a runner-owned native TUI session.
@@ -1727,10 +1728,13 @@ def _build_pi_native_args(
     :param extension_path: Generated OmniCraft Pi extension path.
     :param session_dir: Per-OmniCraft-session Pi session directory.
     :param external_session_id: Captured Pi session id, if any.
+    :param approve: Whether to pre-accept Pi's project-folder trust dialog.
     :returns: Complete Pi arg vector excluding the executable.
     """
     user_args = list(terminal_launch_args or [])
     args = ["--extension", str(extension_path)]
+    if approve:
+        args.append("--approve")
     if not _pi_args_have_session_control(user_args):
         args.extend(["--session-dir", str(session_dir)])
         if external_session_id:
@@ -1908,7 +1912,7 @@ async def _auto_create_pi_terminal(
     """
     from omnicraft.conversation_browser import conversation_url
     from omnicraft.inner.datamodel import OSEnvSpec, TerminalEnvSpec
-    from omnicraft.pi_native import resolve_pi_executable
+    from omnicraft.pi_native import pi_supports_approve, resolve_pi_executable
     from omnicraft.pi_native_bridge import (
         PI_NATIVE_CONFIG_ENV_VAR,
         clear_inbox,
@@ -1985,6 +1989,7 @@ async def _auto_create_pi_terminal(
         extension_path=pi_extension,
         session_dir=session_dir,
         external_session_id=resume_session_id,
+        approve=pi_supports_approve(pi_command),
     )
     pi_env = {
         PI_NATIVE_CONFIG_ENV_VAR: str(config),

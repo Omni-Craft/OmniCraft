@@ -13,6 +13,7 @@ import httpx
 import pytest
 
 from omnicraft.runner.app import (
+    _build_pi_native_args,
     _pi_native_launch_config,
     _PiNativeLaunchConfig,
     _resolve_pi_resume_session,
@@ -23,6 +24,17 @@ from omnicraft.stores.conversation_store import (
 )
 
 _EXTERNAL_ID = "019efdb8-54c8-7c02-be27-875eb2620635"
+
+
+def test_build_pi_native_args_gates_approve(tmp_path: Path) -> None:
+    common = {
+        "terminal_launch_args": None,
+        "extension_path": tmp_path / "extension.ts",
+        "session_dir": tmp_path / "sessions",
+        "external_session_id": None,
+    }
+    assert "--approve" not in _build_pi_native_args(**common)
+    assert "--approve" in _build_pi_native_args(**common, approve=True)
 
 
 def _user_item(text: str, item_id: str = "u1") -> dict[str, Any]:

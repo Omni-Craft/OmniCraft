@@ -117,6 +117,41 @@ def resolve_pi_executable(
     return resolved
 
 
+def pi_version(executable: str) -> tuple[int, int, int] | None:
+    """Return the Pi CLI version as ``(major, minor, patch)``, or ``None``.
+
+    A version probe failure is treated as unsupported so callers do not pass
+    flags an older Pi CLI may reject.
+    """
+    import re
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            [executable, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=5.0,
+        )
+    except Exception:  # noqa: BLE001
+        return None
+    # Older Pi releases print via console.error while newer ones use stdout.
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", result.stdout + result.stderr)
+    if match is None:
+        return None
+    return (int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def pi_supports_approve(executable: str) -> bool:
+    """Return whether *executable* supports Pi's ``--approve`` flag.
+
+    ``--approve`` was added in Pi 0.79.0. Unknown versions are treated as
+    unsupported because older versions exit on an unrecognized option.
+    """
+    version = pi_version(executable)
+    return version is not None and version >= (0, 79, 0)
+
+
 def build_pi_launch(
     pi_args: Sequence[str],
     *,

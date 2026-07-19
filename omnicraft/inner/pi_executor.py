@@ -1615,7 +1615,13 @@ class PiExecutor(Executor):
         # off (they don't route through OmniCraft policies / history and
         # can 400 against the Databricks Responses API), and the bridge
         # extension's tools are explicitly allowlisted.
+        from omnicraft.pi_native import pi_supports_approve
+
         self._extra_args: list[str] = ["--no-tools"]
+        if pi_supports_approve(self._pi_path):
+            # Pi 0.79+ prompts to trust a project folder on first launch.
+            # Runner-driven sessions have no terminal user to answer it.
+            self._extra_args.append("--approve")
         self._bundle_dir = bundle_dir
         self._agent_name = agent_name
         self._skills_filter = skills_filter

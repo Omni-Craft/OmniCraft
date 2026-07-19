@@ -6,7 +6,14 @@
 // nothing, and a git failure hides the bar rather than putting an error in
 // front of the chat.
 
-import { ChevronRightIcon, GitBranchIcon, GitPullRequestIcon, Loader2Icon } from "lucide-react";
+import {
+  CheckIcon,
+  ChevronRightIcon,
+  GitBranchIcon,
+  GitPullRequestIcon,
+  Loader2Icon,
+  XIcon,
+} from "lucide-react";
 import { useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
@@ -49,37 +56,56 @@ function baseBranchName(baseBranch: string | null): string | null {
 /**
  * GitHub compare URL for opening a PR from `branch` onto the base.
  *
- * The endpoint carries no repo slug, so it is recovered from a PR URL when
- * the branch has one. Without a slug (the common no-PR case) there is
- * nothing to link to and the caller renders no button.
+ * Built from the workspace's own remote (`repo_slug`), so it is available on
+ * the common case — a dirty branch with no PR yet. Without a slug (no remote,
+ * or one not hosted on github.com) there is nothing to link to and the caller
+ * renders no button.
  */
 export function compareUrl(status: GitPrStatus): string | null {
   const base = baseBranchName(status.base_branch);
-  if (!base || !status.branch) return null;
-  for (const pr of status.prs) {
-    const match = /^https:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/\d+/.exec(pr.url);
-    if (match) {
-      return `https://github.com/${match[1]}/compare/${encodeURIComponent(base)}...${encodeURIComponent(status.branch)}?expand=1`;
-    }
-  }
-  return null;
+  if (!status.repo_slug || !base || !status.branch) return null;
+  return `https://github.com/${status.repo_slug}/compare/${encodeURIComponent(base)}...${encodeURIComponent(status.branch)}?expand=1`;
 }
 
-/** CI dot for a PR: spinner while pending, a colored bullet once settled. */
-function CiIndicator({ status }: { status: GitPullRequest["ci_status"] }) {
+/** What each settled CI state is called, for both the label and the dot. */
+const CI_LABEL: Record<"success" | "failure" | "pending", string> = {
+  success: "CI passou",
+  failure: "CI falhou",
+  pending: "CI rodando",
+};
+
+const CI_ICON = { success: CheckIcon, failure: XIcon, pending: Loader2Icon } as const;
+
+/**
+ * CI state of a PR: a distinct icon per state (check / cross / spinner) plus
+ * its name in text, so the state never rides on color alone. The compact
+ * badge keeps the name screen-reader-only — the icon shape already tells the
+ * states apart there — while the expanded list spells it out.
+ *
+ * `null` is "sem informação" (no checks reported, or the server hit its CI
+ * lookup budget), which is not a failure and shows nothing.
+ */
+function CiIndicator({
+  status,
+  showLabel = false,
+}: {
+  status: GitPullRequest["ci_status"];
+  showLabel?: boolean;
+}) {
   if (status === null) return null;
-  if (status === "pending") {
-    return <Loader2Icon data-testid="ci-pending" className="size-3 shrink-0 animate-spin" />;
-  }
+  const Icon = CI_ICON[status];
   return (
     <span
       data-testid={`ci-${status}`}
-      aria-hidden="true"
       className={cn(
-        "size-1.5 shrink-0 rounded-full",
-        status === "success" ? "bg-success" : "bg-destructive",
+        "inline-flex shrink-0 items-center gap-1",
+        status === "success" && "text-success",
+        status === "failure" && "text-destructive",
       )}
-    />
+    >
+      <Icon className={cn("size-3 shrink-0", status === "pending" && "animate-spin")} />
+      <span className={showLabel ? undefined : "sr-only"}>{CI_LABEL[status]}</span>
+    </span>
   );
 }
 
@@ -109,6 +135,17 @@ export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | nu
   const behind = data.behind ?? 0;
   const pr = openPullRequest(data.prs);
   const compare = pr ? null : compareUrl(data);
+  // A change set can have files but no line counts (binary files, renames,
+  // mode changes) — "+0 -0" would read as "nothing changed", so name the
+  // files instead. Keeps the summary honest with the visibility rule.
+  const diffSummary = !diff ? null : diff.added + diff.removed > 0 ? (
+    <>
+      <span className="text-success">+{diff.added}</span>{" "}
+      <span className="text-destructive">-{diff.removed}</span>
+    </>
+  ) : diff.files > 0 ? (
+    `${diff.files} arquivo(s)`
+  ) : null;
 
   return (
     <div className="chat-git-status px-4 md:px-6">
@@ -121,9 +158,12 @@ export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | nu
           COLUMN_WIDTH,
         )}
       >
-        <div className="flex items-center gap-2 px-3 py-1.5 text-xs">
+        <div className="flex items-start gap-2 px-3 py-1.5 text-xs">
+          {/* Wraps instead of overflowing: on a narrow composer the summary
+              items fall to a second line rather than pushing the PR link off
+              the card. The branch owns the flexible slot and truncates. */}
           <CollapsibleTrigger
-            className="flex min-w-0 flex-1 items-center gap-2 text-muted-foreground hover:text-foreground"
+            className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-left text-muted-foreground hover:text-foreground"
             aria-label="Detalhes do workspace"
           >
             <ChevronRightIcon
@@ -133,10 +173,9 @@ export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | nu
             <span data-testid="git-status-branch" className="min-w-0 truncate" title={branch}>
               {branch}
             </span>
-            {diff && diff.added + diff.removed > 0 && (
+            {diffSummary && (
               <span data-testid="git-status-diff" className="shrink-0 font-mono">
-                <span className="text-success">+{diff.added}</span>{" "}
-                <span className="text-destructive">-{diff.removed}</span>
+                {diffSummary}
               </span>
             )}
             {ahead > 0 && <span className="shrink-0">↑{ahead}</span>}
@@ -153,7 +192,7 @@ export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | nu
               data-testid="git-status-pr-link"
               href={pr.url}
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
               className="shrink-0 font-medium text-primary hover:underline"
             >
               Ver PR #{pr.number}
@@ -164,7 +203,7 @@ export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | nu
                 data-testid="git-status-create-pr"
                 href={compare}
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 className="shrink-0 font-medium text-primary hover:underline"
               >
                 Criar PR
@@ -188,15 +227,15 @@ export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | nu
                   key={item.number}
                   href={item.url}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   data-testid={`git-status-pr-${item.number}`}
-                  className="flex items-center gap-2 hover:text-foreground"
+                  className="flex flex-wrap items-center gap-x-2 gap-y-1 hover:text-foreground"
                 >
                   <GitPullRequestIcon className="size-3.5 shrink-0" />
                   <span className="shrink-0">#{item.number}</span>
                   <span className="min-w-0 truncate">{item.title}</span>
                   <span className="shrink-0">({PR_STATE_LABEL[item.state]})</span>
-                  <CiIndicator status={item.ci_status} />
+                  <CiIndicator status={item.ci_status} showLabel />
                 </a>
               ))
             )}

@@ -25,7 +25,10 @@ export interface GitPullRequest {
   number: number;
   title: string;
   state: "open" | "merged" | "closed";
-  /** Aggregate CI state; `null` when no checks reported. */
+  /**
+   * Aggregate CI state. `null` means "not known" — no checks reported, or
+   * the server's per-request CI lookup budget ran out. Never a failure.
+   */
   ci_status: "success" | "failure" | "pending" | null;
   url: string;
 }
@@ -43,6 +46,8 @@ export interface GitPrStatus {
   ahead: number | null;
   behind: number | null;
   diff: GitDiffStat | null;
+  /** `owner/name` of the workspace's GitHub remote; `null` when there is none. */
+  repo_slug: string | null;
   prs: GitPullRequest[];
   /** Git failure reason; `null` on success. */
   error: string | null;
@@ -109,6 +114,10 @@ export function useGitPrStatus(sessionId: string | null | undefined) {
     refetchInterval: () =>
       typeof document !== "undefined" && document.visibilityState === "hidden" ? false : POLL_MS,
     refetchIntervalInBackground: false,
-    placeholderData: (prev) => prev,
+    // No `placeholderData` carrying the previous query's data: the key is
+    // per-session, so it would answer a freshly-opened session with the
+    // branch/PRs of the one before it — and make the composer hide its
+    // branch on the strength of another session's workspace. Within one
+    // session the cache already serves the last body while refetching.
   });
 }

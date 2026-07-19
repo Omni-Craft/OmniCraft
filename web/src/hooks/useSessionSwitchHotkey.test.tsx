@@ -109,6 +109,33 @@ describe("useSessionSwitchHotkey", () => {
     expect(navigate).not.toHaveBeenCalled();
   });
 
+  it('does not switch inside contenteditable="" (bare, equivalent to true)', () => {
+    renderHook(() => useSessionSwitchHotkey(ids, "a"));
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "");
+    document.body.appendChild(editable);
+    press("ArrowDown", { metaKey: true }, editable);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('does not switch inside contenteditable="plaintext-only"', () => {
+    renderHook(() => useSessionSwitchHotkey(ids, "a"));
+    const editable = document.createElement("div");
+    editable.setAttribute("contenteditable", "plaintext-only");
+    document.body.appendChild(editable);
+    press("ArrowDown", { metaKey: true }, editable);
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('still switches inside contenteditable="false" (not editable)', () => {
+    renderHook(() => useSessionSwitchHotkey(ids, "a"));
+    const notEditable = document.createElement("div");
+    notEditable.setAttribute("contenteditable", "false");
+    document.body.appendChild(notEditable);
+    press("ArrowDown", { metaKey: true }, notEditable);
+    expect(navigate).toHaveBeenCalledWith("/c/b");
+  });
+
   it("does nothing when the list is empty", () => {
     renderHook(() => useSessionSwitchHotkey([], "a"));
     press("ArrowDown");

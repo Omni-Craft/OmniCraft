@@ -32,7 +32,7 @@ export function useSessionSwitchHotkey(
       const target = e.target;
       if (
         target instanceof HTMLElement &&
-        target.closest('textarea, input, [contenteditable="true"]')
+        target.closest('textarea, input, [contenteditable]:not([contenteditable="false"])')
       ) {
         return;
       }

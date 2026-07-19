@@ -2810,3 +2810,63 @@ def test_declared_passthrough_reads_sandbox_env_passthrough():
     assert _declared_passthrough(None) == ()
     assert _declared_passthrough(OSEnvSpec(sandbox=None)) == ()
     assert _declared_passthrough(OSEnvSpec(sandbox=OSEnvSandboxSpec(type="none"))) == ()
+
+
+def _codex_home_parent_for_start(cwd: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Start a session until spawn and capture the parent of its Codex home."""
+    mkdtemp_dirs: list[str] = []
+    original_mkdtemp = tempfile.mkdtemp
+
+    def capture_mkdtemp(*args: Any, **kwargs: Any) -> str:
+        mkdtemp_dirs.append(kwargs["dir"])
+        return original_mkdtemp(*args, **kwargs)
+
+    session = _CodexAppServerSession(
+        codex_path="/bin/echo",
+        cwd=cwd,
+        env={},
+        tool_executor=None,
+    )
+    monkeypatch.setattr(tempfile, "mkdtemp", capture_mkdtemp)
+    with (
+        patch("omnicraft.inner.codex_executor.populate_codex_skills_from_bundle"),
+        patch("omnicraft.inner.codex_executor._populate_codex_home_config"),
+        patch(
+            "omnicraft.inner.codex_executor._codex_home_config_source_from_env",
+            return_value=None,
+        ),
+        patch(
+            "omnicraft.inner.codex_executor._create_subprocess_exec",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("stop after mkdtemp"),
+        ),
+    ):
+        with pytest.raises(RuntimeError, match="stop after mkdtemp"):
+            _run(session.start())
+
+    assert mkdtemp_dirs, "mkdtemp was never called"
+    return mkdtemp_dirs[0]
+
+
+def test_app_server_start_falls_back_to_tempdir_when_cwd_is_readonly(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A read-only workspace must not prevent Codex app-server startup."""
+    workspace = tmp_path / "read-only-workspace"
+    workspace.mkdir()
+    codex_tmp = workspace / ".codex-tmp"
+    original_mkdir = Path.mkdir
+
+    def readonly_mkdir(path: Path, *args: Any, **kwargs: Any) -> None:
+        if path == codex_tmp:
+            raise OSError("read-only filesystem")
+        original_mkdir(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", readonly_mkdir)
+
+    assert _codex_home_parent_for_start(str(workspace), monkeypatch) == tempfile.gettempdir()
+
+
+def test_app_server_start_uses_tempdir_for_root_cwd(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Root is never a suitable parent for the temporary Codex home."""
+    assert _codex_home_parent_for_start("/", monkeypatch) == tempfile.gettempdir()

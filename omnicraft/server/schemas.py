@@ -1565,6 +1565,35 @@ class SessionGitStatusResponse(BaseModel):
     error: str | None = None
 
 
+class SessionPullRequestResponse(BaseModel):
+    """
+    Response body for ``POST /v1/sessions/{id}/pull-request``.
+
+    Answers the status bar's "Create PR" action. The call is idempotent:
+    a branch that already has an open pull request gets that one back
+    with ``created=False`` instead of a second one.
+
+    Every failure — a workspace that is not a git repository, a branch
+    that was never pushed, a token without write access — is a ``4xx``
+    with an actionable ``error.message``, never a partial success.
+
+    :param object: Fixed type, always ``"session.pull_request"``.
+    :param session_id: Session/conversation identifier.
+    :param number: Pull request number, e.g. ``2345``.
+    :param url: Web URL of the pull request.
+    :param created: ``True`` when this call opened it, ``False`` when an
+        already-open pull request for the branch was returned.
+    :param title: Title of the pull request.
+    """
+
+    object: Literal["session.pull_request"] = "session.pull_request"
+    session_id: str
+    number: int
+    url: str
+    created: bool
+    title: str
+
+
 # Stages of a managed-sandbox launch, in pipeline order: the sandbox
 # is provisioned, the repository workspace is cloned into it (skipped
 # when the session has no repo workspace), the in-sandbox host starts

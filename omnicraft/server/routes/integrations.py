@@ -1,8 +1,12 @@
-"""Read-only GitHub integration.
+"""GitHub integration.
 
 Lets the web app browse a repository's issues and pull requests and pull one
 into a new session as starting context — without leaving OmniCraft. A thin,
 authenticated proxy over the GitHub REST API; no data is stored server-side.
+
+The routed endpoints are read-only. The one write path is opening a pull
+request for a session's branch, exposed by the sessions router through the
+helpers here so the token and the HTTP plumbing stay in one place.
 
 The access token is resolved from the environment (``GITHUB_TOKEN`` /
 ``GH_TOKEN``) and, as a local convenience for a self-hosted single-user setup,
@@ -19,12 +23,14 @@ import asyncio
 import os
 import re
 import subprocess
+import urllib.parse
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Query, Request
 
 from omnicraft.errors import ErrorCode, OmniCraftError
+from omnicraft.host.git_worktree import WorktreeError, validate_branch_name
 from omnicraft.server.auth import AuthProvider
 from omnicraft.server.routes._auth_helpers import require_user
 
@@ -35,6 +41,8 @@ _MAX_COMMENTS = 10
 # Cap on CI lookups per status poll. Each costs 1-2 requests, so an
 # unbounded fan-out over a page of PRs would burn the rate limit.
 _MAX_CI_LOOKUPS = 5
+# Cap on commit subjects quoted in a generated pull-request body.
+_MAX_PR_COMMITS = 20
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 # Sentinel so the ``gh``-derived token is resolved at most once per process
@@ -310,6 +318,228 @@ async def github_pull_requests_for_branch(repo: str, branch: str) -> list[dict[s
             return cards
     except OmniCraftError:
         return []
+
+
+def _validate_ref(ref: str) -> None:
+    """Reject a branch name git itself would refuse, as invalid input.
+
+    Doubles as the guard against path traversal in the API paths below —
+    ``validate_branch_name`` bans ``..``, control characters and a
+    leading ``-``.
+
+    :param ref: Branch name, e.g. ``"feature/login"``.
+    :raises OmniCraftError: If the name is not a valid git branch name.
+    """
+    try:
+        validate_branch_name(ref)
+    except WorktreeError as exc:
+        raise OmniCraftError(exc.message, code=ErrorCode.INVALID_INPUT) from exc
+
+
+def _ref_path(ref: str) -> str:
+    """Encode a branch name for a GitHub API path, keeping ``/`` intact.
+
+    GitHub matches ``feature/login`` as a literal path, so escaping the
+    separator would look up a branch that does not exist.
+
+    :param ref: Branch name already checked by :func:`_validate_ref`.
+    :returns: The path-safe branch name.
+    """
+    return urllib.parse.quote(ref, safe="/")
+
+
+async def _github_post(path: str, payload: dict[str, Any]) -> tuple[int, Any]:
+    """POST a GitHub API path with auth, returning the raw outcome.
+
+    Unlike :func:`_github_get` this does not raise on an error status:
+    opening a pull request has to read GitHub's ``422`` body to tell
+    "a pull request already exists" apart from a real rejection.
+
+    :param path: API path below ``https://api.github.com``.
+    :param payload: JSON request body.
+    :returns: ``(status_code, decoded body)``; the body is ``None`` when
+        it is absent or not JSON.
+    :raises OmniCraftError: On transport failure only.
+    """
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = await _github_token()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    try:
+        async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
+            resp = await client.post(f"{_GITHUB_API}{path}", headers=headers, json=payload)
+    except httpx.HTTPError as exc:
+        raise OmniCraftError(f"could not reach GitHub: {exc}", code=ErrorCode.CONFLICT) from exc
+    try:
+        return resp.status_code, resp.json()
+    except ValueError:
+        return resp.status_code, None
+
+
+def _github_message(payload: Any) -> str | None:
+    """Best-effort human-readable reason out of a GitHub error body.
+
+    :param payload: Decoded GitHub error body.
+    :returns: The message, with any per-field errors appended, or ``None``.
+    """
+    if not isinstance(payload, dict):
+        return None
+    message = payload.get("message")
+    details = [
+        detail.get("message")
+        for detail in (payload.get("errors") or [])
+        if isinstance(detail, dict) and detail.get("message")
+    ]
+    parts = [str(part) for part in [message, *details] if part]
+    return " — ".join(parts) or None
+
+
+async def github_default_branch(repo: str) -> str:
+    """The repository's default branch, e.g. ``"main"``.
+
+    :param repo: ``owner/name`` slug.
+    :returns: The default branch name.
+    :raises OmniCraftError: If GitHub is unreachable, denies the request,
+        or reports no default branch.
+    """
+    _validate_repo(repo)
+    raw = await _github_get(f"/repos/{repo}")
+    branch = raw.get("default_branch") if isinstance(raw, dict) else None
+    if not isinstance(branch, str) or not branch:
+        raise OmniCraftError(
+            f"GitHub reported no default branch for {repo}",
+            code=ErrorCode.CONFLICT,
+        )
+    return branch
+
+
+async def github_branch_exists(repo: str, branch: str) -> bool:
+    """Whether ``branch`` exists on the remote repository.
+
+    :param repo: ``owner/name`` slug.
+    :param branch: Branch name.
+    :returns: ``True`` when GitHub knows the branch.
+    :raises OmniCraftError: On any failure other than "not found".
+    """
+    _validate_repo(repo)
+    _validate_ref(branch)
+    try:
+        await _github_get(f"/repos/{repo}/branches/{_ref_path(branch)}")
+    except OmniCraftError as exc:
+        if exc.code == ErrorCode.NOT_FOUND:
+            return False
+        raise
+    return True
+
+
+async def github_commit_subjects(
+    repo: str,
+    *,
+    base: str,
+    head: str,
+    limit: int = _MAX_PR_COMMITS,
+) -> list[str]:
+    """Subject lines of the commits on ``head`` that are not on ``base``.
+
+    :param repo: ``owner/name`` slug.
+    :param base: Branch the pull request would merge into, e.g. ``"main"``.
+    :param head: Branch carrying the work.
+    :param limit: Cap on returned subjects.
+    :returns: Subjects, oldest first. Empty when there is nothing to merge.
+    :raises OmniCraftError: If GitHub is unreachable or denies the request.
+    """
+    _validate_repo(repo)
+    _validate_ref(base)
+    _validate_ref(head)
+    raw = await _github_get(f"/repos/{repo}/compare/{_ref_path(base)}...{_ref_path(head)}")
+    commits = raw.get("commits") if isinstance(raw, dict) else None
+    subjects: list[str] = []
+    for entry in commits if isinstance(commits, list) else []:
+        commit = entry.get("commit") if isinstance(entry, dict) else None
+        message = commit.get("message") if isinstance(commit, dict) else None
+        subject = message.strip().splitlines()[0].strip() if isinstance(message, str) else ""
+        if subject:
+            subjects.append(subject)
+    return subjects[:limit]
+
+
+async def _open_pull_request_for_branch(repo: str, branch: str) -> dict[str, Any] | None:
+    """The open pull request whose head is ``branch``, if there is one.
+
+    :param repo: ``owner/name`` slug.
+    :param branch: Head branch name.
+    :returns: The card, or ``None`` when no open pull request exists.
+    """
+    for card in await github_pull_requests_for_branch(repo, branch):
+        if card.get("state") == "open" and isinstance(card.get("number"), int):
+            return card
+    return None
+
+
+async def github_open_pull_request(
+    repo: str,
+    *,
+    head: str,
+    base: str,
+    title: str,
+    body: str,
+) -> tuple[dict[str, Any], bool]:
+    """Open a pull request from ``head`` into ``base``, at most once.
+
+    An already-open pull request for ``head`` is returned as-is rather
+    than duplicated — including when a concurrent caller opened it after
+    the lookup, which GitHub reports as a ``422``.
+
+    :param repo: ``owner/name`` slug.
+    :param head: Branch carrying the work; must already be pushed.
+    :param base: Branch to merge into, e.g. ``"main"``.
+    :param title: Pull request title.
+    :param body: Pull request body (may be empty).
+    :returns: ``(card, created)`` — ``created`` is ``False`` when an
+        existing pull request was returned.
+    :raises OmniCraftError: If GitHub rejects the request.
+    """
+    _validate_repo(repo)
+    _validate_ref(head)
+    _validate_ref(base)
+    existing = await _open_pull_request_for_branch(repo, head)
+    if existing is not None:
+        return existing, False
+
+    status, payload = await _github_post(
+        f"/repos/{repo}/pulls",
+        {"title": title, "body": body, "head": head, "base": base},
+    )
+    if status in (200, 201) and isinstance(payload, dict):
+        return _normalize(payload), True
+    if status == 422:
+        raced = await _open_pull_request_for_branch(repo, head)
+        if raced is not None:
+            return raced, False
+        raise OmniCraftError(
+            _github_message(payload) or "GitHub rejected the pull request",
+            code=ErrorCode.INVALID_INPUT,
+        )
+    if status == 401:
+        raise OmniCraftError(
+            "GitHub rejected the token — set GITHUB_TOKEN or run 'gh auth login'",
+            code=ErrorCode.INVALID_INPUT,
+        )
+    if status in (403, 404):
+        # GitHub answers 404, not 403, when a token cannot see (or write
+        # to) a repository, so the two share one actionable message.
+        raise OmniCraftError(
+            f"GitHub denied opening a pull request on {repo} — the token needs "
+            f"write access to pull requests on that repository",
+            code=ErrorCode.FORBIDDEN,
+        )
+    raise OmniCraftError(
+        _github_message(payload) or f"GitHub returned {status} when opening the pull request",
+        code=ErrorCode.CONFLICT,
+    )
 
 
 def create_integrations_router(*, auth_provider: AuthProvider | None = None) -> APIRouter:

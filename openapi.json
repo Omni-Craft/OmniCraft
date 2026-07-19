@@ -4449,6 +4449,52 @@
         "title": "SessionPresenceEvent",
         "type": "object"
       },
+      "SessionPullRequestResponse": {
+        "description": "Response body for `POST /v1/sessions/{id}/pull-request`.\n\nAnswers the status bar's \"Create PR\" action. The call is idempotent:\na branch that already has an open pull request gets that one back\nwith `created=False` instead of a second one.\n\nEvery failure \u2014 a workspace that is not a git repository, a branch\nthat was never pushed, a token without write access \u2014 is a `4xx`\nwith an actionable `error.message`, never a partial success.",
+        "properties": {
+          "created": {
+            "description": "`True` when this call opened it, `False` when an already-open pull request for the branch was returned.",
+            "title": "Created",
+            "type": "boolean"
+          },
+          "number": {
+            "description": "Pull request number, e.g. `2345`.",
+            "title": "Number",
+            "type": "integer"
+          },
+          "object": {
+            "const": "session.pull_request",
+            "default": "session.pull_request",
+            "description": "Fixed type, always `\"session.pull_request\"`.",
+            "title": "Object",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session/conversation identifier.",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "title": {
+            "description": "Title of the pull request.",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "description": "Web URL of the pull request.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "session_id",
+          "number",
+          "url",
+          "created",
+          "title"
+        ],
+        "title": "SessionPullRequestResponse",
+        "type": "object"
+      },
       "SessionReasoningEffortEvent": {
         "description": "Active reasoning-effort update from a terminal-backed integration.\n\nEmitted after an `external_reasoning_effort_change` POST from a native\nterminal forwarder when the user changes the thinking level inside the\nterminal UI. Lets the web effort picker reflect a TUI-side switch without\na reload.",
         "properties": {
@@ -11118,6 +11164,50 @@
         "summary": "Update Policy",
         "tags": [
           "session_policies"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/pull-request": {
+      "post": {
+        "description": "Open a pull request for the session's branch.\n\nBacks the status bar's \"Create PR\" action. The branch, its base\nand the repository come from the workspace's git status on the\nrunner; the pull request itself is opened here, where the GitHub\ntoken lives.\n\nIdempotent: a branch that already has an open pull request gets\nthat one back with `created=False`, and so does a request that\nraces another one into GitHub's \"a pull request already exists\".\n\nThe branch is never pushed on the caller's behalf \u2014 a branch\nabsent from the remote is a `409` telling the user to push it.\n\n**Returns:** The opened (or already-open) pull request.\n\n**Raises**\n\n- `OmniCraftError` \u2014 With an actionable message when the workspace, the branch or the GitHub token cannot support a pull request.",
+        "operationId": "create_session_pull_request_v1_sessions__session_id__pull_request_post",
+        "parameters": [
+          {
+            "description": "Session/conversation identifier, e.g. `\"conv_abc123\"`.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionPullRequestResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Session Pull Request",
+        "tags": [
+          "sessions"
         ]
       }
     },

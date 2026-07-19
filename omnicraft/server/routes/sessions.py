@@ -250,6 +250,7 @@ from omnicraft.server.schemas import (
     SessionMcpStartupEvent,
     SessionModelEvent,
     SessionModelOptionsEvent,
+    SessionPullRequestResponse,
     SessionReasoningEffortEvent,
     SessionResourceListPage,
     SessionResourceObject,
@@ -396,6 +397,9 @@ _EXTERNAL_SESSION_STATUS_VALUES: frozenset[str] = frozenset(
 # window avoids a full transcript read while still tolerating tool/user
 # records after the assistant item.
 _EXTERNAL_STATUS_ASSISTANT_SCAN_LIMIT: int = 1000
+
+# GitHub truncates a pull-request title past this length.
+_PR_TITLE_MAX: int = 256
 
 # Compaction-progress edge observed inside the Claude Code terminal
 # (claude-native forwarder, from the ``PreCompact`` and post-compaction
@@ -18993,6 +18997,210 @@ def create_sessions_router(
             prs=prs,
             error=raw.get("error"),
         )
+
+    @router.post(
+        "/sessions/{session_id}/pull-request",
+        response_model=SessionPullRequestResponse,
+    )
+    async def create_session_pull_request(
+        request: Request,
+        session_id: str,
+    ) -> SessionPullRequestResponse:
+        """
+        Open a pull request for the session's branch.
+
+        Backs the status bar's "Create PR" action. The branch, its base
+        and the repository come from the workspace's git status on the
+        runner; the pull request itself is opened here, where the GitHub
+        token lives.
+
+        Idempotent: a branch that already has an open pull request gets
+        that one back with ``created=False``, and so does a request that
+        races another one into GitHub's "a pull request already exists".
+
+        The branch is never pushed on the caller's behalf — a branch
+        absent from the remote is a ``409`` telling the user to push it.
+
+        :param request: The incoming FastAPI request (for auth).
+        :param session_id: Session/conversation identifier,
+            e.g. ``"conv_abc123"``.
+        :returns: The opened (or already-open) pull request.
+        :raises OmniCraftError: With an actionable message when the
+            workspace, the branch or the GitHub token cannot support a
+            pull request.
+        """
+        await _validate_session(session_id, request, LEVEL_EDIT)
+        try:
+            return await _open_pull_request_for_session(session_id)
+        except OmniCraftError:
+            raise
+        except Exception as exc:
+            # Nothing on this path may surface as a 500: the button that
+            # calls it can only show the user a message.
+            _logger.exception("pull-request creation failed", extra={"session_id": session_id})
+            raise OmniCraftError(
+                "could not open the pull request — an unexpected failure occurred "
+                "while talking to the workspace or GitHub",
+                code=ErrorCode.CONFLICT,
+            ) from exc
+
+    async def _open_pull_request_for_session(session_id: str) -> SessionPullRequestResponse:
+        """Resolve the session's branch and open its pull request.
+
+        :param session_id: Session/conversation identifier.
+        :returns: The opened (or already-open) pull request.
+        :raises OmniCraftError: On any condition that stops a pull
+            request from being opened.
+        """
+        from omnicraft.server.routes.integrations import (
+            _github_token,
+            _validate_repo,
+            github_branch_exists,
+            github_commit_subjects,
+            github_default_branch,
+            github_open_pull_request,
+        )
+
+        if not await _github_token():
+            raise OmniCraftError(
+                "GitHub is not configured on this server — set GITHUB_TOKEN "
+                "or run 'gh auth login' on the machine running OmniCraft",
+                code=ErrorCode.INVALID_INPUT,
+            )
+
+        raw = await _read_runner_git_status(session_id)
+        if raw.get("error"):
+            raise OmniCraftError(
+                f"git failed in the session's workspace: {raw['error']}",
+                code=ErrorCode.CONFLICT,
+            )
+        branch = raw.get("branch")
+        if not isinstance(branch, str) or not branch:
+            raise OmniCraftError(
+                "the session's workspace is not a git repository, or its HEAD "
+                "is detached — check out a branch before opening a pull request",
+                code=ErrorCode.CONFLICT,
+            )
+        repo_slug = raw.get("repo_slug")
+        if not isinstance(repo_slug, str):
+            raise OmniCraftError(
+                "the workspace has no github.com remote, so there is no "
+                "repository to open a pull request against",
+                code=ErrorCode.CONFLICT,
+            )
+        # Strict 'owner/name' before the slug reaches any API path.
+        _validate_repo(repo_slug)
+
+        base = _pull_request_base(raw.get("base_branch"), branch)
+        if base is None:
+            base = await github_default_branch(repo_slug)
+        if base == branch:
+            raise OmniCraftError(
+                f"branch {branch!r} is the base branch of {repo_slug} — "
+                f"a pull request needs a separate branch",
+                code=ErrorCode.CONFLICT,
+            )
+        if not await github_branch_exists(repo_slug, branch):
+            raise OmniCraftError(
+                f"branch {branch!r} is not on the remote yet — push it first "
+                f"('git push -u origin {branch}'), then create the pull request",
+                code=ErrorCode.CONFLICT,
+            )
+        subjects = await github_commit_subjects(repo_slug, base=base, head=branch)
+        if not subjects:
+            raise OmniCraftError(
+                f"branch {branch!r} has no commits that {base!r} does not "
+                f"already have — there is nothing to open a pull request for",
+                code=ErrorCode.CONFLICT,
+            )
+
+        title, body = _pull_request_content(branch, subjects)
+        card, created = await github_open_pull_request(
+            repo_slug,
+            head=branch,
+            base=base,
+            title=title,
+            body=body,
+        )
+        number = card.get("number")
+        url = card.get("url")
+        if not isinstance(number, int) or not isinstance(url, str):
+            raise OmniCraftError(
+                "GitHub answered with an unexpected pull-request shape",
+                code=ErrorCode.CONFLICT,
+            )
+        return SessionPullRequestResponse(
+            session_id=session_id,
+            number=number,
+            url=url,
+            created=created,
+            title=card.get("title") or title,
+        )
+
+    async def _read_runner_git_status(session_id: str) -> Mapping[str, Any]:
+        """Read the workspace's git status off the runner, or fail readably.
+
+        Same source as ``GET /v1/sessions/{id}/git-status``; that route
+        degrades a runner failure into an ``error`` field, while this one
+        must refuse outright.
+
+        :param session_id: Session/conversation identifier.
+        :returns: The runner's git-status body.
+        :raises OmniCraftError: If the runner cannot be reached or
+            answers with something other than a JSON object.
+        """
+        try:
+            raw = await _proxy_get_to_runner(session_id, f"/v1/sessions/{session_id}/git-status")
+        except OmniCraftError:
+            raise
+        except HTTPException as exc:
+            raise OmniCraftError(
+                f"could not read the workspace's git status: {exc.detail}",
+                code=ErrorCode.CONFLICT,
+            ) from exc
+        if not isinstance(raw, Mapping):
+            raise OmniCraftError(
+                "the runner returned a malformed git status for this session",
+                code=ErrorCode.CONFLICT,
+            )
+        return raw
+
+    def _pull_request_base(base_branch: Any, branch: str) -> str | None:
+        """Turn the branch's upstream ref into a pull-request base branch.
+
+        A branch that tracks its own remote copy (``origin/<branch>``)
+        says nothing about what it should merge into; ``None`` then means
+        "ask GitHub for the default branch".
+
+        :param base_branch: Upstream ref from git status,
+            e.g. ``"origin/main"``.
+        :param branch: The session's current branch.
+        :returns: The base branch name, or ``None`` when it is unusable.
+        """
+        if not isinstance(base_branch, str) or not base_branch:
+            return None
+        name = base_branch.removeprefix("origin/")
+        if not name or name == branch:
+            return None
+        return name
+
+    def _pull_request_content(branch: str, subjects: list[str]) -> tuple[str, str]:
+        """Derive a title and body from the branch's commits.
+
+        Nothing is invented: a single commit lends its subject verbatim,
+        and several commits are listed under a title read off the branch
+        name. Bodies never claim work the commits do not mention.
+
+        :param branch: Head branch name, e.g. ``"feature/add-login"``.
+        :param subjects: Commit subjects, oldest first; never empty.
+        :returns: ``(title, body)``; the body is empty for one commit.
+        """
+        if len(subjects) == 1:
+            return subjects[0][:_PR_TITLE_MAX], ""
+        words = branch.rsplit("/", 1)[-1].replace("-", " ").replace("_", " ").strip()
+        title = (words[:1].upper() + words[1:]) if words else branch
+        body = "\n".join(f"- {subject}" for subject in subjects)
+        return title[:_PR_TITLE_MAX], body
 
     @router.get(
         "/sessions/{session_id}/resources/environments/{environment_id}/diff/{relative_path:path}",

@@ -1,31 +1,42 @@
 // The monitor feed (`GET /v1/monitor/sessions`) — the single answer to "what
 // is running, and what needs me" that the floating HUD polls.
 //
-// The server was built to never turn an absent answer into a clean one, and
-// this module's whole job is to hold that line across the wire boundary. The
-// rule it enforces everywhere: **a payload we could not read is not a payload
-// that says "nothing".** So parsing is fail-CLOSED — anything malformed,
-// missing or unrecognized degrades into an explicit unknown that the UI has to
-// render as such, never into a zero.
+// The payload is treated as UNTRUSTED BY CONSTRUCTION. Everything arriving off
+// the wire crosses exactly one strict edge — `parseMonitorFeed` — and past that
+// edge the rest of the app reads plain typed values and never re-checks them.
+// The edge holds one rule: **a field we could not read is not a field that says
+// "nothing".** A missing or malformed required field never gets a calm default;
+// it becomes an explicit unknown plus a recorded degradation.
+//
+// Degrading and marking the tallies a floor are ONE operation here (see
+// `FeedFaults.note`), mirroring the server's own accumulator: there is no path
+// that can record a failure and forget the flag saying the numbers are a floor.
 //
 // Concretely:
 //
 //   * `null` liveness / cost means UNKNOWN, never "offline" / "$0". Only
 //     `false` is a confirmed-offline runner.
+//   * `pending_elicitations_count` is `int | null` on the wire — `null` is an
+//     unreadable prompt index, NEVER "nobody is waiting". It stays `null` here
+//     and the UI must show an unknown, never a `0`.
 //   * An unrecognized `status` becomes `"unknown"` rather than being forced
 //     into the enum — a server that grows a new lifecycle state degrades
 //     instead of breaking.
 //   * `counts` that we cannot fully validate becomes `null`, not `{0, 0}`.
 //     A HUD may not print "0 aguardando" off a payload it failed to parse.
+//   * `counts.partial` means the tallies are a FLOOR, not a total. The server
+//     sets it on any degradation; the client also sets it on any degradation it
+//     detects itself.
 //   * ANY slug in `degraded` — including one this build has never heard of —
 //     marks the feed degraded. New server slugs must not be silently ignored
 //     by an old client.
 //   * `degraded: ["internal_error"]` means the feed could not be BUILT at all;
-//     `unreadable` names that case so an empty list is never read as calm.
+//     the route answers `200` with empty `sessions` in that case, so an empty
+//     list is never read as calm.
 //   * `truncated` means the response doesn't carry every matching session
-//     (scan cut, or the row cap dropped rows — `counts.omitted`). The counts
-//     still describe everything that matched unless `scan_truncated` says
-//     even they are partial.
+//     (scan cut, or the row cap dropped rows — `counts.omitted`). Unreadable,
+//     it reads as `true`: not knowing whether the list is complete is not the
+//     same as knowing it is.
 
 import { useQuery } from "@tanstack/react-query";
 import { authenticatedFetch } from "@/lib/identity";
@@ -40,8 +51,15 @@ export const MONITOR_POLL_MS = 3_000;
  */
 export const MONITOR_STALE_AFTER_MS = MONITOR_POLL_MS * 4;
 
-/** Feed-wide degraded slug meaning the feed could not be built at all. */
+/** Feed-wide degraded slug meaning the server could not build the feed. */
 export const FEED_UNREADABLE = "internal_error";
+
+/**
+ * Client-side slug: the envelope did not match the contract, so we cannot even
+ * enumerate what is running. Not on the wire — it names OUR failure to read,
+ * as distinct from the server's failure to build.
+ */
+export const ENVELOPE_UNREADABLE = "envelope_unreadable";
 
 /**
  * Client-side slug for rows the client itself could not parse. Not on the
@@ -64,9 +82,18 @@ export const FEED_DEGRADED_LABELS: Record<string, string> = {
   agent_names_unavailable: "nomes de agentes indisponíveis",
   child_sessions_unavailable: "sub-agentes não puderam ser lidos",
   pending_elicitations_unavailable: "aprovações pendentes não puderam ser lidas",
+  pending_elicitations_unknown: "aprovações pendentes desta sessão não puderam ser lidas",
+  pending_elicitation_unreadable: "o conteúdo da aprovação pendente não pôde ser lido",
   attention_rescue_unavailable: "sessões bloqueadas fora da varredura não puderam ser resgatadas",
   attention_rescue_truncated: "o resgate de sessões bloqueadas foi cortado",
-  host_unverified: "o host do filtro não pôde ser verificado",
+  status_unknown: "o estado desta sessão não está registrado",
+  status_unreadable: "o estado desta sessão não pôde ser lido",
+  cost_unreadable: "o custo não pôde ser lido",
+  counts_unreadable: "as contagens do feed não puderam ser lidas",
+  generated_at_unreadable: "a hora do feed não pôde ser lida",
+  truncated_unreadable: "não dá para saber se a lista está completa",
+  degraded_unreadable: "a lista de falhas de uma sessão não pôde ser lida",
+  [ENVELOPE_UNREADABLE]: "a resposta do feed não pôde ser lida",
   [ROW_UNREADABLE]: "alguma linha do feed não pôde ser lida",
 };
 
@@ -106,7 +133,12 @@ export interface MonitorSession {
   project: string | null;
   workspace: string | null;
   status: MonitorStatus;
-  pendingElicitationsCount: number;
+  /**
+   * Outstanding approval prompts, or `null` when the prompt index could not be
+   * read. `null` is NOT `0`: the session may or may not be blocked on a human,
+   * and only the server knows. Surfaces must render it as an unknown.
+   */
+  pendingElicitationsCount: number | null;
   pendingElicitation: MonitorPendingElicitation | null;
   /** `null` = unknown. Only `false` is a confirmed-offline runner. */
   runnerOnline: boolean | null;
@@ -130,8 +162,13 @@ export interface MonitorCounts {
   awaiting: number;
   /** Status could not be resolved — neither active nor idle. */
   unknown: number;
-  /** Matching sessions the row cap dropped: counted here, absent from `sessions`. */
+  /**
+   * Matching sessions not carried in `sessions`: rows the cap dropped, plus any
+   * session with pending attention the server could not resolve into a row.
+   */
   omitted: number;
+  /** These tallies are a FLOOR, not a total — something went unresolved. */
+  partial: boolean;
 }
 
 export interface MonitorFeed {
@@ -145,18 +182,52 @@ export interface MonitorFeed {
   sessions: MonitorSession[];
   /** `null` when the tallies could not be read — never assume zeros. */
   counts: MonitorCounts | null;
+  /** `true` also when we could not tell: an unknown list length is not a full one. */
   truncated: boolean;
   /** Every degraded slug, known or not, feed-wide. Empty means fully resolved. */
   degraded: string[];
   /**
-   * The feed itself could not be read — the server said `internal_error`, or
-   * the payload did not parse. `sessions` being empty then says NOTHING about
-   * what is running.
+   * Nothing about what is running could be read — the server said
+   * `internal_error`, or the envelope did not parse. `sessions` being empty
+   * then says NOTHING about what is running.
    */
   unreadable: boolean;
-  /** Even the counts are partial (`scan_truncated`). */
+  /** The tallies are a floor, not a total (server `counts.partial`, or our own). */
   countsPartial: boolean;
 }
+
+/**
+ * Every failure recorded on one read.
+ *
+ * `note()` records the slug AND makes the tallies a floor — one operation, so
+ * no branch can degrade the feed while still presenting its counts as
+ * complete. `fail()` adds that we cannot enumerate at all.
+ */
+class FeedFaults {
+  readonly slugs: string[] = [];
+  fatal = false;
+
+  note(slug: string): void {
+    if (!this.slugs.includes(slug)) this.slugs.push(slug);
+  }
+
+  /** A failure that leaves us unable to say what is running. */
+  fail(slug: string): void {
+    this.note(slug);
+    this.fatal = true;
+  }
+
+  /** Anything recorded means the tallies are a floor. */
+  get partial(): boolean {
+    return this.slugs.length > 0;
+  }
+}
+
+/** A field read: a trusted value, or "not readable" — never a quiet default. */
+type Read<T> = { ok: true; value: T } | { ok: false };
+
+const UNREADABLE: Read<never> = { ok: false };
+const readable = <T>(value: T): Read<T> => ({ ok: true, value });
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value !== null && typeof value === "object" && !Array.isArray(value)
@@ -164,22 +235,38 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
-/** `null` for anything that isn't a real boolean — including a missing key. */
-function boolOrNull(value: unknown): boolean | null {
-  return typeof value === "boolean" ? value : null;
+function readBool(value: unknown): Read<boolean> {
+  return typeof value === "boolean" ? readable(value) : UNREADABLE;
 }
 
-/** `null` for anything that isn't a finite number, so `0` stays meaningful. */
-function numberOrNull(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+function readString(value: unknown): Read<string> {
+  return typeof value === "string" ? readable(value) : UNREADABLE;
 }
 
-function stringOrNull(value: unknown): string | null {
-  return typeof value === "string" ? value : null;
+function readNumber(value: unknown): Read<number> {
+  return typeof value === "number" && Number.isFinite(value) ? readable(value) : UNREADABLE;
 }
 
-function stringList(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
+/** A tally: whole and non-negative. `-1` is out of domain, not a small number. */
+function readCount(value: unknown): Read<number> {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
+    ? readable(value)
+    : UNREADABLE;
+}
+
+function readStringArray(value: unknown): Read<string[]> {
+  return Array.isArray(value) && value.every((entry) => typeof entry === "string")
+    ? readable(value as string[])
+    : UNREADABLE;
+}
+
+/**
+ * A field the contract allows to be `null`. Absent or `null` is a legitimate
+ * unknown; a value of the wrong TYPE is not — that stays unreadable so the
+ * caller records it.
+ */
+function readNullable<T>(value: unknown, read: (raw: unknown) => Read<T>): Read<T | null> {
+  return value === undefined || value === null ? readable(null) : read(value);
 }
 
 /**
@@ -194,117 +281,202 @@ export function normalizeStatus(value: unknown): MonitorStatus {
 /**
  * Parse the tallies, or return `null` when they cannot be trusted.
  *
- * `active` and `awaiting` must be real non-negative numbers; `unknown` and
- * `omitted` may be absent (an older server) but must be numbers when present.
- * Anything else means we do not know the tallies — and `null` is the only
- * honest way to say that. Returning `{active: 0, awaiting: 0}` here would let
- * a malformed body render as "nothing needs you".
+ * Every field of the contract is required and must be a whole non-negative
+ * number (`partial`, a boolean). Anything else means we do not know the
+ * tallies — and `null` is the only honest way to say that. Returning
+ * `{active: 0, awaiting: 0}` off a partial body would let an incomplete
+ * payload render as "nothing needs you".
  */
 export function parseMonitorCounts(value: unknown): MonitorCounts | null {
   const raw = asRecord(value);
   if (raw === null) return null;
-  const read = (key: string, required: boolean): number | null => {
-    if (raw[key] === undefined) return required ? null : 0;
-    const n = numberOrNull(raw[key]);
-    return n === null || n < 0 ? null : n;
+  const active = readCount(raw.active);
+  const awaiting = readCount(raw.awaiting);
+  const unknown = readCount(raw.unknown);
+  const omitted = readCount(raw.omitted);
+  const partial = readBool(raw.partial);
+  if (!active.ok || !awaiting.ok || !unknown.ok || !omitted.ok || !partial.ok) return null;
+  return {
+    active: active.value,
+    awaiting: awaiting.value,
+    unknown: unknown.value,
+    omitted: omitted.value,
+    partial: partial.value,
   };
-  const active = read("active", true);
-  const awaiting = read("awaiting", true);
-  const unknown = read("unknown", false);
-  const omitted = read("omitted", false);
-  if (active === null || awaiting === null || unknown === null || omitted === null) return null;
-  return { active, awaiting, unknown, omitted };
 }
 
 function parsePendingElicitation(value: unknown): MonitorPendingElicitation | null {
   const raw = asRecord(value);
   if (raw === null) return null;
-  const id = stringOrNull(raw.id);
-  const sessionId = stringOrNull(raw.session_id);
-  if (id === null || sessionId === null) return null;
+  const id = readString(raw.id);
+  const sessionId = readString(raw.session_id);
+  if (!id.ok || !sessionId.ok) return null;
+  const kind = readNullable(raw.kind, readString);
+  const summary = readNullable(raw.summary, readString);
   return {
-    id,
-    sessionId,
-    kind: stringOrNull(raw.kind) ?? "unknown",
-    summary: stringOrNull(raw.summary),
-  };
-}
-
-function parseSession(value: unknown): MonitorSession | null {
-  const raw = asRecord(value);
-  if (raw === null) return null;
-  const sessionId = stringOrNull(raw.session_id);
-  if (sessionId === null) return null;
-  const pendingCount = numberOrNull(raw.pending_elicitations_count);
-  const rowDegraded = stringList(raw.degraded);
-  return {
-    sessionId,
-    agentName: stringOrNull(raw.agent_name),
-    title: stringOrNull(raw.title),
-    project: stringOrNull(raw.project),
-    workspace: stringOrNull(raw.workspace),
-    status: normalizeStatus(raw.status),
-    // An unreadable count is not "no prompts" — fall back to 0 but say the
-    // row is degraded so nothing renders it as a clean, unblocked session.
-    pendingElicitationsCount: pendingCount ?? 0,
-    pendingElicitation: parsePendingElicitation(raw.pending_elicitation),
-    runnerOnline: boolOrNull(raw.runner_online),
-    hostOnline: boolOrNull(raw.host_online),
-    updatedAt: numberOrNull(raw.updated_at),
-    costUsd: numberOrNull(raw.cost_usd),
-    degraded: pendingCount === null ? [...rowDegraded, ROW_UNREADABLE] : rowDegraded,
+    id: id.value,
+    sessionId: sessionId.value,
+    kind: kind.ok ? (kind.value ?? "unknown") : "unknown",
+    summary: summary.ok ? summary.value : null,
   };
 }
 
 /**
- * Turn a raw feed body into the client shape. Never throws — but never
- * fabricates calm either: a body that isn't a feed comes back `unreadable`
- * with `counts: null`.
+ * Parse one row. Returns `null` only when the row cannot be identified at all —
+ * the caller then records it as a dropped row rather than a shorter list.
+ */
+function parseSession(value: unknown, faults: FeedFaults): MonitorSession | null {
+  const raw = asRecord(value);
+  if (raw === null) return null;
+  const sessionId = readString(raw.session_id);
+  if (!sessionId.ok) return null;
+
+  const wireDegraded = readStringArray(raw.degraded);
+  const degraded = wireDegraded.ok ? [...wireDegraded.value] : [];
+  /** A failure the SERVER already reported: mark the row, feed already partial. */
+  const noteRow = (slug: string) => {
+    if (!degraded.includes(slug)) degraded.push(slug);
+  };
+  /** A failure WE found reading the row: the feed's own numbers are a floor too. */
+  const failRow = (slug: string) => {
+    noteRow(slug);
+    faults.note(ROW_UNREADABLE);
+  };
+  if (!wireDegraded.ok) failRow("degraded_unreadable");
+
+  const status = KNOWN_STATUSES.find((s) => s === raw.status);
+  if (status === undefined) failRow("status_unreadable");
+
+  // `null` is the server saying it could not read the prompt index; a value
+  // outside the domain (negative, fractional, a string) is the same unknown
+  // reached our way. Neither may become a `0` — that would hide a session
+  // blocked on a human behind a confident all-clear.
+  const wireCount = readNullable(raw.pending_elicitations_count, readCount);
+  if (!wireCount.ok) failRow("pending_elicitations_unknown");
+  else if (wireCount.value === null) noteRow("pending_elicitations_unknown");
+  const pendingCount = wireCount.ok ? wireCount.value : null;
+
+  const prompt =
+    raw.pending_elicitation === undefined || raw.pending_elicitation === null
+      ? null
+      : parsePendingElicitation(raw.pending_elicitation);
+  if (
+    raw.pending_elicitation !== undefined &&
+    raw.pending_elicitation !== null &&
+    prompt === null
+  ) {
+    failRow("pending_elicitation_unreadable");
+  }
+
+  const runnerOnline = readNullable(raw.runner_online, readBool);
+  const hostOnline = readNullable(raw.host_online, readBool);
+  if (!runnerOnline.ok || !hostOnline.ok) failRow("liveness_unavailable");
+  const costUsd = readNullable(raw.cost_usd, readNumber);
+  if (!costUsd.ok) failRow("cost_unreadable");
+
+  // Labels assert nothing on their own: an unreadable one degrades to `null`,
+  // which renders as absent rather than as a fact.
+  const label = (field: unknown): string | null => {
+    const read = readNullable(field, readString);
+    return read.ok ? read.value : null;
+  };
+  const updatedAt = readNullable(raw.updated_at, readNumber);
+
+  return {
+    sessionId: sessionId.value,
+    agentName: label(raw.agent_name),
+    title: label(raw.title),
+    project: label(raw.project),
+    workspace: label(raw.workspace),
+    status: status ?? "unknown",
+    pendingElicitationsCount: pendingCount,
+    pendingElicitation: prompt,
+    runnerOnline: runnerOnline.ok ? runnerOnline.value : null,
+    hostOnline: hostOnline.ok ? hostOnline.value : null,
+    updatedAt: updatedAt.ok ? updatedAt.value : null,
+    costUsd: costUsd.ok ? costUsd.value : null,
+    degraded,
+  };
+}
+
+function unreadableFeed(faults: FeedFaults, hostId: string | null = null): MonitorFeed {
+  return {
+    generatedAt: null,
+    hostId,
+    sessions: [],
+    counts: null,
+    truncated: true,
+    degraded: faults.slugs,
+    unreadable: true,
+    countsPartial: true,
+  };
+}
+
+/**
+ * The single strict edge between the wire and the app. Never throws — and never
+ * fabricates calm either: anything it could not read comes back as an explicit
+ * unknown with the failure recorded. Past this function the HUD reads plain
+ * typed values and does no re-checking.
  */
 export function parseMonitorFeed(body: unknown): MonitorFeed {
+  const faults = new FeedFaults();
   const raw = asRecord(body);
   if (raw === null) {
-    return {
-      generatedAt: null,
-      hostId: null,
-      sessions: [],
-      counts: null,
-      truncated: false,
-      degraded: [FEED_UNREADABLE],
-      unreadable: true,
-      countsPartial: true,
-    };
+    faults.fail(ENVELOPE_UNREADABLE);
+    return unreadableFeed(faults);
   }
-  const degraded = [...stringList(raw.degraded)];
-  // `sessions` absent or not an array is a payload we cannot read — not an
-  // empty account.
+
+  // The server's own failure list. Losing it means losing every reason the
+  // feed might be incomplete, so an unreadable list is fatal, and `internal_error`
+  // says the server never built the feed at all.
+  const wireDegraded = readStringArray(raw.degraded);
+  if (!wireDegraded.ok) faults.fail(ENVELOPE_UNREADABLE);
+  else
+    for (const slug of wireDegraded.value) {
+      if (slug === FEED_UNREADABLE) faults.fail(slug);
+      else faults.note(slug);
+    }
+
+  // Rows we cannot enumerate are not an empty account.
   const rawSessions = raw.sessions;
-  const sessionsUnreadable = !Array.isArray(rawSessions);
+  if (!Array.isArray(rawSessions)) faults.fail(ENVELOPE_UNREADABLE);
   const sessions = (Array.isArray(rawSessions) ? rawSessions : [])
-    .map(parseSession)
+    .map((row) => parseSession(row, faults))
     .filter((s): s is MonitorSession => s !== null);
-  // Rows the client dropped are a degradation, not a shorter list.
   if (Array.isArray(rawSessions) && sessions.length !== rawSessions.length) {
-    if (!degraded.includes(ROW_UNREADABLE)) degraded.push(ROW_UNREADABLE);
+    faults.note(ROW_UNREADABLE);
   }
+
   const counts = parseMonitorCounts(raw.counts);
-  if (sessionsUnreadable && !degraded.includes(FEED_UNREADABLE)) degraded.push(FEED_UNREADABLE);
+  if (counts === null) faults.note("counts_unreadable");
+
+  const generatedAt = readNumber(raw.generated_at);
+  if (!generatedAt.ok) faults.note("generated_at_unreadable");
+
+  // Not knowing whether the list is complete is not the same as knowing it is.
+  const truncated = readBool(raw.truncated);
+  if (!truncated.ok) faults.note("truncated_unreadable");
+
+  const hostId = readNullable(raw.host_id, readString);
+  if (faults.fatal) return unreadableFeed(faults, hostId.ok ? hostId.value : null);
+
   return {
-    generatedAt: numberOrNull(raw.generated_at),
-    hostId: stringOrNull(raw.host_id),
+    generatedAt: generatedAt.ok ? generatedAt.value : null,
+    hostId: hostId.ok ? hostId.value : null,
     sessions,
     counts,
-    truncated: raw.truncated === true,
-    degraded,
-    unreadable: degraded.includes(FEED_UNREADABLE),
-    countsPartial: counts === null || degraded.includes("scan_truncated"),
+    truncated: truncated.ok ? truncated.value : true,
+    degraded: faults.slugs,
+    unreadable: false,
+    countsPartial: counts === null || counts.partial || faults.partial,
   };
 }
 
 /**
  * A feed read that failed. Carries the status so the HUD can say WHY —
- * a rejected `host_id` (400/404) is a filter the user can fix, not a server
- * that is down, and neither is an empty account.
+ * a rejected `host_id` (400/404) is a filter the user can fix, an
+ * unverifiable one (503) is a server that cannot check, and none of them is
+ * an empty account.
  */
 export class MonitorFeedError extends Error {
   readonly status: number | null;
@@ -332,11 +504,19 @@ export async function fetchMonitorFeed(hostId?: string | null): Promise<MonitorF
     throw new MonitorFeedError("O servidor não respondeu.", null);
   }
   if (!res.ok) {
-    // A rejected filter is a distinct, actionable failure — surfacing it as a
-    // generic outage (or worse, an empty feed) would hide a fixable mistake.
+    // The feed itself always answers 200 (a failure to build it is reported
+    // in the body). Every error status is about the `host_id` filter, and each
+    // is a distinct, actionable failure — surfacing any of them as an empty
+    // feed would hide a fixable mistake behind a clean board.
     if (res.status === 400 || res.status === 404) {
       throw new MonitorFeedError(
         `O filtro de host foi recusado pelo servidor (${res.status}). O feed não foi lido.`,
+        res.status,
+      );
+    }
+    if (res.status === 503) {
+      throw new MonitorFeedError(
+        "O servidor não tem registro de hosts para verificar esse filtro (503). O feed não foi lido.",
         res.status,
       );
     }

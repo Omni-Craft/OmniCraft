@@ -10,6 +10,8 @@
  * no monitor, so each way of not-knowing gets its own visible state:
  *
  *   - counts the payload didn't carry → "contagens ilegíveis", not zeros
+ *   - counts the server marked partial → a FLOOR ("≥"), never a total
+ *   - a session whose prompt index couldn't be read → "?", never "0 pendentes"
  *   - a feed that failed to build, or a read that failed → the reason, with
  *     the note that this does NOT mean nothing is running
  *   - a snapshot that stopped refreshing → marked desatualizado, with its age,
@@ -37,6 +39,7 @@ import {
   isFeedStale,
   monitorFeedErrorMessage,
   useMonitorFeed,
+  type MonitorPendingElicitation,
   type MonitorSession,
   type MonitorStatus,
 } from "@/hooks/useMonitorFeed";
@@ -71,6 +74,18 @@ function livenessText(online: boolean | null): { text: string; tone: "unknown" |
 /** Phrase a degraded slug, falling back to the raw slug for ones we don't know. */
 function degradedText(slug: string): string {
   return FEED_DEGRADED_LABELS[slug] ?? slug;
+}
+
+/**
+ * Key for the optimistic verdict / resolve error of one prompt.
+ *
+ * Scoped by the ROW it renders on and the session that owns the prompt, not by
+ * the elicitation id alone: ids are only unique within a session, so a feed
+ * that swapped underneath would otherwise show one card's answer — or its
+ * failure — on an unrelated prompt that happens to reuse the id.
+ */
+function verdictKey(rowSessionId: string, prompt: MonitorPendingElicitation): string {
+  return [rowSessionId, prompt.sessionId, prompt.id].join("\u0000");
 }
 
 /** Wall-clock ms, re-read on an interval so age-based staleness can surface. */
@@ -135,14 +150,14 @@ export function HudPanel({
     onExpandedChange(next);
   };
 
-  const makeSubmit = (resolveSessionId: string): SubmitApprovalFn => {
+  const makeSubmit = (key: string, resolveSessionId: string): SubmitApprovalFn => {
     return (elicitationId, action, content) => {
       setResolveErrors((prev) => {
         const next = { ...prev };
-        delete next[elicitationId];
+        delete next[key];
         return next;
       });
-      setResponded((prev) => ({ ...prev, [elicitationId]: action }));
+      setResponded((prev) => ({ ...prev, [key]: action }));
       void approve(
         resolveSessionId,
         elicitationId,
@@ -156,12 +171,12 @@ export function HudPanel({
           // had been answered.
           setResponded((prev) => {
             const next = { ...prev };
-            delete next[elicitationId];
+            delete next[key];
             return next;
           });
           setResolveErrors((prev) => ({
             ...prev,
-            [elicitationId]:
+            [key]:
               error instanceof Error && error.message
                 ? error.message
                 : "A resposta não pôde ser enviada.",
@@ -176,13 +191,19 @@ export function HudPanel({
   else if (loading || feed === null) pill = "Carregando…";
   else if (feed.counts === null) pill = "Contagens ilegíveis";
   else {
-    const parts = [`${feed.counts.active} ativas`, `${feed.counts.awaiting} aguardando`];
-    // Unknown-status and cap-omitted sessions are real sessions the tallies
-    // above don't describe. Printing only the two clean numbers would present
-    // a partial answer as a complete one.
-    if (feed.counts.unknown > 0) parts.push(`${feed.counts.unknown} desconhecidas`);
-    if (feed.counts.omitted > 0) parts.push(`+${feed.counts.omitted} omitidas`);
-    if (feed.truncated || feed.countsPartial) parts.push("parcial");
+    // Partial tallies are a FLOOR, not a total: something matching went
+    // unresolved, so each number is "at least this many". Printing them bare
+    // would present a floor as the answer.
+    const floor = feed.countsPartial;
+    const n = (value: number) => (floor ? `≥${value}` : `${value}`);
+    const parts = [`${n(feed.counts.active)} ativas`, `${n(feed.counts.awaiting)} aguardando`];
+    // Unknown-status and omitted sessions are real sessions the tallies above
+    // don't describe. Printing only the two clean numbers would present a
+    // partial answer as a complete one.
+    if (feed.counts.unknown > 0) parts.push(`${n(feed.counts.unknown)} desconhecidas`);
+    if (feed.counts.omitted > 0) parts.push(`+${feed.counts.omitted} fora da lista`);
+    if (floor) parts.push("piso, não total");
+    else if (feed.truncated) parts.push("lista parcial");
     pill = parts.join(" · ");
   }
 
@@ -247,10 +268,19 @@ export function HudPanel({
               aguardando é desconhecido.
             </p>
           )}
-          {feed?.truncated && (
+          {feed?.counts !== null && feed?.countsPartial && !unreadable && (
+            <p data-testid="hud-counts-partial" className="text-xs text-warning">
+              As contagens são um piso, não um total: parte do feed não pôde ser resolvida, então
+              pode haver mais sessões ativas ou aguardando você.
+            </p>
+          )}
+          {feed && (feed.truncated || (feed.counts?.omitted ?? 0) > 0) && (
             <p data-testid="hud-truncated" className="text-xs text-muted-foreground">
               Lista parcial: nem toda sessão que casou está aqui
-              {feed.counts && feed.counts.omitted > 0 ? ` (${feed.counts.omitted} omitidas)` : ""}.
+              {feed.counts && feed.counts.omitted > 0
+                ? ` (${feed.counts.omitted} fora da lista, incluindo as que podem precisar de você)`
+                : ""}
+              .
             </p>
           )}
           {degradedSlugs.length > 0 && (
@@ -268,6 +298,7 @@ export function HudPanel({
           {feed &&
             !feed.unreadable &&
             feed.counts !== null &&
+            !feed.countsPartial &&
             feed.sessions.length === 0 &&
             !feed.truncated &&
             degradedSlugs.length === 0 && (
@@ -302,22 +333,31 @@ interface HudSessionRowProps {
   session: MonitorSession;
   responded: Record<string, "accept" | "decline">;
   resolveErrors: Record<string, string>;
-  makeSubmit: (resolveSessionId: string) => SubmitApprovalFn;
+  makeSubmit: (key: string, resolveSessionId: string) => SubmitApprovalFn;
 }
 
 function HudSessionRow({ session, responded, resolveErrors, makeSubmit }: HudSessionRowProps) {
   const prompt = session.pendingElicitation;
+  // `null` = the prompt index could not be read. It is NOT zero: this row may
+  // be blocked on a human and nothing here may imply otherwise.
+  const pending = session.pendingElicitationsCount;
+  const pendingUnknown = pending === null;
   // The sidebar's own derivation, fed the monitor row: a pending prompt wins
-  // over "running", which is exactly the priority a monitor wants.
+  // over "running", which is exactly the priority a monitor wants. An unknown
+  // count earns no badge — the explicit "?" below says what we don't know.
   const badgeState = getSessionState({
     status: session.status === "running" ? "running" : undefined,
-    pending_elicitations_count: session.pendingElicitationsCount,
+    pending_elicitations_count: pending ?? 0,
   });
   const runner = livenessText(session.runnerOnline);
   const host = livenessText(session.hostOnline);
-  const waiting = session.status === "waiting" || session.pendingElicitationsCount > 0;
-  const verdict = prompt ? responded[prompt.id] : undefined;
-  const resolveError = prompt ? resolveErrors[prompt.id] : undefined;
+  const waiting = session.status === "waiting" || (pending ?? 0) > 0;
+  // An unreadable count may be hiding a human-blocking prompt, so the row is
+  // flagged for attention rather than styled like a settled one.
+  const attention = waiting || pendingUnknown;
+  const key = prompt ? verdictKey(session.sessionId, prompt) : null;
+  const verdict = key ? responded[key] : undefined;
+  const resolveError = key ? resolveErrors[key] : undefined;
 
   return (
     <li
@@ -325,9 +365,10 @@ function HudSessionRow({ session, responded, resolveErrors, makeSubmit }: HudSes
       data-session-id={session.sessionId}
       data-status={session.status}
       data-waiting={waiting}
+      data-pending-unknown={pendingUnknown}
       className={cn(
         "flex flex-col gap-1 rounded-lg border p-2",
-        waiting ? "border-warning/40 bg-warning/5" : "border-border",
+        attention ? "border-warning/40 bg-warning/5" : "border-border",
       )}
     >
       <div className="flex items-center gap-2">
@@ -351,6 +392,11 @@ function HudSessionRow({ session, responded, resolveErrors, makeSubmit }: HudSes
         >
           custo: {session.costUsd === null ? "—" : `US$ ${session.costUsd.toFixed(2)}`}
         </span>
+        {pendingUnknown && (
+          <span data-testid="hud-pending-unknown" className="text-warning">
+            aprovações pendentes: ?
+          </span>
+        )}
         {session.degraded.length > 0 && (
           <span data-testid="hud-session-degraded" className="text-warning">
             parcial: {session.degraded.map(degradedText).join(", ")}
@@ -369,7 +415,7 @@ function HudSessionRow({ session, responded, resolveErrors, makeSubmit }: HudSes
           response={verdict ? { action: verdict } : null}
           // The prompt is parked on the session named by the feed, which may
           // be a sub-agent child of this row — post the verdict THERE.
-          onSubmit={makeSubmit(prompt.sessionId)}
+          onSubmit={makeSubmit(key ?? prompt.id, prompt.sessionId)}
         />
       )}
       {resolveError && (
@@ -377,10 +423,16 @@ function HudSessionRow({ session, responded, resolveErrors, makeSubmit }: HudSes
           A resposta não foi enviada: {resolveError.replace(/\.$/, "")}. Tente novamente.
         </p>
       )}
-      {!prompt && session.pendingElicitationsCount > 0 && (
+      {!prompt && pending !== null && pending > 0 && (
         <p data-testid="hud-prompt-unreadable" className="text-xs text-warning">
-          {session.pendingElicitationsCount} aprovação(ões) pendente(s), mas o conteúdo não pôde ser
-          lido. Abra a sessão para responder.
+          {pending} aprovação(ões) pendente(s), mas o conteúdo não pôde ser lido. Abra a sessão para
+          responder.
+        </p>
+      )}
+      {!prompt && pendingUnknown && (
+        <p data-testid="hud-pending-unknown-detail" className="text-xs text-warning">
+          Não dá para saber se esta sessão está esperando por você — o índice de aprovações não pôde
+          ser lido. Abra a sessão para conferir.
         </p>
       )}
     </li>

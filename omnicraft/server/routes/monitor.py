@@ -376,9 +376,9 @@ def create_monitor_router(
         compute liveness, which the feed reports as unknown rather than
         offline.
     :param host_store: Store used to validate the ``host_id`` filter.
-        ``None`` means the filter still applies (sessions stay
-        ACL-scoped) but cannot be verified, which the feed reports as
-        ``"host_unverified"``.
+        ``None`` means a ``host_id`` cannot be checked at all, so the
+        request is refused with a typed ``503 host_unverifiable`` rather
+        than answered with a feed scoped to nothing.
     :returns: The configured router.
     """
     router = APIRouter()

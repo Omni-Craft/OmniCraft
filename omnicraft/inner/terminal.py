@@ -146,7 +146,14 @@ def _read_terminal_transport_config() -> str | None:
     if not isinstance(table, dict):
         return None
     value = table.get(_TERMINAL_TRANSPORT_CONFIG_KEY)
-    return value if isinstance(value, str) else None
+    # YAML parses the documented aliases false/true/0/1/yes/no/on/off as
+    # bool/int, not str — coerce them back so the caller's alias match works.
+    # (Before the SafeLoader-clobber fix these arrived pre-stringified.)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        return str(value)
+    return None
 
 
 def resolve_terminal_transport(

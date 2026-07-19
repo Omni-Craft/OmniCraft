@@ -359,6 +359,38 @@ def test_write_policy_hook_config_merges_user_model(tmp_path, monkeypatch) -> No
     assert config["hooks_auto_accept"] is True
 
 
+def test_write_policy_hook_config_custom_hermes_home_isolates_credentials(
+    tmp_path, monkeypatch
+) -> None:
+    """A caller-supplied ``hermes_home`` keeps credentials off the predictable
+    bridge dir — only ``bridge.json`` (no secrets) belongs there."""
+    bridge_dir = tmp_path / "bridge"
+    private_home = tmp_path / "private_home"
+    user_hermes = tmp_path / ".hermes"
+    user_hermes.mkdir()
+    (user_hermes / ".env").write_text("API_KEY=secret")
+    (user_hermes / "auth.json").write_text('{"token": "abc"}')
+    monkeypatch.setattr(b.Path, "home", staticmethod(lambda: tmp_path))
+
+    hermes_home = b.write_policy_hook_config(
+        bridge_dir, "http://localhost:6767", "s3", hermes_home=private_home
+    )
+
+    assert hermes_home == private_home
+    assert hermes_home.stat().st_mode & 0o777 == 0o700
+    assert (private_home / ".env").read_text() == "API_KEY=secret"
+    assert (private_home / "auth.json").read_text() == '{"token": "abc"}'
+    assert (private_home / "config.yaml").is_file()
+    assert (private_home / "omnicraft-policy-hook.sh").is_file()
+
+    # The predictable bridge dir only ever gets bridge.json — no credentials.
+    bridge_entries = {p.name for p in bridge_dir.iterdir()}
+    assert bridge_entries == {"bridge.json"}
+    assert not (bridge_dir / ".env").exists()
+    assert not (bridge_dir / "auth.json").exists()
+    assert not (bridge_dir / "hermes_home").exists()
+
+
 def test_read_hermes_home_returns_path_when_exists(tmp_path) -> None:
     (tmp_path / "hermes_home").mkdir()
     assert b.read_hermes_home(tmp_path) == tmp_path / "hermes_home"

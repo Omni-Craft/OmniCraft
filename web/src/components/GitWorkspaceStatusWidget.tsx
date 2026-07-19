@@ -5,6 +5,11 @@
 // base, or a pull request for the branch. A clean tree with no PR shows
 // nothing, and a git failure hides the bar rather than putting an error in
 // front of the chat.
+//
+// Its one action opens a pull request for the branch. That publishes to
+// GitHub, so it takes a deliberate second click; when the server refuses, the
+// reason is printed in the bar next to GitHub's compare page as the way
+// through.
 
 import {
   CheckIcon,
@@ -14,11 +19,16 @@ import {
   Loader2Icon,
   XIcon,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { useGitPrStatus, type GitPrStatus, type GitPullRequest } from "@/hooks/useGitPrStatus";
+import {
+  useCreateSessionPullRequest,
+  useGitPrStatus,
+  type GitPrStatus,
+  type GitPullRequest,
+} from "@/hooks/useGitPrStatus";
 import { cn } from "@/lib/utils";
 
 /** Mirrors the composer column so the bar lines up with the card below it. */
@@ -142,6 +152,9 @@ const PR_STATE_LABEL: Record<GitPullRequest["state"], string> = {
   closed: "fechado",
 };
 
+/** How long the button stays armed before disarming itself. */
+const CONFIRM_TIMEOUT_MS = 5_000;
+
 /**
  * Git/PR status bar for the session's workspace, rendered above the composer.
  *
@@ -151,17 +164,63 @@ const PR_STATE_LABEL: Record<GitPullRequest["state"], string> = {
  * @param sessionId Session/conversation id. Nullish renders nothing.
  */
 export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | null | undefined }) {
-  const [open, setOpen] = useState(false);
   const { data } = useGitPrStatus(sessionId);
 
-  if (!isGitWorkspaceStatusVisible(data) || !data) return null;
+  if (!sessionId || !isGitWorkspaceStatusVisible(data) || !data) return null;
+  return <GitStatusBar sessionId={sessionId} data={data} />;
+}
+
+/** The bar itself, mounted only once there is a status worth showing. */
+function GitStatusBar({ sessionId, data }: { sessionId: string; data: GitPrStatus }) {
+  const [open, setOpen] = useState(false);
+  // Opening a PR is outward-facing, so the button arms on the first click and
+  // fires on the second. It disarms on blur, Escape or a short timeout so a
+  // forgotten click never sits there waiting to publish something.
+  const [confirming, setConfirming] = useState(false);
+  // The PR the click just opened. Kept aside from the query so the button
+  // stays "Ver PR #N" even if the next git-status doesn't list it yet.
+  const [createdPr, setCreatedPr] = useState<GitPullRequest | null>(null);
+  const createPr = useCreateSessionPullRequest(sessionId);
+
+  useEffect(() => {
+    if (!confirming) return;
+    const timer = setTimeout(() => setConfirming(false), CONFIRM_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [confirming]);
 
   const branch = data.branch as string;
   const diff = data.diff;
   const ahead = data.ahead ?? 0;
   const behind = data.behind ?? 0;
-  const pr = openPullRequest(data.prs);
+  const pr = openPullRequest(data.prs) ?? createdPr;
   const compare = pr ? null : compareUrl(data);
+  const failure = createPr.isError ? createPr.error.message : null;
+
+  function handleCreateClick() {
+    if (createPr.isPending) return;
+    if (!confirming) {
+      setConfirming(true);
+      return;
+    }
+    setConfirming(false);
+    createPr.mutate(undefined, {
+      onSuccess: (result) =>
+        setCreatedPr({
+          number: result.number,
+          title: result.title,
+          state: "open",
+          ci_status: null,
+          url: result.url,
+        }),
+    });
+  }
+
+  const createLabel = createPr.isPending ? "Criando PR…" : confirming ? "Confirmar?" : "Criar PR";
+  const createAriaLabel = createPr.isPending
+    ? "Criando PR…"
+    : confirming
+      ? `Confirmar: abrir um pull request de ${branch} para ${baseBranchName(data.base_branch) ?? "o branch base"} no GitHub`
+      : "Criar PR — pede confirmação antes de abrir";
   // A change set can have files but no line counts (binary files, renames,
   // mode changes) — "+0 -0" would read as "nothing changed", so name the
   // files instead. Keeps the summary honest with the visibility rule.
@@ -226,18 +285,48 @@ export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | nu
             </a>
           ) : (
             compare && (
-              <a
+              <button
+                type="button"
                 data-testid="git-status-create-pr"
-                href={compare}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="shrink-0 font-medium text-primary hover:underline"
+                onClick={handleCreateClick}
+                onBlur={() => setConfirming(false)}
+                onKeyDown={(event) => {
+                  if (event.key === "Escape") setConfirming(false);
+                }}
+                disabled={createPr.isPending}
+                aria-label={createAriaLabel}
+                aria-busy={createPr.isPending || undefined}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1 font-medium hover:underline disabled:cursor-default disabled:opacity-70 disabled:hover:no-underline",
+                  confirming ? "text-warning" : "text-primary",
+                )}
               >
-                Criar PR
-              </a>
+                {createPr.isPending && <Loader2Icon className="size-3 shrink-0 animate-spin" />}
+                {createLabel}
+              </button>
             )
           )}
         </div>
+        {failure && (
+          <div
+            data-testid="git-status-pr-error"
+            role="status"
+            className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-border px-3 py-1.5 text-xs text-destructive"
+          >
+            <span className="min-w-0">{failure}</span>
+            {compare && (
+              <a
+                data-testid="git-status-compare-link"
+                href={compare}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 font-medium underline"
+              >
+                Abrir a página de compare no GitHub
+              </a>
+            )}
+          </div>
+        )}
         <CollapsibleContent>
           <div className="space-y-1 border-t border-border px-3 py-2 text-xs text-muted-foreground">
             {data.base_branch && (

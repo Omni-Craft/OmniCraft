@@ -4,7 +4,8 @@
 // up only when the workspace has changes, commits ahead, or a PR — and stays
 // out of the way for a clean tree, a session without a workspace, or a git
 // failure. The rest cover collapse/expand and the "Criar PR" → "Ver PR"
-// swap once a PR is open.
+// swap once a PR is open — including the two-click confirmation that opens
+// it, which must never POST on the first click nor twice on the second.
 //
 // `authenticatedFetch` is stubbed at the seam so the real hook (query key,
 // enabled gate, response normalization) runs against canned bodies.
@@ -140,14 +141,11 @@ describe("collapse / expand", () => {
 });
 
 describe("PR action", () => {
-  it("offers a compare link for a dirty branch with no PR", async () => {
+  it("offers a create button for a dirty branch with no PR", async () => {
     await renderWidget(status({ diff: { added: 5, removed: 1, files: 2 } }));
-    const link = await screen.findByTestId("git-status-create-pr");
-    // The branch name has a slash — it must survive as one path segment.
-    expect(link.getAttribute("href")).toBe(
-      "https://github.com/acme/omni/compare/main...feature%2Flogin?expand=1",
-    );
-    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    const button = await screen.findByTestId("git-status-create-pr");
+    expect(button.textContent).toBe("Criar PR");
+    expect(button.getAttribute("aria-label")).toContain("pede confirmação");
   });
 
   it("swaps the create button for the PR link once a PR shows up", async () => {
@@ -180,6 +178,150 @@ describe("PR action", () => {
     await renderWidget(status({ ahead: 1, prs: [pr({ state: "closed", ci_status: null })] }));
     expect(await screen.findByTestId("git-status-create-pr")).toBeTruthy();
     expect(screen.queryByTestId("git-status-pr-link")).toBeNull();
+  });
+});
+
+describe("creating the pull request", () => {
+  /**
+   * Render with the git-status GET answering `body` and the pull-request POST
+   * answering `post`, so the click path runs against the real hook.
+   */
+  async function renderCreatable(post: () => unknown, body: GitPrStatus = status({ ahead: 1 })) {
+    authenticatedFetchMock.mockImplementation(async (url: unknown) =>
+      String(url).endsWith("/pull-request")
+        ? post()
+        : { ok: true, status: 200, json: async () => body },
+    );
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <GitWorkspaceStatusWidget sessionId="sess_1" />
+      </QueryClientProvider>,
+    );
+    return {
+      button: await screen.findByTestId("git-status-create-pr"),
+      posts: () =>
+        authenticatedFetchMock.mock.calls.filter((call) =>
+          String(call[0]).endsWith("/pull-request"),
+        ),
+    };
+  }
+
+  const created = (overrides = {}) => ({
+    ok: true,
+    status: 200,
+    json: async () => ({
+      object: "session.pull_request",
+      session_id: "sess_1",
+      number: 7,
+      url: "https://github.com/acme/omni/pull/7",
+      created: true,
+      title: "Add login",
+      ...overrides,
+    }),
+  });
+
+  const refused = (httpStatus: number, code: string, message: string) => ({
+    ok: false,
+    status: httpStatus,
+    json: async () => ({ error: { code, message } }),
+  });
+
+  it("arms on the first click without opening anything", async () => {
+    const { button, posts } = await renderCreatable(created);
+    fireEvent.click(button);
+
+    await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
+    expect(button.getAttribute("aria-label")).toContain("abrir um pull request de feature/login");
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("opens the pull request on the second click and shows it", async () => {
+    const { button, posts } = await renderCreatable(created);
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    const link = await screen.findByTestId("git-status-pr-link");
+    expect(link.textContent).toBe("Ver PR #7");
+    expect(link.getAttribute("href")).toBe("https://github.com/acme/omni/pull/7");
+    expect(posts()).toHaveLength(1);
+    expect((posts()[0][1] as { method?: string }).method).toBe("POST");
+    expect(screen.queryByTestId("git-status-create-pr")).toBeNull();
+  });
+
+  it("sends a single POST however fast the button is clicked", async () => {
+    let release: (value: unknown) => void = () => {};
+    const { button, posts } = await renderCreatable(
+      () => new Promise((resolve) => (release = resolve)),
+    );
+    fireEvent.click(button);
+    fireEvent.click(button);
+    await waitFor(() => expect(button.getAttribute("aria-label")).toBe("Criando PR…"));
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(button.textContent).toContain("Criando PR…");
+
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect(posts()).toHaveLength(1);
+
+    release(created());
+    expect((await screen.findByTestId("git-status-pr-link")).textContent).toBe("Ver PR #7");
+  });
+
+  it("treats an already-open pull request as a success", async () => {
+    const { button } = await renderCreatable(() => created({ created: false, number: 12 }));
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect((await screen.findByTestId("git-status-pr-link")).textContent).toBe("Ver PR #12");
+    expect(screen.queryByTestId("git-status-pr-error")).toBeNull();
+  });
+
+  // Every refusal arrives with a message already written for the user; the
+  // bar prints it and leaves the compare page as the way through.
+  it.each([
+    [400, "invalid_input", "GitHub is not configured for this workspace."],
+    [403, "forbidden", "The GitHub token cannot write pull requests."],
+    [409, "conflict", "Push the branch before opening a pull request."],
+  ])("reports a %s refusal and keeps the compare fallback", async (code, slug, message) => {
+    const { button } = await renderCreatable(() => refused(code, slug, message));
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    const error = await screen.findByTestId("git-status-pr-error");
+    expect(error.textContent).toContain(message);
+    expect(screen.getByTestId("git-status-compare-link").getAttribute("href")).toBe(
+      "https://github.com/acme/omni/compare/main...feature%2Flogin?expand=1",
+    );
+    expect(screen.getByTestId("git-status-compare-link").getAttribute("rel")).toBe(
+      "noopener noreferrer",
+    );
+    expect(screen.getByTestId("git-status-create-pr").textContent).toBe("Criar PR");
+  });
+
+  it("disarms on Escape", async () => {
+    const { button, posts } = await renderCreatable(created);
+    fireEvent.click(button);
+    await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
+
+    fireEvent.keyDown(button, { key: "Escape" });
+    await waitFor(() => expect(button.textContent).toBe("Criar PR"));
+    // The next click has to arm again rather than fire.
+    fireEvent.click(button);
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("disarms when the button loses focus", async () => {
+    const { button, posts } = await renderCreatable(created);
+    fireEvent.click(button);
+    await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
+
+    fireEvent.blur(button);
+    await waitFor(() => expect(button.textContent).toBe("Criar PR"));
+    fireEvent.click(button);
+    expect(posts()).toHaveLength(0);
   });
 });
 

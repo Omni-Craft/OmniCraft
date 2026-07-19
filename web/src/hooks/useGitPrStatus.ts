@@ -8,7 +8,7 @@
 // only when git itself failed.
 
 import { useEffect, useRef } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { authenticatedFetch } from "@/lib/identity";
 import { useChatStore } from "@/store/chatStore";
@@ -31,6 +31,17 @@ export interface GitPullRequest {
    */
   ci_status: "success" | "failure" | "pending" | null;
   url: string;
+}
+
+/** Body of `POST /v1/sessions/{id}/pull-request`. */
+export interface SessionPullRequest {
+  object: "session.pull_request";
+  session_id: string;
+  number: number;
+  url: string;
+  /** `false` when the branch already had an open PR — not an error. */
+  created: boolean;
+  title: string;
 }
 
 /** Body of `GET /v1/sessions/{id}/git-status`. */
@@ -119,5 +130,69 @@ export function useGitPrStatus(sessionId: string | null | undefined) {
     // branch/PRs of the one before it — and make the composer hide its
     // branch on the strength of another session's workspace. Within one
     // session the cache already serves the last body while refetching.
+  });
+}
+
+/**
+ * Reason a pull-request attempt was refused, as an `Error`.
+ *
+ * Every refusal is a 4xx whose `error.message` is already written for the
+ * person reading it ("branch not pushed", "token without write access"), so
+ * it is surfaced verbatim; the status code is the fallback for a body that
+ * isn't the documented shape.
+ */
+async function pullRequestError(res: Response): Promise<Error> {
+  let message = `HTTP ${res.status}`;
+  try {
+    const body = (await res.json()) as { error?: { message?: string } };
+    if (body?.error?.message) message = body.error.message;
+  } catch {
+    // Non-JSON body — the status line is all there is to report.
+  }
+  return new Error(message);
+}
+
+/**
+ * Open a pull request for the session's branch: `POST
+ * /v1/sessions/{id}/pull-request`.
+ *
+ * The answer already carries the PR's number and URL, so it is written into
+ * the git-status cache before the invalidation refetch — the bar shows the
+ * PR on the click, not on the next poll. An existing PR comes back with
+ * `created: false` and lands in the same place.
+ *
+ * @param sessionId Session/conversation id.
+ */
+export function useCreateSessionPullRequest(sessionId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (): Promise<SessionPullRequest> => {
+      const res = await authenticatedFetch(
+        `/v1/sessions/${encodeURIComponent(sessionId)}/pull-request`,
+        { method: "POST" },
+      );
+      if (!res.ok) throw await pullRequestError(res);
+      return (await res.json()) as SessionPullRequest;
+    },
+    onSuccess: (result) => {
+      queryClient.setQueryData([QUERY_KEY, sessionId], (prev: GitPrStatus | undefined) =>
+        prev
+          ? {
+              ...prev,
+              prs: [
+                {
+                  number: result.number,
+                  title: result.title,
+                  state: "open" as const,
+                  ci_status: null,
+                  url: result.url,
+                },
+                ...prev.prs.filter((item) => item.number !== result.number),
+              ],
+            }
+          : prev,
+      );
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEY, sessionId] });
+    },
   });
 }

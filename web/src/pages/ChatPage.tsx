@@ -142,6 +142,11 @@ import { useWorkingLabelTick } from "@/hooks/useWorkingLabelTick";
 import { UserMessageNav } from "@/components/UserMessageNav";
 import { HostBadge } from "@/components/HostBadge";
 import {
+  GitWorkspaceStatusWidget,
+  isGitWorkspaceStatusVisible,
+} from "@/components/GitWorkspaceStatusWidget";
+import { useGitPrStatus } from "@/hooks/useGitPrStatus";
+import {
   BUILTIN_SLASH_COMMANDS,
   isSlashCommandText,
   SlashCommandMenu,
@@ -1606,6 +1611,11 @@ function MainAgentSurface({
   // spinner suppresses it (that bubble owns the slot with its own animation).
   const showWorkingIndicator = shouldShowWorkingIndicator(showsWorking, bubbles);
 
+  // Same query the git bar reads (React Query dedupes it): when the bar is up
+  // it already names the branch, so the status line below drops its own copy.
+  const { data: gitStatus } = useGitPrStatus(conversationId);
+  const gitStatusVisible = isGitWorkspaceStatusVisible(gitStatus);
+
   if (showTerminal && conversationId) {
     return (
       <>
@@ -1772,7 +1782,12 @@ function MainAgentSurface({
         onReply={(text) => setReplyQuotes((prev) => [...prev, text])}
       />
 
+      {/* Workspace git/PR bar — a sibling above the composer card, contextual:
+          it renders nothing when the tree is clean and no PR is open. */}
+      <GitWorkspaceStatusWidget sessionId={conversationId} />
+
       <Composer
+        hideGitBranch={gitStatusVisible}
         disabled={disabled}
         status={status}
         isWorking={isWorking}
@@ -3309,6 +3324,12 @@ interface ComposerProps {
    */
   isTerminalFirst?: boolean;
   /**
+   * The git/PR bar above the composer is showing, and already names the
+   * worktree branch — the status-line tray hides its own branch so the
+   * two don't print it twice.
+   */
+  hideGitBranch?: boolean;
+  /**
    * Native-CLI wrapper session (claude-native / codex-native). Drops the
    * `/model` slash command unless the session also has a model picker
    * (`showModels`); terminal-first SDK sessions (embedded OmniCraft REPL
@@ -3556,10 +3577,12 @@ function ComposerStatusLine({
   harnessLabel,
   codexGoal,
   isSubAgentSession,
+  hideGitBranch = false,
 }: {
   harnessLabel: string | null;
   codexGoal: CodexGoal | null;
   isSubAgentSession: boolean;
+  hideGitBranch?: boolean;
 }) {
   const conversationId = useChatStore((s) => s.conversationId);
   const contextWindow = useChatStore((s) => s.contextWindow);
@@ -3570,7 +3593,8 @@ function ComposerStatusLine({
   // the other status-line values rather than a separate fetch.
   const gitBranch = useChatStore((s) => s.gitBranch);
 
-  const showBranch = !!conversationId && !!gitBranch;
+  // The git/PR bar above the composer owns the branch when it's up.
+  const showBranch = !!conversationId && !!gitBranch && !hideGitBranch;
   // Host indicator (green/red dot + host name), left of the worktree branch.
   // Hidden on sub-agent sessions — the header's child-session slot owns the
   // back affordance there, mirroring where this badge used to live. HostBadge
@@ -3744,6 +3768,7 @@ export function Composer({
   showCodexPlanMode,
   showCodexGoal = false,
   isTerminalFirst = false,
+  hideGitBranch = false,
   isNativeWrapper = false,
   reconnectHint = false,
   sandboxAsleepHint = false,
@@ -4954,6 +4979,7 @@ export function Composer({
         harnessLabel={harnessLabel}
         codexGoal={codexGoal}
         isSubAgentSession={subAgentLabel != null}
+        hideGitBranch={hideGitBranch}
       />
     </form>
   );

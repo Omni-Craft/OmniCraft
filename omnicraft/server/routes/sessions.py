@@ -12676,8 +12676,10 @@ async def _create_session_from_existing_agent(
                 runner_client,
                 conversation_store,
             )
+            # Dispatch (not a plain forward) so native-terminal sessions take the
+            # single-writer bypass — otherwise the forwarder's echo duplicates the kickoff.
             for item in body.initial_items:
-                await _forward_event_to_runner(
+                await _dispatch_session_event_to_runner(
                     conv.id,
                     conv,
                     item,
@@ -12687,9 +12689,10 @@ async def _create_session_from_existing_agent(
                     file_store=file_store,
                     artifact_store=artifact_store,
                     created_by=_attribution_user(user_id),
+                    runner_router=runner_router,
                 )
     # Re-read rather than reusing the local ``conv``: the label-only branch
-    # above and ``_forward_event_to_runner`` can mutate the row after it was
+    # above and ``_dispatch_session_event_to_runner`` can mutate the row after it was
     # built, so a fresh read is what keeps the create response current.
     return await _get_session_snapshot(
         conversation_store,

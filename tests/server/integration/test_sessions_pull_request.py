@@ -21,15 +21,23 @@ import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from omnicraft.entities import Conversation
+from omnicraft.entities import Conversation, ResolvedAccess, SessionPermission
 from omnicraft.errors import ErrorCode, OmniCraftError
 from omnicraft.runtime import _globals, set_runner_client, set_runner_router
+from omnicraft.server.auth import (
+    LEVEL_EDIT,
+    LEVEL_READ,
+    RESERVED_USER_PUBLIC,
+    UnifiedAuthProvider,
+)
 from omnicraft.server.routes import integrations
 from omnicraft.server.routes.sessions import create_sessions_router
 
 _SESSION_ID = "conv_pr"
 _REPO = "octocat/hello-world"
 _BRANCH = "feature/add-login"
+# Zero-width space: what defuses an ``@mention`` without hiding it.
+_ZWSP = "\u200b"
 
 
 class _ConversationStore:
@@ -192,6 +200,17 @@ def _pr_item(number: int = 7, *, state: str = "open", title: str = "Add login") 
     }
 
 
+def _unrelated_pr_item(number: int) -> dict[str, Any]:
+    """An open pull request for a different branch, to fill a page.
+
+    :param number: Pull request number.
+    :returns: The raw item as the pulls endpoint returns it.
+    """
+    item = _pr_item(number=number, title=f"Other work {number}")
+    item["head"] = {"ref": f"other/branch-{number}", "sha": "def456"}
+    return item
+
+
 def _commits(*subjects: str) -> dict[str, Any]:
     """A compare response carrying *subjects* as commit messages.
 
@@ -204,6 +223,10 @@ def _commits(*subjects: str) -> dict[str, Any]:
 class _FakeGitHub:
     """In-memory GitHub API double for ``_github_get``/``_github_post``.
 
+    The pulls endpoint honours ``state``, ``page`` and ``per_page`` the
+    way GitHub does, so a lookup that only reads the first page cannot
+    pass by accident.
+
     :param pulls: Raw pull-request items the pulls endpoint lists.
     :param commits: Compare response for the base..head range.
     :param branch_exists: Whether the head branch is on the remote.
@@ -212,6 +235,8 @@ class _FakeGitHub:
     :param pulls_after_post: Items the pulls endpoint lists once the
         create call has been made — models another client winning the
         race.
+    :param pulls_error_after_post: Raised by the pulls endpoint after the
+        create call — models GitHub failing exactly during the recovery.
     """
 
     def __init__(
@@ -223,6 +248,7 @@ class _FakeGitHub:
         post_status: int = 201,
         post_body: Any = None,
         pulls_after_post: list[dict[str, Any]] | None = None,
+        pulls_error_after_post: Exception | None = None,
     ) -> None:
         """
         :returns: None.
@@ -233,19 +259,42 @@ class _FakeGitHub:
         self.post_status = post_status
         self.post_body = post_body
         self.pulls_after_post = pulls_after_post
+        self.pulls_error_after_post = pulls_error_after_post
         self.posts: list[dict[str, Any]] = []
+        self.pull_pages: list[int] = []
+
+    def _list_pulls(self, params: dict[str, Any]) -> list[dict[str, Any]]:
+        """Page and filter the pull-request list like GitHub does.
+
+        :param params: Query parameters of the request.
+        :returns: The requested page.
+        :raises Exception: ``pulls_error_after_post``, once a create call
+            has been made.
+        """
+        if self.posts and self.pulls_error_after_post is not None:
+            raise self.pulls_error_after_post
+        items = self.pulls
+        if self.posts and self.pulls_after_post is not None:
+            items = self.pulls_after_post
+        state = params.get("state")
+        if state in {"open", "closed"}:
+            items = [item for item in items if item.get("state") == state]
+        per_page = int(params.get("per_page") or 30)
+        page = int(params.get("page") or 1)
+        self.pull_pages.append(page)
+        start = (page - 1) * per_page
+        return items[start : start + per_page]
 
     async def get(self, path: str, params: Any = None, **_kwargs: Any) -> Any:
         """Answer a GitHub GET.
 
         :param path: API path.
-        :param params: Query parameters (unused).
+        :param params: Query parameters.
         :returns: The canned body.
         :raises OmniCraftError: For a missing branch.
         """
-        del params
         if path == f"/repos/{_REPO}/pulls":
-            return self.pulls_after_post if self.posts and self.pulls_after_post else self.pulls
+            return self._list_pulls(params or {})
         if path == f"/repos/{_REPO}":
             return {"default_branch": "main"}
         if path.startswith(f"/repos/{_REPO}/branches/"):
@@ -338,18 +387,75 @@ async def test_single_commit_lends_its_subject_as_the_title(
 
 
 @pytest.mark.asyncio
-async def test_several_commits_list_their_subjects_under_a_branch_title(
+async def test_several_commits_take_the_title_from_a_real_commit(
     client: httpx.AsyncClient,
     github: _FakeGitHub,
 ) -> None:
-    """Many commits: branch-derived title, body listing only real subjects."""
-    github.commits = _commits("add the form", "wire the endpoint")
+    """Many commits: the title is the first commit's subject, not the branch."""
+    github.commits = _commits("add the login form", "wire the endpoint")
     _use_runner()
 
     await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
 
-    assert github.posts[0]["title"] == "Add login"
-    assert github.posts[0]["body"] == "- add the form\n- wire the endpoint"
+    assert github.posts[0]["title"] == "add the login form"
+    assert github.posts[0]["body"] == "- `add the login form`\n- `wire the endpoint`"
+
+
+@pytest.mark.asyncio
+async def test_mentions_and_markdown_in_subjects_are_defused(
+    client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """A commit subject cannot ping a team or render as a link."""
+    github.commits = _commits(
+        "notify @org/team about [the outage](http://evil.test)",
+        "thank @octocat",
+    )
+    _use_runner()
+
+    await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
+
+    title = github.posts[0]["title"]
+    body = github.posts[0]["body"]
+    # The handles stay readable, but no '@' is left touching a name, so
+    # GitHub resolves none of them into a notification.
+    assert f"@{_ZWSP}org/team" in title
+    assert "@org/team" not in title
+    assert "@octocat" not in body
+    # Active markdown is inert inside the code spans the body is built from.
+    assert body == (
+        f"- `notify @{_ZWSP}org/team about [the outage](http://evil.test)`\n"
+        f"- `thank @{_ZWSP}octocat`"
+    )
+
+
+@pytest.mark.asyncio
+async def test_backticks_in_a_subject_cannot_break_out_of_the_code_span(
+    client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """A subject quoting code keeps the rest of the body inert."""
+    github.commits = _commits("drop `legacy` flag", "keep the rest")
+    _use_runner()
+
+    await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
+
+    assert github.posts[0]["body"].splitlines()[0] == "- ``drop `legacy` flag``"
+
+
+@pytest.mark.asyncio
+async def test_blank_subjects_are_nothing_to_open_a_pull_request_for(
+    client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """No usable subject means no derived content, so nothing is opened."""
+    github.commits = {"commits": [{"commit": {"message": "   "}}, {"commit": {}}]}
+    _use_runner()
+
+    resp = await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
+
+    assert resp.status_code == 409
+    assert github.posts == []
 
 
 @pytest.mark.asyncio
@@ -403,6 +509,70 @@ async def test_github_422_recovers_the_pull_request_that_won_the_race(
     body = resp.json()
     assert resp.status_code == 200
     assert (body["number"], body["created"]) == (9, False)
+
+
+@pytest.mark.asyncio
+async def test_open_pull_request_past_the_first_page_is_still_found(
+    client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """A repository busy enough to paginate must not get a duplicate PR."""
+    github.pulls = [_unrelated_pr_item(n) for n in range(100, 130)] + [_pr_item(number=9)]
+    _use_runner()
+
+    resp = await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert (body["number"], body["created"]) == (9, False)
+    assert github.posts == []
+    assert github.pull_pages == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_422_recovery_reads_past_the_first_page(
+    client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """The race recovery paginates too, instead of reporting bad input."""
+    github.post_status = 422
+    github.post_body = {"message": "Validation Failed"}
+    github.pulls_after_post = [_unrelated_pr_item(n) for n in range(100, 130)] + [
+        _pr_item(number=11)
+    ]
+    _use_runner()
+
+    resp = await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert (body["number"], body["created"]) == (11, False)
+
+
+@pytest.mark.asyncio
+async def test_422_recovery_failing_is_a_distinct_readable_409(
+    client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """A failed read-back is never reported as invalid input.
+
+    The pull request may well exist; blaming the caller would send them
+    to fix a request that was fine.
+    """
+    github.post_status = 422
+    github.post_body = {"message": "Validation Failed"}
+    github.pulls_error_after_post = OmniCraftError(
+        "could not reach GitHub: timed out",
+        code=ErrorCode.CONFLICT,
+    )
+    _use_runner()
+
+    resp = await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
+
+    message = resp.json()["error"]["message"]
+    assert resp.status_code == 409
+    assert "could not be read back" in message
+    assert "timed out" in message
 
 
 @pytest.mark.asyncio
@@ -577,3 +747,147 @@ async def test_unreachable_runner_is_a_409_not_a_500(
 
     assert resp.status_code == 409
     assert resp.json()["error"]["message"]
+
+
+class _StubPermissionStore:
+    """In-memory permission store with the methods access checks use.
+
+    :param grants: ``{(user_id, session_id): level}`` seed grants.
+    """
+
+    def __init__(self, grants: dict[tuple[str, str], int]) -> None:
+        """
+        :param grants: Seed grants keyed by user and session.
+        :returns: None.
+        """
+        self._grants = grants
+
+    def get(self, user_id: str, conversation_id: str) -> SessionPermission | None:
+        """
+        :param user_id: Grantee.
+        :param conversation_id: Session the grant is on.
+        :returns: The grant, or ``None``.
+        """
+        level = self._grants.get((user_id, conversation_id))
+        if level is None:
+            return None
+        return SessionPermission(
+            user_id=user_id,
+            conversation_id=conversation_id,
+            level=level,
+        )
+
+    def is_admin(self, user_id: str) -> bool:
+        """
+        :param user_id: User to check.
+        :returns: ``False`` — this suite has no admins.
+        """
+        del user_id
+        return False
+
+    def resolve_access(self, user_id: str | None, conversation_id: str) -> ResolvedAccess:
+        """
+        :param user_id: Authenticated caller, or ``None``.
+        :param conversation_id: Session being accessed.
+        :returns: The caller's admin flag and grants.
+        """
+        if user_id is None:
+            return ResolvedAccess(is_admin=False, user_grant_level=None, public_grant_level=None)
+        user_grant = self.get(user_id, conversation_id)
+        public_grant = self.get(RESERVED_USER_PUBLIC, conversation_id)
+        return ResolvedAccess(
+            is_admin=False,
+            user_grant_level=user_grant.level if user_grant is not None else None,
+            public_grant_level=public_grant.level if public_grant is not None else None,
+        )
+
+
+@pytest.fixture
+async def guarded_client(runner_globals_reset: None) -> AsyncIterator[httpx.AsyncClient]:
+    """Client for an app enforcing per-user permissions on the session.
+
+    ``alice`` may edit the session, ``viewer`` may only read it.
+
+    :param runner_globals_reset: Ensures clean runner globals.
+    :returns: Iterator yielding the client.
+    """
+    del runner_globals_reset
+    app = FastAPI()
+
+    @app.exception_handler(OmniCraftError)
+    async def _handle_omnicraft_error(request: Request, exc: OmniCraftError) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=exc.http_status,
+            content={"error": {"code": exc.code, "message": exc.message}},
+        )
+
+    app.include_router(
+        create_sessions_router(
+            _ConversationStore(),  # type: ignore[arg-type]
+            _StubAgentStore(),  # type: ignore[arg-type]
+            # Strict header mode: opt out of the suite-wide single-user
+            # default so a headerless request is rejected, as in a
+            # deployed multi-user server.
+            auth_provider=UnifiedAuthProvider(source="header", local_single_user=False),
+            permission_store=_StubPermissionStore(  # type: ignore[arg-type]
+                {
+                    ("alice@example.com", _SESSION_ID): LEVEL_EDIT,
+                    ("viewer@example.com", _SESSION_ID): LEVEL_READ,
+                }
+            ),
+        ),
+        prefix="/v1",
+    )
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://server") as c:
+        yield c
+
+
+@pytest.mark.asyncio
+async def test_read_only_collaborator_cannot_open_a_pull_request(
+    guarded_client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """Opening a PR is a write: LEVEL_READ is rejected before GitHub."""
+    _use_runner()
+
+    resp = await guarded_client.post(
+        f"/v1/sessions/{_SESSION_ID}/pull-request",
+        headers={"X-Forwarded-Email": "viewer@example.com"},
+    )
+
+    assert resp.status_code == 403
+    # Decisive: nothing was opened on the user's behalf.
+    assert github.posts == []
+
+
+@pytest.mark.asyncio
+async def test_unauthenticated_caller_cannot_open_a_pull_request(
+    guarded_client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """Without an identity the request never reaches GitHub."""
+    _use_runner()
+
+    resp = await guarded_client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
+
+    assert resp.status_code == 401
+    assert github.posts == []
+
+
+@pytest.mark.asyncio
+async def test_edit_collaborator_can_open_a_pull_request(
+    guarded_client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """The gate lets an edit collaborator through — it is not a blanket deny."""
+    _use_runner()
+
+    resp = await guarded_client.post(
+        f"/v1/sessions/{_SESSION_ID}/pull-request",
+        headers={"X-Forwarded-Email": "alice@example.com"},
+    )
+
+    assert resp.status_code == 200
+    assert len(github.posts) == 1

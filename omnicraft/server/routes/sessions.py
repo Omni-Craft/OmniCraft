@@ -401,6 +401,11 @@ _EXTERNAL_STATUS_ASSISTANT_SCAN_LIMIT: int = 1000
 # GitHub truncates a pull-request title past this length.
 _PR_TITLE_MAX: int = 256
 
+# An ``@handle`` in text OmniCraft publishes to GitHub, and the same text
+# with a zero-width space wedged in: still readable, no longer a mention.
+_MENTION_RE = re.compile(r"@(?=[A-Za-z0-9])")
+_DEFUSED_MENTION = "@\u200b"
+
 # Compaction-progress edge observed inside the Claude Code terminal
 # (claude-native forwarder, from the ``PreCompact`` and post-compaction
 # ``SessionStart source=compact`` hooks). Publishes the same
@@ -19187,20 +19192,53 @@ def create_sessions_router(
     def _pull_request_content(branch: str, subjects: list[str]) -> tuple[str, str]:
         """Derive a title and body from the branch's commits.
 
-        Nothing is invented: a single commit lends its subject verbatim,
-        and several commits are listed under a title read off the branch
-        name. Bodies never claim work the commits do not mention.
+        Nothing is invented: the title is the subject of the branch's
+        first commit — the one that names the work — and the body lists
+        the subjects as they were written. The branch name is only a last
+        resort, for commits whose subjects are unusable.
 
         :param branch: Head branch name, e.g. ``"feature/add-login"``.
         :param subjects: Commit subjects, oldest first; never empty.
         :returns: ``(title, body)``; the body is empty for one commit.
         """
-        if len(subjects) == 1:
-            return subjects[0][:_PR_TITLE_MAX], ""
-        words = branch.rsplit("/", 1)[-1].replace("-", " ").replace("_", " ").strip()
-        title = (words[:1].upper() + words[1:]) if words else branch
-        body = "\n".join(f"- {subject}" for subject in subjects)
-        return title[:_PR_TITLE_MAX], body
+        usable = [_defuse_markup(subject) for subject in subjects]
+        usable = [subject for subject in usable if subject]
+        title = (usable[0] if usable else _defuse_markup(branch) or branch)[:_PR_TITLE_MAX]
+        if len(usable) < 2:
+            return title, ""
+        body = "\n".join(f"- {_inline_code(subject)}" for subject in usable)
+        return title, body
+
+    def _defuse_markup(text: str) -> str:
+        """Strip a commit subject of anything that acts when published.
+
+        A pull request is outward-facing: a subject like ``notify
+        @org/team`` would ping a real team, and one carrying a link or an
+        image would render as one. The text stays readable — only its
+        power to act is removed.
+
+        :param text: Raw commit subject.
+        :returns: The subject with mentions and control characters
+            defused, collapsed onto one line.
+        """
+        flattened = " ".join(text.split())
+        # A zero-width space after '@' keeps the handle readable while
+        # stopping GitHub from resolving it into a notification.
+        return _MENTION_RE.sub(_DEFUSED_MENTION, flattened)
+
+    def _inline_code(text: str) -> str:
+        """Wrap text in a code span, so markdown and HTML in it stay inert.
+
+        The fence grows past the longest backtick run inside the text, so
+        a subject that quotes code cannot break out of the span.
+
+        :param text: Text to render verbatim.
+        :returns: The code span, e.g. ``"`fix: drop <b>`"``.
+        """
+        longest = max((len(run) for run in re.findall(r"`+", text)), default=0)
+        fence = "`" * (longest + 1)
+        pad = " " if text.startswith("`") or text.endswith("`") else ""
+        return f"{fence}{pad}{text}{pad}{fence}"
 
     @router.get(
         "/sessions/{session_id}/resources/environments/{environment_id}/diff/{relative_path:path}",

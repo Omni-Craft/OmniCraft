@@ -43,6 +43,10 @@ _MAX_COMMENTS = 10
 _MAX_CI_LOOKUPS = 5
 # Cap on commit subjects quoted in a generated pull-request body.
 _MAX_PR_COMMITS = 20
+# Pages walked when looking for a branch's open pull request. The query
+# is already filtered to one head branch, so this only guards against a
+# repository whose matching pull requests somehow overflow a page.
+_MAX_PR_LOOKUP_PAGES = 5
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
 # Sentinel so the ``gh``-derived token is resolved at most once per process
@@ -469,13 +473,49 @@ async def github_commit_subjects(
 async def _open_pull_request_for_branch(repo: str, branch: str) -> dict[str, Any] | None:
     """The open pull request whose head is ``branch``, if there is one.
 
+    Deliberately strict, unlike :func:`github_pull_requests_for_branch`,
+    which degrades every failure to ``[]`` so the status bar keeps
+    rendering: deciding whether to open a pull request must never read a
+    failed lookup as "there is none", or it opens a duplicate.
+
+    Asks GitHub for open pull requests with this exact head and walks the
+    pages, so a repository with more open pull requests than fit on one
+    page still finds it.
+
     :param repo: ``owner/name`` slug.
     :param branch: Head branch name.
     :returns: The card, or ``None`` when no open pull request exists.
+    :raises OmniCraftError: If GitHub is unreachable, denies the request,
+        or answers with an unexpected shape — never silently ``None``.
     """
-    for card in await github_pull_requests_for_branch(repo, branch):
-        if card.get("state") == "open" and isinstance(card.get("number"), int):
-            return card
+    owner = repo.split("/")[0]
+    for page in range(1, _MAX_PR_LOOKUP_PAGES + 1):
+        raw = await _github_get(
+            f"/repos/{repo}/pulls",
+            {
+                "state": "open",
+                "head": f"{owner}:{branch}",
+                "per_page": _PAGE_SIZE,
+                "page": page,
+            },
+        )
+        if not isinstance(raw, list):
+            raise OmniCraftError(
+                "GitHub returned an unexpected pull-request list",
+                code=ErrorCode.CONFLICT,
+            )
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            card = _normalize(item)
+            # The ``head`` filter is owner-scoped, so a fork's same-named
+            # branch comes back too (``None`` = head repo deleted, which
+            # we cannot rule out and so keep).
+            if card["head_branch"] == branch and _head_repo(item) in (None, repo):
+                if isinstance(card.get("number"), int):
+                    return card
+        if len(raw) < _PAGE_SIZE:
+            return None
     return None
 
 
@@ -516,7 +556,19 @@ async def github_open_pull_request(
     if status in (200, 201) and isinstance(payload, dict):
         return _normalize(payload), True
     if status == 422:
-        raced = await _open_pull_request_for_branch(repo, head)
+        try:
+            raced = await _open_pull_request_for_branch(repo, head)
+        except OmniCraftError as exc:
+            # GitHub refused, most likely as a duplicate, and we cannot
+            # read back what already exists. Saying "invalid input" here
+            # would blame the caller for a transient failure.
+            raise OmniCraftError(
+                f"GitHub rejected the pull request ("
+                f"{_github_message(payload) or 'validation failed'}) and the "
+                f"existing pull request for {head!r} could not be read back: "
+                f"{exc.message}",
+                code=ErrorCode.CONFLICT,
+            ) from exc
         if raced is not None:
             return raced, False
         raise OmniCraftError(

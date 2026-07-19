@@ -99,6 +99,20 @@ class AgentCache:
         bundle_bytes = self._artifact_store.get(bundle_location)
         return self._extract_and_cache(agent_id, bundle_bytes, workdir, expand_env=expand_env)
 
+    def peek(self, agent_id: str) -> AgentSpec | None:
+        """
+        Return the agent's spec only if it is already parsed in memory.
+
+        For read paths that want spec detail but must not pay for it:
+        unlike :meth:`load`, a miss never downloads or extracts a
+        bundle, it just answers "not here". Callers treat that as
+        unknown, not as an empty spec.
+
+        :param agent_id: Unique agent identifier, e.g. ``"ag_abc123"``.
+        :returns: The cached :class:`AgentSpec`, or ``None`` on a miss.
+        """
+        return self._specs.get(agent_id)
+
     def replace(
         self,
         agent_id: str,

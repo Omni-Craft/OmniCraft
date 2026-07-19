@@ -83,6 +83,30 @@ function wireSession(overrides: Record<string, unknown> = {}) {
     cost_usd: 0.42,
     degraded: [],
     ...overrides,
+    // The server sends the same spend in both places, so the fixture does too
+    // — a test that nulls `cost_usd` must not leave a stale figure in `usage`.
+    usage:
+      overrides.usage ??
+      wireUsage({ cost_usd: "cost_usd" in overrides ? overrides.cost_usd : 0.42 }),
+  };
+}
+
+/**
+ * A raw `usage` object: local counters, and no budget. Tests that want a
+ * denominator pass `budget` explicitly — the shape's default is deliberately
+ * "no budget", because that is the case the UI must render without a bar.
+ */
+function wireUsage(overrides: Record<string, unknown> = {}) {
+  return {
+    source: "local_counter",
+    input_tokens: null,
+    output_tokens: null,
+    total_tokens: null,
+    cache_read_input_tokens: null,
+    cache_creation_input_tokens: null,
+    cost_usd: 0.42,
+    budget: null,
+    ...overrides,
   };
 }
 
@@ -327,6 +351,252 @@ describe("HudPanel — unknowns render neutral", () => {
     expect(within(row).getByTestId("hud-session-status")).toHaveTextContent("estado desconhecido");
     expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
       "o estado desta sessão não pôde ser lido",
+    );
+  });
+});
+
+describe("HudPanel — a local counter is not a quota", () => {
+  /** One row with the given `usage`, expanded and ready to assert on. */
+  async function usageRow(usage: Record<string, unknown>, row: Record<string, unknown> = {}) {
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 1 }),
+        sessions: [wireSession({ usage: wireUsage(usage), ...row })],
+      }),
+    );
+    renderPanel();
+    await expand();
+    return screen.getByTestId("hud-session");
+  }
+
+  it("shows a session without a budget as an absolute number, with no bar", async () => {
+    const row = await usageRow({ total_tokens: 12_345, cost_usd: 1.5, budget: null });
+    expect(within(row).getByTestId("hud-usage")).toHaveAttribute("data-has-budget", "false");
+    expect(within(row).getByTestId("hud-tokens")).toHaveTextContent("tokens: 12.345");
+    expect(within(row).getByTestId("hud-cost")).toHaveTextContent("US$ 1,50");
+    // The whole point: no denominator means no bar, no ramp, no percentage.
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(within(row).queryByRole("progressbar")).toBeNull();
+    expect(row).not.toHaveTextContent("%");
+    expect(within(row).getByTestId("hud-no-budget")).toBeInTheDocument();
+  });
+
+  it("never turns token counts into a percentage", async () => {
+    // A big round number is exactly what invites "80% of a 1M window". There
+    // is no window on the wire, so there is no percentage on screen.
+    const row = await usageRow({ total_tokens: 800_000, input_tokens: 700_000, budget: null });
+    expect(row).not.toHaveTextContent("%");
+    expect(within(row).queryByRole("progressbar")).toBeNull();
+  });
+
+  it("says the counters are a local total rather than an allowance", async () => {
+    const row = await usageRow({ total_tokens: 10 });
+    expect(within(row).getByTestId("hud-usage")).toHaveTextContent("contador local, não cota");
+  });
+
+  it("renders an unrecorded token bucket as unknown, never as zero", async () => {
+    const row = await usageRow({ total_tokens: null, cost_usd: null }, { cost_usd: null });
+    expect(within(row).getByTestId("hud-tokens")).toHaveAttribute("data-tone", "unknown");
+    expect(within(row).getByTestId("hud-tokens")).toHaveTextContent("tokens: —");
+    expect(row).not.toHaveTextContent("tokens: 0");
+  });
+});
+
+describe("HudPanel — a budget is the only thing a percentage may divide by", () => {
+  async function budgetRow(costUsd: number | null, maxCostUsd: number | null) {
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 1 }),
+        sessions: [
+          wireSession({
+            cost_usd: costUsd,
+            usage: wireUsage({
+              cost_usd: costUsd,
+              budget: { max_cost_usd: maxCostUsd, thresholds_usd: [], source: "agent_spec" },
+            }),
+          }),
+        ],
+      }),
+    );
+    renderPanel();
+    await expand();
+    return screen.getByTestId("hud-session");
+  }
+
+  it("draws the bar at the real ratio of spend to the declared limit", async () => {
+    const row = await budgetRow(1.25, 5);
+    const gauge = within(row).getByTestId("hud-budget-gauge");
+    expect(gauge).toHaveAttribute("data-percent", "25");
+    expect(gauge).toHaveAttribute("aria-valuenow", "25");
+    expect(gauge).toHaveTextContent("25% de US$ 5,00");
+  });
+
+  it.each([
+    [1, 10, "ok", "dentro"],
+    [7.5, 10, "warning", "perto do limite"],
+    [9.5, 10, "critical", "no limite"],
+  ])("ramps %s of %s to %s", async (cost, max, level, phrase) => {
+    const row = await budgetRow(cost, max);
+    const gauge = within(row).getByTestId("hud-budget-gauge");
+    expect(gauge).toHaveAttribute("data-level", level);
+    // Colour is never the only carrier: the level is also written out.
+    expect(gauge).toHaveTextContent(phrase);
+    expect(gauge).toHaveAttribute("aria-label", expect.stringContaining(phrase));
+  });
+
+  it("reports an overspend as over 100% instead of a bar that stops at full", async () => {
+    const row = await budgetRow(12, 10);
+    const gauge = within(row).getByTestId("hud-budget-gauge");
+    expect(gauge).toHaveAttribute("data-percent", "120");
+    expect(gauge).toHaveAttribute("data-level", "critical");
+  });
+
+  it("refuses a percentage when the budget exists but the spend is unknown", async () => {
+    const row = await budgetRow(null, 5);
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(within(row).getByTestId("hud-budget-no-spend")).toHaveTextContent("desconhecido");
+  });
+
+  it("refuses a budget the server could not settle, rather than drawing it", async () => {
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 1, partial: true }),
+        sessions: [wireSession({ degraded: ["budget_unreadable"] })],
+      }),
+    );
+    renderPanel();
+    await expand();
+    const row = screen.getByTestId("hud-session");
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(within(row).getByTestId("hud-budget-unreadable")).toBeInTheDocument();
+    // And it must not read as "no budget" — the session has one.
+    expect(within(row).queryByTestId("hud-no-budget")).toBeNull();
+  });
+
+  it("lets the slug win over a limit sent alongside it", async () => {
+    // The server never sends both. If one ever did, a gauge would claim we
+    // know the limit while the same row says we don't — and the row would
+    // carry a bar and the words "sem barra" at once.
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 1, partial: true }),
+        sessions: [
+          wireSession({
+            degraded: ["budget_unreadable"],
+            usage: wireUsage({
+              cost_usd: 1,
+              budget: { max_cost_usd: 10, thresholds_usd: [], source: "agent_spec" },
+            }),
+          }),
+        ],
+      }),
+    );
+    renderPanel();
+    await expand();
+    const row = screen.getByTestId("hud-session");
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(within(row).queryByRole("progressbar")).toBeNull();
+    expect(row).not.toHaveTextContent("10%");
+    expect(within(row).getByTestId("hud-budget-unreadable")).toBeInTheDocument();
+  });
+
+  it("keeps the ARIA state inside the range it declares when overspent", async () => {
+    const row = await budgetRow(12, 10);
+    const gauge = within(row).getByTestId("hud-budget-gauge");
+    expect(gauge).toHaveAttribute("aria-valuemax", "100");
+    expect(gauge).toHaveAttribute("aria-valuenow", "100");
+    // The real figure is not lost — it rides on valuetext, as it does visibly.
+    expect(gauge).toHaveAttribute("aria-valuetext", expect.stringContaining("120%"));
+  });
+});
+
+describe("parseMonitorFeed — a budget is taken whole or not at all", () => {
+  /** One row whose `usage.budget` is the given raw value. */
+  async function budgetPayload(budget: unknown, usage: Record<string, unknown> = {}) {
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 1 }),
+        sessions: [
+          wireSession({ cost_usd: 1, usage: wireUsage({ cost_usd: 1, budget, ...usage }) }),
+        ],
+      }),
+    );
+    renderPanel();
+    await expand();
+    return screen.getByTestId("hud-session");
+  }
+
+  it("degrades on a budget that is not even an object, instead of dropping it", async () => {
+    const row = await budgetPayload("hostil");
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    // Silently vanishing would read as "this session has no budget".
+    expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
+      "o limite não pôde ser lido",
+    );
+    expect(within(row).queryByTestId("hud-no-budget")).toBeNull();
+  });
+
+  it("refuses a usable limit that arrives with a rotten threshold", async () => {
+    const row = await budgetPayload({
+      max_cost_usd: 5,
+      thresholds_usd: [1, "dois"],
+      source: "agent_spec",
+    });
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(row).not.toHaveTextContent("20%");
+    expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
+      "o limite não pôde ser lido",
+    );
+  });
+
+  it("refuses a threshold the real gate could never have enforced", async () => {
+    // `cost_budget` rejects a checkpoint outside `(0, max)` at build time, so
+    // this declaration never ran anywhere. Every number in it parses, which is
+    // exactly why the check has to be about coherence, not shape.
+    const row = await budgetPayload({
+      max_cost_usd: 5,
+      thresholds_usd: [10],
+      source: "agent_spec",
+    });
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(row).not.toHaveTextContent("20%");
+    expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
+      "o limite não pôde ser lido",
+    );
+  });
+
+  it("refuses a budget whose provenance is not the literal we know", async () => {
+    const row = await budgetPayload({
+      max_cost_usd: 5,
+      thresholds_usd: [],
+      source: "provider_quota",
+    });
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(row).not.toHaveTextContent("20%");
+  });
+
+  it("refuses the whole usage object when its provenance does not check out", async () => {
+    // If we cannot identify the payload we cannot call it a local counter,
+    // and we certainly cannot divide by a budget riding inside it.
+    const row = await budgetPayload(
+      { max_cost_usd: 5, thresholds_usd: [], source: "agent_spec" },
+      { source: "provider_quota", total_tokens: 99 },
+    );
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(within(row).getByTestId("hud-tokens")).toHaveTextContent("tokens: —");
+    expect(row).not.toHaveTextContent("tokens: 99");
+    expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
+      "parte da contagem de tokens não pôde ser lida",
+    );
+  });
+
+  it("refuses a non-positive limit instead of dividing by it", async () => {
+    const row = await budgetPayload({ max_cost_usd: 0, thresholds_usd: [], source: "agent_spec" });
+    expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
+    expect(row).not.toHaveTextContent("Infinity");
+    expect(row).not.toHaveTextContent("NaN");
+    expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
+      "o limite não pôde ser lido",
     );
   });
 });

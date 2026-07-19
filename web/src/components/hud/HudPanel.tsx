@@ -18,7 +18,11 @@
  *     so old numbers are never mistaken for current ones
  *   - any degraded slug the server reports, including ones this build has
  *     never seen → shown, never ignored
- *   - `null` liveness/cost → "desconhecido" / "—", never "offline" / US$ 0,00
+ *   - `null` liveness/cost/tokens → "desconhecido" / "—", never "offline" /
+ *     US$ 0,00 / 0 tokens
+ *   - consumption without a declared budget → the absolute number, no bar and
+ *     no colour ramp. A bar is a fraction of something; a local counter is a
+ *     fraction of nothing, and no percentage may be derived from it.
  *
  * Rows render in the SERVER's order, which is already ranked by how much each
  * session needs a human (blocked → failed → active → unresolved → idle). This
@@ -42,6 +46,7 @@ import {
   type MonitorPendingElicitation,
   type MonitorSession,
   type MonitorStatus,
+  type MonitorUsage,
 } from "@/hooks/useMonitorFeed";
 import {
   onHudExpandedChanged,
@@ -74,6 +79,48 @@ function sessionLabel(session: MonitorSession): string {
 function livenessText(online: boolean | null): { text: string; tone: "unknown" | "up" | "down" } {
   if (online === null) return { text: "desconhecido", tone: "unknown" };
   return online ? { text: "online", tone: "up" } : { text: "offline", tone: "down" };
+}
+
+const USD = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD" });
+const INTEGER = new Intl.NumberFormat("pt-BR");
+
+/** A recorded amount, or an em dash. An unrecorded value is unknown, not zero. */
+function usdText(value: number | null): string {
+  return value === null ? "—" : USD.format(value);
+}
+
+/** Same rule for a token bucket: a bucket we have no number for is not `0`. */
+function tokensText(value: number | null): string {
+  return value === null ? "—" : INTEGER.format(value);
+}
+
+/**
+ * Where a session's spend sits against its declared budget.
+ *
+ * Only ever called with a real `maxCostUsd`. There is exactly one legitimate
+ * percentage on this feed and this is it: spend over a limit somebody
+ * DECLARED. Nothing derived from token counters may take this path — a local
+ * accumulator has no denominator, so it has no percentage.
+ */
+function budgetRamp(costUsd: number, maxCostUsd: number) {
+  const ratio = costUsd / maxCostUsd;
+  const percent = Math.round(ratio * 100);
+  // Colour is a second channel, never the only one: `level` is also written to
+  // the DOM and spoken in the label below, so the reading survives with no
+  // colour perception at all.
+  const level = ratio >= 0.9 ? "critical" : ratio >= 0.7 ? "warning" : "ok";
+  const levelText =
+    level === "critical" ? "no limite" : level === "warning" ? "perto do limite" : "dentro";
+  return {
+    percent,
+    level,
+    levelText,
+    // The bar is clamped; the number above it is not, so an overspend reads as
+    // "112%" rather than as a bar that quietly stops at full.
+    width: `${Math.min(100, Math.max(0, ratio * 100))}%`,
+    tone:
+      level === "critical" ? "bg-destructive" : level === "warning" ? "bg-warning" : "bg-success",
+  };
 }
 
 /** Phrase a degraded slug, falling back to the raw slug for ones we don't know. */
@@ -237,6 +284,12 @@ export function HudPanel({
     };
   };
 
+  // Consumption stays OFF the pill. A total summed over the rows is always a
+  // floor and never a total — `only_active` drops idle sessions, the row cap
+  // drops more (`counts.omitted`), and any `null` cost is a session missing
+  // from the sum — so the only honest headline figure would be a "≥" that can
+  // never equal the truth, in a line already carrying four numbers. Per-row is
+  // where the number means something, so that is where it stays.
   let pill: string;
   if (unreadable) pill = "Feed indisponível";
   else if (loading || feed === null) pill = "Carregando…";
@@ -380,6 +433,100 @@ export function HudPanel({
   );
 }
 
+/**
+ * A session's consumption, shown honestly.
+ *
+ * Two shapes, and which one appears is decided by whether a real denominator
+ * exists — never by what would look better:
+ *
+ *   - **With a declared budget** → a bar with a true percentage and a
+ *     green → amber → red ramp. The ratio is spend over a limit somebody set.
+ *   - **Without one** → the absolute numbers only. No bar, no ramp, not even a
+ *     muted one: a bar implies a fraction of something, and a local counter is
+ *     a fraction of nothing. This is the token-usage case, and it stays a
+ *     plain number no matter how much a gauge would flatter it.
+ *
+ * A `null` anywhere renders as `—`, never as `0` — the server declined to
+ * state that number and this component may not state it either.
+ */
+function HudUsageGauge({
+  usage,
+  budgetUnreadable,
+}: {
+  usage: MonitorUsage;
+  budgetUnreadable: boolean;
+}) {
+  // Defence in depth. The server never sends a budget alongside
+  // `budget_unreadable` — but if one ever did, the slug wins: a gauge is a
+  // claim that we know the limit, and the row is simultaneously saying we
+  // don't. Dropping the budget here also means the "sem barra" copy below can
+  // never appear next to a bar.
+  const budget = budgetUnreadable ? null : usage.budget;
+  const max = budget?.maxCostUsd ?? null;
+  const cost = usage.costUsd;
+  const ramp = max !== null && cost !== null ? budgetRamp(cost, max) : null;
+  const tokens = usage.totalTokens;
+
+  return (
+    <div data-testid="hud-usage" data-has-budget={max !== null} className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-x-2 text-[11px] text-muted-foreground">
+        <span data-testid="hud-cost" data-tone={cost === null ? "unknown" : "known"}>
+          custo: {usdText(cost)}
+        </span>
+        <span data-testid="hud-tokens" data-tone={tokens === null ? "unknown" : "known"}>
+          tokens: {tokensText(tokens)}
+        </span>
+        {/* Naming the provenance on screen is the point: a running total we
+            summed is not an allowance from the provider, and nothing here
+            should ever be read as "% da cota". */}
+        <span className="opacity-70">(contador local, não cota)</span>
+      </div>
+      {ramp !== null && max !== null && (
+        <div
+          data-testid="hud-budget-gauge"
+          data-level={ramp.level}
+          data-percent={ramp.percent}
+          role="progressbar"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          // The bar cannot exceed its own scale, so the ARIA state stays in
+          // the range it declares; the real figure — which CAN exceed it —
+          // rides on `aria-valuetext`, matching the visible "120%".
+          aria-valuenow={Math.min(100, Math.max(0, ramp.percent))}
+          aria-valuetext={`${ramp.percent}% de ${usdText(max)}`}
+          aria-label={`Orçamento do agente: ${ramp.percent}% de ${usdText(max)} — ${ramp.levelText}`}
+          className="flex flex-col gap-0.5"
+        >
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+            <div className={cn("h-full rounded-full", ramp.tone)} style={{ width: ramp.width }} />
+          </div>
+          {/* The percentage and the word are both here, so the ramp's colour
+              adds emphasis and carries nothing on its own. */}
+          <span className="text-[11px] text-muted-foreground">
+            orçamento do agente: {ramp.percent}% de {usdText(max)} · {ramp.levelText}
+          </span>
+        </div>
+      )}
+      {max !== null && cost === null && (
+        <span data-testid="hud-budget-no-spend" className="text-[11px] text-warning">
+          orçamento do agente de {usdText(max)}, mas o gasto desta sessão é desconhecido — sem
+          porcentagem.
+        </span>
+      )}
+      {max === null && !budgetUnreadable && (
+        <span data-testid="hud-no-budget" className="text-[11px] text-muted-foreground">
+          Sem orçamento conhecido para esta sessão — número absoluto, sem barra.
+        </span>
+      )}
+      {budgetUnreadable && (
+        <span data-testid="hud-budget-unreadable" className="text-[11px] text-warning">
+          Esta sessão tem orçamento, mas o limite não pôde ser lido — sem barra.
+        </span>
+      )}
+    </div>
+  );
+}
+
 interface HudSessionRowProps {
   session: MonitorSession;
   responded: Record<string, "accept" | "decline">;
@@ -436,13 +583,6 @@ function HudSessionRow({ session, responded, resolveErrors, makeSubmit }: HudSes
         <span data-testid="hud-host" data-tone={host.tone}>
           host: {host.text}
         </span>
-        <span
-          data-testid="hud-cost"
-          data-tone={session.costUsd === null ? "unknown" : "known"}
-          // An unrecorded cost is unknown, not zero — a dash, never "US$ 0,00".
-        >
-          custo: {session.costUsd === null ? "—" : `US$ ${session.costUsd.toFixed(2)}`}
-        </span>
         {pendingUnknown && (
           <span data-testid="hud-pending-unknown" className="text-warning">
             aprovações pendentes: ?
@@ -454,6 +594,10 @@ function HudSessionRow({ session, responded, resolveErrors, makeSubmit }: HudSes
           </span>
         )}
       </div>
+      <HudUsageGauge
+        usage={session.usage}
+        budgetUnreadable={session.degraded.includes("budget_unreadable")}
+      />
       {prompt && (
         <ApprovalCard
           elicitationId={prompt.id}

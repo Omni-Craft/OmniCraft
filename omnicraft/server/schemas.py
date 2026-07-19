@@ -2438,6 +2438,101 @@ class MonitorPendingElicitation(BaseModel):
     summary: str | None = None
 
 
+class MonitorSessionBudget(BaseModel):
+    """
+    A **real denominator** for a session's recorded spend.
+
+    This is the only thing on the feed a percentage may be computed
+    against, and it exists because it is a limit somebody actually
+    declared — not a number derived from usage. There is deliberately
+    no provider quota here (no window, no remaining, no reset): no
+    adapter reads rate-limit headers, so the server has no quota to
+    report, and a field shaped like one would invite a surface to
+    invent it.
+
+    :param max_cost_usd: The hard limit in USD the agent declared,
+        e.g. ``5.0``. ``None`` when the agent declared only warning
+        checkpoints — there is then no denominator, so a surface
+        must still not draw a bar.
+    :param thresholds_usd: Soft warning checkpoints in USD, ascending,
+        e.g. ``[1.0, 2.5]``. Empty when none were declared.
+    :param source: Where the limit was read from. ``"agent_spec"`` is
+        the agent bundle's ``guardrails.policies`` block. **This is
+        the agent's declared cap, not every gate in force**: a
+        session-scoped or server-default cost policy can set a
+        tighter one, and reading those would cost a query per row,
+        which this feed does not spend. A surface must therefore
+        label the ratio as the agent's budget rather than as "the"
+        budget.
+    """
+
+    max_cost_usd: float | None = None
+    thresholds_usd: list[float] = Field(default_factory=list)
+    source: Literal["agent_spec"] = "agent_spec"
+
+
+class MonitorSessionUsage(BaseModel):
+    """
+    What this session has consumed, as a **local accumulator**.
+
+    ``source`` names that provenance and is not decoration. Every
+    number here is a running total this server summed up as turns
+    landed; none of it is a provider quota. A quota has a window and a
+    reset and would license a percentage and a countdown — these
+    counters license neither, so nothing on this model may be
+    rendered as "% used" or "resets in". The one legitimate
+    percentage on a row is spend against :class:`MonitorSessionBudget`,
+    which is a declared limit rather than a measurement.
+
+    Every field is independently nullable because the blob is written
+    by whichever harness ran: claude-native bills without reporting
+    token counts, so a session can carry a cost and no tokens at all.
+    ``None`` therefore means "not recorded / not readable", **never**
+    "zero" — a surface that renders an absent bucket as ``0`` is
+    asserting the session consumed nothing, which the server did not
+    say. A present-but-unusable value also lands as ``None``, with
+    ``usage_unreadable`` on the row's ``degraded`` list so the two can
+    be told apart.
+
+    :param source: Provenance marker, always ``"local_counter"``:
+        totals this server accumulated, not a provider allowance.
+    :param input_tokens: Cumulative prompt tokens, or ``None``.
+    :param output_tokens: Cumulative completion tokens, or ``None``.
+    :param total_tokens: Cumulative total tokens, or ``None``. Not
+        derived from the other two — it is reported separately, and
+        summing unknowns would manufacture a number.
+    :param cache_read_input_tokens: Cumulative cache-read tokens, or
+        ``None``.
+    :param cache_creation_input_tokens: Cumulative cache-write
+        tokens, or ``None``.
+    :param cost_usd: The same value as the row's ``cost_usd``,
+        carried here so a surface reads spend and its limit off one
+        object. ``None`` when unrecorded or unreadable.
+    :param budget: The agent's declared cost budget, or ``None``.
+        ``None`` means **no budget this feed can vouch for** — the
+        agent declared none, or its spec is not loaded in this
+        process. It does not prove none exists, so a surface must not
+        announce "no budget"; it simply has no denominator and must
+        show absolute numbers with no bar. A budget that *is*
+        declared but could not be settled leaves this ``None`` **and**
+        puts ``budget_unreadable`` on the row's ``degraded`` list —
+        never a value alongside that slug. One unsettled declaration
+        discards the ones that did parse, because a limit is only
+        worth publishing if it is provably the tightest gate; a
+        surface may therefore divide by any budget it receives here
+        without re-checking ``degraded``.
+    """
+
+    source: Literal["local_counter"] = "local_counter"
+    input_tokens: int | None = None
+    output_tokens: int | None = None
+    total_tokens: int | None = None
+    cache_read_input_tokens: int | None = None
+    cache_creation_input_tokens: int | None = None
+    cost_usd: float | None = None
+    budget: MonitorSessionBudget | None = None
+
+
 class MonitorSessionItem(BaseModel):
     """
     One session row of ``GET /v1/monitor/sessions``.
@@ -2499,6 +2594,12 @@ class MonitorSessionItem(BaseModel):
         rendered as ``0``. Sub-agent children's spend is **not**
         rolled in: that needs a paginated subtree walk this feed
         deliberately avoids.
+    :param usage: What this session consumed, as a local accumulator,
+        plus the agent's declared cost budget when there is one. See
+        :class:`MonitorSessionUsage` — in particular that its token
+        counters are **not** a provider quota and license no
+        percentage, and that a ``None`` field is "unknown", never
+        ``0``. Always present; its fields carry the unknowns.
     :param degraded: Stable slugs naming every part of this row that
         could not be resolved, e.g.
         ``["liveness_partial", "status_unknown"]``. Empty when the
@@ -2510,7 +2611,10 @@ class MonitorSessionItem(BaseModel):
         doesn't understand), ``pending_elicitations_unknown`` (the
         prompt index could not be read for this row),
         ``pending_elicitation_unreadable``, ``cost_unreadable``,
-        ``liveness_unavailable``, ``liveness_partial``.
+        ``usage_unreadable`` (a token bucket was present but
+        unusable), ``budget_unreadable`` (a cost budget is declared
+        but its limit could not be settled), ``liveness_unavailable``,
+        ``liveness_partial``.
     """
 
     session_id: str
@@ -2525,6 +2629,7 @@ class MonitorSessionItem(BaseModel):
     host_online: bool | None = None
     updated_at: int
     cost_usd: float | None = None
+    usage: MonitorSessionUsage = Field(default_factory=MonitorSessionUsage)
     degraded: list[str] = Field(default_factory=list)
 
 

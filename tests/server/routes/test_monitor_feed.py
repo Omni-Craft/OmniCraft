@@ -10,6 +10,7 @@ listing N sessions stays a fixed number of store calls.
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -25,6 +26,7 @@ from omnicraft.server.routes import monitor as monitor_module
 from omnicraft.server.routes import sessions as sessions_module
 from omnicraft.server.routes.monitor import create_monitor_router
 from omnicraft.server.routes.sessions import SessionLiveness
+from omnicraft.spec.types import FunctionPolicySpec, FunctionRef, GuardrailsSpec
 from omnicraft.stores.agent_store.sqlalchemy_store import SqlAlchemyAgentStore
 from omnicraft.stores.conversation_store.sqlalchemy_store import (
     SqlAlchemyConversationStore,
@@ -827,6 +829,296 @@ def test_unreadable_cost_degrades_instead_of_reading_as_zero(db_uri: str) -> Non
     row = _get(_app(db_uri))["sessions"][0]
     assert row["cost_usd"] is None
     assert "cost_unreadable" in row["degraded"]
+
+
+# ── Usage: a local counter, never a quota ──────────────────────────
+
+
+def _cost_policy(
+    name: str = "budget",
+    *,
+    max_cost_usd: Any = 5.0,
+    ask_thresholds_usd: Any = None,
+    condition: Any = None,
+    path: str = "omnicraft.policies.builtins.cost.cost_budget",
+) -> FunctionPolicySpec:
+    """A declared ``cost_budget`` policy, as the spec parser produces it."""
+    arguments: dict[str, Any] = {}
+    if max_cost_usd is not None:
+        arguments["max_cost_usd"] = max_cost_usd
+    if ask_thresholds_usd is not None:
+        arguments["ask_thresholds_usd"] = ask_thresholds_usd
+    return FunctionPolicySpec(
+        name=name,
+        on=None,
+        condition=condition,
+        function=FunctionRef(path=path, arguments=arguments),
+    )
+
+
+def _warm_agent(monkeypatch: pytest.MonkeyPatch, *policies: FunctionPolicySpec) -> None:
+    """Make ``ag_test``'s spec readable from the in-memory agent cache."""
+
+    class _Cache:
+        def peek(self, agent_id: str) -> Any:
+            if agent_id != "ag_test":
+                return None
+            return SimpleNamespace(
+                guardrails=GuardrailsSpec(policies=list(policies)),
+                sub_agents=[],
+            )
+
+    monkeypatch.setattr("omnicraft.runtime.get_agent_cache", lambda: _Cache())
+
+
+def _usage(db_uri: str, blob: dict[str, Any]) -> dict[str, Any]:
+    """Seed one running session with *blob* and return its ``usage``."""
+    session = _seed(db_uri, title="Priced")
+    sessions_module._session_status_cache[session] = "running"
+    SqlAlchemyConversationStore(db_uri).set_session_usage(session, blob)
+    return _get(_app(db_uri))["sessions"][0]
+
+
+def test_usage_reports_the_token_buckets_the_blob_carries(db_uri: str) -> None:
+    """Tokens ride on the row already loaded, alongside the spend."""
+    row = _usage(
+        db_uri,
+        {
+            "input_tokens": 1_200,
+            "output_tokens": 340,
+            "total_tokens": 1_540,
+            "cache_read_input_tokens": 900,
+            "cache_creation_input_tokens": 12,
+            "total_cost_usd": 1.25,
+        },
+    )
+
+    assert row["usage"]["input_tokens"] == 1_200
+    assert row["usage"]["output_tokens"] == 340
+    assert row["usage"]["total_tokens"] == 1_540
+    assert row["usage"]["cache_read_input_tokens"] == 900
+    assert row["usage"]["cache_creation_input_tokens"] == 12
+    # The row's own cost and the usage object may never disagree.
+    assert row["usage"]["cost_usd"] == row["cost_usd"] == 1.25
+    assert row["degraded"] == []
+
+
+def test_absent_tokens_are_unknown_never_zero(db_uri: str) -> None:
+    """claude-native bills without reporting tokens; that is not "spent none"."""
+    row = _usage(db_uri, {"total_cost_usd": 0.4})
+
+    assert row["usage"]["cost_usd"] == 0.4
+    for bucket in (
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+    ):
+        assert row["usage"][bucket] is None, bucket
+    # Nothing failed — the harness simply recorded no tokens.
+    assert row["degraded"] == []
+
+
+def test_unreadable_token_bucket_degrades_instead_of_reading_as_zero(db_uri: str) -> None:
+    """A bucket we failed to read is not an empty one."""
+    row = _usage(db_uri, {"input_tokens": "lots", "output_tokens": 5})
+
+    assert row["usage"]["input_tokens"] is None
+    assert row["usage"]["output_tokens"] == 5
+    assert "usage_unreadable" in row["degraded"]
+
+
+def test_negative_token_count_is_refused_rather_than_published(db_uri: str) -> None:
+    """A count outside its domain is unknown, not a small number."""
+    row = _usage(db_uri, {"total_tokens": -3})
+
+    assert row["usage"]["total_tokens"] is None
+    assert "usage_unreadable" in row["degraded"]
+
+
+def test_usage_carries_no_quota_shaped_field(db_uri: str) -> None:
+    """No adapter reads rate-limit headers, so the feed publishes no quota.
+
+    Not even as a null: a field shaped like a percentage or a reset
+    countdown is an invitation for a surface to fill it in from token
+    counts, which is the exact inference this shape exists to prevent.
+    """
+    row = _usage(db_uri, {"total_tokens": 10, "total_cost_usd": 0.1})
+
+    assert set(row["usage"]) == {
+        "source",
+        "input_tokens",
+        "output_tokens",
+        "total_tokens",
+        "cache_read_input_tokens",
+        "cache_creation_input_tokens",
+        "cost_usd",
+        "budget",
+    }
+    # The counters say what they are: a local running total, not an allowance.
+    assert row["usage"]["source"] == "local_counter"
+
+
+def test_budget_carries_no_quota_shaped_field_either(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The nested object is where a "remaining"/"resets_at" would sneak in."""
+    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[1.0]))
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert set(row["usage"]["budget"]) == {"max_cost_usd", "thresholds_usd", "source"}
+    assert row["usage"]["budget"]["source"] == "agent_spec"
+
+
+# ── Budget: the only legitimate denominator ────────────────────────
+
+
+def test_no_budget_when_the_agent_spec_is_not_loaded(db_uri: str) -> None:
+    """A cold spec is "no budget we can vouch for" — and no bar."""
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    # Not knowing is not a failure to read something that was there.
+    assert row["degraded"] == []
+
+
+def test_budget_read_from_the_declared_cost_policy(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The agent's own hard limit is the denominator a surface may divide by."""
+    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[2.5, 1.0]))
+
+    row = _usage(db_uri, {"total_cost_usd": 1.25})
+
+    assert row["usage"]["budget"] == {
+        "max_cost_usd": 5.0,
+        "thresholds_usd": [1.0, 2.5],
+        "source": "agent_spec",
+    }
+    assert row["degraded"] == []
+
+
+def test_tightest_declared_budget_wins(db_uri: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Two caps means the lower one fires first; that is the real limit."""
+    _warm_agent(
+        monkeypatch,
+        _cost_policy("loose", max_cost_usd=20.0),
+        _cost_policy("tight", max_cost_usd=3.0),
+    )
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"]["max_cost_usd"] == 3.0
+
+
+def test_label_gated_budget_is_unsettled_rather_than_absent(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A conditional cap may be in force; the feed has no labels to check it."""
+    _warm_agent(monkeypatch, _cost_policy(condition={"tier": "paid"}))
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    assert "budget_unreadable" in row["degraded"]
+
+
+def test_unusable_limit_is_refused_rather_than_used_as_a_denominator(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Zero is not a small budget — it is a denominator that breaks every ratio."""
+    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=0))
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    assert "budget_unreadable" in row["degraded"]
+
+
+def test_one_unsettled_declaration_discards_the_ones_that_parsed(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A readable cap next to a conditional one is not provably the tightest.
+
+    The conditional policy may impose $3 right now. Publishing the $10 it
+    could read would put a comfortable percentage on screen against a cap
+    that is not the one about to fire — so neither is published.
+    """
+    _warm_agent(
+        monkeypatch,
+        _cost_policy("plain", max_cost_usd=10.0),
+        _cost_policy("gated", max_cost_usd=3.0, condition={"tier": "free"}),
+    )
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    assert "budget_unreadable" in row["degraded"]
+
+
+def test_a_readable_cap_beside_a_malformed_one_is_still_refused(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same rule for a sibling whose limit is not a number at all."""
+    _warm_agent(
+        monkeypatch,
+        _cost_policy("good", max_cost_usd=10.0),
+        _cost_policy("broken", max_cost_usd="muito"),
+    )
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    assert "budget_unreadable" in row["degraded"]
+
+
+def test_a_partly_unreadable_threshold_list_refuses_the_whole_budget(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A budget is published whole or not at all — never "the parts we liked"."""
+    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=10.0, ask_thresholds_usd=[1.0, "dois"]))
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    assert "budget_unreadable" in row["degraded"]
+
+
+def test_threshold_above_the_cap_is_refused_like_the_gate_refuses_it(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``cost_budget`` rejects a checkpoint outside ``(0, max)`` at build time.
+
+    Reading one back as a valid budget would report a limit that could
+    never have been enforced.
+    """
+    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[10.0]))
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    assert "budget_unreadable" in row["degraded"]
+
+
+def test_a_budget_measuring_something_else_is_not_this_row_denominator(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The daily variant limits the OWNER's spend across sessions.
+
+    Dividing this row's own cost by it would be a percentage of a
+    quantity the row never reports.
+    """
+    _warm_agent(
+        monkeypatch,
+        _cost_policy(path="omnicraft.policies.builtins.cost.user_daily_cost_budget"),
+    )
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    assert row["degraded"] == []
 
 
 # ── Filtering and failure handling ─────────────────────────────────

@@ -36,6 +36,13 @@
 //   * `degraded: ["internal_error"]` means the feed could not be BUILT at all;
 //     the route answers `200` with empty `sessions` in that case, so an empty
 //     list is never read as calm.
+//   * `usage` is a LOCAL COUNTER, never a quota. Its tokens are totals the
+//     server summed as turns landed; there is no window, no remaining, no
+//     reset, and no percentage may be derived from them. The one honest ratio
+//     is `usage.costUsd / usage.budget.maxCostUsd` — a limit somebody
+//     DECLARED. `budget === null` means "no budget this feed can vouch for",
+//     which is not the same as "no budget exists", so a surface shows numbers
+//     and no bar rather than announcing there is no limit.
 //   * `truncated` means the response doesn't carry every matching session
 //     (scan cut, or the row cap dropped rows — `counts.omitted`). Unreadable,
 //     it reads as `true`: not knowing whether the list is complete is not the
@@ -92,6 +99,8 @@ export const FEED_DEGRADED_LABELS: Record<string, string> = {
   status_unknown: "o estado desta sessão não está registrado",
   status_unreadable: "o estado desta sessão não pôde ser lido",
   cost_unreadable: "o custo não pôde ser lido",
+  usage_unreadable: "parte da contagem de tokens não pôde ser lida",
+  budget_unreadable: "esta sessão tem orçamento, mas o limite não pôde ser lido",
   counts_unreadable: "as contagens do feed não puderam ser lidas",
   generated_at_unreadable: "a hora do feed não pôde ser lida",
   host_id_unreadable: "não dá para saber a que host estas contagens se referem",
@@ -132,6 +141,55 @@ export interface MonitorPendingElicitation {
   summary: string | null;
 }
 
+/**
+ * A **declared** spending limit — the only denominator on this feed a
+ * percentage may be computed against.
+ *
+ * It is not a provider quota (none reaches the server) and it is not derived
+ * from usage. `maxCostUsd === null` means only soft checkpoints were declared:
+ * there is no denominator, so still no bar.
+ */
+export interface MonitorBudget {
+  maxCostUsd: number | null;
+  /** Soft warning checkpoints in USD, ascending. */
+  thresholdsUsd: number[];
+  /**
+   * Where the limit came from — a discriminator, validated against the literal
+   * `"agent_spec"`, never accepted as free text. It is the agent's own
+   * declaration; a session-scoped policy could be tighter, so a surface labels
+   * the ratio as the AGENT's budget rather than as "the" budget.
+   */
+  source: typeof BUDGET_SOURCE;
+}
+
+/**
+ * What a session consumed, as a running total this server accumulated.
+ *
+ * Every field is independently `null` because the blob is written by whichever
+ * harness ran — claude-native bills without reporting tokens at all. `null` is
+ * "not recorded / not readable", NEVER `0`: rendering an absent bucket as zero
+ * asserts the session consumed nothing, which the server never said.
+ */
+export interface MonitorUsage {
+  /**
+   * Provenance, validated against the literal `"local_counter"`: a total we
+   * summed, not an allowance. `"unknown"` is the client's own landing spot for
+   * a payload whose provenance did not check out — every other field is then
+   * empty and `budget` is `null`, so nothing can be drawn off it.
+   */
+  source: typeof USAGE_SOURCE | "unknown";
+  inputTokens: number | null;
+  outputTokens: number | null;
+  /** Reported separately, never summed from the two above. */
+  totalTokens: number | null;
+  cacheReadInputTokens: number | null;
+  cacheCreationInputTokens: number | null;
+  /** The same spend as the row's `costUsd`. */
+  costUsd: number | null;
+  /** `null` = no budget this feed can vouch for. Not proof none exists. */
+  budget: MonitorBudget | null;
+}
+
 export interface MonitorSession {
   sessionId: string;
   agentName: string | null;
@@ -153,6 +211,8 @@ export interface MonitorSession {
   updatedAt: number | null;
   /** `null` = no cost recorded / unreadable, never `0`. */
   costUsd: number | null;
+  /** Local counters plus the declared budget. Never a quota — see `MonitorUsage`. */
+  usage: MonitorUsage;
   degraded: string[];
 }
 
@@ -431,6 +491,131 @@ function parsePendingElicitation(value: unknown, faults: Faults): MonitorPending
   };
 }
 
+/** A count that is whole and non-negative, or unreadable. Same domain as a tally. */
+const readTokens = readCount;
+
+/** A USD amount that could serve as a denominator: finite and strictly positive. */
+function readPositiveUsd(value: unknown): Read<number> {
+  return typeof value === "number" && Number.isFinite(value) && value > 0
+    ? readable(value)
+    : UNREADABLE;
+}
+
+/** The only provenance a budget may claim. A discriminator, not free text. */
+const BUDGET_SOURCE = "agent_spec";
+
+/** The only provenance the counters may claim. Likewise a discriminator. */
+const USAGE_SOURCE = "local_counter";
+
+/** Exactly this literal, or unreadable. An unknown value is a payload we don't know. */
+function readLiteral(expected: string): (value: unknown) => Read<string> {
+  return (value) => (value === expected ? readable(expected) : UNREADABLE);
+}
+
+/**
+ * Parse the declared budget, or refuse it **whole**.
+ *
+ * A limit we cannot fully trust is worse than no limit: it would draw a bar
+ * whose percentage means nothing. So this is all-or-nothing — one malformed
+ * field discards every other field with it, records `budget_unreadable`, and
+ * the row falls back to absolute numbers with no bar. There is deliberately no
+ * partial success: a budget object with a good `max_cost_usd` and a rotten
+ * threshold is a declaration we did not understand, and "the part we liked" is
+ * not a denominator.
+ */
+function parseBudget(value: unknown, faults: Faults): MonitorBudget | null {
+  // Absent is a fact — the server had no budget to vouch for.
+  if (value === undefined || value === null) return null;
+  const raw = asRecord(value);
+  if (raw === null) {
+    // Present but not even an object: something is declared and we cannot
+    // read it. Silently dropping it would read as "no budget".
+    faults.note("budget_unreadable");
+    return null;
+  }
+  const refuse = (): null => {
+    faults.note("budget_unreadable");
+    return null;
+  };
+  // `source` is the discriminator: a value this build doesn't know means the
+  // object may not be what we think it is, so nothing in it may be used.
+  if (!readLiteral(BUDGET_SOURCE)(raw.source).ok) return refuse();
+  const rawMax = raw.max_cost_usd;
+  let max: number | null = null;
+  if (rawMax !== undefined && rawMax !== null) {
+    const parsed = readPositiveUsd(rawMax);
+    if (!parsed.ok) return refuse();
+    max = parsed.value;
+  }
+  const rawThresholds = raw.thresholds_usd;
+  let thresholds: number[] = [];
+  if (rawThresholds !== undefined && rawThresholds !== null) {
+    const list = readArray(rawThresholds);
+    if (!list.ok) return refuse();
+    const parsed = list.value.map(readPositiveUsd);
+    if (parsed.some((entry) => !entry.ok)) return refuse();
+    thresholds = parsed.map((entry) => (entry.ok ? entry.value : 0));
+  }
+  // The real gate refuses a checkpoint outside `(0, max)` when it is built, so
+  // a budget carrying one could never have been enforced as declared. Reading
+  // it back as valid would hand the gauge a denominator no policy stands
+  // behind — well-formed numbers are not the same as a coherent declaration.
+  if (max !== null && thresholds.some((threshold) => threshold >= max)) return refuse();
+  // A well-formed object that declares nothing is no denominator either.
+  if (max === null && thresholds.length === 0) return null;
+  return { maxCostUsd: max, thresholdsUsd: thresholds, source: BUDGET_SOURCE };
+}
+
+/**
+ * Parse the usage counters.
+ *
+ * Absent is a fact (the harness recorded nothing) and present-but-unusable is a
+ * failure; both land as `null` because there is no number either way, and only
+ * the second records `usage_unreadable`. Nothing here is ever computed —
+ * `totalTokens` is read, never summed — because adding unknowns would
+ * manufacture a figure the server declined to state.
+ */
+function parseUsage(value: unknown, faults: Faults, rowCostUsd: number | null): MonitorUsage {
+  /** Nothing known but the row's own spend — and, in particular, no budget. */
+  const nothingKnown = (source: string): MonitorUsage => ({
+    source,
+    inputTokens: null,
+    outputTokens: null,
+    totalTokens: null,
+    cacheReadInputTokens: null,
+    cacheCreationInputTokens: null,
+    costUsd: rowCostUsd,
+    budget: null,
+  });
+
+  const raw = asRecord(value);
+  if (raw === null) {
+    // A server too old to send `usage` at all is not a degradation — it just
+    // has no tokens to report. Its spend still arrives on the row itself.
+    if (value !== undefined && value !== null) faults.note("usage_unreadable");
+    return nothingKnown("unknown");
+  }
+  // `source` is the discriminator. If it is not the literal we know, this is
+  // not an object whose provenance we can vouch for — and a surface must not
+  // present numbers as a local counter, nor a budget as a real limit, off a
+  // payload it failed to identify.
+  if (!readLiteral(USAGE_SOURCE)(raw.source).ok) {
+    faults.note("usage_unreadable");
+    return nothingKnown("unknown");
+  }
+  const tokens = (key: string) => optional(raw, key, readTokens, faults, "usage_unreadable");
+  return {
+    source: USAGE_SOURCE,
+    inputTokens: tokens("input_tokens"),
+    outputTokens: tokens("output_tokens"),
+    totalTokens: tokens("total_tokens"),
+    cacheReadInputTokens: tokens("cache_read_input_tokens"),
+    cacheCreationInputTokens: tokens("cache_creation_input_tokens"),
+    costUsd: optional(raw, "cost_usd", readNumber, faults, "cost_unreadable") ?? rowCostUsd,
+    budget: parseBudget(raw.budget, faults),
+  };
+}
+
 /**
  * Parse one row. Returns `null` only when the row cannot be identified at all —
  * the caller then records it as a dropped row rather than a shorter list.
@@ -500,6 +685,7 @@ function parseSession(value: unknown, faults: FeedFaults): MonitorSession | null
     hostOnline,
     updatedAt,
     costUsd,
+    usage: parseUsage(raw.usage, row, costUsd),
     degraded: row.slugs,
   };
 }

@@ -27,6 +27,16 @@ Three things make it different from ``GET /v1/sessions``:
   and flagged (``counts.partial``), so the tallies read as a floor
   rather than a total.
 
+One more distinction the feed refuses to blur: a **local counter** is
+not a **quota**. Everything under ``usage`` is a running total this
+server summed as turns landed. A provider quota — a window with a
+remaining allowance and a reset — never reaches this server at all: the
+adapters call the provider without reading rate-limit headers. So there
+is no quota field here, not even a null one, because a field shaped
+like a percentage is an invitation to fill it in. The only real
+denominator on a row is a limit somebody *declared* (``usage.budget``),
+and it is the only thing a percentage may be computed against.
+
 Row assembly reuses the session-list builder and the same batched
 pulls ``GET /v1/sessions`` makes (labels, permission grants, agent
 names, child ids), so listing N sessions stays a fixed number of
@@ -54,7 +64,9 @@ from omnicraft.server.schemas import (
     MonitorCounts,
     MonitorFeedResponse,
     MonitorPendingElicitation,
+    MonitorSessionBudget,
     MonitorSessionItem,
+    MonitorSessionUsage,
 )
 from omnicraft.stores.conversation_store import PROJECT_LABEL_KEY, ConversationStore
 from omnicraft.stores.permission_store import PermissionStore
@@ -290,6 +302,227 @@ def _cost_usd(session_usage: Any) -> tuple[float | None, list[str]]:
     if not math.isfinite(value):
         return None, ["cost_unreadable"]
     return value, []
+
+
+# Token buckets read off the usage blob, in the order they are reported.
+# Nothing here is derived from anything else: ``total_tokens`` is its own
+# recorded figure, because adding two unknowns would manufacture a number.
+_TOKEN_FIELDS = (
+    "input_tokens",
+    "output_tokens",
+    "total_tokens",
+    "cache_read_input_tokens",
+    "cache_creation_input_tokens",
+)
+
+# The one built-in budget whose denominator is this session's own
+# ``total_cost_usd`` — the very number the row publishes. The per-user
+# daily and sub-agent subtree variants measure different quantities, so
+# dividing this row's cost by their limit would be a percentage of
+# nothing.
+_COST_BUDGET_PATH = "omnicraft.policies.builtins.cost.cost_budget"
+
+
+def _token_count(raw: Any) -> tuple[int | None, bool]:
+    """
+    Read one token bucket off the usage blob.
+
+    :param raw: The blob's value for the bucket, e.g. ``1024``.
+    :returns: ``(count, unreadable)``. Absent is ``None`` and *not*
+        flagged — a harness that bills without reporting tokens simply
+        recorded nothing here. Present-but-unusable is ``None`` too,
+        flagged, because a bucket we failed to read is not an empty
+        one.
+    """
+    if raw is None:
+        return None, False
+    if isinstance(raw, bool):
+        return None, True
+    if isinstance(raw, int):
+        return (raw, False) if raw >= 0 else (None, True)
+    if isinstance(raw, float) and math.isfinite(raw) and raw >= 0 and raw.is_integer():
+        return int(raw), False
+    return None, True
+
+
+def _positive_usd(raw: Any) -> float | None:
+    """
+    Coerce a declared USD limit, or refuse it.
+
+    :param raw: A limit off a policy's factory arguments, e.g. ``5.0``.
+    :returns: The value, or ``None`` when it is not a usable positive
+        amount. A non-positive limit is not a small budget — it is a
+        denominator that would turn every ratio into nonsense.
+    """
+    if isinstance(raw, bool) or not isinstance(raw, int | float):
+        return None
+    value = float(raw)
+    return value if math.isfinite(value) and value > 0 else None
+
+
+def _budget_from_spec(
+    spec: Any, sub_agent_name: str | None
+) -> tuple[MonitorSessionBudget | None, bool]:
+    """
+    The cost budget an agent spec declares for its own session spend.
+
+    Walks ``guardrails.policies`` for the built-in session cost budget
+    and reports the limit it was configured with. Several declarations
+    are collapsed to the tightest one, because that is the gate that
+    fires first.
+
+    A label-gated policy (``condition``) is *not* read as absent: it
+    may be in force right now and this feed has no labels to check it
+    against, so it is reported as unsettled instead. Same for a limit
+    that isn't a usable number.
+
+    Unsettled is **all-or-nothing**: one declaration this function
+    cannot settle discards the ones it could. A budget is only worth
+    publishing if it is provably the tightest gate, and a limit read
+    alongside a conditional or malformed sibling is not — dividing by
+    it would print a comfortable percentage against a cap that may not
+    be the one about to fire.
+
+    :param spec: A parsed ``AgentSpec``, or ``None`` when the spec is
+        not loaded in this process.
+    :param sub_agent_name: The bundled sub-agent this session runs as,
+        or ``None`` for the brain itself. A head has its own
+        guardrails, so the brain's budget must not be reported for it.
+    :returns: ``(budget, uncertain)``. *uncertain* means a cost budget
+        may well be in force but its limit could not be settled; the
+        budget is then ``None`` **and** the row degrades, so it neither
+        shows a denominator it cannot vouch for nor implies there is
+        none. The two are never both truthy.
+    """
+    if spec is None:
+        return None, False
+    if sub_agent_name is not None:
+        heads = getattr(spec, "sub_agents", None) or []
+        spec = next((s for s in heads if getattr(s, "name", None) == sub_agent_name), None)
+        if spec is None:
+            # The head this session runs as isn't in the spec we hold, so
+            # the brain's budget says nothing about it.
+            return None, True
+    guardrails = getattr(spec, "guardrails", None)
+    policies = getattr(guardrails, "policies", None) or []
+    uncertain = False
+    maxima: list[float] = []
+    thresholds: set[float] = set()
+    for policy in policies:
+        function = getattr(policy, "function", None)
+        if function is None or getattr(function, "path", None) != _COST_BUDGET_PATH:
+            continue
+        if getattr(policy, "condition", None):
+            uncertain = True
+            continue
+        arguments = getattr(function, "arguments", None) or {}
+        raw_max = arguments.get("max_cost_usd")
+        limit = None if raw_max is None else _positive_usd(raw_max)
+        if raw_max is not None and limit is None:
+            uncertain = True
+        elif limit is not None:
+            maxima.append(limit)
+        raw_thresholds = arguments.get("ask_thresholds_usd") or []
+        if not isinstance(raw_thresholds, list):
+            uncertain = True
+            raw_thresholds = []
+        for raw_threshold in raw_thresholds:
+            checkpoint = _positive_usd(raw_threshold)
+            # The gate itself refuses a checkpoint outside ``(0, max)``, so a
+            # spec carrying one would not build. Reading it back as a valid
+            # budget would report a limit that could never have been enforced.
+            if checkpoint is None or (limit is not None and checkpoint >= limit):
+                uncertain = True
+            else:
+                thresholds.add(checkpoint)
+    # Fail closed. A single unsettled declaration means the tightest gate is
+    # not known — and the whole worth of this field is being the one
+    # denominator a surface may divide by. Publishing the limits that DID
+    # parse would hand out a percentage against a cap that may not be the
+    # binding one, which is the number this feed exists not to invent.
+    if uncertain:
+        return None, True
+    if not maxima and not thresholds:
+        return None, False
+    return (
+        MonitorSessionBudget(
+            max_cost_usd=min(maxima) if maxima else None,
+            thresholds_usd=sorted(thresholds),
+        ),
+        False,
+    )
+
+
+def _usage_for_row(
+    session_usage: Any,
+    cost: float | None,
+    spec: Any,
+    sub_agent_name: str | None,
+) -> tuple[MonitorSessionUsage, list[str]]:
+    """
+    Assemble a row's local usage counters and its declared budget.
+
+    Same rule as everywhere else on this feed: a bucket the blob
+    doesn't carry is ``None``, never ``0``. Claiming a session burned
+    zero tokens off a payload that simply didn't mention them is the
+    same class of lie as an empty feed.
+
+    :param session_usage: The conversation's ``session_usage`` blob.
+    :param cost: The spend already read by :func:`_cost_usd`, reused so
+        the row and its usage object cannot disagree.
+    :param spec: The agent's parsed spec, or ``None`` when unavailable.
+    :param sub_agent_name: The bundled sub-agent this session runs as.
+    :returns: ``(usage, degraded)``.
+    """
+    budget, budget_uncertain = _budget_from_spec(spec, sub_agent_name)
+    degraded = ["budget_unreadable"] if budget_uncertain else []
+    if not isinstance(session_usage, dict):
+        # A blob that isn't an object is a total we lost, not a session
+        # that spent nothing.
+        return (
+            MonitorSessionUsage(cost_usd=cost, budget=budget),
+            [*degraded, "usage_unreadable"] if session_usage is not None else degraded,
+        )
+    counts: dict[str, int | None] = {}
+    unreadable = False
+    for field in _TOKEN_FIELDS:
+        counts[field], field_unreadable = _token_count(session_usage.get(field))
+        unreadable = unreadable or field_unreadable
+    if unreadable:
+        degraded.append("usage_unreadable")
+    return MonitorSessionUsage(cost_usd=cost, budget=budget, **counts), degraded
+
+
+def _warm_specs(agent_ids: list[str]) -> dict[str, Any]:
+    """
+    Agent specs already parsed in this process, for the page's agents.
+
+    Warm tier only, on purpose: a cold agent means downloading and
+    extracting a bundle, and a three-second poll must never pay for
+    that. A miss leaves the row's budget ``None``, which the contract
+    defines as "no budget this feed can vouch for" rather than "no
+    budget exists" — so nothing is asserted that a cache miss cannot
+    back up.
+
+    :param agent_ids: Unique agent ids on the page.
+    :returns: ``{agent_id: AgentSpec}``, covering whatever was warm.
+    """
+    try:
+        from omnicraft.runtime import get_agent_cache
+
+        cache = get_agent_cache()
+    except Exception:  # noqa: BLE001 — no runtime cache is "unknown", not an error
+        return {}
+    specs: dict[str, Any] = {}
+    for agent_id in agent_ids:
+        try:
+            spec = cache.peek(agent_id)
+        except Exception:  # noqa: BLE001 — one bad entry must not cost the page
+            _logger.debug("Monitor feed spec peek failed for %s", agent_id, exc_info=True)
+            continue
+        if spec is not None:
+            specs[agent_id] = spec
+    return specs
 
 
 def _row_rank(row: MonitorSessionItem) -> tuple[int, int, int]:
@@ -750,6 +983,8 @@ def create_monitor_router(
                 item.runner_online = None
                 item.host_online = None
 
+        # In-memory only, so this adds no query to the page.
+        agent_specs = _warm_specs(unique_agent_ids)
         convs_by_id = {conv.id: conv for conv in convs}
         rows: list[MonitorSessionItem] = []
         for item in items:
@@ -766,6 +1001,13 @@ def create_monitor_router(
             degraded.extend(pending_degraded)
             cost, cost_degraded = _cost_usd(conv.session_usage)
             degraded.extend(cost_degraded)
+            usage, usage_degraded = _usage_for_row(
+                conv.session_usage,
+                cost,
+                agent_specs.get(conv.agent_id) if conv.agent_id is not None else None,
+                conv.sub_agent_name,
+            )
+            degraded.extend(usage_degraded)
             if not liveness_resolved:
                 degraded.append("liveness_unavailable")
             elif item.runner_online is None or (
@@ -795,6 +1037,7 @@ def create_monitor_router(
                     host_online=item.host_online,
                     updated_at=item.updated_at,
                     cost_usd=cost,
+                    usage=usage,
                     degraded=degraded,
                 )
             )

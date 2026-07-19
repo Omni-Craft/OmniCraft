@@ -285,7 +285,15 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   const lastSelectedIdRef = useRef<string | null>(null);
   const getVisibleIdsRef = useRef<() => string[]>(() => []);
   const getVisibleConversationsRef = useRef<() => Conversation[]>(() => []);
-  const [visibleConversationCount, setVisibleConversationCount] = useState(0);
+  const [visibleConversationIds, setVisibleConversationIds] = useState<readonly string[]>([]);
+  // Keep the same array identity when the visible ids are unchanged: the child
+  // reports them from a memo that can re-run without a content change, and a
+  // fresh reference here would re-render in a loop.
+  const handleVisibleIdsChange = useCallback((ids: readonly string[]) => {
+    setVisibleConversationIds((prev) =>
+      prev.length === ids.length && prev.every((id, i) => id === ids[i]) ? prev : ids,
+    );
+  }, []);
 
   const toggleSelected = useCallback((id: string, shiftKey?: boolean) => {
     setSelectedIds((prev) => {
@@ -634,7 +642,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   <BulkActionBar
                     selectedIds={selectedIds}
                     allConversations={loadedRows}
-                    visibleCount={visibleConversationCount}
+                    visibleIds={visibleConversationIds}
                     onSelectAll={() => selectAll(getVisibleConversationsRef.current())}
                     onDeselectAll={deselectAll}
                     onClear={deselectAll}
@@ -726,7 +734,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   onToggleSelected={toggleSelected}
                   getVisibleIdsRef={getVisibleIdsRef}
                   getVisibleConversationsRef={getVisibleConversationsRef}
-                  onVisibleCountChange={setVisibleConversationCount}
+                  onVisibleIdsChange={handleVisibleIdsChange}
                   surface={inCode ? "code" : "home"}
                 />
               </nav>
@@ -976,7 +984,7 @@ interface ConversationListProps {
   onToggleSelected: (conversationId: string, shiftKey?: boolean) => void;
   getVisibleIdsRef: RefObject<() => string[]>;
   getVisibleConversationsRef: RefObject<() => Conversation[]>;
-  onVisibleCountChange: (count: number) => void;
+  onVisibleIdsChange: (ids: readonly string[]) => void;
   // Which tab's history to show: "home" = Chat sessions (agent "chat"),
   // "code" = coding sessions + projects.
   surface: "home" | "code";
@@ -1001,7 +1009,7 @@ function ConversationList({
   onToggleSelected,
   getVisibleIdsRef,
   getVisibleConversationsRef,
-  onVisibleCountChange,
+  onVisibleIdsChange,
   surface,
 }: ConversationListProps) {
   // All loaded conversations from the single paginated list (for pinned
@@ -1360,8 +1368,8 @@ function ConversationList({
     ].map((c) => c.id);
   }, [sections, effectiveCollapsedSections, expandedProjects]);
   useEffect(() => {
-    onVisibleCountChange(orderedConversationIds.length);
-  }, [orderedConversationIds.length, onVisibleCountChange]);
+    onVisibleIdsChange(orderedConversationIds);
+  }, [orderedConversationIds, onVisibleIdsChange]);
   getVisibleConversationsRef.current = () => {
     const visible = (title: string, list: readonly Conversation[]) =>
       effectiveCollapsedSections.includes(title) ? [] : [...list];
@@ -3416,7 +3424,7 @@ function ConversationEditRow({ initialTitle, onCommit, onCancel }: ConversationE
 function BulkActionBar({
   selectedIds,
   allConversations,
-  visibleCount,
+  visibleIds,
   onSelectAll,
   onDeselectAll,
   onClear,
@@ -3424,7 +3432,7 @@ function BulkActionBar({
 }: {
   selectedIds: Set<string>;
   allConversations: Conversation[];
-  visibleCount: number;
+  visibleIds: readonly string[];
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onClear: () => void;
@@ -3460,7 +3468,14 @@ function BulkActionBar({
     ownedSelected.length > 0 && (archivedSelected.length === 0 || nonArchivedSelected.length === 0);
 
   const count = selectedIds.size;
-  const allSelected = count > 0 && count === visibleCount;
+  // "Select all" is scoped to the visible rows, so the toggle must reflect
+  // whether every visible row is selected — not whether the total selection
+  // (which can include collapsed, off-screen rows) happens to match the tally.
+  const visibleSelectedCount = useMemo(
+    () => visibleIds.reduce((n, id) => (selectedIds.has(id) ? n + 1 : n), 0),
+    [visibleIds, selectedIds],
+  );
+  const allSelected = visibleSelectedCount > 0 && visibleSelectedCount === visibleIds.length;
   const isBusy = bulkArchive.isPending || bulkDelete.isPending;
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);

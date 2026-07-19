@@ -285,6 +285,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
   const lastSelectedIdRef = useRef<string | null>(null);
   const getVisibleIdsRef = useRef<() => string[]>(() => []);
   const getVisibleConversationsRef = useRef<() => Conversation[]>(() => []);
+  const [visibleConversationCount, setVisibleConversationCount] = useState(0);
 
   const toggleSelected = useCallback((id: string, shiftKey?: boolean) => {
     setSelectedIds((prev) => {
@@ -632,7 +633,8 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                 {selectionMode ? (
                   <BulkActionBar
                     selectedIds={selectedIds}
-                    allConversations={getVisibleConversationsRef.current()}
+                    allConversations={loadedRows}
+                    visibleCount={visibleConversationCount}
                     onSelectAll={() => selectAll(getVisibleConversationsRef.current())}
                     onDeselectAll={deselectAll}
                     onClear={deselectAll}
@@ -724,6 +726,7 @@ export function Sidebar({ open, onClose, dragProgress = null, onOpenSearch }: Si
                   onToggleSelected={toggleSelected}
                   getVisibleIdsRef={getVisibleIdsRef}
                   getVisibleConversationsRef={getVisibleConversationsRef}
+                  onVisibleCountChange={setVisibleConversationCount}
                   surface={inCode ? "code" : "home"}
                 />
               </nav>
@@ -973,6 +976,7 @@ interface ConversationListProps {
   onToggleSelected: (conversationId: string, shiftKey?: boolean) => void;
   getVisibleIdsRef: RefObject<() => string[]>;
   getVisibleConversationsRef: RefObject<() => Conversation[]>;
+  onVisibleCountChange: (count: number) => void;
   // Which tab's history to show: "home" = Chat sessions (agent "chat"),
   // "code" = coding sessions + projects.
   surface: "home" | "code";
@@ -997,6 +1001,7 @@ function ConversationList({
   onToggleSelected,
   getVisibleIdsRef,
   getVisibleConversationsRef,
+  onVisibleCountChange,
   surface,
 }: ConversationListProps) {
   // All loaded conversations from the single paginated list (for pinned
@@ -1354,6 +1359,9 @@ function ConversationList({
       ...visible("Chats", sections.sessions),
     ].map((c) => c.id);
   }, [sections, effectiveCollapsedSections, expandedProjects]);
+  useEffect(() => {
+    onVisibleCountChange(orderedConversationIds.length);
+  }, [orderedConversationIds.length, onVisibleCountChange]);
   getVisibleConversationsRef.current = () => {
     const visible = (title: string, list: readonly Conversation[]) =>
       effectiveCollapsedSections.includes(title) ? [] : [...list];
@@ -3408,6 +3416,7 @@ function ConversationEditRow({ initialTitle, onCommit, onCancel }: ConversationE
 function BulkActionBar({
   selectedIds,
   allConversations,
+  visibleCount,
   onSelectAll,
   onDeselectAll,
   onClear,
@@ -3415,6 +3424,7 @@ function BulkActionBar({
 }: {
   selectedIds: Set<string>;
   allConversations: Conversation[];
+  visibleCount: number;
   onSelectAll: () => void;
   onDeselectAll: () => void;
   onClear: () => void;
@@ -3450,7 +3460,7 @@ function BulkActionBar({
     ownedSelected.length > 0 && (archivedSelected.length === 0 || nonArchivedSelected.length === 0);
 
   const count = selectedIds.size;
-  const allSelected = count > 0 && count === allConversations.length;
+  const allSelected = count > 0 && count === visibleCount;
   const isBusy = bulkArchive.isPending || bulkDelete.isPending;
 
   const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);

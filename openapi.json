@@ -3740,7 +3740,7 @@
           },
           "prs_status": {
             "default": "ok",
-            "description": "How complete `prs` is. `\"ok\"` \u2014 the list is everything GitHub has (also when there was nothing to query, so an empty list really means \"no pull request\"). `\"partial\"` \u2014 GitHub returned a full page and more may exist. `\"unavailable\"` \u2014 the lookup produced no answer (GitHub unconfigured, unreachable, or refusing), so an empty list means \"cannot tell\", not \"no pull request\".",
+            "description": "How complete `prs` is. `\"ok\"` \u2014 the list is everything GitHub has (also when there was nothing to query, so an empty list really means \"no pull request\"). `\"partial\"` \u2014 pull requests are known to be missing from it: GitHub confirmed more than one page of them, or a row came back unreadable and was dropped. `\"unavailable\"` \u2014 the lookup produced no answer at all (GitHub unconfigured, unreachable, refusing, or a body nothing could be read from), so an empty list means \"cannot tell\", not \"no pull request\".",
             "enum": [
               "ok",
               "partial",

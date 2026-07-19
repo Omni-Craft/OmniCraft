@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 
 import pytest
 
@@ -211,6 +212,57 @@ async def test_ci_state_falls_back_to_check_runs(
     assert cards[0]["ci_status"] == "pending"
 
 
+def _pr_row(**overrides: Any) -> dict[str, Any]:
+    """A well-formed pulls row for the ``feature`` branch.
+
+    :param overrides: Fields to replace on the row.
+    :returns: The raw row as GitHub would send it.
+    """
+    return {
+        "number": 7,
+        "title": "Add login",
+        "html_url": "https://github.com/o/r/pull/7",
+        "state": "open",
+        "head": {"ref": "feature", "sha": "abc", "repo": {"full_name": "o/r"}},
+        **overrides,
+    }
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        pytest.param(_pr_row(), id="complete_row"),
+        # Everything below is genuinely optional: a real pull request
+        # must never be dropped — and the list marked short — over one.
+        pytest.param(_pr_row(head={"ref": "feature"}), id="no_head_sha_only_skips_ci"),
+        pytest.param(_pr_row(head={"ref": "feature", "repo": None}), id="head_repo_deleted"),
+        pytest.param(_pr_row(title=None), id="no_title"),
+        pytest.param(_pr_row(user=None, labels=None, updated_at=None), id="no_author_or_labels"),
+    ],
+)
+def test_readable_pr_rows_are_kept(row: dict[str, Any]) -> None:
+    """Only what a card is built from is required; optional fields stay optional."""
+    assert integrations._is_readable_pr_row(row) is True
+
+
+@pytest.mark.parametrize(
+    "row",
+    [
+        pytest.param(_pr_row(number=True), id="number_is_a_bool"),
+        pytest.param(_pr_row(number="7"), id="number_is_a_string"),
+        pytest.param(_pr_row(head={"ref": ""}), id="head_ref_is_empty"),
+        pytest.param(_pr_row(head={"sha": "abc"}), id="head_ref_is_missing"),
+        pytest.param(_pr_row(state=None), id="state_is_missing"),
+        pytest.param(_pr_row(state=""), id="state_is_empty"),
+        pytest.param(_pr_row(html_url=None), id="url_is_missing"),
+        pytest.param(_pr_row(html_url=""), id="url_is_empty"),
+    ],
+)
+def test_unreadable_pr_rows_are_rejected(row: dict[str, Any]) -> None:
+    """A row that cannot produce a valid card is not quietly turned into one."""
+    assert integrations._is_readable_pr_row(row) is False
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "raw",
@@ -220,6 +272,10 @@ async def test_ci_state_falls_back_to_check_runs(
         pytest.param(["nonsense"], id="list_of_scalars"),
         pytest.param([{"number": 1, "head": "not-an-object"}], id="head_is_a_string"),
         pytest.param([{"head": {"ref": "feature"}}], id="number_is_missing"),
+        pytest.param([_pr_row(number=True)], id="number_is_a_bool"),
+        pytest.param([_pr_row(head={"ref": ""})], id="head_ref_is_empty"),
+        pytest.param([_pr_row(state=None)], id="state_is_missing"),
+        pytest.param([_pr_row(html_url=None)], id="url_is_missing"),
     ],
 )
 async def test_branch_pull_requests_degrades_on_unexpected_shapes(
@@ -395,6 +451,7 @@ async def test_ci_status_is_none_when_the_commit_has_no_checks(
         # not even the zero that would license asking check-runs.
         pytest.param({}, None, "unknown", id="combined_without_a_count"),
         pytest.param({"total_count": "two"}, None, "unknown", id="combined_count_is_a_string"),
+        pytest.param({"total_count": -1}, None, "unknown", id="combined_count_is_negative"),
         pytest.param(
             {"total_count": 3, "state": "reticulating"},
             None,
@@ -426,6 +483,55 @@ async def test_ci_status_is_none_when_the_commit_has_no_checks(
             {"check_runs": [{"status": "completed", "conclusion": "mystery"}]},
             "unknown",
             id="conclusion_is_unknown",
+        ),
+        # A run still going next to one whose result cannot be read: the
+        # unreadable sibling decides, because "pending" would claim CI is
+        # merely unfinished when we cannot say that.
+        pytest.param(
+            {"total_count": 0},
+            {
+                "check_runs": [
+                    {"status": "in_progress", "conclusion": None},
+                    {"status": "completed", "conclusion": "mystery"},
+                ]
+            },
+            "unknown",
+            id="in_progress_beside_an_unreadable_conclusion",
+        ),
+        pytest.param(
+            {"total_count": 0},
+            {
+                "check_runs": [
+                    {"status": "in_progress", "conclusion": None},
+                    {"status": "completed"},
+                ]
+            },
+            "unknown",
+            id="in_progress_beside_a_missing_conclusion",
+        ),
+        # A run genuinely still going, all finished ones readable.
+        pytest.param(
+            {"total_count": 0},
+            {
+                "check_runs": [
+                    {"status": "in_progress", "conclusion": None},
+                    {"status": "completed", "conclusion": "success"},
+                ]
+            },
+            "pending",
+            id="in_progress_beside_a_readable_pass",
+        ),
+        # A known failure still outranks a run that has not finished.
+        pytest.param(
+            {"total_count": 0},
+            {
+                "check_runs": [
+                    {"status": "in_progress", "conclusion": None},
+                    {"status": "completed", "conclusion": "failure"},
+                ]
+            },
+            "failure",
+            id="failure_outranks_an_unfinished_sibling",
         ),
         # Recognized non-failing conclusions still add up to a pass.
         pytest.param(

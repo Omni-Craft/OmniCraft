@@ -1555,10 +1555,12 @@ class SessionGitStatusResponse(BaseModel):
     :param prs_status: How complete ``prs`` is. ``"ok"`` — the list is
         everything GitHub has (also when there was nothing to query, so
         an empty list really means "no pull request"). ``"partial"`` —
-        GitHub returned a full page and more may exist. ``"unavailable"``
-        — the lookup produced no answer (GitHub unconfigured,
-        unreachable, or refusing), so an empty list means "cannot tell",
-        not "no pull request".
+        pull requests are known to be missing from it: GitHub confirmed
+        more than one page of them, or a row came back unreadable and was
+        dropped. ``"unavailable"`` — the lookup produced no answer at all
+        (GitHub unconfigured, unreachable, refusing, or a body nothing
+        could be read from), so an empty list means "cannot tell", not
+        "no pull request".
     :param error: Git failure reason, e.g. a timeout. ``None`` on
         success. Only git or the runner sets it; a GitHub lookup that
         fails is reported through ``prs_status``, never here.

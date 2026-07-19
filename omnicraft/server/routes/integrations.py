@@ -256,8 +256,9 @@ async def _commit_ci_status(
         return "unknown"
     total = combined.get("total_count")
     # A body with no readable count says nothing — not even "zero", which
-    # is what licenses the fall-through to check-runs below.
-    if not isinstance(total, int) or isinstance(total, bool):
+    # is what licenses the fall-through to check-runs below. A negative
+    # count is not a count.
+    if not isinstance(total, int) or isinstance(total, bool) or total < 0:
         return "unknown"
     if total:
         state = combined.get("state")
@@ -278,31 +279,52 @@ async def _commit_ci_status(
     statuses = {r.get("status") for r in runs}
     if not statuses <= _CHECK_RUN_STATUSES:
         return "unknown"
-    if statuses != {"completed"}:
-        return "pending"
-    conclusions = {r.get("conclusion") for r in runs}
-    # A failed run is a fact even if a sibling is unreadable; claiming
-    # success is not, so that needs every conclusion recognized.
+    conclusions = {r.get("conclusion") for r in runs if r.get("status") == "completed"}
+    # A failed run is a fact whatever its siblings say, so it wins.
     if conclusions & _FAILING_CONCLUSIONS:
         return "failure"
+    # A finished run whose result cannot be read leaves the aggregate
+    # unknown — including next to a run still going, where "pending"
+    # would claim CI is merely unfinished rather than unreadable.
     if not conclusions <= _PASSING_CONCLUSIONS:
         return "unknown"
+    if statuses != {"completed"}:
+        return "pending"
     return "success"
+
+
+def _nonempty_str(value: Any) -> bool:
+    """Whether a value is a string with something in it."""
+    return isinstance(value, str) and bool(value)
 
 
 def _is_readable_pr_row(item: Any) -> bool:
     """Whether a raw pulls row carries the fields a card is built from.
 
-    A row missing them cannot be matched to a branch, so dropping it
-    silently would shrink the list without the caller ever knowing.
+    Checks exactly what a card needs: a number, the head ref that decides
+    whether the PR belongs to this branch, and the state and URL the
+    response requires. Genuinely optional fields — ``head.sha`` (its
+    absence only skips the CI lookup), ``merged_at``, ``user``, labels —
+    are not demanded, so a real pull request is never dropped over one.
+
+    A row failing this cannot be matched to a branch or rendered, and
+    dropping it silently would shrink the list without the caller ever
+    knowing.
 
     :param item: One entry from the pulls endpoint.
     :returns: ``True`` when the row can be read.
     """
-    if not isinstance(item, dict) or not isinstance(item.get("number"), int):
+    if not isinstance(item, dict):
+        return False
+    number = item.get("number")
+    # ``bool`` is an ``int`` in Python, and a PR numbered ``True`` is a
+    # body this code does not understand.
+    if not isinstance(number, int) or isinstance(number, bool):
         return False
     head = item.get("head")
-    return isinstance(head, dict) and isinstance(head.get("ref"), str)
+    if not isinstance(head, dict) or not _nonempty_str(head.get("ref")):
+        return False
+    return _nonempty_str(item.get("state")) and _nonempty_str(item.get("html_url"))
 
 
 @dataclasses.dataclass(frozen=True)

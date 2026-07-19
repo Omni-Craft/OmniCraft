@@ -11,6 +11,9 @@
 // Degrading and marking the tallies a floor are ONE operation here (see
 // `FeedFaults.note`), mirroring the server's own accumulator: there is no path
 // that can record a failure and forget the flag saying the numbers are a floor.
+// Rows go through the SAME accumulator (`FeedFaults.row`), so a single row we
+// could not fully resolve is enough to stop the pill presenting its counts as
+// a total — an envelope that parsed cleanly says nothing about the rows in it.
 //
 // Concretely:
 //
@@ -197,29 +200,71 @@ export interface MonitorFeed {
 }
 
 /**
- * Every failure recorded on one read.
+ * Every failure recorded on one read, envelope and rows alike.
  *
  * `note()` records the slug AND makes the tallies a floor — one operation, so
  * no branch can degrade the feed while still presenting its counts as
- * complete. `fail()` adds that we cannot enumerate at all.
+ * complete. `fail()` adds that we cannot enumerate at all. The list is
+ * read-only from outside: `note()` is the only way in, which is what keeps a
+ * degradation from being recorded without its companion flag.
  */
 class FeedFaults {
-  readonly slugs: string[] = [];
-  fatal = false;
+  #slugs: string[] = [];
+  #fatal = false;
+
+  get slugs(): string[] {
+    return [...this.#slugs];
+  }
+
+  get fatal(): boolean {
+    return this.#fatal;
+  }
 
   note(slug: string): void {
-    if (!this.slugs.includes(slug)) this.slugs.push(slug);
+    if (!this.#slugs.includes(slug)) this.#slugs.push(slug);
+  }
+
+  /**
+   * A row's own failures. They land on the row AND on the feed, because a row
+   * we could not fully resolve is a session the tallies cannot claim to
+   * describe — the pill must read as a floor even when the envelope is clean.
+   */
+  row(): RowFaults {
+    return new RowFaults(this);
   }
 
   /** A failure that leaves us unable to say what is running. */
   fail(slug: string): void {
     this.note(slug);
-    this.fatal = true;
+    this.#fatal = true;
   }
 
   /** Anything recorded means the tallies are a floor. */
   get partial(): boolean {
-    return this.slugs.length > 0;
+    return this.#slugs.length > 0;
+  }
+}
+
+/**
+ * One row's failures. There is no way to record one here without it reaching
+ * the feed's accumulator, so a degraded row can never sit inside a feed whose
+ * pill still presents its counts as a total.
+ */
+class RowFaults {
+  #slugs: string[] = [];
+  #feed: FeedFaults;
+
+  constructor(feed: FeedFaults) {
+    this.#feed = feed;
+  }
+
+  get slugs(): string[] {
+    return [...this.#slugs];
+  }
+
+  note(slug: string): void {
+    if (!this.#slugs.includes(slug)) this.#slugs.push(slug);
+    this.#feed.note(slug);
   }
 }
 
@@ -331,29 +376,24 @@ function parseSession(value: unknown, faults: FeedFaults): MonitorSession | null
   const sessionId = readString(raw.session_id);
   if (!sessionId.ok) return null;
 
+  // One accumulator for the whole read: every slug below lands on this row AND
+  // on the feed, so a degraded row cannot sit inside a feed whose counts still
+  // read as a total. Slugs the SERVER reported on the row go through it too —
+  // they are equally a reason the tallies do not describe everything.
+  const row = faults.row();
   const wireDegraded = readStringArray(raw.degraded);
-  const degraded = wireDegraded.ok ? [...wireDegraded.value] : [];
-  /** A failure the SERVER already reported: mark the row, feed already partial. */
-  const noteRow = (slug: string) => {
-    if (!degraded.includes(slug)) degraded.push(slug);
-  };
-  /** A failure WE found reading the row: the feed's own numbers are a floor too. */
-  const failRow = (slug: string) => {
-    noteRow(slug);
-    faults.note(ROW_UNREADABLE);
-  };
-  if (!wireDegraded.ok) failRow("degraded_unreadable");
+  if (wireDegraded.ok) for (const slug of wireDegraded.value) row.note(slug);
+  else row.note("degraded_unreadable");
 
   const status = KNOWN_STATUSES.find((s) => s === raw.status);
-  if (status === undefined) failRow("status_unreadable");
+  if (status === undefined) row.note("status_unreadable");
 
   // `null` is the server saying it could not read the prompt index; a value
   // outside the domain (negative, fractional, a string) is the same unknown
   // reached our way. Neither may become a `0` — that would hide a session
   // blocked on a human behind a confident all-clear.
   const wireCount = readNullable(raw.pending_elicitations_count, readCount);
-  if (!wireCount.ok) failRow("pending_elicitations_unknown");
-  else if (wireCount.value === null) noteRow("pending_elicitations_unknown");
+  if (!wireCount.ok || wireCount.value === null) row.note("pending_elicitations_unknown");
   const pendingCount = wireCount.ok ? wireCount.value : null;
 
   const prompt =
@@ -365,14 +405,14 @@ function parseSession(value: unknown, faults: FeedFaults): MonitorSession | null
     raw.pending_elicitation !== null &&
     prompt === null
   ) {
-    failRow("pending_elicitation_unreadable");
+    row.note("pending_elicitation_unreadable");
   }
 
   const runnerOnline = readNullable(raw.runner_online, readBool);
   const hostOnline = readNullable(raw.host_online, readBool);
-  if (!runnerOnline.ok || !hostOnline.ok) failRow("liveness_unavailable");
+  if (!runnerOnline.ok || !hostOnline.ok) row.note("liveness_unavailable");
   const costUsd = readNullable(raw.cost_usd, readNumber);
-  if (!costUsd.ok) failRow("cost_unreadable");
+  if (!costUsd.ok) row.note("cost_unreadable");
 
   // Labels assert nothing on their own: an unreadable one degrades to `null`,
   // which renders as absent rather than as a fact.
@@ -395,7 +435,7 @@ function parseSession(value: unknown, faults: FeedFaults): MonitorSession | null
     hostOnline: hostOnline.ok ? hostOnline.value : null,
     updatedAt: updatedAt.ok ? updatedAt.value : null,
     costUsd: costUsd.ok ? costUsd.value : null,
-    degraded,
+    degraded: row.slugs,
   };
 }
 

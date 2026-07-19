@@ -911,3 +911,61 @@ describe("HudPanel — verdict state is scoped to its session", () => {
     expect(within(rows[1]).queryByTestId("hud-resolve-error")).toBeNull();
   });
 });
+
+// ── Third round: a clean envelope says nothing about the rows in it ──
+
+describe("HudPanel — one degraded row makes the whole pill a floor", () => {
+  it("stops presenting counts as a total when a row carries a degradation", async () => {
+    // Envelope is spotless — `partial: false`, `degraded: []` — but one row
+    // says its status is unresolved. Those counts cannot describe a session
+    // whose state nobody could resolve, so they are a floor.
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 2, awaiting: 1 }),
+        degraded: [],
+        sessions: [wireSession({ status: "unknown", degraded: ["status_unknown"] })],
+      }),
+    );
+    renderPanel();
+    await waitFor(() => {
+      const pill = screen.getByTestId("hud-pill");
+      expect(pill).toHaveTextContent("≥2 ativas");
+      expect(pill).toHaveTextContent("piso, não total");
+    });
+    await expand();
+    expect(screen.getByTestId("hud-counts-partial")).toBeInTheDocument();
+    expect(screen.getByTestId("hud-degraded")).toHaveTextContent(
+      "o estado desta sessão não está registrado",
+    );
+  });
+
+  it("does the same for a row whose prompt index could not be read", async () => {
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 1, awaiting: 0 }),
+        degraded: [],
+        sessions: [
+          wireSession({
+            pending_elicitations_count: null,
+            pending_elicitation: null,
+            degraded: [],
+          }),
+        ],
+      }),
+    );
+    renderPanel();
+    await waitFor(() => {
+      const pill = screen.getByTestId("hud-pill");
+      // "0 aguardando" here would be an all-clear built on a row that may well
+      // be blocked on a human.
+      expect(pill).toHaveTextContent("≥0 aguardando");
+      expect(pill).toHaveTextContent("piso, não total");
+    });
+    await expand();
+    const row = screen.getByTestId("hud-session");
+    expect(within(row).getByTestId("hud-pending-unknown")).toHaveTextContent(
+      "aprovações pendentes: ?",
+    );
+    expect(within(row).getByTestId("hud-pending-unknown-detail")).toBeInTheDocument();
+  });
+});

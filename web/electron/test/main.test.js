@@ -96,38 +96,23 @@ describe("floating HUD hardening (src/main.js)", () => {
   });
 });
 
-// The visibility policy itself is unit-tested in hudVisibility.test.js; what no
-// behavior test can see is whether main.js still CALLS it — a HUD that never
-// re-decides is one stuck in whatever state it opened in, and a mode the user
-// picked in Settings that silently does nothing.
-describe("floating HUD visibility policy wiring (src/main.js)", () => {
-  it("re-applies the policy on every feed report from the HUD", () => {
-    const start = liveCode.indexOf('ipcMain.on("omnicraft:hud-report-feed"');
-    assert.notEqual(start, -1, "the hud-report-feed IPC handler is gone");
-    const handler = liveCode.slice(start, start + 600);
-    assert.match(handler, /event\.sender !== hudWindow\.webContents/);
-    assert.match(
-      handler,
-      /applyHudPolicy\(\)/,
-      [
-        "src/main.js takes the HUD's feed report but no longer applies the visibility",
-        "policy to it. The report is the ONLY thing that can hide an idle HUD or expand",
-        "one when a session starts waiting on a human; without applyHudPolicy() the modes",
-        "in Settings do nothing. Do not delete this test.",
-      ].join(" "),
-    );
-  });
-
-  it("applies the policy at startup, so the saved HUD comes back", () => {
-    const ready = liveCode.slice(liveCode.indexOf("app.whenReady()"));
-    assert.match(ready, /applyHudPolicy\(\)/);
-  });
-
+// The HUD's visibility policy (src/hudPolicy.js) and its IPC surface
+// (src/hudIpc.js) are exercised for real in hudPolicy.test.js / hudIpc.test.js —
+// fake window, fake ipcMain, handlers actually invoked. What is left here is
+// the one property that lives in main.js's own BrowserWindow options and has no
+// behavior to drive: the hidden HUD must keep polling.
+describe("floating HUD window options (src/main.js)", () => {
   it("keeps the hidden HUD polling (no background throttling)", () => {
     // The modes HIDE the window rather than closing it; a throttled renderer
     // would poll about once a minute and take that long to come back.
     const start = liveCode.indexOf("const hud = new BrowserWindow(");
     const hudWindow = liveCode.slice(start, liveCode.indexOf("hudWindow = hud", start));
     assert.match(hudWindow, /backgroundThrottling:\s*false/);
+  });
+
+  it("creates the HUD hidden, so a mode that starts hidden never flashes", () => {
+    const start = liveCode.indexOf("const hud = new BrowserWindow(");
+    const hudWindow = liveCode.slice(start, liveCode.indexOf("hudWindow = hud", start));
+    assert.match(hudWindow, /show:\s*false/);
   });
 });

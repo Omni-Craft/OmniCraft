@@ -15,6 +15,7 @@ const {
   HUD_VISIBILITY_MODES,
   DEFAULT_HUD_VISIBILITY,
   readHudSettings,
+  mergeHudSettings,
   summarizeFeedReport,
   decideHud,
 } = require("../src/hudVisibility");
@@ -79,6 +80,39 @@ describe("readHudSettings", () => {
   it("offers exactly the three documented modes", () => {
     assert.deepEqual(HUD_VISIBILITY_MODES, ["always", "hide-when-idle", "attention-only"]);
     assert.ok(HUD_VISIBILITY_MODES.includes(DEFAULT_HUD_VISIBILITY));
+  });
+});
+
+describe("mergeHudSettings", () => {
+  it("keeps every other preference in the file", () => {
+    const read = { ok: true, settings: { server_url: "https://a", recent_servers: ["https://a"] } };
+    const { settings } = mergeHudSettings(read, { enabled: true });
+    assert.deepEqual(settings, {
+      server_url: "https://a",
+      recent_servers: ["https://a"],
+      hud: { enabled: true, mode: DEFAULT_HUD_VISIBILITY },
+    });
+  });
+
+  it("REFUSES to write over a settings.json it could not read", () => {
+    // The read failed, so the file's contents are unknown — saving here would
+    // replace the saved server, the recents and everything else with a file
+    // holding one hud blob. Refusing keeps the file for the user to fix.
+    assert.throws(() => mergeHudSettings({ ok: false, settings: null }, { enabled: false }));
+    assert.throws(() => mergeHudSettings(null, { enabled: false }));
+  });
+
+  it("writes on first launch, when the file is merely absent", () => {
+    const { settings, hud } = mergeHudSettings({ ok: true, settings: {} }, { enabled: true });
+    assert.deepEqual(hud, { enabled: true, mode: DEFAULT_HUD_VISIBILITY });
+    assert.deepEqual(settings, { hud: { enabled: true, mode: DEFAULT_HUD_VISIBILITY } });
+  });
+
+  it("replaces a malformed hud blob inside a readable file", () => {
+    const read = { ok: true, settings: { server_url: "https://a", hud: "on" } };
+    const { settings } = mergeHudSettings(read, { mode: "attention-only" });
+    assert.deepEqual(settings.hud, { enabled: false, mode: "attention-only" });
+    assert.equal(settings.server_url, "https://a", "the rest of the file survives");
   });
 });
 
@@ -176,6 +210,30 @@ describe("decideHud", () => {
       true,
     );
     assert.equal(decideHud({ enabled: true, mode: "attention-only", report: null }).visible, true);
+  });
+
+  it("does not claim an expansion the user already had", () => {
+    // Attention arriving on a HUD the user opened by hand has nothing to
+    // expand — and must not mark it as the shell's to collapse later.
+    const decision = decideHud({
+      enabled: true,
+      mode: "always",
+      report: report({ awaiting: 1 }),
+      expanded: true,
+      autoExpanded: false,
+    });
+    assert.deepEqual(decision, { visible: true, expanded: null, autoExpanded: false });
+  });
+
+  it("keeps owning an expansion it already caused when attention persists", () => {
+    const decision = decideHud({
+      enabled: true,
+      mode: "always",
+      report: report({ awaiting: 2 }),
+      expanded: true,
+      autoExpanded: true,
+    });
+    assert.deepEqual(decision, { visible: true, expanded: null, autoExpanded: true });
   });
 
   it("shows and expands on attention, in every mode", () => {

@@ -51,6 +51,36 @@ function readHudSettings(settings) {
 }
 
 /**
+ * Merge a HUD patch into a settings.json READ, returning the whole settings
+ * object to persist plus the resulting hud blob.
+ *
+ * THROWS when the read failed. settings.json holds the saved server, the
+ * recents and every other preference; writing after a failed read would write
+ * over contents we never parsed, losing all of it to save one boolean. Refusing
+ * leaves the file intact for the user to fix, and the caller surfaces the
+ * failure (Settings already renders "não pôde ser salva").
+ *
+ * A hud blob that is malformed inside a READABLE file is different: there is
+ * nothing in it to preserve, so it is replaced.
+ *
+ * @param {{ok: boolean, settings: object | null}} read Result of reading
+ *   settings.json, with "absent" (first launch) distinct from "unreadable".
+ * @param {{enabled?: boolean, mode?: string}} patch
+ * @returns {{settings: object, hud: {enabled: boolean, mode: string}}}
+ */
+function mergeHudSettings(read, patch) {
+  if (!read || read.ok !== true || read.settings === null || typeof read.settings !== "object") {
+    throw new Error("settings.json could not be read; refusing to overwrite it");
+  }
+  const current = readHudSettings(read.settings);
+  const base = current.readable
+    ? { enabled: current.enabled, mode: current.mode }
+    : { enabled: false, mode: DEFAULT_HUD_VISIBILITY };
+  const hud = { ...base, ...patch };
+  return { settings: { ...read.settings, hud }, hud };
+}
+
+/**
  * What the HUD's renderer told us about the feed, reduced to the two questions
  * visibility turns on. Anything malformed lands in "not certain", never in
  * "idle".
@@ -89,19 +119,27 @@ function summarizeFeedReport(report) {
  * — the shell must not fight a manual expand, and must not collapse a HUD it
  * auto-expanded while the reason for it is merely unknown. `autoExpanded`
  * tracks whether the CURRENT expansion was the shell's doing, so the return to
- * collapsed only ever undoes an auto-expand.
+ * collapsed only ever undoes an auto-expand. `expanded` is what the window is
+ * showing right now, which is what tells attention whether it CAUSED the
+ * expansion it is about to claim.
  *
  * @param {{enabled: boolean | null, mode: string | null, report: unknown,
- *   autoExpanded?: boolean}} input
+ *   expanded?: boolean, autoExpanded?: boolean}} input
  * @returns {{visible: boolean, expanded: boolean | null, autoExpanded: boolean}}
  */
-function decideHud({ enabled, mode, report, autoExpanded = false }) {
+function decideHud({ enabled, mode, report, expanded = false, autoExpanded = false }) {
   // Only an explicit `true` opens the HUD: unknown settings must not silently
   // put an always-on-top window on the user's screen.
   if (enabled !== true) return { visible: false, expanded: false, autoExpanded: false };
 
   const { attention, idleCertain } = summarizeFeedReport(report);
-  if (attention) return { visible: true, expanded: true, autoExpanded: true };
+  if (attention) {
+    // Attention only OWNS the expansion it actually caused. On a HUD the user
+    // already opened by hand there is nothing to expand, and claiming it would
+    // hand the shell a manual expansion to collapse later.
+    if (expanded) return { visible: true, expanded: null, autoExpanded };
+    return { visible: true, expanded: true, autoExpanded: true };
+  }
 
   const effectiveMode = HUD_VISIBILITY_MODES.includes(mode) ? mode : DEFAULT_HUD_VISIBILITY;
 
@@ -114,12 +152,14 @@ function decideHud({ enabled, mode, report, autoExpanded = false }) {
 
   // Certain: nothing is waiting on a human. Undo an auto-expand (and only an
   // auto-expand — a manual one is the user's).
-  const expanded = autoExpanded ? false : null;
-  if (effectiveMode === "attention-only") return { visible: false, expanded, autoExpanded: false };
-  if (effectiveMode === "hide-when-idle") {
-    return { visible: !idleCertain, expanded, autoExpanded: false };
+  const nextExpanded = autoExpanded ? false : null;
+  if (effectiveMode === "attention-only") {
+    return { visible: false, expanded: nextExpanded, autoExpanded: false };
   }
-  return { visible: true, expanded, autoExpanded: false };
+  if (effectiveMode === "hide-when-idle") {
+    return { visible: !idleCertain, expanded: nextExpanded, autoExpanded: false };
+  }
+  return { visible: true, expanded: nextExpanded, autoExpanded: false };
 }
 
 /**
@@ -146,6 +186,7 @@ module.exports = {
   HUD_VISIBILITY_MODES,
   DEFAULT_HUD_VISIBILITY,
   readHudSettings,
+  mergeHudSettings,
   summarizeFeedReport,
   decideHud,
 };

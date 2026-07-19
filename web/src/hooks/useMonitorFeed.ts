@@ -94,6 +94,9 @@ export const FEED_DEGRADED_LABELS: Record<string, string> = {
   cost_unreadable: "o custo não pôde ser lido",
   counts_unreadable: "as contagens do feed não puderam ser lidas",
   generated_at_unreadable: "a hora do feed não pôde ser lida",
+  host_id_unreadable: "não dá para saber a que host estas contagens se referem",
+  session_labels_unreadable: "parte da identificação desta sessão não pôde ser lida",
+  updated_at_unreadable: "a hora da última atividade desta sessão não pôde ser lida",
   truncated_unreadable: "não dá para saber se a lista está completa",
   degraded_unreadable: "a lista de falhas de uma sessão não pôde ser lida",
   [ENVELOPE_UNREADABLE]: "a resposta do feed não pôde ser lida",
@@ -268,6 +271,16 @@ class RowFaults {
   }
 }
 
+/**
+ * Anything that can record a failure — the feed's accumulator or a row's.
+ *
+ * Every field reader below takes one, so producing a `null` from an unreadable
+ * value without recording it is not something this file can express.
+ */
+interface Faults {
+  note(slug: string): void;
+}
+
 /** A field read: a trusted value, or "not readable" — never a quiet default. */
 type Read<T> = { ok: true; value: T } | { ok: false };
 
@@ -305,13 +318,51 @@ function readStringArray(value: unknown): Read<string[]> {
     : UNREADABLE;
 }
 
+function readArray(value: unknown): Read<unknown[]> {
+  return Array.isArray(value) ? readable(value) : UNREADABLE;
+}
+
 /**
- * A field the contract allows to be `null`. Absent or `null` is a legitimate
- * unknown; a value of the wrong TYPE is not — that stays unreadable so the
- * caller records it.
+ * Read a field the contract allows to be absent or `null`.
+ *
+ * The distinction that matters: ABSENT is a fact (the server had nothing to
+ * say), while PRESENT-BUT-UNREADABLE is a failure (the server said something we
+ * could not understand). Both come back `null` — they have to, we have no
+ * value — but only the second records a fault, so a row that lost information
+ * cannot sit inside a feed still presenting its counts as a total.
+ *
+ * The accumulator is a required parameter for exactly that reason: a caller
+ * cannot get a `null` out of a malformed value without one.
  */
-function readNullable<T>(value: unknown, read: (raw: unknown) => Read<T>): Read<T | null> {
-  return value === undefined || value === null ? readable(null) : read(value);
+function optional<T>(
+  raw: Record<string, unknown>,
+  key: string,
+  read: (value: unknown) => Read<T>,
+  faults: Faults,
+  slug: string,
+): T | null {
+  const value = raw[key];
+  if (value === undefined || value === null) return null;
+  const parsed = read(value);
+  if (parsed.ok) return parsed.value;
+  faults.note(slug);
+  return null;
+}
+
+/**
+ * Read a field the contract requires. Absent is unreadable here — there is no
+ * legitimate "not applicable" for a field that must be there.
+ */
+function required<T>(
+  raw: Record<string, unknown>,
+  key: string,
+  read: (value: unknown) => Read<T>,
+  faults: Faults,
+  slug: string,
+): Read<T> {
+  const parsed = read(raw[key]);
+  if (!parsed.ok) faults.note(slug);
+  return parsed;
 }
 
 /**
@@ -323,6 +374,12 @@ export function normalizeStatus(value: unknown): MonitorStatus {
   return KNOWN_STATUSES.find((s) => s === value) ?? "unknown";
 }
 
+/** A wire status, or unreadable — a value outside the enum is not a status. */
+function readStatus(value: unknown): Read<MonitorStatus> {
+  const status = KNOWN_STATUSES.find((s) => s === value);
+  return status === undefined ? UNREADABLE : readable(status);
+}
+
 /**
  * Parse the tallies, or return `null` when they cannot be trusted.
  *
@@ -331,6 +388,11 @@ export function normalizeStatus(value: unknown): MonitorStatus {
  * tallies — and `null` is the only honest way to say that. Returning
  * `{active: 0, awaiting: 0}` off a partial body would let an incomplete
  * payload render as "nothing needs you".
+ *
+ * This is the one place that reads fields without an accumulator, and it is
+ * safe for a structural reason: nothing here is optional, so there is no
+ * per-field `null` to leak — one bad field collapses the whole object, and the
+ * caller records that.
  */
 export function parseMonitorCounts(value: unknown): MonitorCounts | null {
   const raw = asRecord(value);
@@ -350,19 +412,22 @@ export function parseMonitorCounts(value: unknown): MonitorCounts | null {
   };
 }
 
-function parsePendingElicitation(value: unknown): MonitorPendingElicitation | null {
+/** The slug for anything unreadable inside a parked prompt. */
+const PROMPT_UNREADABLE = "pending_elicitation_unreadable";
+
+function parsePendingElicitation(value: unknown, faults: Faults): MonitorPendingElicitation | null {
   const raw = asRecord(value);
   if (raw === null) return null;
-  const id = readString(raw.id);
-  const sessionId = readString(raw.session_id);
+  const id = required(raw, "id", readString, faults, PROMPT_UNREADABLE);
+  const sessionId = required(raw, "session_id", readString, faults, PROMPT_UNREADABLE);
   if (!id.ok || !sessionId.ok) return null;
-  const kind = readNullable(raw.kind, readString);
-  const summary = readNullable(raw.summary, readString);
   return {
     id: id.value,
     sessionId: sessionId.value,
-    kind: kind.ok ? (kind.value ?? "unknown") : "unknown",
-    summary: summary.ok ? summary.value : null,
+    // Absent `kind` is the contract's own default; a `kind` of the wrong shape
+    // is information we lost, and lands as a fault rather than as that default.
+    kind: optional(raw, "kind", readString, faults, PROMPT_UNREADABLE) ?? "unknown",
+    summary: optional(raw, "summary", readString, faults, PROMPT_UNREADABLE),
   };
 }
 
@@ -373,68 +438,68 @@ function parsePendingElicitation(value: unknown): MonitorPendingElicitation | nu
 function parseSession(value: unknown, faults: FeedFaults): MonitorSession | null {
   const raw = asRecord(value);
   if (raw === null) return null;
-  const sessionId = readString(raw.session_id);
+
+  // One accumulator for the whole row: every read below takes it, so no field
+  // can degrade to `null` without the feed hearing about it. Slugs the SERVER
+  // reported on the row go through it too — they are equally a reason the
+  // tallies do not describe everything.
+  const row = faults.row();
+  const sessionId = required(raw, "session_id", readString, row, ROW_UNREADABLE);
   if (!sessionId.ok) return null;
 
-  // One accumulator for the whole read: every slug below lands on this row AND
-  // on the feed, so a degraded row cannot sit inside a feed whose counts still
-  // read as a total. Slugs the SERVER reported on the row go through it too —
-  // they are equally a reason the tallies do not describe everything.
-  const row = faults.row();
-  const wireDegraded = readStringArray(raw.degraded);
+  const wireDegraded = required(raw, "degraded", readStringArray, row, "degraded_unreadable");
   if (wireDegraded.ok) for (const slug of wireDegraded.value) row.note(slug);
-  else row.note("degraded_unreadable");
 
-  const status = KNOWN_STATUSES.find((s) => s === raw.status);
-  if (status === undefined) row.note("status_unreadable");
+  const status = required(raw, "status", readStatus, row, "status_unreadable");
 
   // `null` is the server saying it could not read the prompt index; a value
   // outside the domain (negative, fractional, a string) is the same unknown
   // reached our way. Neither may become a `0` — that would hide a session
   // blocked on a human behind a confident all-clear.
-  const wireCount = readNullable(raw.pending_elicitations_count, readCount);
-  if (!wireCount.ok || wireCount.value === null) row.note("pending_elicitations_unknown");
-  const pendingCount = wireCount.ok ? wireCount.value : null;
+  const pendingCount = optional(
+    raw,
+    "pending_elicitations_count",
+    readCount,
+    row,
+    "pending_elicitations_unknown",
+  );
+  if (pendingCount === null) row.note("pending_elicitations_unknown");
 
-  const prompt =
-    raw.pending_elicitation === undefined || raw.pending_elicitation === null
-      ? null
-      : parsePendingElicitation(raw.pending_elicitation);
-  if (
-    raw.pending_elicitation !== undefined &&
-    raw.pending_elicitation !== null &&
-    prompt === null
-  ) {
-    row.note("pending_elicitation_unreadable");
-  }
+  // Absent is "nothing parked here"; present but unparseable is a prompt we
+  // lost, which is the case the row must not render as calm.
+  const prompt = optional(
+    raw,
+    "pending_elicitation",
+    (field) => {
+      const parsed = parsePendingElicitation(field, row);
+      return parsed === null ? UNREADABLE : readable(parsed);
+    },
+    row,
+    PROMPT_UNREADABLE,
+  );
 
-  const runnerOnline = readNullable(raw.runner_online, readBool);
-  const hostOnline = readNullable(raw.host_online, readBool);
-  if (!runnerOnline.ok || !hostOnline.ok) row.note("liveness_unavailable");
-  const costUsd = readNullable(raw.cost_usd, readNumber);
-  if (!costUsd.ok) row.note("cost_unreadable");
+  const runnerOnline = optional(raw, "runner_online", readBool, row, "liveness_unavailable");
+  const hostOnline = optional(raw, "host_online", readBool, row, "liveness_unavailable");
+  const costUsd = optional(raw, "cost_usd", readNumber, row, "cost_unreadable");
+  const updatedAt = optional(raw, "updated_at", readNumber, row, "updated_at_unreadable");
 
-  // Labels assert nothing on their own: an unreadable one degrades to `null`,
-  // which renders as absent rather than as a fact.
-  const label = (field: unknown): string | null => {
-    const read = readNullable(field, readString);
-    return read.ok ? read.value : null;
-  };
-  const updatedAt = readNullable(raw.updated_at, readNumber);
+  // Labels assert nothing on their own, so an unreadable one still renders as
+  // absent — but it is information the row lost, and the feed is told.
+  const label = (key: string) => optional(raw, key, readString, row, "session_labels_unreadable");
 
   return {
     sessionId: sessionId.value,
-    agentName: label(raw.agent_name),
-    title: label(raw.title),
-    project: label(raw.project),
-    workspace: label(raw.workspace),
-    status: status ?? "unknown",
+    agentName: label("agent_name"),
+    title: label("title"),
+    project: label("project"),
+    workspace: label("workspace"),
+    status: status.ok ? status.value : "unknown",
     pendingElicitationsCount: pendingCount,
     pendingElicitation: prompt,
-    runnerOnline: runnerOnline.ok ? runnerOnline.value : null,
-    hostOnline: hostOnline.ok ? hostOnline.value : null,
-    updatedAt: updatedAt.ok ? updatedAt.value : null,
-    costUsd: costUsd.ok ? costUsd.value : null,
+    runnerOnline,
+    hostOnline,
+    updatedAt,
+    costUsd,
     degraded: row.slugs,
   };
 }
@@ -469,7 +534,7 @@ export function parseMonitorFeed(body: unknown): MonitorFeed {
   // The server's own failure list. Losing it means losing every reason the
   // feed might be incomplete, so an unreadable list is fatal, and `internal_error`
   // says the server never built the feed at all.
-  const wireDegraded = readStringArray(raw.degraded);
+  const wireDegraded = required(raw, "degraded", readStringArray, faults, ENVELOPE_UNREADABLE);
   if (!wireDegraded.ok) faults.fail(ENVELOPE_UNREADABLE);
   else
     for (const slug of wireDegraded.value) {
@@ -478,37 +543,44 @@ export function parseMonitorFeed(body: unknown): MonitorFeed {
     }
 
   // Rows we cannot enumerate are not an empty account.
-  const rawSessions = raw.sessions;
-  if (!Array.isArray(rawSessions)) faults.fail(ENVELOPE_UNREADABLE);
-  const sessions = (Array.isArray(rawSessions) ? rawSessions : [])
+  const rawSessions = required(raw, "sessions", readArray, faults, ENVELOPE_UNREADABLE);
+  if (!rawSessions.ok) faults.fail(ENVELOPE_UNREADABLE);
+  const rows = rawSessions.ok ? rawSessions.value : [];
+  const sessions = rows
     .map((row) => parseSession(row, faults))
     .filter((s): s is MonitorSession => s !== null);
-  if (Array.isArray(rawSessions) && sessions.length !== rawSessions.length) {
-    faults.note(ROW_UNREADABLE);
-  }
+  if (sessions.length !== rows.length) faults.note(ROW_UNREADABLE);
 
-  const counts = parseMonitorCounts(raw.counts);
-  if (counts === null) faults.note("counts_unreadable");
+  const counts = required(
+    raw,
+    "counts",
+    (value) => {
+      const parsed = parseMonitorCounts(value);
+      return parsed === null ? UNREADABLE : readable(parsed);
+    },
+    faults,
+    "counts_unreadable",
+  );
 
-  const generatedAt = readNumber(raw.generated_at);
-  if (!generatedAt.ok) faults.note("generated_at_unreadable");
+  const generatedAt = required(raw, "generated_at", readNumber, faults, "generated_at_unreadable");
 
   // Not knowing whether the list is complete is not the same as knowing it is.
-  const truncated = readBool(raw.truncated);
-  if (!truncated.ok) faults.note("truncated_unreadable");
+  const truncated = required(raw, "truncated", readBool, faults, "truncated_unreadable");
 
-  const hostId = readNullable(raw.host_id, readString);
-  if (faults.fatal) return unreadableFeed(faults, hostId.ok ? hostId.value : null);
+  // Unfiltered feeds carry no `host_id` at all; one of the wrong shape means we
+  // cannot say which host these numbers describe.
+  const hostId = optional(raw, "host_id", readString, faults, "host_id_unreadable");
+  if (faults.fatal) return unreadableFeed(faults, hostId);
 
   return {
     generatedAt: generatedAt.ok ? generatedAt.value : null,
-    hostId: hostId.ok ? hostId.value : null,
+    hostId,
     sessions,
-    counts,
+    counts: counts.ok ? counts.value : null,
     truncated: truncated.ok ? truncated.value : true,
     degraded: faults.slugs,
     unreadable: false,
-    countsPartial: counts === null || counts.partial || faults.partial,
+    countsPartial: !counts.ok || counts.value.partial || faults.partial,
   };
 }
 

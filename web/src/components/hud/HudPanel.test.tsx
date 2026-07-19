@@ -1032,3 +1032,119 @@ describe("HudPanel — what it reports to the shell", () => {
     expect(await screen.findByTestId("hud-body")).toBeInTheDocument();
   });
 });
+
+// ── Fourth round: no optional field is read outside the accumulator ──
+// Same class of defect, one level deeper. Each field below used to degrade to
+// `null` in silence, so a feed with `partial: false` and `degraded: []` could
+// carry a row that had lost information while the pill printed its tallies as
+// a total. Every case here serves a SPOTLESS envelope and a value that is
+// present but malformed — the only honest reading is a floor.
+
+describe("HudPanel — a field lost inside a row still makes the counts a floor", () => {
+  /** Clean envelope, one row, whatever the case wants broken on it. */
+  function serveRow(overrides: Record<string, unknown>) {
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 1, awaiting: 0 }),
+        degraded: [],
+        sessions: [wireSession(overrides)],
+      }),
+    );
+  }
+
+  async function expectFloor() {
+    await waitFor(() => {
+      const pill = screen.getByTestId("hud-pill");
+      expect(pill).toHaveTextContent("≥1 ativas");
+      expect(pill).toHaveTextContent("piso, não total");
+    });
+    await expand();
+    expect(screen.getByTestId("hud-counts-partial")).toBeInTheDocument();
+  }
+
+  it("records a prompt whose `kind` is malformed instead of defaulting it", async () => {
+    // Absent `kind` legitimately means "unknown"; a `kind` of the wrong shape
+    // is information we lost, and must not land on that same default quietly.
+    serveRow({
+      status: "waiting",
+      pending_elicitations_count: 1,
+      pending_elicitation: { id: "elic_1", session_id: "conv_1", kind: 7, summary: "Seguir?" },
+    });
+    renderPanel();
+    await expectFloor();
+    expect(screen.getByTestId("hud-degraded")).toHaveTextContent("aprovação pendente");
+  });
+
+  it("records a prompt whose `summary` is malformed instead of blanking it", async () => {
+    serveRow({
+      status: "waiting",
+      pending_elicitations_count: 1,
+      pending_elicitation: {
+        id: "elic_1",
+        session_id: "conv_1",
+        kind: "permission",
+        summary: { texto: "Seguir?" },
+      },
+    });
+    renderPanel();
+    await expectFloor();
+  });
+
+  it("records a malformed label rather than rendering the row as unnamed", async () => {
+    serveRow({ project: 42 });
+    renderPanel();
+    await expectFloor();
+    expect(screen.getByTestId("hud-degraded")).toHaveTextContent("identificação desta sessão");
+  });
+
+  it("records a malformed `updated_at` instead of treating it as never-updated", async () => {
+    serveRow({ updated_at: "ontem" });
+    renderPanel();
+    await expectFloor();
+    expect(screen.getByTestId("hud-degraded")).toHaveTextContent("última atividade");
+  });
+
+  it("keeps a legitimately absent optional field free of any fault", async () => {
+    // The distinction the accumulator exists to preserve: ABSENT is the server
+    // having nothing to say, and must stay a plain total.
+    serveFeed(
+      wireFeed({
+        counts: wireCounts({ active: 1, awaiting: 0 }),
+        degraded: [],
+        sessions: [wireSession({ project: null, title: null, cost_usd: null, host_online: null })],
+      }),
+    );
+    renderPanel();
+    await waitFor(() => {
+      const pill = screen.getByTestId("hud-pill");
+      expect(pill).toHaveTextContent("1 ativas · 0 aguardando");
+      expect(pill).not.toHaveTextContent("≥");
+      expect(pill).not.toHaveTextContent("piso");
+    });
+    await expand();
+    expect(screen.queryByTestId("hud-counts-partial")).toBeNull();
+    expect(screen.queryByTestId("hud-degraded")).toBeNull();
+  });
+});
+
+describe("HudPanel — a malformed host_id is not a feed about nothing", () => {
+  it("records it instead of silently forgetting which host the counts describe", async () => {
+    serveFeed(
+      wireFeed({
+        host_id: 7,
+        counts: wireCounts({ active: 2, awaiting: 1 }),
+        degraded: [],
+        sessions: [],
+      }),
+    );
+    renderPanel();
+    await waitFor(() => {
+      const pill = screen.getByTestId("hud-pill");
+      expect(pill).toHaveTextContent("≥2 ativas");
+      expect(pill).toHaveTextContent("piso, não total");
+    });
+    await expand();
+    expect(screen.getByTestId("hud-degraded")).toHaveTextContent("a que host");
+    expect(screen.queryByTestId("hud-empty")).toBeNull();
+  });
+});

@@ -10,7 +10,7 @@
 // `authenticatedFetch` is stubbed at the seam so the real hook (query key,
 // enabled gate, response normalization) runs against canned bodies.
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -39,6 +39,7 @@ function status(overrides: Partial<GitPrStatus> = {}): GitPrStatus {
     diff: { added: 0, removed: 0, files: 0 },
     repo_slug: "acme/omni",
     prs: [],
+    prs_status: "ok",
     error: null,
     ...overrides,
   };
@@ -175,7 +176,7 @@ describe("PR action", () => {
   });
 
   it("keeps offering the compare link while only closed PRs exist", async () => {
-    await renderWidget(status({ ahead: 1, prs: [pr({ state: "closed", ci_status: null })] }));
+    await renderWidget(status({ ahead: 1, prs: [pr({ state: "closed", ci_status: "none" })] }));
     expect(await screen.findByTestId("git-status-create-pr")).toBeTruthy();
     expect(screen.queryByTestId("git-status-pr-link")).toBeNull();
   });
@@ -190,6 +191,12 @@ describe("PR action", () => {
  */
 let listedPrs: GitPrStatus["prs"] = [];
 
+/** How complete the git-status endpoint claims `listedPrs` is. */
+let listedPrsStatus: GitPrStatus["prs_status"] = "ok";
+
+/** Whether the git-status GET fails outright, as a refetch against a down server. */
+let gitStatusFails = false;
+
 /** The pull-request POST answering with the PR it opened. */
 const created = (overrides: Record<string, unknown> = {}) => {
   const body = {
@@ -201,7 +208,7 @@ const created = (overrides: Record<string, unknown> = {}) => {
     title: "Add login",
     ...overrides,
   };
-  listedPrs = [pr({ number: body.number, title: body.title, url: body.url, ci_status: null })];
+  listedPrs = [pr({ number: body.number, title: body.title, url: body.url, ci_status: "unknown" })];
   return { ok: true, status: 200, json: async () => body };
 };
 
@@ -224,16 +231,21 @@ const posts = () =>
  * be configured that way.
  */
 async function renderCreatable(post: () => unknown, sessionId = "sess_1") {
-  authenticatedFetchMock.mockImplementation(async (url: unknown) =>
-    String(url).endsWith("/pull-request")
-      ? post()
-      : {
-          ok: true,
-          status: 200,
-          json: async () =>
-            status({ session_id: String(url).split("/")[3], ahead: 1, prs: listedPrs }),
-        },
-  );
+  authenticatedFetchMock.mockImplementation(async (url: unknown) => {
+    if (String(url).endsWith("/pull-request")) return post();
+    if (gitStatusFails) return { ok: false, status: 503, json: async () => ({}) };
+    return {
+      ok: true,
+      status: 200,
+      json: async () =>
+        status({
+          session_id: String(url).split("/")[3],
+          ahead: 1,
+          prs: listedPrs,
+          prs_status: listedPrsStatus,
+        }),
+    };
+  });
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: 3 } },
   });
@@ -248,6 +260,8 @@ async function renderCreatable(post: () => unknown, sessionId = "sess_1") {
 describe("creating the pull request", () => {
   beforeEach(() => {
     listedPrs = [];
+    listedPrsStatus = "ok";
+    gitStatusFails = false;
   });
 
   it("arms on the first click without opening anything", async () => {
@@ -359,41 +373,13 @@ describe("creating the pull request", () => {
     fireEvent.click(button);
     expect(posts()).toHaveLength(0);
   });
-
-  // The local answer is a bridge until the poll catches up, not a claim of
-  // its own: once the server has spoken and doesn't list the PR — closed,
-  // deleted, or never really there — the bar goes back to offering to open it.
-  it("gives up the created PR when the next status disagrees", async () => {
-    const { button, client } = await renderCreatable(() => {
-      // The server does not start listing it: `created` is bypassed.
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({
-          object: "session.pull_request",
-          session_id: "sess_1",
-          number: 7,
-          url: "https://github.com/acme/omni/pull/7",
-          created: true,
-          title: "Add login",
-        }),
-      };
-    });
-    fireEvent.click(button);
-    fireEvent.click(button);
-    expect((await screen.findByTestId("git-status-pr-link")).textContent).toBe("Ver PR #7");
-
-    await client.refetchQueries({ queryKey: ["session-git-status", "sess_1"] });
-    await waitFor(() =>
-      expect(screen.getByTestId("git-status-create-pr").textContent).toBe("Criar PR"),
-    );
-    expect(screen.queryByTestId("git-status-pr-link")).toBeNull();
-  });
 });
 
 describe("session switching while the button is armed", () => {
   beforeEach(() => {
     listedPrs = [];
+    listedPrsStatus = "ok";
+    gitStatusFails = false;
   });
 
   /**
@@ -461,6 +447,8 @@ describe("session switching while the button is armed", () => {
 describe("the disarm timer", () => {
   beforeEach(() => {
     listedPrs = [];
+    listedPrsStatus = "ok";
+    gitStatusFails = false;
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
 
@@ -496,29 +484,220 @@ describe("the disarm timer", () => {
 });
 
 describe("CI state", () => {
-  it("names each state in text, not just color", async () => {
+  /** Expand the bar with one PR per CI state, numbered 1…5. */
+  async function renderAllCiStates() {
     await renderWidget(
       status({
         prs: [
           pr({ number: 1, ci_status: "success" }),
           pr({ number: 2, ci_status: "failure" }),
           pr({ number: 3, ci_status: "pending" }),
+          pr({ number: 4, ci_status: "none" }),
+          pr({ number: 5, ci_status: "unknown" }),
         ],
       }),
     );
     fireEvent.click(await screen.findByRole("button", { name: "Detalhes do workspace" }));
-    expect(await screen.findByTestId("git-status-pr-1")).toBeTruthy();
+    await screen.findByTestId("git-status-pr-1");
+  }
+
+  it("names all five states in text, not just color", async () => {
+    await renderAllCiStates();
     expect(screen.getByTestId("git-status-pr-1").textContent).toContain("CI passou");
     expect(screen.getByTestId("git-status-pr-2").textContent).toContain("CI falhou");
     expect(screen.getByTestId("git-status-pr-3").textContent).toContain("CI rodando");
+    expect(screen.getByTestId("git-status-pr-4").textContent).toContain("sem CI");
+    expect(screen.getByTestId("git-status-pr-5").textContent).toContain("CI não consultado");
   });
 
-  it("shows nothing for an unknown CI state — null is not a failure", async () => {
-    await renderWidget(status({ prs: [pr({ ci_status: null })] }));
+  it("draws each state distinctly", async () => {
+    await renderAllCiStates();
+    // Each row carries its own state and no other's — five indicators, five
+    // different icons, and only the two that mean something colored.
+    const states = ["success", "failure", "pending", "none", "unknown"] as const;
+    const indicators = states.map((state, index) => {
+      const row = within(screen.getByTestId(`git-status-pr-${index + 1}`));
+      for (const other of states.filter((s) => s !== state)) {
+        expect(row.queryByTestId(`ci-${other}`)).toBeNull();
+      }
+      return row.getByTestId(`ci-${state}`);
+    });
+    const icons = indicators.map((el) => el.querySelector("svg")?.getAttribute("class"));
+    expect(new Set(icons).size).toBe(states.length);
+    expect(indicators[0].className).toContain("text-success");
+    expect(indicators[1].className).toContain("text-destructive");
+    // Neither "no CI" nor "not consulted" borrows the failure color.
+    expect(indicators[3].className).toContain("text-muted-foreground");
+    expect(indicators[4].className).toContain("text-muted-foreground");
+  });
+
+  // "No checks at all" is an answer GitHub gave; the bar has to say it rather
+  // than leave the PR looking like one whose CI nobody looked at.
+  it("says a PR has no CI, distinctly from one that was not consulted", async () => {
+    await renderWidget(status({ prs: [pr({ ci_status: "none" })] }));
     fireEvent.click(await screen.findByRole("button", { name: "Detalhes do workspace" }));
+    const row = within(await screen.findByTestId("git-status-pr-42"));
+    expect(row.getByTestId("ci-none").textContent).toBe("sem CI");
+    expect(row.queryByTestId("ci-unknown")).toBeNull();
+    // Nothing about "no CI" is a failure.
+    expect(row.queryByTestId("ci-failure")).toBeNull();
+    expect(row.getByTestId("ci-none").className).not.toContain("text-destructive");
+  });
+
+  it("keeps an unconsulted CI neutral — never an error, never 'sem CI'", async () => {
+    await renderWidget(status({ prs: [pr({ ci_status: "unknown" })] }));
+    // The compact badge carries no CI chip at all for a state nobody asked about.
+    const badge = await screen.findByText("#42");
+    expect(badge.textContent).not.toContain("CI");
+    expect(screen.queryByTestId("ci-unknown")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Detalhes do workspace" }));
     const row = await screen.findByTestId("git-status-pr-42");
-    expect(row.textContent).not.toContain("CI");
+    expect(row.textContent).toContain("CI não consultado");
+    expect(row.textContent).not.toContain("sem CI");
     expect(screen.queryByTestId("ci-failure")).toBeNull();
+    expect(screen.getByTestId("ci-unknown").className).toContain("text-muted-foreground");
+    expect(screen.getByTestId("ci-unknown").className).not.toContain("text-destructive");
+  });
+});
+
+// A pull request the bar just opened is real whatever the next poll manages
+// to list. Only a list the server vouches for as complete can retire it —
+// anything else would put "Criar PR" back in front of an open pull request.
+describe("trusting the PR list", () => {
+  beforeEach(() => {
+    listedPrs = [];
+    listedPrsStatus = "ok";
+    gitStatusFails = false;
+  });
+
+  /**
+   * Open a PR through the button, with the server never listing it back.
+   *
+   * The status endpoint is taken down for the click, so the invalidation the
+   * mutation fires can't land a status before the test has set up the one it
+   * means to test — every scenario below gets exactly one status to react to.
+   */
+  async function createWithoutListing() {
+    const { button, client } = await renderCreatable(() => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        object: "session.pull_request",
+        session_id: "sess_1",
+        number: 7,
+        url: "https://github.com/acme/omni/pull/7",
+        created: true,
+        title: "Add login",
+      }),
+    }));
+    gitStatusFails = true;
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect((await screen.findByTestId("git-status-pr-link")).textContent).toBe("Ver PR #7");
+    // The bar weighs a status only once it is stamped after the PR was
+    // opened, and both stamps land in the same millisecond otherwise.
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    return client;
+  }
+
+  /**
+   * Let the status endpoint answer with an incomplete `prsStatus`, refetch,
+   * and wait until the bar has actually rendered that answer — the caveat it
+   * puts on the trigger is the proof, so the assertions that follow are made
+   * against the new status and not the one before it.
+   */
+  async function refetchIncomplete(client: QueryClient, prsStatus: "partial" | "unavailable") {
+    listedPrsStatus = prsStatus;
+    gitStatusFails = false;
+    await client.refetchQueries({ queryKey: ["session-git-status", "sess_1"] });
+    const caveat = prsStatus === "partial" ? "incompleta" : "Não foi possível consultar";
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Detalhes do workspace" }).getAttribute("title"),
+      ).toContain(caveat),
+    );
+  }
+
+  it("drops the created PR when a complete list does not name it", async () => {
+    const client = await createWithoutListing();
+    gitStatusFails = false;
+
+    await client.refetchQueries({ queryKey: ["session-git-status", "sess_1"] });
+    await waitFor(() =>
+      expect(screen.getByTestId("git-status-create-pr").textContent).toBe("Criar PR"),
+    );
+    expect(screen.queryByTestId("git-status-pr-link")).toBeNull();
+  });
+
+  it("keeps it when the list is truncated — the PR may be past the end", async () => {
+    const client = await createWithoutListing();
+
+    await refetchIncomplete(client, "partial");
+    expect(screen.getByTestId("git-status-pr-link").textContent).toBe("Ver PR #7");
+    expect(screen.queryByTestId("git-status-create-pr")).toBeNull();
+  });
+
+  it("keeps it when GitHub could not be consulted at all", async () => {
+    const client = await createWithoutListing();
+
+    await refetchIncomplete(client, "unavailable");
+    expect(screen.getByTestId("git-status-pr-link").textContent).toBe("Ver PR #7");
+    expect(screen.queryByTestId("git-status-create-pr")).toBeNull();
+  });
+
+  it("keeps it when the refetch itself fails", async () => {
+    const client = await createWithoutListing();
+    // One good status first, so the PR is gone from the cache and only the
+    // local answer is still holding the link up.
+    await refetchIncomplete(client, "unavailable");
+
+    gitStatusFails = true;
+    await client.refetchQueries({ queryKey: ["session-git-status", "sess_1"] });
+    await act(async () => {});
+    expect(screen.getByTestId("git-status-pr-link").textContent).toBe("Ver PR #7");
+    expect(screen.queryByTestId("git-status-create-pr")).toBeNull();
+  });
+});
+
+describe("an untrustworthy PR list", () => {
+  it("says so rather than claiming the branch has no pull request", async () => {
+    await renderWidget(status({ ahead: 1, prs: [], prs_status: "unavailable" }));
+    const trigger = await screen.findByRole("button", { name: "Detalhes do workspace" });
+    expect(trigger.getAttribute("title")).toContain("Não foi possível consultar");
+
+    fireEvent.click(trigger);
+    const caveat = await screen.findByTestId("git-status-prs-caveat");
+    expect(caveat.textContent).toContain("Não foi possível consultar");
+    expect(screen.queryByText("Nenhum pull request para este branch.")).toBeNull();
+  });
+
+  it("warns that a truncated list may be missing pull requests", async () => {
+    await renderWidget(status({ ahead: 1, prs: [pr()], prs_status: "partial" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Detalhes do workspace" }));
+    expect((await screen.findByTestId("git-status-prs-caveat")).textContent).toContain(
+      "pode estar incompleta",
+    );
+  });
+
+  it("stays quiet when the list is complete", async () => {
+    await renderWidget(status({ ahead: 1, prs: [] }));
+    const trigger = await screen.findByRole("button", { name: "Detalhes do workspace" });
+    expect(trigger.getAttribute("title")).toBeNull();
+
+    fireEvent.click(trigger);
+    expect(await screen.findByText("Nenhum pull request para este branch.")).toBeTruthy();
+    expect(screen.queryByTestId("git-status-prs-caveat")).toBeNull();
+  });
+
+  // An older server that says nothing about completeness has not said the
+  // list is complete — the hook must not read the silence as "ok".
+  it("treats a body with no prs_status as untrustworthy", async () => {
+    const body = status({ ahead: 1, prs: [] });
+    delete (body as Partial<GitPrStatus>).prs_status;
+    await renderWidget(body);
+    fireEvent.click(await screen.findByRole("button", { name: "Detalhes do workspace" }));
+    expect(await screen.findByTestId("git-status-prs-caveat")).toBeTruthy();
   });
 });
 

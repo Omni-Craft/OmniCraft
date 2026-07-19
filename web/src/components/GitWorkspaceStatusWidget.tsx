@@ -14,9 +14,11 @@
 import {
   CheckIcon,
   ChevronRightIcon,
+  CircleSlashIcon,
   GitBranchIcon,
   GitPullRequestIcon,
   Loader2Icon,
+  MinusIcon,
   XIcon,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -104,23 +106,34 @@ export function compareUrl(status: GitPrStatus): string | null {
   return `https://github.com/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(status.branch)}?expand=1`;
 }
 
-/** What each settled CI state is called, for both the label and the dot. */
-const CI_LABEL: Record<"success" | "failure" | "pending", string> = {
+/** What each CI state is called, for both the label and the icon. */
+const CI_LABEL: Record<GitPullRequest["ci_status"], string> = {
   success: "CI passou",
   failure: "CI falhou",
   pending: "CI rodando",
+  none: "sem CI",
+  unknown: "CI não consultado",
 };
 
-const CI_ICON = { success: CheckIcon, failure: XIcon, pending: Loader2Icon } as const;
+const CI_ICON = {
+  success: CheckIcon,
+  failure: XIcon,
+  pending: Loader2Icon,
+  none: CircleSlashIcon,
+  unknown: MinusIcon,
+} as const;
 
 /**
- * CI state of a PR: a distinct icon per state (check / cross / spinner) plus
- * its name in text, so the state never rides on color alone. The compact
- * badge keeps the name screen-reader-only — the icon shape already tells the
- * states apart there — while the expanded list spells it out.
+ * CI state of a PR: a distinct icon per state plus its name in text, so the
+ * state never rides on color alone. The compact badge keeps the name
+ * screen-reader-only — the icon shape already tells the states apart there —
+ * while the expanded list spells it out.
  *
- * `null` is "sem informação" (no checks reported, or the server hit its CI
- * lookup budget), which is not a failure and shows nothing.
+ * Two of the five say nothing about the build and are drawn neutral, never
+ * as an error: `"none"` is a PR that has no checks at all, and `"unknown"`
+ * is a question that was never asked. The latter is the absence of an
+ * answer, so it stays out of the compact badge entirely and shows only as a
+ * dash where the list has room to name it.
  */
 function CiIndicator({
   status,
@@ -129,7 +142,7 @@ function CiIndicator({
   status: GitPullRequest["ci_status"];
   showLabel?: boolean;
 }) {
-  if (status === null) return null;
+  if (status === "unknown" && !showLabel) return null;
   const Icon = CI_ICON[status];
   return (
     <span
@@ -138,12 +151,25 @@ function CiIndicator({
         "inline-flex shrink-0 items-center gap-1",
         status === "success" && "text-success",
         status === "failure" && "text-destructive",
+        (status === "none" || status === "unknown") && "text-muted-foreground",
       )}
     >
       <Icon className={cn("size-3 shrink-0", status === "pending" && "animate-spin")} />
       <span className={showLabel ? undefined : "sr-only"}>{CI_LABEL[status]}</span>
     </span>
   );
+}
+
+/**
+ * Why the PR list can't be taken at face value, or `null` when it can.
+ *
+ * A truncated or unreachable list is not evidence of absence — this is what
+ * the bar says instead of letting an empty list read as "no pull request".
+ */
+function prsCaveat(status: GitPrStatus["prs_status"]): string | null {
+  if (status === "partial") return "A lista de pull requests pode estar incompleta.";
+  if (status === "unavailable") return "Não foi possível consultar os pull requests no GitHub.";
+  return null;
 }
 
 const PR_STATE_LABEL: Record<GitPullRequest["state"], string> = {
@@ -208,8 +234,14 @@ function GitStatusBar({
     return () => clearTimeout(timer);
   }, [confirming]);
 
+  // Retire the local answer only against a list that is provably complete.
+  // A truncated list may simply not reach this PR, and a list GitHub never
+  // answered says nothing at all — dropping it on either would offer to open
+  // a pull request that already exists. A refetch that failed leaves
+  // `dataUpdatedAt` where it was, so it never gets this far.
   useEffect(() => {
     if (!createdPr || dataUpdatedAt <= createdPr.at) return;
+    if (data.prs_status !== "ok") return;
     const listed = data.prs.some(
       (item) => item.number === createdPr.pr.number && item.state === "open",
     );
@@ -223,6 +255,7 @@ function GitStatusBar({
   const pr = openPullRequest(data.prs) ?? createdPr?.pr ?? null;
   const compare = pr ? null : compareUrl(data);
   const failure = createPr.isError ? createPr.error.message : null;
+  const caveat = prsCaveat(data.prs_status);
 
   function handleCreateClick() {
     if (submitting.current || createPr.isPending) return;
@@ -239,7 +272,7 @@ function GitStatusBar({
             number: result.number,
             title: result.title,
             state: "open",
-            ci_status: null,
+            ci_status: "unknown",
             url: result.url,
           },
           at: Date.now(),
@@ -286,6 +319,9 @@ function GitStatusBar({
           <CollapsibleTrigger
             className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-left text-muted-foreground hover:text-foreground"
             aria-label="Detalhes do workspace"
+            // A caveat about the PR list costs no room here — it rides as the
+            // bar's tooltip and is spelled out once expanded.
+            title={caveat ?? undefined}
           >
             <ChevronRightIcon
               className={cn("size-3.5 shrink-0 transition-transform", open && "rotate-90")}
@@ -370,26 +406,27 @@ function GitStatusBar({
                 {diff ? ` · ${diff.files} arquivo(s)` : ""}
               </div>
             )}
-            {data.prs.length === 0 ? (
-              <div>Nenhum pull request para este branch.</div>
-            ) : (
-              data.prs.map((item) => (
-                <a
-                  key={item.number}
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid={`git-status-pr-${item.number}`}
-                  className="flex flex-wrap items-center gap-x-2 gap-y-1 hover:text-foreground"
-                >
-                  <GitPullRequestIcon className="size-3.5 shrink-0" />
-                  <span className="shrink-0">#{item.number}</span>
-                  <span className="min-w-0 truncate">{item.title}</span>
-                  <span className="shrink-0">({PR_STATE_LABEL[item.state]})</span>
-                  <CiIndicator status={item.ci_status} showLabel />
-                </a>
-              ))
-            )}
+            {caveat && <div data-testid="git-status-prs-caveat">{caveat}</div>}
+            {data.prs.length === 0
+              ? // Only a complete list can claim there is no pull request; with
+                // a truncated or unanswered one the caveat above stands alone.
+                !caveat && <div>Nenhum pull request para este branch.</div>
+              : data.prs.map((item) => (
+                  <a
+                    key={item.number}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid={`git-status-pr-${item.number}`}
+                    className="flex flex-wrap items-center gap-x-2 gap-y-1 hover:text-foreground"
+                  >
+                    <GitPullRequestIcon className="size-3.5 shrink-0" />
+                    <span className="shrink-0">#{item.number}</span>
+                    <span className="min-w-0 truncate">{item.title}</span>
+                    <span className="shrink-0">({PR_STATE_LABEL[item.state]})</span>
+                    <CiIndicator status={item.ci_status} showLabel />
+                  </a>
+                ))}
           </div>
         </CollapsibleContent>
       </Collapsible>

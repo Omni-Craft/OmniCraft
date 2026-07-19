@@ -26,10 +26,12 @@ export interface GitPullRequest {
   title: string;
   state: "open" | "merged" | "closed";
   /**
-   * Aggregate CI state. `null` means "not known" — no checks reported, or
-   * the server's per-request CI lookup budget ran out. Never a failure.
+   * Aggregate CI state. `"none"` means GitHub was asked and this PR has no
+   * checks at all; `"unknown"` means it was never asked (lookup budget, no
+   * head sha) or the question went unanswered. Neither is a failure, and
+   * the two are not interchangeable.
    */
-  ci_status: "success" | "failure" | "pending" | null;
+  ci_status: "success" | "failure" | "pending" | "none" | "unknown";
   url: string;
 }
 
@@ -60,6 +62,13 @@ export interface GitPrStatus {
   /** `owner/name` of the workspace's GitHub remote; `null` when there is none. */
   repo_slug: string | null;
   prs: GitPullRequest[];
+  /**
+   * How far `prs` can be trusted. `"ok"` — everything GitHub has, so an
+   * empty list really means "no pull request". `"partial"` — truncated,
+   * the PR being looked for may be past the end. `"unavailable"` — the
+   * lookup produced no answer, so an empty list means "cannot tell".
+   */
+  prs_status: "ok" | "partial" | "unavailable";
   /** Git failure reason; `null` on success. */
   error: string | null;
 }
@@ -75,7 +84,15 @@ async function fetchGitPrStatus(sessionId: string): Promise<GitPrStatus> {
     throw new Error(`git status fetch failed: HTTP ${res.status}`);
   }
   const body = (await res.json()) as GitPrStatus;
-  return { ...body, prs: body.prs ?? [] };
+  // A body that doesn't say how complete its list is has not said it is
+  // complete — treated as `"unavailable"` so callers never read an empty
+  // list from an older server as proof that there is no pull request.
+  const known = ["ok", "partial", "unavailable"];
+  return {
+    ...body,
+    prs: body.prs ?? [],
+    prs_status: known.includes(body.prs_status) ? body.prs_status : "unavailable",
+  };
 }
 
 /**
@@ -188,7 +205,7 @@ export function useCreateSessionPullRequest(sessionId: string) {
                   number: result.number,
                   title: result.title,
                   state: "open" as const,
-                  ci_status: null,
+                  ci_status: "unknown" as const,
                   url: result.url,
                 },
                 ...prev.prs.filter((item) => item.number !== result.number),

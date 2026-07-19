@@ -53,18 +53,45 @@ function baseBranchName(baseBranch: string | null): string | null {
   return slash === -1 ? baseBranch : baseBranch.slice(slash + 1);
 }
 
+/** GitHub account name: alphanumerics and inner hyphens. */
+const OWNER_PATTERN = /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/;
+/** GitHub repository name: alphanumerics, dot, underscore, hyphen. */
+const REPO_PATTERN = /^[A-Za-z0-9._-]+$/;
+
+/**
+ * Split `"owner/repo"` into its two encoded path segments.
+ *
+ * The slug reaches us as free-form text from a git remote, and it lands in
+ * the middle of a URL we hand to the browser — a value carrying `?`, `#`, an
+ * extra segment or `..` could rewrite the path or point the button at another
+ * destination entirely. Only a strict `owner/repo` is accepted; anything else
+ * is `null`, which drops the button rather than linking somewhere unintended.
+ */
+function parseRepoSlug(slug: string | null): string | null {
+  if (!slug) return null;
+  const parts = slug.split("/");
+  if (parts.length !== 2) return null;
+  const [owner, repo] = parts;
+  if (!OWNER_PATTERN.test(owner) || !REPO_PATTERN.test(repo)) return null;
+  // `.` and `..` pass REPO_PATTERN but are path traversal, not repositories.
+  if (repo === "." || repo.includes("..")) return null;
+  return `${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`;
+}
+
 /**
  * GitHub compare URL for opening a PR from `branch` onto the base.
  *
  * Built from the workspace's own remote (`repo_slug`), so it is available on
- * the common case — a dirty branch with no PR yet. Without a slug (no remote,
- * or one not hosted on github.com) there is nothing to link to and the caller
- * renders no button.
+ * the common case — a dirty branch with no PR yet. Without a usable slug (no
+ * remote, one not hosted on github.com, or a slug that isn't a plain
+ * `owner/repo`) there is nothing safe to link to and the caller renders no
+ * button.
  */
 export function compareUrl(status: GitPrStatus): string | null {
+  const repo = parseRepoSlug(status.repo_slug);
   const base = baseBranchName(status.base_branch);
-  if (!status.repo_slug || !base || !status.branch) return null;
-  return `https://github.com/${status.repo_slug}/compare/${encodeURIComponent(base)}...${encodeURIComponent(status.branch)}?expand=1`;
+  if (!repo || !base || !status.branch) return null;
+  return `https://github.com/${repo}/compare/${encodeURIComponent(base)}...${encodeURIComponent(status.branch)}?expand=1`;
 }
 
 /** What each settled CI state is called, for both the label and the dot. */

@@ -430,12 +430,21 @@ export function parseEvent(rawType: string, data: Record<string, unknown>): Stre
         typeof data.background_task_count === "number" && data.background_task_count >= 0
           ? data.background_task_count
           : undefined;
+      // A `failed` transition may carry an ErrorDetail (`{code, message}`)
+      // for a setup failure with no `response.failed`. Parse it so the store
+      // can surface the reason; a malformed/absent field stays undefined.
+      const errRaw = data.error;
+      const error =
+        errRaw && typeof errRaw === "object" && !Array.isArray(errRaw)
+          ? parseErrorInfo(errRaw)
+          : undefined;
       return {
         type: "session_status",
         conversationId,
         status,
         responseId,
         backgroundTaskCount,
+        ...(error !== undefined ? { error } : {}),
       } satisfies SessionStatusEvent;
     }
     return null;

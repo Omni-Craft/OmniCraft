@@ -2471,6 +2471,109 @@ describe("chatStore — background-shell tally (claude-native)", () => {
   });
 });
 
+describe("chatStore — setup-failure error surfacing", () => {
+  it("materializes an ErrorBlock when a failed status carries a setup error", () => {
+    // A runner crash (runner_failed_to_start) ends the turn before any
+    // response.failed fires, so the BlockStream never emits an error block.
+    // The failed transition's error must land in the transcript instead of
+    // leaving it blank.
+    useChatStore.setState({
+      conversationId: "conv_abc",
+      sessionStatus: "running",
+      blocks: [],
+      activeResponse: null,
+    });
+    handleSessionEvent({
+      type: "session_status",
+      conversationId: "conv_abc",
+      status: "failed",
+      error: { code: "runner_failed_to_start", message: "runner process exited with code 1" },
+    });
+    const state = useChatStore.getState();
+    expect(state.sessionStatus).toBe("failed");
+    expect(state.blocks).toHaveLength(1);
+    expect(state.blocks[0]).toMatchObject({
+      type: "error",
+      code: "runner_failed_to_start",
+      message: "runner process exited with code 1",
+    });
+  });
+
+  it("does not append a duplicate when the same turn's response.failed rendered it", () => {
+    // response.failed already surfaced the error for THIS response; the
+    // trailing failed transition (same responseId) must not double it.
+    const existing: ErrorBlock = {
+      type: "error",
+      ctx: { agent: null, depth: 0, turn: 0, timestamp: 0, responseId: "resp_1", itemId: null },
+      message: "token expired",
+      source: "",
+      code: "provider_token_expired",
+    };
+    useChatStore.setState({
+      conversationId: "conv_abc",
+      sessionStatus: "running",
+      blocks: [existing],
+      activeResponse: null,
+    });
+    handleSessionEvent({
+      type: "session_status",
+      conversationId: "conv_abc",
+      status: "failed",
+      responseId: "resp_1",
+      error: { code: "provider_token_expired", message: "token expired" },
+    });
+    const errorBlocks = useChatStore.getState().blocks.filter((b) => b.type === "error");
+    expect(errorBlocks).toHaveLength(1);
+  });
+
+  it("surfaces a byte-identical failure recurring in a later turn (different responseId)", () => {
+    // A prior turn's error must not suppress the same error in a new turn:
+    // the dedup is scoped to the current responseId, so the recurrence shows
+    // instead of regressing to a silent end.
+    const prior: ErrorBlock = {
+      type: "error",
+      ctx: { agent: null, depth: 0, turn: 0, timestamp: 0, responseId: "resp_1", itemId: null },
+      message: "token expired",
+      source: "",
+      code: "provider_token_expired",
+    };
+    useChatStore.setState({
+      conversationId: "conv_abc",
+      sessionStatus: "running",
+      blocks: [prior],
+      activeResponse: null,
+    });
+    handleSessionEvent({
+      type: "session_status",
+      conversationId: "conv_abc",
+      status: "failed",
+      responseId: "resp_2",
+      error: { code: "provider_token_expired", message: "token expired" },
+    });
+    const errorBlocks = useChatStore.getState().blocks.filter((b) => b.type === "error");
+    expect(errorBlocks).toHaveLength(2);
+    expect(errorBlocks[1]).toMatchObject({
+      code: "provider_token_expired",
+      ctx: { responseId: "resp_2" },
+    });
+  });
+
+  it("adds no error block on a failed status with no error detail", () => {
+    useChatStore.setState({
+      conversationId: "conv_abc",
+      sessionStatus: "running",
+      blocks: [],
+      activeResponse: null,
+    });
+    handleSessionEvent({
+      type: "session_status",
+      conversationId: "conv_abc",
+      status: "failed",
+    });
+    expect(useChatStore.getState().blocks.filter((b) => b.type === "error")).toHaveLength(0);
+  });
+});
+
 describe("chatStore — send (cross-session routing)", () => {
   it("delivers a queued send to the session it was composed in, not the now-active session", async () => {
     // Repro for the cross-session message-routing leak.

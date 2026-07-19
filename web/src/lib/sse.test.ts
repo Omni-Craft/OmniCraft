@@ -114,6 +114,35 @@ describe("parseEvent — session.status (background_task_count)", () => {
   });
 });
 
+describe("parseEvent — session.status (error / setup failure)", () => {
+  function err(data: Record<string, unknown>): unknown {
+    const ev = parseEvent("session.status", {
+      conversation_id: "conv_a",
+      status: "failed",
+      ...data,
+    });
+    return (ev as SessionStatusEvent | null)?.error;
+  }
+
+  it("threads an ErrorDetail so a setup failure reaches the store", () => {
+    // Runner crash before any response.failed: the reason must ride on the
+    // failed transition or the transcript shows a silent end.
+    expect(err({ error: { code: "runner_failed_to_start", message: "exit 1" } })).toEqual({
+      code: "runner_failed_to_start",
+      message: "exit 1",
+    });
+  });
+
+  it("leaves error undefined when the field is absent", () => {
+    expect(err({})).toBeUndefined();
+  });
+
+  it("ignores a non-object error field", () => {
+    expect(err({ error: "boom" })).toBeUndefined();
+    expect(err({ error: ["boom"] })).toBeUndefined();
+  });
+});
+
 describe("parseEvent — session.mcp_startup", () => {
   it("parses a per-server startup map for the MCP startup band", () => {
     const ev = parseEvent("session.mcp_startup", {

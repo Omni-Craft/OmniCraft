@@ -444,6 +444,10 @@ export interface ClientTaskCancel {
  * harness-start signal. `waiting` arrives when the parent agent loop parks
  * on background tools / sub-agents. The session snapshot's `status` never
  * reports `waiting`; it is live-only.
+ *
+ * `error` rides only on a `failed` transition, carrying a setup failure
+ * (token expired, runner failed to start) that ends the turn before any
+ * `response.failed`. The store renders it as the terminal error line.
  */
 export interface SessionStatusEvent {
   type: "session_status";
@@ -451,6 +455,7 @@ export interface SessionStatusEvent {
   status: "idle" | "launching" | "running" | "waiting" | "failed";
   responseId?: string;
   backgroundTaskCount?: number;
+  error?: ErrorInfo;
 }
 
 /**

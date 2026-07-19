@@ -4130,6 +4130,36 @@ export function handleSessionEvent(event: StreamEvent): void {
           if (!s.isNativeTerminalSession && s.pendingUserMessages.length > 0) {
             patch.pendingUserMessages = [];
           }
+          // A setup failure (token expired, runner_failed_to_start) ends the
+          // turn before any `response.failed`, so no error block is emitted
+          // and the transcript shows a silent end. Materialize one here.
+          const failureError = event.status === "failed" ? event.error : undefined;
+          if (failureError) {
+            const base = patch.blocks ?? s.blocks;
+            const responseId = event.responseId ?? "";
+            // Suppress only the same turn's `response.failed` dup (matching
+            // responseId); a byte-identical failure in a later turn still
+            // surfaces. An unknown responseId never matches, so it shows.
+            const alreadyShown =
+              responseId !== "" &&
+              base.some(
+                (b) =>
+                  b.type === "error" &&
+                  b.message === failureError.message &&
+                  b.code === failureError.code &&
+                  b.ctx.responseId === responseId,
+              );
+            if (!alreadyShown) {
+              const errorBlock: ErrorBlock = {
+                type: "error",
+                ctx: { agent: null, depth: 0, turn: 0, timestamp: 0, responseId, itemId: null },
+                message: failureError.message,
+                source: "",
+                code: failureError.code,
+              };
+              patch.blocks = [...base, errorBlock];
+            }
+          }
         }
         return patch;
       });

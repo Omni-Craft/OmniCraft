@@ -40,6 +40,12 @@ const {
   hudNavigationDecision,
 } = require("./url");
 const { registerWorkspaceChromeHide } = require("./workspace-chrome");
+const {
+  HUD_VISIBILITY_MODES,
+  DEFAULT_HUD_VISIBILITY,
+  readHudSettings,
+  decideHud,
+} = require("./hudVisibility");
 const { createBrowserViewRegistry } = require("./browserViewRegistry");
 const { createBrowserViewBoundsController } = require("./browserViewBounds");
 const { registerBrowserIpc } = require("./browserIpc");
@@ -677,6 +683,34 @@ function loadSettings() {
   } catch {
     // Missing/corrupt file → empty settings (first launch).
     return {};
+  }
+}
+
+/**
+ * Same read, but keeping the distinction `loadSettings` flattens: a file that
+ * isn't there yet (first launch — every setting legitimately unset) is not the
+ * same as one we could not read (corrupt JSON, bad permissions), where every
+ * setting is UNKNOWN. Surfaces that must not present an unread value as a fact
+ * read through here.
+ *
+ * @returns {{ok: boolean, settings: object | null}}
+ */
+function loadSettingsResult() {
+  let raw;
+  try {
+    raw = fs.readFileSync(settingsPath(), "utf8");
+  } catch (err) {
+    if (err && err.code === "ENOENT") return { ok: true, settings: {} };
+    return { ok: false, settings: null };
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { ok: false, settings: null };
+    }
+    return { ok: true, settings: parsed };
+  } catch {
+    return { ok: false, settings: null };
   }
 }
 
@@ -1350,6 +1384,49 @@ let hudWindow = null;
 let hudExpanded = false;
 
 /**
+ * True while the CURRENT expansion is the shell's own doing (attention showed
+ * up), so the automatic return to collapsed only ever undoes an auto-expand
+ * and never closes a list the user opened by hand.
+ */
+let hudAutoExpanded = false;
+
+/**
+ * The HUD renderer's last word on the feed — `{readable, exact, stale, active,
+ * awaiting, unresolved}` — or null before the first report. The main process
+ * does NOT poll the feed itself: the HUD's page already does, over the
+ * authenticated same-origin session that only it has.
+ *
+ * null means "we have not been told", which decideHud treats as unresolved,
+ * i.e. NOT idle.
+ */
+let hudFeedReport = null;
+
+/** The persisted HUD settings, with unreadable kept distinct from off. */
+function hudSettingsState() {
+  const { ok, settings } = loadSettingsResult();
+  return readHudSettings(ok ? settings : null);
+}
+
+/**
+ * Merge a patch into the persisted `hud` blob and return the result. An
+ * unreadable blob is replaced (there is nothing to preserve), never merged
+ * into — merging into junk would persist the junk.
+ *
+ * @param {{enabled?: boolean, mode?: string}} patch
+ */
+function writeHudSettings(patch) {
+  const settings = loadSettings();
+  const current = readHudSettings(settings);
+  const base = current.readable
+    ? { enabled: current.enabled, mode: current.mode }
+    : { enabled: false, mode: DEFAULT_HUD_VISIBILITY };
+  const next = { ...base, ...patch };
+  settings.hud = next;
+  saveSettings(settings);
+  return next;
+}
+
+/**
  * Where the HUD sits: horizontally centered on the primary display's work
  * area, just below its top edge. Recomputed on every display change and on
  * every expand/collapse, so the pill and the list stay centered on the same
@@ -1483,6 +1560,11 @@ function openHud() {
       nodeIntegration: false,
       sandbox: true,
       webviewTag: false,
+      // The visibility modes HIDE this window rather than closing it, and a
+      // hidden window is exactly what Chromium throttles to a timer a minute.
+      // The hidden HUD is the only thing that can tell the shell when to bring
+      // itself back, so its polling must keep running at full rate.
+      backgroundThrottling: false,
     },
   });
   hudWindow = hud;
@@ -1508,6 +1590,10 @@ function openHud() {
     // Inactive: glancing at the monitor must not steal focus from whatever
     // the user is typing in.
     hud.showInactive();
+    // No feed report has arrived yet, so this can only ever KEEP it on screen
+    // (an unread feed is not an idle one) — the first report is what may hide
+    // it under the "hide when idle" / "attention only" modes.
+    applyHudPolicy();
   });
   hud.on("closed", () => {
     screen.removeListener("display-metrics-changed", reposition);
@@ -1515,6 +1601,10 @@ function openHud() {
     screen.removeListener("display-removed", reposition);
     hudWindow = null;
     hudExpanded = false;
+    hudAutoExpanded = false;
+    // The next HUD polls for itself; keeping this one's last numbers would
+    // decide the new window's visibility from a snapshot nobody re-read.
+    hudFeedReport = null;
   });
 }
 
@@ -1524,15 +1614,67 @@ function closeHud() {
 }
 
 /**
- * Menu / programmatic entry point: open the HUD, or close the open one. Until
- * the Settings toggle lands this is the only way in.
+ * Switch the open HUD between its two footprints and tell its page, so the
+ * panel and the window agree on which one is showing. No-op when it already
+ * is in that state.
+ *
+ * @param {boolean} expanded
  */
-function toggleHud() {
-  if (hudWindow && !hudWindow.isDestroyed()) {
-    closeHud();
+function setHudWindowExpanded(expanded) {
+  if (!hudWindow || hudWindow.isDestroyed() || hudExpanded === expanded) return;
+  hudExpanded = expanded;
+  positionHud();
+  hudWindow.webContents.send("omnicraft:hud-expanded", expanded);
+}
+
+/**
+ * Bring the HUD window in line with the persisted settings and the last feed
+ * report: open/close it, show/hide it, expand it when something is waiting on
+ * a human and collapse it when that clears.
+ *
+ * Hiding is `hide()`, not `close()` — the hidden window keeps polling (that is
+ * what `backgroundThrottling: false` is for), which is the only way it can
+ * know when to come back. Only the setting being OFF closes it.
+ */
+function applyHudPolicy() {
+  const { enabled, mode } = hudSettingsState();
+  if (enabled !== true) {
+    // Unknown settings do not open an always-on-top window, and do not close
+    // one the user already has: only an explicit `false` closes.
+    hudAutoExpanded = false;
+    if (enabled === false) closeHud();
     return;
   }
-  openHud();
+  if (!hudWindow || hudWindow.isDestroyed()) {
+    openHud(); // applies the policy again once the page is ready to show
+    return;
+  }
+  const decision = decideHud({
+    enabled,
+    mode,
+    report: hudFeedReport,
+    autoExpanded: hudAutoExpanded,
+  });
+  hudAutoExpanded = decision.autoExpanded;
+  if (decision.expanded !== null) setHudWindowExpanded(decision.expanded);
+  if (decision.visible) {
+    // showInactive, always: a HUD that reappears because a session got blocked
+    // must not steal focus from whatever the user is typing in.
+    if (!hudWindow.isVisible()) hudWindow.showInactive();
+  } else if (hudWindow.isVisible()) {
+    hudWindow.hide();
+  }
+}
+
+/**
+ * Menu entry point: turn the HUD on or off, persisting the choice so Settings
+ * and the next launch agree with what is on screen. The menu toggles what the
+ * user can SEE, so an open-but-policy-hidden HUD counts as on.
+ */
+function toggleHud() {
+  const open = Boolean(hudWindow && !hudWindow.isDestroyed());
+  writeHudSettings({ enabled: !open });
+  applyHudPolicy();
 }
 
 /**
@@ -2301,7 +2443,59 @@ function registerIpc() {
       return;
     }
     hudExpanded = expanded === true;
+    // A hand-driven toggle is the user's: the shell must not later collapse
+    // (or keep expanded) a state it did not choose.
+    hudAutoExpanded = false;
     positionHud();
+  });
+
+  // HUD → what the feed says right now, from the only renderer that polls it.
+  // Same live-HUD sender check as above; this decides whether an always-on-top
+  // window is on screen, so no other page gets to drive it.
+  //
+  // The payload is read defensively (see summarizeFeedReport): a field that
+  // isn't there or isn't a number lands in "unresolved", never in "idle".
+  ipcMain.on("omnicraft:hud-report-feed", (event, report) => {
+    if (!hudWindow || hudWindow.isDestroyed() || event.sender !== hudWindow.webContents) {
+      console.warn("[omnicraft] hud-report-feed from untrusted sender dropped");
+      return;
+    }
+    hudFeedReport = report ?? null;
+    applyHudPolicy();
+  });
+
+  // SPA (Settings → Desktop → HUD) → the persisted HUD settings. Returns the
+  // readable flag alongside the values so the page can say "desconhecido"
+  // rather than render an unread setting as "off".
+  ipcMain.handle("omnicraft:hud-get-settings", (event) => {
+    if (!isPinnedOriginSender(event)) {
+      console.warn("[omnicraft] hud-get-settings from untrusted sender dropped");
+      return null;
+    }
+    return hudSettingsState();
+  });
+
+  // SPA → change the HUD's on/off state or its visibility mode, and apply it
+  // immediately. Validated here, not just in the page: only the two documented
+  // shapes are ever persisted, so a bad value can't end up as a settings blob
+  // the next launch reads back as unreadable.
+  ipcMain.handle("omnicraft:hud-set-settings", (event, patch) => {
+    if (!isPinnedOriginSender(event)) {
+      throw new Error("hud-set-settings is only available to a connected server page");
+    }
+    const next = {};
+    if (patch?.enabled !== undefined) {
+      if (typeof patch.enabled !== "boolean") throw new Error("hud enabled must be a boolean");
+      next.enabled = patch.enabled;
+    }
+    if (patch?.mode !== undefined) {
+      if (!HUD_VISIBILITY_MODES.includes(patch.mode))
+        throw new Error("unknown hud visibility mode");
+      next.mode = patch.mode;
+    }
+    writeHudSettings(next);
+    applyHudPolicy();
+    return hudSettingsState();
   });
 
   // Dock/taskbar badge. Each window's SPA reports ITS unread count; the
@@ -2592,6 +2786,10 @@ if (!gotLock) {
     // Saved LOCAL server → boot the whole stack (server + host) so opening
     // the app is enough for the harnesses to work; no manual terminals.
     void autoStartLocalStack(startupWindow);
+    // The HUD is a persisted preference, so it has to come back on its own —
+    // a monitor the user has to re-open every launch is one they stop
+    // trusting. Only an explicit `true` opens it (see applyHudPolicy).
+    applyHudPolicy();
 
     app.on("activate", () => {
       // macOS: re-create the window when the dock icon is clicked and none open.

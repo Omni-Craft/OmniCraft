@@ -13,6 +13,7 @@ import {
   ChartColumnIcon,
   ClipboardCheckIcon,
   ClockIcon,
+  GaugeIcon,
   GitBranchIcon,
   KeyboardIcon,
   LayoutGridIcon,
@@ -47,7 +48,8 @@ export type SettingsSectionId =
   | "members"
   | "policies"
   | "archived"
-  | "cli";
+  | "cli"
+  | "hud";
 
 const SECTION_IDS: readonly SettingsSectionId[] = [
   "appearance",
@@ -64,6 +66,7 @@ const SECTION_IDS: readonly SettingsSectionId[] = [
   "policies",
   "archived",
   "cli",
+  "hud",
 ];
 
 interface SettingsNavItem {
@@ -86,7 +89,8 @@ interface SettingsNavGroup {
  * absent only in header single-user mode. The Admin group (Members / Policies)
  * appears for admins in ANY multi-user mode since both accounts and OIDC share
  * the `users.is_admin` flag and the server enforces admin on every route; the
- * Desktop group (Local CLI) appears only in the Electron shell.
+ * Desktop group (floating HUD, Local CLI) appears only in the Electron shell —
+ * both configure the shell itself, which a browser tab does not have.
  */
 export function settingsNavGroups(
   hasAuthSession: boolean,
@@ -104,12 +108,15 @@ export function settingsNavGroups(
     general.unshift({ id: "account", label: "Conta", icon: UserCogIcon });
   }
   const groups: SettingsNavGroup[] = [];
-  // Desktop (Local CLI) leads when present — it's the shell-specific section a
-  // desktop user is most likely here to change.
+  // Desktop leads when present — the shell-specific sections a desktop user is
+  // most likely here to change.
   if (isDesktop) {
     groups.push({
       title: "Desktop",
-      items: [{ id: "cli", label: "CLI local", icon: TerminalIcon }],
+      items: [
+        { id: "hud", label: "HUD flutuante", icon: GaugeIcon },
+        { id: "cli", label: "CLI local", icon: TerminalIcon },
+      ],
     });
   }
   groups.push({ title: "Geral", items: general });

@@ -130,7 +130,18 @@ import {
   writeThemePalette,
 } from "@/lib/themePalette";
 import { useIsEmbedded } from "@/lib/embedded";
-import { type CliStatus, getCliStatus, isElectronShell, resetCliPath } from "@/lib/nativeBridge";
+import {
+  type CliStatus,
+  getCliStatus,
+  getHudSettings,
+  type HudSettings,
+  type HudSettingsRead,
+  type HudVisibilityMode,
+  isElectronShell,
+  resetCliPath,
+  setHudSettings,
+} from "@/lib/nativeBridge";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 // Admin-only management surfaces, rendered as the Members / Policies settings
@@ -218,6 +229,10 @@ export function SettingsPage() {
       {section === "shortcuts" && <ShortcutsSection />}
       {section === "account" && hasAuthSession && <AccountSection />}
       {section === "archived" && <ArchivedSection />}
+      {/* Unlike the CLI section, this one renders OUTSIDE the shell too: a
+          browser tab that lands on /settings/hud gets told the HUD is a
+          desktop-app window, instead of an empty panel. */}
+      {section === "hud" && <HudSection />}
       {section === "cli" && isElectronShell() && <LocalCliSection />}
     </PageScroll>
   );
@@ -1064,6 +1079,169 @@ function ShortcutsSection() {
   return (
     <Section title="Atalhos de teclado" description="Acelere ações comuns com o teclado.">
       <KeyboardShortcutsList />
+    </Section>
+  );
+}
+
+/** The three visibility modes, in the order they escalate from. */
+const hudModeCards: { value: HudVisibilityMode; title: string; helper: string }[] = [
+  {
+    value: "always",
+    title: "Sempre visível",
+    helper: "O HUD fica na tela o tempo todo, mesmo sem nada rodando.",
+  },
+  {
+    value: "hide-when-idle",
+    title: "Esconder quando ocioso",
+    helper: "Some quando o feed confirma que nada está rodando; volta ao primeiro sinal.",
+  },
+  {
+    value: "attention-only",
+    title: "Só quando há atenção",
+    helper: "Aparece apenas quando alguma sessão está esperando por você.",
+  },
+];
+
+/**
+ * Desktop-only: the floating HUD's on/off switch and when it shows itself.
+ *
+ * The settings live in the shell's settings.json (the main process reads them
+ * at startup, before any page exists), so this section talks to it over IPC —
+ * and every way that call can not answer lands in ONE state: unknown. A shell
+ * too old for the bridge, a main process that never replied, a settings.json
+ * that wouldn't parse — none of those mean "the HUD is off", and a switch
+ * sitting at "off" would be this page inventing an answer it doesn't have.
+ *
+ * In a browser tab there is no HUD to configure at all, which the section says
+ * outright rather than offering a control that would do nothing.
+ */
+function HudSection() {
+  const desktop = isElectronShell();
+  // "loading" only while a real probe is in flight; null is UNKNOWN.
+  const [read, setRead] = useState<HudSettingsRead | null | "loading">(desktop ? "loading" : null);
+  const [busy, setBusy] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
+  const modeLabelId = useId();
+
+  const load = useCallback(() => {
+    if (!desktop) return;
+    setRead("loading");
+    setSaveFailed(false);
+    void getHudSettings().then(setRead);
+  }, [desktop]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const apply = useCallback(async (patch: Partial<HudSettings>) => {
+    setBusy(true);
+    setSaveFailed(false);
+    const next = await setHudSettings(patch);
+    setBusy(false);
+    // A write that didn't come back tells us nothing about what is persisted —
+    // including whether this very change landed. Drop to unknown instead of
+    // leaving the old values on screen as if they were still current.
+    if (next === null) {
+      setSaveFailed(true);
+      setRead(null);
+      return;
+    }
+    setRead(next);
+  }, []);
+
+  if (!desktop) {
+    return (
+      <Section title="HUD flutuante">
+        <p data-testid="hud-settings-browser" className="text-sm text-muted-foreground">
+          O HUD flutuante é uma janela do app desktop do OmniCraft — uma faixa que fica sobre os
+          outros programas mostrando o que está rodando e o que espera por você. Uma aba do
+          navegador não tem essa janela, então não há nada para ligar aqui. Abra o app desktop para
+          configurá-lo.
+        </p>
+      </Section>
+    );
+  }
+
+  if (read === "loading") {
+    return (
+      <Section title="HUD flutuante">
+        <p className="text-sm text-muted-foreground">Verificando…</p>
+      </Section>
+    );
+  }
+
+  // Unknown covers every shape we can't trust: no answer, an unreadable
+  // settings file, or a partial blob. None of them is "desligado".
+  const settings =
+    read !== null && read.readable && read.enabled !== null && read.mode !== null
+      ? { enabled: read.enabled, mode: read.mode }
+      : null;
+
+  return (
+    <Section
+      title="HUD flutuante"
+      description="Uma faixa sempre visível, acima dos outros apps, com o que está rodando e o que está esperando por você."
+    >
+      {settings === null ? (
+        <div className="flex flex-col items-start gap-3">
+          <p data-testid="hud-settings-unknown" className="text-sm text-warning">
+            {saveFailed
+              ? "A alteração não pôde ser salva e o estado atual do HUD é desconhecido."
+              : "As configurações do HUD não puderam ser lidas — o estado atual é desconhecido."}{" "}
+            Isso não quer dizer que ele esteja desligado.
+          </p>
+          <Button variant="ghost" size="sm" disabled={busy} onClick={load}>
+            Tentar de novo
+          </Button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-6">
+          <label className="flex items-center justify-between gap-4">
+            <span className="flex flex-col">
+              <span className="text-sm font-medium">Mostrar o HUD</span>
+              <span className="text-sm text-muted-foreground">
+                Abre a janela flutuante e a traz de volta a cada inicialização do app.
+              </span>
+            </span>
+            <Switch
+              data-testid="hud-enabled"
+              checked={settings.enabled}
+              disabled={busy}
+              onCheckedChange={(checked) => void apply({ enabled: checked })}
+            />
+          </label>
+
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-col">
+              <span id={modeLabelId} className="text-sm font-medium">
+                Quando mostrar
+              </span>
+              <span className="text-sm text-muted-foreground">
+                Quando o feed não pode ser lido, o HUD continua visível em qualquer modo — não dá
+                para chamar de ocioso o que não deu para ler.
+              </span>
+            </div>
+            <CardRadioGroup
+              labelledBy={modeLabelId}
+              value={settings.mode}
+              onSelect={(mode) => void apply({ mode })}
+              className="grid gap-2 sm:grid-cols-3"
+              cardClassName="flex-col items-start gap-1 p-3 text-left"
+              items={hudModeCards.map((card) => ({
+                value: card.value,
+                testId: `hud-mode-${card.value}`,
+                body: (
+                  <>
+                    <span className="text-sm font-medium">{card.title}</span>
+                    <span className="text-xs text-muted-foreground">{card.helper}</span>
+                  </>
+                ),
+              }))}
+            />
+          </div>
+        </div>
+      )}
     </Section>
   );
 }

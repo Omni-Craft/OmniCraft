@@ -969,3 +969,66 @@ describe("HudPanel — one degraded row makes the whole pill a floor", () => {
     expect(within(row).getByTestId("hud-pending-unknown-detail")).toBeInTheDocument();
   });
 });
+
+// The shell owns the visibility modes ("hide when idle", "only on attention")
+// but has no authenticated session of its own: this panel is its only source
+// for what the feed says. What it reports therefore has to carry the same
+// uncertainty the panel renders — a floor is not a total, and an unreadable
+// feed is not an idle one — or the shell would hide the HUD on numbers nobody
+// could resolve.
+describe("HudPanel — what it reports to the shell", () => {
+  it("reports a fully-resolved feed as readable and exact", async () => {
+    serveFeed(wireFeed({ counts: wireCounts({ active: 2, awaiting: 1, unknown: 0, omitted: 0 }) }));
+    const onFeedReport = vi.fn();
+    renderPanel({ onFeedReport });
+
+    await waitFor(() =>
+      expect(onFeedReport).toHaveBeenCalledWith(
+        expect.objectContaining({ readable: true, exact: true, active: 2, awaiting: 1 }),
+      ),
+    );
+  });
+
+  it("reports an unbuildable feed as unreadable, not as zeros", async () => {
+    serveFeed(wireFeed({ degraded: ["internal_error"], counts: null }));
+    const onFeedReport = vi.fn();
+    renderPanel({ onFeedReport });
+
+    // The feed answered; anything still readable=true would be the panel
+    // reporting the pre-fetch blank as an answer.
+    await waitFor(() => expect(screen.getByTestId("hud-pill")).toHaveTextContent("indisponível"));
+    expect(onFeedReport.mock.lastCall?.[0]).toMatchObject({ readable: false, exact: false });
+  });
+
+  it("reports partial tallies as inexact, so a floor is never read as idle", async () => {
+    serveFeed(wireFeed({ counts: wireCounts({ partial: true, unknown: 1 }) }));
+    const onFeedReport = vi.fn();
+    renderPanel({ onFeedReport });
+
+    // Sessions the feed couldn't resolve travel too — an all-zero active count
+    // with one unresolved session is not an idle machine.
+    await waitFor(() =>
+      expect(onFeedReport).toHaveBeenCalledWith(
+        expect.objectContaining({ readable: true, exact: false, unresolved: 1 }),
+      ),
+    );
+  });
+
+  it("follows the shell when IT expands the HUD (attention showed up)", async () => {
+    serveFeed(wireFeed({ counts: wireCounts({ awaiting: 1 }), sessions: [wireSession()] }));
+    let notify: ((expanded: boolean) => void) | null = null;
+    renderPanel({
+      subscribeExpanded: (callback) => {
+        notify = callback;
+        return () => {};
+      },
+    });
+    await waitFor(() => expect(screen.getByTestId("hud-pill")).not.toHaveTextContent("Carregando"));
+    expect(screen.queryByTestId("hud-body")).not.toBeInTheDocument();
+
+    // The shell resized its window and says so; the panel must render the
+    // state the window is actually in.
+    notify!(true);
+    expect(await screen.findByTestId("hud-body")).toBeInTheDocument();
+  });
+});

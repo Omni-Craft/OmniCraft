@@ -21,4 +21,41 @@ contextBridge.exposeInMainWorld("omnicraftHud", {
   setExpanded: (expanded) => {
     ipcRenderer.send("omnicraft:hud-set-expanded", expanded === true);
   },
+
+  /**
+   * Report what the feed says, so the shell can apply the user's visibility
+   * mode (and expand when something starts waiting on a human). The HUD's page
+   * is the only renderer that polls the feed — the main process has no
+   * authenticated session of its own.
+   *
+   * Plain numbers/booleans so the payload survives structured cloning. Fields
+   * carry their own uncertainty: `readable` false or `exact` false means the
+   * counts are not an answer, and the shell must not read them as "idle".
+   *
+   * @param {{readable: boolean, exact: boolean, stale: boolean,
+   *   active: number, awaiting: number, unresolved: number}} report
+   */
+  reportFeed: (report) => {
+    ipcRenderer.send("omnicraft:hud-report-feed", {
+      readable: report?.readable === true,
+      exact: report?.exact === true,
+      stale: report?.stale === true,
+      active: Number(report?.active),
+      awaiting: Number(report?.awaiting),
+      unresolved: Number(report?.unresolved),
+    });
+  },
+
+  /**
+   * Subscribe to the shell's own expand/collapse decisions (it auto-expands
+   * when attention appears), so the panel renders the state its window is in.
+   * Returns an unsubscribe function.
+   *
+   * @param {(expanded: boolean) => void} callback
+   */
+  onExpandedChanged: (callback) => {
+    const listener = (_event, expanded) => callback(expanded === true);
+    ipcRenderer.on("omnicraft:hud-expanded", listener);
+    return () => ipcRenderer.removeListener("omnicraft:hud-expanded", listener);
+  },
 });

@@ -1,0 +1,228 @@
+// Tests for the floating HUD's visibility decision (src/hudVisibility.js), run
+// with `node --test` (no extra deps).
+//
+// The bug class this guards is one specific lie: reading a feed the shell
+// could NOT resolve as "nothing is happening" and hiding the monitor on the
+// strength of it. So most of what's here is the negative space around "idle" —
+// an unreadable feed, a floor instead of a total, a stale snapshot, a report
+// that never arrived, a malformed one — none of which may hide the HUD, in any
+// mode.
+
+const { describe, it } = require("node:test");
+const assert = require("node:assert/strict");
+
+const {
+  HUD_VISIBILITY_MODES,
+  DEFAULT_HUD_VISIBILITY,
+  readHudSettings,
+  summarizeFeedReport,
+  decideHud,
+} = require("../src/hudVisibility");
+
+/** A fully-resolved report: readable, exact, fresh. */
+function report(overrides = {}) {
+  return {
+    readable: true,
+    exact: true,
+    stale: false,
+    active: 0,
+    awaiting: 0,
+    unresolved: 0,
+    ...overrides,
+  };
+}
+
+describe("readHudSettings", () => {
+  it("reads a never-configured install as off, on the default mode", () => {
+    assert.deepEqual(readHudSettings({}), {
+      readable: true,
+      enabled: false,
+      mode: DEFAULT_HUD_VISIBILITY,
+    });
+  });
+
+  it("reads a stored blob back", () => {
+    assert.deepEqual(readHudSettings({ hud: { enabled: true, mode: "attention-only" } }), {
+      readable: true,
+      enabled: true,
+      mode: "attention-only",
+    });
+  });
+
+  it("defaults the mode when only `enabled` was ever written", () => {
+    assert.deepEqual(readHudSettings({ hud: { enabled: true } }), {
+      readable: true,
+      enabled: true,
+      mode: DEFAULT_HUD_VISIBILITY,
+    });
+  });
+
+  it("reports an unreadable settings file as unknown, NOT as off", () => {
+    // null is what main.js passes when settings.json could not be read.
+    const unknown = { readable: false, enabled: null, mode: null };
+    assert.deepEqual(readHudSettings(null), unknown);
+    assert.deepEqual(readHudSettings("nonsense"), unknown);
+    assert.deepEqual(readHudSettings([]), unknown);
+  });
+
+  it("reports a malformed hud blob as unknown, NOT as off", () => {
+    const unknown = { readable: false, enabled: null, mode: null };
+    // Hand-edited files: a non-object blob, a missing/non-boolean `enabled`,
+    // and a mode this build doesn't know are all uninterpretable.
+    assert.deepEqual(readHudSettings({ hud: null }), unknown);
+    assert.deepEqual(readHudSettings({ hud: "on" }), unknown);
+    assert.deepEqual(readHudSettings({ hud: {} }), unknown);
+    assert.deepEqual(readHudSettings({ hud: { enabled: "yes" } }), unknown);
+    assert.deepEqual(readHudSettings({ hud: { enabled: true, mode: "whenever" } }), unknown);
+  });
+
+  it("offers exactly the three documented modes", () => {
+    assert.deepEqual(HUD_VISIBILITY_MODES, ["always", "hide-when-idle", "attention-only"]);
+    assert.ok(HUD_VISIBILITY_MODES.includes(DEFAULT_HUD_VISIBILITY));
+  });
+});
+
+describe("summarizeFeedReport", () => {
+  it("calls a fresh, exact, all-zero feed idle", () => {
+    assert.deepEqual(summarizeFeedReport(report()), { attention: false, idleCertain: true });
+  });
+
+  it("never calls an unresolved feed idle", () => {
+    for (const overrides of [
+      { readable: false },
+      { exact: false }, // counts are a FLOOR, so zero means "at least zero"
+      { stale: true }, // the numbers stopped refreshing
+      { unresolved: 2 }, // sessions the feed could not resolve or had to omit
+      { active: 1 },
+    ]) {
+      assert.equal(
+        summarizeFeedReport(report(overrides)).idleCertain,
+        false,
+        `${JSON.stringify(overrides)} must not read as idle`,
+      );
+    }
+  });
+
+  it("never calls a missing or malformed report idle", () => {
+    for (const value of [null, undefined, "idle", {}, report({ awaiting: "0" })]) {
+      assert.equal(summarizeFeedReport(value).idleCertain, false);
+    }
+  });
+
+  it("flags attention on any positive awaiting count, floor or stale included", () => {
+    assert.equal(summarizeFeedReport(report({ awaiting: 1 })).attention, true);
+    assert.equal(summarizeFeedReport(report({ awaiting: 3, exact: false })).attention, true);
+    assert.equal(summarizeFeedReport(report({ awaiting: 1, stale: true })).attention, true);
+    assert.equal(summarizeFeedReport(report({ awaiting: 0 })).attention, false);
+  });
+});
+
+describe("decideHud", () => {
+  it("keeps the HUD closed while the setting is off or unknown", () => {
+    for (const enabled of [false, null, undefined]) {
+      assert.deepEqual(decideHud({ enabled, mode: "always", report: report({ awaiting: 5 }) }), {
+        visible: false,
+        expanded: false,
+        autoExpanded: false,
+      });
+    }
+  });
+
+  it("always mode keeps a fully idle HUD on screen", () => {
+    const decision = decideHud({ enabled: true, mode: "always", report: report() });
+    assert.equal(decision.visible, true);
+  });
+
+  it("hide-when-idle hides only a PROVEN idle feed", () => {
+    assert.equal(
+      decideHud({ enabled: true, mode: "hide-when-idle", report: report() }).visible,
+      false,
+    );
+    assert.equal(
+      decideHud({ enabled: true, mode: "hide-when-idle", report: report({ active: 1 }) }).visible,
+      true,
+    );
+  });
+
+  it("hide-when-idle keeps a degraded feed visible — unreadable is not idle", () => {
+    // The whole point: an all-zero count we could not resolve must not be
+    // mistaken for silence and hide the monitor.
+    for (const overrides of [
+      { readable: false },
+      { exact: false },
+      { stale: true },
+      { unresolved: 1 },
+    ]) {
+      assert.equal(
+        decideHud({ enabled: true, mode: "hide-when-idle", report: report(overrides) }).visible,
+        true,
+        `${JSON.stringify(overrides)} must keep the HUD visible`,
+      );
+    }
+    // Same for a report that never arrived, or arrived malformed.
+    assert.equal(decideHud({ enabled: true, mode: "hide-when-idle", report: null }).visible, true);
+    assert.equal(decideHud({ enabled: true, mode: "hide-when-idle", report: {} }).visible, true);
+  });
+
+  it("attention-only hides settled work but never an unresolved feed", () => {
+    // Running, nothing waiting on a human, and the feed says so exactly.
+    assert.equal(
+      decideHud({ enabled: true, mode: "attention-only", report: report({ active: 3 }) }).visible,
+      false,
+    );
+    assert.equal(
+      decideHud({ enabled: true, mode: "attention-only", report: report({ exact: false }) })
+        .visible,
+      true,
+    );
+    assert.equal(decideHud({ enabled: true, mode: "attention-only", report: null }).visible, true);
+  });
+
+  it("shows and expands on attention, in every mode", () => {
+    for (const mode of HUD_VISIBILITY_MODES) {
+      assert.deepEqual(
+        decideHud({ enabled: true, mode, report: report({ active: 1, awaiting: 1 }) }),
+        { visible: true, expanded: true, autoExpanded: true },
+        `mode ${mode} must surface attention`,
+      );
+    }
+  });
+
+  it("falls back to the default mode when the stored mode is unknown", () => {
+    // An unrecognized mode must not become "hide everything".
+    assert.equal(decideHud({ enabled: true, mode: null, report: report() }).visible, true);
+    assert.equal(decideHud({ enabled: true, mode: "whenever", report: report() }).visible, true);
+  });
+
+  it("collapses its OWN expansion once attention clears", () => {
+    const decision = decideHud({
+      enabled: true,
+      mode: "always",
+      report: report({ active: 1 }),
+      autoExpanded: true,
+    });
+    assert.deepEqual(decision, { visible: true, expanded: false, autoExpanded: false });
+  });
+
+  it("leaves a manual expansion alone when attention clears", () => {
+    const decision = decideHud({
+      enabled: true,
+      mode: "always",
+      report: report({ active: 1 }),
+      autoExpanded: false,
+    });
+    assert.equal(decision.expanded, null, "no auto-expand to undo → no opinion");
+  });
+
+  it("does not collapse an auto-expansion while attention is merely unknown", () => {
+    // The feed stopped resolving after the HUD auto-expanded: nothing here
+    // proves the blocked session got answered.
+    const decision = decideHud({
+      enabled: true,
+      mode: "hide-when-idle",
+      report: report({ readable: false, awaiting: 0 }),
+      autoExpanded: true,
+    });
+    assert.deepEqual(decision, { visible: true, expanded: null, autoExpanded: true });
+  });
+});

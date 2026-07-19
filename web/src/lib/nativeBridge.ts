@@ -130,7 +130,39 @@ interface ElectronDesktopApi extends NativeShellApi {
   getCliStatus?: () => Promise<CliStatus | null>;
   /** Clear the CLI-path override (revert to auto-detection); resolves status. */
   resetCliPath?: () => Promise<CliStatus | null>;
+  /** The floating HUD's persisted settings, with unreadable kept distinct from off. */
+  getHudSettings?: () => Promise<HudSettingsRead | null>;
+  /** Turn the HUD on/off or change its visibility mode; resolves the new settings. */
+  setHudSettings?: (patch: Partial<HudSettings>) => Promise<HudSettingsRead | null>;
 }
+
+/**
+ * When the floating HUD is on screen.
+ *
+ * `hide-when-idle` hides it only when the feed PROVES nothing is happening —
+ * an unreadable or partial feed keeps it visible, because "we can't tell" is
+ * not "nothing is running".
+ */
+export type HudVisibilityMode = "always" | "hide-when-idle" | "attention-only";
+
+/** The floating HUD's settings, as the shell persists them. */
+export interface HudSettings {
+  enabled: boolean;
+  mode: HudVisibilityMode;
+}
+
+/**
+ * A read of those settings. `readable: false` means settings.json could not be
+ * read — the values are UNKNOWN, and a surface must not render them as off.
+ */
+export interface HudSettingsRead {
+  readable: boolean;
+  enabled: boolean | null;
+  mode: HudVisibilityMode | null;
+}
+
+/** How long a HUD-settings IPC call may hang before it counts as no answer. */
+const HUD_IPC_TIMEOUT_MS = 5_000;
 
 /** A lifecycle action for the host daemon. */
 export type HostControlAction = "start" | "stop" | "restart";
@@ -552,4 +584,52 @@ export async function resetCliPath(): Promise<CliStatus | null> {
     console.warn("[nativeBridge] electron resetCliPath failed:", err);
     return null;
   }
+}
+
+/**
+ * Resolve `null` if the shell hasn't answered in time. An IPC call that never
+ * settles would otherwise leave the HUD settings stuck on "checking" forever;
+ * `null` is the surface's UNKNOWN, which is exactly what a silent main process
+ * means.
+ */
+function withIpcTimeout<T>(promise: Promise<T | null>): Promise<T | null> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => resolve(null), HUD_IPC_TIMEOUT_MS);
+    void promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        console.warn("[nativeBridge] electron hud settings call failed:", err);
+        resolve(null);
+      },
+    );
+  });
+}
+
+/**
+ * Read the floating HUD's settings from the shell.
+ *
+ * `null` means we do not know: no shell, a shell too old to expose the bridge,
+ * a call that threw, or one that never came back. Callers must render that as
+ * unknown — never as "the HUD is off".
+ */
+export async function getHudSettings(): Promise<HudSettingsRead | null> {
+  const electron = electronApi();
+  if (!electron?.getHudSettings) return null;
+  return withIpcTimeout(electron.getHudSettings());
+}
+
+/**
+ * Turn the HUD on/off or change its visibility mode. Resolves the settings as
+ * they now stand, or `null` on the same "we do not know" cases as
+ * {@link getHudSettings} — including a rejected write, where the change did
+ * NOT land.
+ */
+export async function setHudSettings(patch: Partial<HudSettings>): Promise<HudSettingsRead | null> {
+  const electron = electronApi();
+  if (!electron?.setHudSettings) return null;
+  return withIpcTimeout(electron.setHudSettings(patch));
 }

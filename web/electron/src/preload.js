@@ -105,6 +105,19 @@ contextBridge.exposeInMainWorld("omnicraftDesktop", {
    */
   resetCliPath: () => ipcRenderer.invoke("omnicraft:cli-reset-path"),
 
+  /**
+   * The floating HUD's persisted settings — `{ readable, enabled, mode }`.
+   * `readable: false` means settings.json could not be read: the values are
+   * UNKNOWN, not off, and the Settings section says so.
+   */
+  getHudSettings: () => ipcRenderer.invoke("omnicraft:hud-get-settings"),
+  /**
+   * Turn the HUD on/off or change its visibility mode. Applied immediately by
+   * the shell; resolves the settings as they now stand.
+   * @param {{enabled?: boolean, mode?: string}} patch
+   */
+  setHudSettings: (patch) => ipcRenderer.invoke("omnicraft:hud-set-settings", patch),
+
   // ── Embedded browser pane ──────────────────────────────────────────────
   // The relay hook (web/src/hooks/useBrowserAgentRelay.ts) drives a native
   // WebContentsView per conversation through these; all args/results are

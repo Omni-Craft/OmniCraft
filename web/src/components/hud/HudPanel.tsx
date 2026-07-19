@@ -43,7 +43,12 @@ import {
   type MonitorSession,
   type MonitorStatus,
 } from "@/hooks/useMonitorFeed";
-import { setHudExpanded } from "@/lib/hudBridge";
+import {
+  onHudExpandedChanged,
+  reportHudFeed,
+  setHudExpanded,
+  type HudFeedReport,
+} from "@/lib/hudBridge";
 import { approve } from "@/lib/sessionsApi";
 import { cn } from "@/lib/utils";
 
@@ -109,6 +114,16 @@ export interface HudPanelProps {
    * Injectable for tests; defaults to the real bridge.
    */
   onExpandedChange?: (expanded: boolean) => void;
+  /**
+   * Reports what the feed says to the shell, which owns the visibility modes.
+   * Injectable for tests; defaults to the real bridge.
+   */
+  onFeedReport?: (report: HudFeedReport) => void;
+  /**
+   * Subscribes to the shell's own expand/collapse decisions (it auto-expands
+   * on attention). Injectable for tests; defaults to the real bridge.
+   */
+  subscribeExpanded?: (callback: (expanded: boolean) => void) => () => void;
   /** Frozen clock, for tests that need a deterministic staleness age. */
   nowMs?: number;
 }
@@ -117,6 +132,8 @@ export function HudPanel({
   hostId = null,
   enabled = true,
   onExpandedChange = setHudExpanded,
+  onFeedReport = reportHudFeed,
+  subscribeExpanded = onHudExpandedChanged,
   nowMs,
 }: HudPanelProps) {
   const [expanded, setExpanded] = useState(false);
@@ -149,6 +166,32 @@ export function HudPanel({
     setExpanded(next);
     onExpandedChange(next);
   };
+
+  // The shell expands the HUD by itself when a session starts waiting on a
+  // human (and collapses that expansion when it clears). Follow it, without
+  // echoing back — the window is already in that state.
+  useEffect(() => subscribeExpanded(setExpanded), [subscribeExpanded]);
+
+  // Tell the shell what the feed says, so it can apply the user's visibility
+  // mode. Everything unresolved travels as unresolved: `readable` false when
+  // nothing could be read, `exact` false when the tallies are a floor. The
+  // shell hides on IDLE, and neither of those is idle.
+  const counts = feed?.counts ?? null;
+  const feedReadable = !unreadable && !loading && counts !== null;
+  const report: HudFeedReport = {
+    readable: feedReadable,
+    exact: feedReadable && !feed?.countsPartial,
+    stale,
+    active: counts?.active ?? 0,
+    awaiting: counts?.awaiting ?? 0,
+    unresolved: (counts?.unknown ?? 0) + (counts?.omitted ?? 0),
+  };
+  // Serialized so an unchanged snapshot doesn't re-fire on every render tick
+  // (the staleness clock re-renders once a second).
+  const reportKey = JSON.stringify(report);
+  useEffect(() => {
+    onFeedReport(JSON.parse(reportKey) as HudFeedReport);
+  }, [onFeedReport, reportKey]);
 
   const makeSubmit = (key: string, resolveSessionId: string): SubmitApprovalFn => {
     return (elicitationId, action, content) => {

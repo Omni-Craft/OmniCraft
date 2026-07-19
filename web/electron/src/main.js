@@ -33,7 +33,12 @@ const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 const { execFile } = require("node:child_process");
 const { registerLocalhostCors } = require("./localhost_cors");
-const { normalizeUrl, expandDatabricksWorkspaceUrl, hudRouteUrl } = require("./url");
+const {
+  normalizeUrl,
+  expandDatabricksWorkspaceUrl,
+  hudRouteUrl,
+  hudNavigationDecision,
+} = require("./url");
 const { registerWorkspaceChromeHide } = require("./workspace-chrome");
 const { createBrowserViewRegistry } = require("./browserViewRegistry");
 const { createBrowserViewBoundsController } = require("./browserViewBounds");
@@ -1390,6 +1395,54 @@ function hudServerUrl() {
   return fromWindow || loadSettings().server_url || null;
 }
 
+/**
+ * Pin a HUD window to one origin for its whole life.
+ *
+ * The main window deliberately allows free navigation — auth-fronted servers
+ * bounce through external identity providers, and that window has a title bar,
+ * a menu and a visible URL when it matters. The HUD has none of that: it is a
+ * borderless 320px strip floating above every other application. A page that
+ * could steer it anywhere would have a chromeless, always-on-top canvas with
+ * no origin indicator, which is exactly the shape of a credential-phishing
+ * overlay. It also has no reason to navigate — it is one route polling one
+ * endpoint — so the safe rule is also the cheap one.
+ *
+ * Off-origin http(s) goes to the user's REAL browser, where it gets an address
+ * bar and the browser's own protections; anything else is dropped.
+ *
+ * @param {BrowserWindow} hud
+ * @param {string} pinnedOrigin Origin the HUD was opened on.
+ */
+function hardenHudNavigation(hud, pinnedOrigin) {
+  const handle = (url) => {
+    const decision = hudNavigationDecision(pinnedOrigin, url);
+    if (decision === "external") void shell.openExternal(url);
+    else if (decision === "block") console.warn("[omnicraft] HUD blocked navigation to", url);
+    return decision;
+  };
+  // Top-level navigation (link click, location assignment, meta refresh) and
+  // in-page redirects out of the pinned origin.
+  hud.webContents.on("will-navigate", (event, url) => {
+    if (handle(url) !== "allow") event.preventDefault();
+  });
+  hud.webContents.on("will-redirect", (event, url) => {
+    if (handle(url) !== "allow") event.preventDefault();
+  });
+  // Never spawn a window from the HUD: a popup would inherit the opener and
+  // is never something a status strip needs.
+  hud.webContents.setWindowOpenHandler(({ url }) => {
+    handle(url);
+    return { action: "deny" };
+  });
+  // Belt and braces — `webviewTag: false` already prevents this.
+  hud.webContents.on("will-attach-webview", (event) => {
+    event.preventDefault();
+  });
+  // NOTE: no permission handler here on purpose. The HUD shares the DEFAULT
+  // session with the main window (it must — that's where the login cookie
+  // lives), so a handler installed here would answer for the whole app.
+}
+
 /** Open the HUD, or focus the one already open. */
 function openHud() {
   if (hudWindow && !hudWindow.isDestroyed()) {
@@ -1421,13 +1474,20 @@ function openHud() {
     fullscreenable: false,
     show: false,
     webPreferences: {
+      // The HUD's page is REMOTE and untrusted relative to the shell, and it
+      // lives in a chromeless always-on-top window — so it gets the tightest
+      // renderer the shell has: no Node, an isolated context, the OS sandbox
+      // on, and a preload whose entire surface is one boolean (hud_preload.js).
       preload: HUD_PRELOAD,
       contextIsolation: true,
       nodeIntegration: false,
+      sandbox: true,
+      webviewTag: false,
     },
   });
   hudWindow = hud;
   hudExpanded = false;
+  hardenHudNavigation(hud, new URL(target).origin);
   if (process.platform === "darwin") {
     // "floating" keeps it above ordinary windows without the screen-saver
     // level's aggressiveness, and following the user across Spaces (incl.

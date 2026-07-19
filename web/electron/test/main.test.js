@@ -55,3 +55,43 @@ describe("workspace chrome injection wiring (src/main.js)", () => {
     );
   });
 });
+
+// The HUD loads a REMOTE page into a frameless, always-on-top window. Its
+// hardening is wiring, not behavior — no unit test of a pure helper can see
+// whether main.js still ATTACHES it — so these guard the call sites the same
+// way the workspace-chrome test above does. hudNavigationDecision's own
+// behavior is covered in url.test.js.
+describe("floating HUD hardening (src/main.js)", () => {
+  it("pins the HUD window's navigation as live code", () => {
+    assert.match(
+      liveCode,
+      /hardenHudNavigation\(hud,\s*new URL\(target\)\.origin\)/,
+      [
+        "src/main.js no longer hardens the HUD window's navigation. Without that call the",
+        "HUD — a chromeless, always-on-top window loading a remote page — can be steered to",
+        "any origin by its own page content, producing an unattributable overlay above every",
+        "other app. Re-add hardenHudNavigation(hud, new URL(target).origin) right after the",
+        "HUD BrowserWindow is constructed; do not delete this test.",
+      ].join(" "),
+    );
+  });
+
+  it("wires will-navigate, will-redirect and setWindowOpenHandler on the HUD", () => {
+    const body = liveCode.slice(liveCode.indexOf("function hardenHudNavigation"));
+    assert.match(body, /hud\.webContents\.on\(\s*"will-navigate"/);
+    assert.match(body, /hud\.webContents\.on\(\s*"will-redirect"/);
+    assert.match(body, /hud\.webContents\.setWindowOpenHandler\(/);
+  });
+
+  it("gives the HUD renderer the locked-down webPreferences", () => {
+    // The HUD's page is server-controlled; Node in that renderer, a shared
+    // context, or a disabled sandbox would hand it the shell.
+    const start = liveCode.indexOf("const hud = new BrowserWindow(");
+    const hudWindow = liveCode.slice(start, liveCode.indexOf("hudWindow = hud", start));
+    assert.match(hudWindow, /preload:\s*HUD_PRELOAD/);
+    assert.match(hudWindow, /contextIsolation:\s*true/);
+    assert.match(hudWindow, /nodeIntegration:\s*false/);
+    assert.match(hudWindow, /sandbox:\s*true/);
+    assert.match(hudWindow, /webviewTag:\s*false/);
+  });
+});

@@ -12,6 +12,7 @@ const {
   isPlainHttpRemote,
   expandDatabricksWorkspaceUrl,
   hudRouteUrl,
+  hudNavigationDecision,
   WORKSPACE_UI_PATH,
 } = require("../src/url");
 
@@ -21,12 +22,28 @@ describe("hudRouteUrl", () => {
     assert.equal(hudRouteUrl("http://localhost:6767/"), "http://localhost:6767/hud");
   });
 
-  it("preserves a mount prefix", () => {
-    // The route table declares /hud UNDER the mount; dropping the prefix
-    // would land on the workspace's own 404 instead of the SPA.
+  it("resolves against the ORIGIN, not the current route", () => {
+    // The URL handed in is whatever the window navigated to. Appending to
+    // that path yields /chat/123/hud — a route the SPA does not have — so
+    // the HUD would open on a 404 for anyone not sitting on the root.
+    assert.equal(hudRouteUrl("http://localhost:6767/chat/123"), "http://localhost:6767/hud");
+    assert.equal(
+      hudRouteUrl("http://localhost:6767/c/conv_abc/files/deep/path"),
+      "http://localhost:6767/hud",
+    );
+  });
+
+  it("preserves a recognized mount prefix", () => {
+    // A workspace deploy really does serve the SPA (and therefore /hud)
+    // under the mount; dropping the prefix lands on the workspace's own 404.
     assert.equal(
       hudRouteUrl("https://dbc-x.cloud.databricks.com/ml/omnicrafts/"),
       "https://dbc-x.cloud.databricks.com/ml/omnicrafts/hud",
+    );
+    // …including once the window has navigated inside the mount.
+    assert.equal(
+      hudRouteUrl(`https://dbc-x.cloud.databricks.com${WORKSPACE_UI_PATH}/chat/123`),
+      `https://dbc-x.cloud.databricks.com${WORKSPACE_UI_PATH}/hud`,
     );
   });
 
@@ -40,6 +57,33 @@ describe("hudRouteUrl", () => {
   it("throws on an unusable server URL rather than navigating to garbage", () => {
     assert.throws(() => hudRouteUrl(""));
     assert.throws(() => hudRouteUrl("ftp://example.com"));
+  });
+});
+
+describe("hudNavigationDecision", () => {
+  const PINNED = "http://localhost:6767";
+
+  it("allows the pinned origin's own routes", () => {
+    assert.equal(hudNavigationDecision(PINNED, "http://localhost:6767/hud"), "allow");
+    assert.equal(
+      hudNavigationDecision(PINNED, "http://localhost:6767/login?return_to=%2Fhud"),
+      "allow",
+    );
+  });
+
+  it("sends another origin to the real browser instead of the floating strip", () => {
+    // A chromeless always-on-top window has no address bar, so a foreign page
+    // rendered there is an unattributable overlay above every other app.
+    assert.equal(hudNavigationDecision(PINNED, "https://evil.example.com/login"), "external");
+    // Same host, different port or scheme is still a different origin.
+    assert.equal(hudNavigationDecision(PINNED, "http://localhost:9999/"), "external");
+    assert.equal(hudNavigationDecision(PINNED, "https://localhost:6767/"), "external");
+  });
+
+  it("blocks non-web schemes and unparseable targets outright", () => {
+    assert.equal(hudNavigationDecision(PINNED, "file:///etc/passwd"), "block");
+    assert.equal(hudNavigationDecision(PINNED, "vscode://file/x.py"), "block");
+    assert.equal(hudNavigationDecision(PINNED, "not a url"), "block");
   });
 });
 

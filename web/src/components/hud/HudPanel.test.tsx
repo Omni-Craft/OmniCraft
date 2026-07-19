@@ -35,13 +35,23 @@ function serveFeed(body: unknown) {
   } as unknown as Response);
 }
 
+/** Make the next feed read fail with an HTTP status. */
+function serveStatus(status: number) {
+  vi.mocked(identity.authenticatedFetch).mockResolvedValue({
+    ok: false,
+    status,
+    statusText: "Bad Request",
+    json: async () => ({}),
+  } as unknown as Response);
+}
+
 /** A raw `GET /v1/monitor/sessions` body, as the server sends it. */
 function wireFeed(overrides: Record<string, unknown> = {}) {
   return {
     generated_at: 1_700_000_000,
     host_id: null,
     sessions: [],
-    counts: { active: 0, awaiting: 0 },
+    counts: { active: 0, awaiting: 0, unknown: 0, omitted: 0 },
     truncated: false,
     degraded: [],
     ...overrides,
@@ -324,10 +334,309 @@ describe("parseMonitorFeed — wire normalization", () => {
     expect(parseMonitorFeed(wireFeed()).unreadable).toBe(false);
   });
 
-  it("survives a garbage body without throwing", () => {
+  it("survives a garbage body without throwing — and without inventing calm", () => {
     const feed = parseMonitorFeed(null);
     expect(feed.sessions).toEqual([]);
-    expect(feed.counts).toEqual({ active: 0, awaiting: 0 });
-    expect(feed.unreadable).toBe(false);
+    // NOT {active: 0, awaiting: 0}: zeros here would let any malformed
+    // response render as "nothing needs you".
+    expect(feed.counts).toBeNull();
+    expect(feed.unreadable).toBe(true);
+  });
+});
+
+// ── Cross-review blockers ────────────────────────────────────────────
+// Each test below pins one way the HUD could assert something it does not
+// know. They are written to fail if the corresponding guard is removed.
+
+describe("HudPanel — a payload we cannot read is never an all-clear", () => {
+  it("refuses to print counts the payload did not carry", async () => {
+    // Feed shaped right but `counts` missing: a fail-open parser would
+    // default it to zeros and the pill would read "0 aguardando" — an
+    // all-clear derived from an absence.
+    serveFeed({ ...wireFeed(), counts: undefined });
+    renderPanel();
+    await waitFor(() =>
+      expect(screen.getByTestId("hud-pill")).toHaveTextContent("Contagens ilegíveis"),
+    );
+    expect(screen.getByTestId("hud-pill")).not.toHaveTextContent("0 aguardando");
+    await expand();
+    expect(screen.getByTestId("hud-counts-unreadable")).toBeInTheDocument();
+    expect(screen.queryByTestId("hud-empty")).toBeNull();
+  });
+
+  it("treats a non-numeric count as unknown rather than coercing it", async () => {
+    serveFeed(wireFeed({ counts: { active: 3, awaiting: "muitas" } }));
+    renderPanel();
+    await waitFor(() =>
+      expect(screen.getByTestId("hud-pill")).toHaveTextContent("Contagens ilegíveis"),
+    );
+  });
+
+  it("treats a body that is not a feed as unreadable, not as an empty account", async () => {
+    serveFeed("<html>gateway timeout</html>");
+    renderPanel();
+    await waitFor(() =>
+      expect(screen.getByTestId("hud-pill")).toHaveTextContent("Feed indisponível"),
+    );
+    await expand();
+    expect(screen.getByTestId("hud-unreadable")).toHaveTextContent("não quer dizer que nada");
+    expect(screen.queryByTestId("hud-empty")).toBeNull();
+  });
+
+  it("treats a missing sessions array as unreadable", async () => {
+    serveFeed({ ...wireFeed(), sessions: undefined });
+    renderPanel();
+    await waitFor(() =>
+      expect(screen.getByTestId("hud-pill")).toHaveTextContent("Feed indisponível"),
+    );
+  });
+
+  it("flags rows it had to drop instead of silently shortening the list", async () => {
+    serveFeed(
+      wireFeed({
+        counts: { active: 2, awaiting: 0, unknown: 0, omitted: 0 },
+        sessions: [wireSession(), { agent_name: "sem id" }],
+      }),
+    );
+    renderPanel();
+    await expand();
+    expect(screen.getAllByTestId("hud-session")).toHaveLength(1);
+    expect(
+      within(screen.getByTestId("hud-degraded")).getByText(/linha do feed/),
+    ).toBeInTheDocument();
+    expect(screen.queryByTestId("hud-empty")).toBeNull();
+  });
+});
+
+describe("HudPanel — every degraded slug counts, known or not", () => {
+  it.each([
+    "scan_truncated",
+    "liveness_partial",
+    "permissions_unavailable",
+    "agent_names_unavailable",
+    "child_sessions_unavailable",
+    "pending_elicitations_unavailable",
+    "attention_rescue_unavailable",
+    "attention_rescue_truncated",
+    "host_unverified",
+  ])("surfaces %s on an otherwise empty feed", async (slug) => {
+    serveFeed(wireFeed({ degraded: [slug] }));
+    renderPanel();
+    await expand();
+    expect(screen.getByTestId("hud-degraded")).toBeInTheDocument();
+    // The whole point: an empty list plus a degradation is NOT "tudo tranquilo".
+    expect(screen.queryByTestId("hud-empty")).toBeNull();
+  });
+
+  it("treats a slug this build has never seen as a degradation too", async () => {
+    // Forward-compat: a new server slug must not be silently dropped by an
+    // old client, which would turn a partial answer into a confident one.
+    serveFeed(wireFeed({ degraded: ["quantum_flux_unavailable"] }));
+    renderPanel();
+    await expand();
+    expect(screen.getByTestId("hud-degraded")).toHaveTextContent("quantum_flux_unavailable");
+    expect(screen.queryByTestId("hud-empty")).toBeNull();
+  });
+
+  it("marks the counts themselves partial when the scan was cut", async () => {
+    serveFeed(
+      wireFeed({
+        truncated: true,
+        degraded: ["scan_truncated"],
+        counts: { active: 9, awaiting: 1, unknown: 0, omitted: 0 },
+      }),
+    );
+    renderPanel();
+    await waitFor(() => expect(screen.getByTestId("hud-pill")).toHaveTextContent("parcial"));
+  });
+});
+
+describe("HudPanel — staleness is visible", () => {
+  it("marks the snapshot stale once it stops being refreshed", async () => {
+    serveFeed(wireFeed({ counts: { active: 4, awaiting: 1, unknown: 0, omitted: 0 } }));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchInterval: false } },
+    });
+    const ui = (nowMs?: number) => (
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <HudPanel onExpandedChange={() => {}} nowMs={nowMs} />
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui());
+    await waitFor(() => expect(screen.getByTestId("hud-pill")).toHaveTextContent("4 ativas"));
+    expect(screen.queryByTestId("hud-stale")).toBeNull();
+
+    // Same snapshot, much later clock: without a staleness check the HUD keeps
+    // presenting an old reading as if it were current.
+    rerender(ui(Date.now() + 60_000));
+    expect(screen.getByTestId("hud-stale")).toBeInTheDocument();
+    expect(screen.getByTestId("hud-panel")).toHaveAttribute("data-stale", "true");
+  });
+
+  it("keeps the last numbers on screen when a poll fails, but marks them stale", async () => {
+    serveFeed(wireFeed({ counts: { active: 2, awaiting: 1, unknown: 0, omitted: 0 } }));
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, refetchInterval: false } },
+    });
+    render(
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <HudPanel onExpandedChange={() => {}} />
+        </TooltipProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(screen.getByTestId("hud-pill")).toHaveTextContent("2 ativas"));
+
+    vi.mocked(identity.authenticatedFetch).mockRejectedValue(new Error("network down"));
+    await client.refetchQueries({ queryKey: ["monitor-feed"] });
+    await waitFor(() => expect(screen.getByTestId("hud-stale")).toBeInTheDocument());
+    // The numbers stay (better than blanking) — but never unlabelled.
+    expect(screen.getByTestId("hud-pill")).toHaveTextContent("2 ativas");
+  });
+});
+
+describe("HudPanel — a failed verdict is visible and retryable", () => {
+  function servePendingFeed() {
+    serveFeed(
+      wireFeed({
+        counts: { active: 1, awaiting: 1, unknown: 0, omitted: 0 },
+        sessions: [
+          wireSession({
+            status: "waiting",
+            pending_elicitations_count: 1,
+            pending_elicitation: {
+              id: "elic_1",
+              session_id: "conv_1",
+              kind: "permission",
+              summary: "Rodar `rm -rf build/`?",
+            },
+          }),
+        ],
+      }),
+    );
+  }
+
+  it("shows the failure and puts the buttons back when the resolve POST fails", async () => {
+    servePendingFeed();
+    vi.mocked(sessionsApi.approve).mockRejectedValue(new Error("503 Service Unavailable"));
+    renderPanel();
+    await expand();
+    fireEvent.click(screen.getByRole("button", { name: "Aprovar" }));
+
+    // Silently swallowing this leaves an agent blocked while the HUD implies
+    // the prompt was answered.
+    await waitFor(() => expect(screen.getByTestId("hud-resolve-error")).toBeInTheDocument());
+    expect(screen.getByTestId("hud-resolve-error")).toHaveTextContent("503 Service Unavailable");
+    expect(screen.getByRole("button", { name: "Aprovar" })).toBeEnabled();
+  });
+
+  it("clears the error when the retry is submitted", async () => {
+    servePendingFeed();
+    vi.mocked(sessionsApi.approve).mockRejectedValueOnce(new Error("503 Service Unavailable"));
+    renderPanel();
+    await expand();
+    fireEvent.click(screen.getByRole("button", { name: "Aprovar" }));
+    await waitFor(() => expect(screen.getByTestId("hud-resolve-error")).toBeInTheDocument());
+
+    vi.mocked(sessionsApi.approve).mockResolvedValue({ queued: true } as never);
+    fireEvent.click(screen.getByRole("button", { name: "Aprovar" }));
+    await waitFor(() => expect(screen.queryByTestId("hud-resolve-error")).toBeNull());
+  });
+});
+
+describe("HudPanel — the new feed shape", () => {
+  it("reports unknown-status and cap-omitted sessions instead of a clean total", async () => {
+    // active excludes unknown, and omitted rows are counted but not carried:
+    // printing only "N ativas · M aguardando" would present a partial answer
+    // as a complete one.
+    serveFeed(
+      wireFeed({
+        truncated: true,
+        counts: { active: 3, awaiting: 1, unknown: 2, omitted: 5 },
+        sessions: [wireSession()],
+      }),
+    );
+    renderPanel();
+    await waitFor(() => {
+      const pill = screen.getByTestId("hud-pill");
+      expect(pill).toHaveTextContent("3 ativas");
+      expect(pill).toHaveTextContent("1 aguardando");
+      expect(pill).toHaveTextContent("2 desconhecidas");
+      expect(pill).toHaveTextContent("+5 omitidas");
+    });
+    await expand();
+    expect(screen.getByTestId("hud-truncated")).toHaveTextContent("5 omitidas");
+  });
+
+  it("renders `unknown` status without breaking the row", async () => {
+    serveFeed(
+      wireFeed({
+        counts: { active: 0, awaiting: 0, unknown: 1, omitted: 0 },
+        sessions: [wireSession({ status: "unknown", degraded: ["status_unknown"] })],
+      }),
+    );
+    renderPanel();
+    await expand();
+    const row = screen.getByTestId("hud-session");
+    expect(row).toHaveAttribute("data-status", "unknown");
+    expect(within(row).getByTestId("hud-session-status")).toHaveTextContent("estado desconhecido");
+  });
+
+  it("preserves the server's human-need ordering", async () => {
+    // The feed already ranks blocked → failed → active → idle. Re-sorting by
+    // updated_at would bury the session that needs a human under fresher noise.
+    serveFeed(
+      wireFeed({
+        counts: { active: 3, awaiting: 1, unknown: 0, omitted: 0 },
+        sessions: [
+          wireSession({
+            session_id: "blocked",
+            project: "bloqueada",
+            status: "waiting",
+            updated_at: 1,
+          }),
+          wireSession({ session_id: "failed", project: "falhou", status: "failed", updated_at: 2 }),
+          wireSession({ session_id: "running", project: "rodando", updated_at: 9_999 }),
+        ],
+      }),
+    );
+    renderPanel();
+    await expand();
+    expect(screen.getAllByTestId("hud-session").map((r) => r.dataset.sessionId)).toEqual([
+      "blocked",
+      "failed",
+      "running",
+    ]);
+  });
+
+  it("reports a rejected host_id filter as an error, not as an empty feed", async () => {
+    serveStatus(400);
+    renderPanel({ hostId: "host_inexistente" });
+    // The hook retries once before giving up, so allow for its backoff.
+    await waitFor(
+      () => expect(screen.getByTestId("hud-pill")).toHaveTextContent("Feed indisponível"),
+      { timeout: 5_000 },
+    );
+    await expand();
+    expect(screen.getByTestId("hud-unreadable")).toHaveTextContent("filtro de host foi recusado");
+    expect(screen.queryByTestId("hud-empty")).toBeNull();
+  });
+
+  it("does not paint a null runner as offline", async () => {
+    serveFeed(
+      wireFeed({
+        counts: { active: 1, awaiting: 0, unknown: 0, omitted: 0 },
+        sessions: [wireSession({ runner_online: null, host_online: false })],
+      }),
+    );
+    renderPanel();
+    await expand();
+    const row = screen.getByTestId("hud-session");
+    expect(within(row).getByTestId("hud-runner")).toHaveAttribute("data-tone", "unknown");
+    expect(within(row).getByTestId("hud-runner")).not.toHaveTextContent("offline");
+    // …while a confirmed-false one still reads offline.
+    expect(within(row).getByTestId("hud-host")).toHaveAttribute("data-tone", "down");
   });
 });

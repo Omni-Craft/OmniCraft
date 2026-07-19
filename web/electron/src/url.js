@@ -188,23 +188,57 @@
   /**
    * The floating HUD's route on the server a window is connected to.
    *
-   * The HUD renders the SAME SPA the shell already loads, so its URL has to
-   * keep whatever mount prefix the connection carries (e.g. a Databricks
-   * ``…/ml/omnicrafts`` mount): the route table declares `/hud` UNDER that
-   * prefix, and dropping it would land on the workspace's own 404. Query and
-   * hash are stripped — the route is reached by path, never hash routing, and
-   * nothing about auth may ride in the URL (the HUD is same-origin, so the
-   * server's HttpOnly session cookie is already sent).
+   * Resolved against the ORIGIN, never against the current path. The URL this
+   * is handed is whatever the window is on, which after any in-app navigation
+   * is a route, not a root: appending to it turns ``…/chat/123`` into
+   * ``…/chat/123/hud``, a path the SPA has no route for. Only a recognized
+   * MOUNT prefix survives — a Databricks ``/ml/omnicrafts`` deploy really does
+   * serve the SPA (and therefore ``/hud``) under it, and dropping that would
+   * land on the workspace's own 404.
    *
-   * @param {string} serverUrl The full server URL the window connected with.
+   * Query and hash are stripped: the route is reached by path, never hash
+   * routing, and nothing about auth may ride in the URL (the HUD is
+   * same-origin, so the server's HttpOnly session cookie is already sent).
+   *
+   * @param {string} serverUrl Any URL on the target server.
    * @returns {string} Absolute http(s) URL of the HUD route.
    */
   function hudRouteUrl(serverUrl) {
     const url = new URL(normalizeUrl(serverUrl));
-    url.pathname = `${url.pathname.replace(/\/+$/, "")}/hud`;
-    url.search = "";
-    url.hash = "";
-    return url.toString();
+    const mount =
+      url.pathname === WORKSPACE_UI_PATH || url.pathname.startsWith(`${WORKSPACE_UI_PATH}/`)
+        ? WORKSPACE_UI_PATH
+        : "";
+    return `${url.origin}${mount}/hud`;
+  }
+
+  /**
+   * What the HUD window may do with a navigation request.
+   *
+   * The HUD loads a REMOTE page (the server's SPA) into a frameless,
+   * always-on-top window with no address bar, no back button and no visible
+   * origin. A page that could navigate it elsewhere would own a chromeless
+   * overlay pinned above every other app — the classic spoofing surface — so
+   * the HUD is pinned to one origin for its entire life. It never needs to
+   * leave: it is a single route polling one endpoint.
+   *
+   * @param {string} pinnedOrigin The origin the HUD was opened on.
+   * @param {string} url The navigation target.
+   * @returns {"allow" | "external" | "block"} ``allow`` for same-origin
+   *   http(s) (the SPA's own reloads/redirects), ``external`` for another
+   *   http(s) origin — which belongs in the user's real browser, where it has
+   *   an address bar — and ``block`` for everything else (custom schemes,
+   *   file://, unparseable), which a strip like this must never open.
+   */
+  function hudNavigationDecision(pinnedOrigin, url) {
+    let target;
+    try {
+      target = new URL(url);
+    } catch {
+      return "block";
+    }
+    if (target.protocol !== "http:" && target.protocol !== "https:") return "block";
+    return target.origin === pinnedOrigin ? "allow" : "external";
   }
 
   return {
@@ -213,6 +247,7 @@
     normalizeUrl,
     isPlainHttpRemote,
     hudRouteUrl,
+    hudNavigationDecision,
     WORKSPACE_UI_PATH,
     WORKSPACE_PROBE_TIMEOUT_MS,
     expandDatabricksWorkspaceUrl,

@@ -277,15 +277,19 @@ async def _commit_ci_status(
         return "none"
 
     statuses = {r.get("status") for r in runs}
-    if not statuses <= _CHECK_RUN_STATUSES:
-        return "unknown"
     conclusions = {r.get("conclusion") for r in runs if r.get("status") == "completed"}
-    # A failed run is a fact whatever its siblings say, so it wins.
+    # A run that finished and failed settles the aggregate on its own, so
+    # it is read before anything else — a sibling this code cannot make
+    # sense of, by status or by conclusion, does not soften a failure.
     if conclusions & _FAILING_CONCLUSIONS:
         return "failure"
-    # A finished run whose result cannot be read leaves the aggregate
-    # unknown — including next to a run still going, where "pending"
-    # would claim CI is merely unfinished rather than unreadable.
+    # Past here every verdict is a claim about runs as a whole, and an
+    # unreadable run makes any such claim a guess: a status outside
+    # GitHub's vocabulary, or a finished run whose result cannot be read
+    # — where "pending" would say CI is merely unfinished rather than
+    # illegible.
+    if not statuses <= _CHECK_RUN_STATUSES:
+        return "unknown"
     if not conclusions <= _PASSING_CONCLUSIONS:
         return "unknown"
     if statuses != {"completed"}:

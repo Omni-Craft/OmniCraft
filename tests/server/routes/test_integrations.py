@@ -546,7 +546,7 @@ async def test_ci_status_is_none_when_the_commit_has_no_checks(
             id="neutral_and_skipped_are_a_pass",
         ),
         # A run that definitely failed is a fact, even next to a sibling
-        # we cannot read.
+        # we cannot read — on either axis it can be unreadable on.
         pytest.param(
             {"total_count": 0},
             {
@@ -556,7 +556,18 @@ async def test_ci_status_is_none_when_the_commit_has_no_checks(
                 ]
             },
             "failure",
-            id="a_real_failure_outranks_an_unreadable_sibling",
+            id="a_real_failure_outranks_an_unreadable_conclusion",
+        ),
+        pytest.param(
+            {"total_count": 0},
+            {
+                "check_runs": [
+                    {"status": "completed", "conclusion": "failure"},
+                    {"status": "reticulating", "conclusion": None},
+                ]
+            },
+            "failure",
+            id="a_real_failure_outranks_an_unreadable_status",
         ),
     ],
 )

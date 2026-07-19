@@ -124,9 +124,15 @@ describe("mergeItemsIntoPages", () => {
     // Equal labels by value → no change.
     expect(mergeItemsIntoPages(before, sameLabels, DEFAULT_FILTERS, NO_ACTIVE).data).toBe(before);
     // Different label value → row rewritten with the new labels.
-    const { data: after } = mergeItemsIntoPages(before, changedLabels, DEFAULT_FILTERS, NO_ACTIVE);
+    const {
+      data: after,
+      needsRefetch,
+    } = mergeItemsIntoPages(before, changedLabels, DEFAULT_FILTERS, NO_ACTIVE);
     expect(after).not.toBe(before);
     expect(after!.pages[0].data[0].labels).toEqual({ x: "2" });
+    // Labels determine project-folder membership, which a local overlay cannot
+    // reconcile when the row moves into a folder that does not cache it yet.
+    expect(needsRefetch).toBe(true);
   });
 
   it("does not report ids absent from any page (structural additions)", () => {

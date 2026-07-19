@@ -138,6 +138,9 @@ function violatesKnownMembership(conv: Conversation, filters: ConversationListFi
 function changedFieldsNeedRefetch(changed: Set<string>, isActiveRow: boolean): boolean {
   if (changed.has("archived")) return true;
   if (changed.has("title")) return true;
+  // A project-label change can move a session between project folders. A
+  // refetch reconciles folders that cannot place a newly added member locally.
+  if (changed.has("labels")) return true;
   // updated_at only affects the server's sort order. The active chat row is
   // pinned at its position by ActiveChatOverride regardless of that order, so
   // an updated_at bump on it — the common case while the user sends messages —

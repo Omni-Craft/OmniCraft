@@ -2051,18 +2051,30 @@
         "type": "object"
       },
       "MonitorCounts": {
-        "description": "Headline tallies over the rows in the same response.",
+        "description": "Headline tallies over every session that matched the request.\n\nThe tallies cover the matching set, **not** just the rows carried\nin `sessions`: when the row cap drops the least urgent rows,\n`omitted` says how many, and the other counts still describe the\nwhole set. A headline that shrank with the page would repeat the\nexact failure the feed exists to avoid. What was never scanned is\na different matter \u2014 see `MonitorFeedResponse.truncated` and the\n`scan_truncated` marker.",
         "properties": {
           "active": {
             "default": 0,
-            "description": "Rows whose `status` is not `\"idle\"` \u2014 work in flight or in an error state.",
+            "description": "Sessions doing something \u2014 status `launching`, `running`, `waiting` or `failed`. `idle` and `unknown` are excluded, so an idle session blocked on an approval counts in `awaiting` but **not** in `active` (`active=0, awaiting=1` is a session that needs a human and is doing nothing until it gets one).",
             "title": "Active",
             "type": "integer"
           },
           "awaiting": {
             "default": 0,
-            "description": "Rows with at least one outstanding approval prompt, i.e. blocked on a human.",
+            "description": "Sessions with at least one outstanding approval prompt, i.e. blocked on a human. Counted independently of `active`; a row can be in both.",
             "title": "Awaiting",
+            "type": "integer"
+          },
+          "omitted": {
+            "default": 0,
+            "description": "Matching sessions dropped by the row cap after ranking, i.e. present in the counts but absent from `sessions`. `0` when everything matching is carried.",
+            "title": "Omitted",
+            "type": "integer"
+          },
+          "unknown": {
+            "default": 0,
+            "description": "Sessions whose status could not be resolved. Tracked separately so a client can show \"N unknown\" rather than folding them into either bucket.",
+            "title": "Unknown",
             "type": "integer"
           }
         },
@@ -2074,10 +2086,10 @@
         "properties": {
           "counts": {
             "$ref": "#/components/schemas/MonitorCounts",
-            "description": "Tallies over `sessions`."
+            "description": "Tallies over every matching session, including any the row cap dropped."
           },
           "degraded": {
-            "description": "Stable slugs naming feed-wide failures, e.g. `[\"liveness_unavailable\"]` when no row could be resolved for liveness, or `[\"internal_error\"]` when the feed could not be built at all (`sessions` is then empty, and an empty list must **not** be read as \"nothing is running\").",
+            "description": "Stable slugs naming feed-wide failures. Current slugs: `scan_truncated`, `liveness_unavailable`, `permissions_unavailable`, `agent_names_unavailable`, `child_sessions_unavailable`, `pending_elicitations_unavailable`, `attention_rescue_unavailable`, `attention_rescue_truncated`, `host_unverified`, and `internal_error` when the feed could not be built at all (`sessions` is then empty, and an empty list must **not** be read as \"nothing is running\").",
             "items": {
               "type": "string"
             },
@@ -2102,7 +2114,7 @@
             "title": "Host Id"
           },
           "sessions": {
-            "description": "The rows, most recently updated first.",
+            "description": "The rows, ordered by how much they need a human \u2014 blocked first, then failed, then active work, then unresolved, then idle; recency only breaks ties.",
             "items": {
               "$ref": "#/components/schemas/MonitorSessionItem"
             },
@@ -2111,7 +2123,7 @@
           },
           "truncated": {
             "default": false,
-            "description": "`True` when more matching sessions existed than the feed's cap \u2014 the tallies then describe the returned rows only, not the whole account.",
+            "description": "`True` when the response does not carry every matching session \u2014 either the store scan was cut (`scan_truncated` in `degraded`, so even the counts are partial) or the row cap dropped rows (`counts.omitted`).",
             "title": "Truncated",
             "type": "boolean"
           }
@@ -2189,7 +2201,7 @@
             "title": "Cost Usd"
           },
           "degraded": {
-            "description": "Stable slugs naming every part of this row that could not be resolved, e.g. `[\"liveness_unavailable\", \"status_unreadable\"]`. Empty when the row is fully resolved. A row with a non-empty list is never filtered out by `only_active` \u2014 an unknown state must not disappear as if it were idle.",
+            "description": "Stable slugs naming every part of this row that could not be resolved, e.g. `[\"liveness_partial\", \"status_unknown\"]`. Empty when the row is fully resolved. A row with a non-empty list is never filtered out by `only_active` \u2014 an unknown state must not disappear as if it were idle. Current slugs: `status_unknown` (no status on record for a dispatched session), `status_unreadable` (a cached value this server doesn't understand), `pending_elicitation_unreadable`, `cost_unreadable`, `liveness_unavailable`, `liveness_partial`.",
             "items": {
               "type": "string"
             },
@@ -2205,7 +2217,7 @@
                 "type": "null"
               }
             ],
-            "description": "Host tunnel liveness. `None` when the session has no `host_id`, or when liveness is unknown \u2014 the same `degraded` marker disambiguates.",
+            "description": "Host tunnel liveness. `None` when the session has no `host_id`, or when liveness is unknown \u2014 the `degraded` markers above disambiguate the two.",
             "title": "Host Online"
           },
           "pending_elicitation": {
@@ -2246,7 +2258,7 @@
                 "type": "null"
               }
             ],
-            "description": "Strict runner liveness, as in `SessionListItem`. `None` means **unknown** (no liveness lookup wired, or the lookup failed), never \"offline\"; `degraded` then carries `\"liveness_unavailable\"`.",
+            "description": "Strict runner liveness, as in `SessionListItem`. `None` means **unknown**, never \"offline\": `degraded` carries `\"liveness_unavailable\"` when no lookup ran at all and `\"liveness_partial\"` when the lookup ran but couldn't resolve this session.",
             "title": "Runner Online"
           },
           "session_id": {
@@ -2255,13 +2267,14 @@
             "type": "string"
           },
           "status": {
-            "description": "Lifecycle status. Unlike `SessionListItem`, `\"waiting\"` is **preserved** (the list shape collapses it into `\"running\"`) \u2014 a monitor's whole job is telling \"still working\" apart from \"blocked on a human\". `\"launching\"` is likewise kept distinct from `\"idle\"`. Rolls up direct sub-agent children: a parent whose child is running reads `\"running\"`, and a parent whose child is blocked reads `\"waiting\"`.",
+            "description": "Lifecycle status. Unlike `SessionListItem`, `\"waiting\"` is **preserved** (the list shape collapses it into `\"running\"`) \u2014 a monitor's whole job is telling \"still working\" apart from \"blocked on a human\". `\"launching\"` is likewise kept distinct from `\"idle\"`. Rolls up direct sub-agent children: a parent whose child is running reads `\"running\"`, and a parent whose child is blocked reads `\"waiting\"`. `\"unknown\"` means the server has no status on record for a session that *could* be running (it has a runner or host binding) \u2014 after a restart, or on another replica, a busy session is indistinguishable from a quiet one, and the feed says so instead of reporting `\"idle\"`. Sessions never dispatched anywhere still read `\"idle\"`, which is a fact off the row rather than an absence.",
             "enum": [
               "idle",
               "launching",
               "running",
               "waiting",
-              "failed"
+              "failed",
+              "unknown"
             ],
             "title": "Status",
             "type": "string"
@@ -8217,11 +8230,11 @@
     },
     "/v1/monitor/sessions": {
       "get": {
-        "description": "Monitor feed of the caller's sessions, newest activity first.\n\n**Returns:** A `MonitorFeedResponse`. Never 5xx \u2014 an internal failure comes back as an empty `sessions` list with `degraded=[\"internal_error\"]`.",
+        "description": "Monitor feed of the caller's sessions, most in need of a human first.\n\n**Returns:** A `MonitorFeedResponse`. Infrastructure failures degrade into explicit markers instead of a 5xx; programming errors are left to surface as a 500 rather than being disguised as a clean, empty feed.",
         "operationId": "monitor_sessions_v1_monitor_sessions_get",
         "parameters": [
           {
-            "description": "When set, only sessions bound to this host, e.g. `\"host_abc123\"`. `None` (default) returns every session visible to the caller.",
+            "description": "When set, only sessions bound to this host, e.g. `\"host_abc123\"`. Applied in the store query and validated first: an unknown host \u2014 or one the caller doesn't own \u2014 is a 404, never an empty feed that reads as \"nothing running there\". `None` (default) returns every session visible to the caller, including ones on other people's hosts that are shared with them.",
             "in": "query",
             "name": "host_id",
             "required": false,
@@ -8238,7 +8251,7 @@
             }
           },
           {
-            "description": "When `True` (the default), drop rows that are idle **and** have no outstanding prompt **and** resolved cleanly \u2014 the \"needs an eye on it\" view. Rows carrying a `degraded` marker are always kept, so an unknown state is never mistaken for an idle one. `False` returns every non-archived session in the page.",
+            "description": "When `True` (the default), drop rows that are idle **and** have no outstanding prompt **and** resolved cleanly \u2014 the \"needs an eye on it\" view. Rows carrying a `degraded` marker (including every `unknown` status) are always kept, so an unresolved state is never mistaken for an idle one. `False` returns every non-archived session in the scan.",
             "in": "query",
             "name": "only_active",
             "required": false,

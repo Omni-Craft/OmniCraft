@@ -1805,12 +1805,11 @@ def create_app(
 
         :param sid: Session/conversation id, e.g. ``"conv_abc123"``.
         :returns: The :class:`SessionLiveness` pair for ``sid``. An id
-            with no conversation row resolves to
-            ``runner_online=True`` (no runner ⇒ reachable) and
-            ``host_online=None`` (no host binding).
+            the bulk lookup cannot resolve reads unknown on both axes
+            (``None``) rather than claiming reachability.
         """
         return _bulk_session_liveness([sid]).get(
-            sid, SessionLiveness(runner_online=True, host_online=None)
+            sid, SessionLiveness(runner_online=None, host_online=None)
         )
 
     def _bulk_session_liveness(ids: list[str]) -> dict[str, SessionLiveness]:
@@ -1848,13 +1847,17 @@ def create_app(
         as ``runner_online=False``, and the next message relaunches on
         a live host).
 
+        Absence never becomes an assertion: an id the connectivity
+        batch doesn't answer for reads ``runner_online=None``, and a
+        failed hosts lookup reads ``host_online=None`` for every bound
+        host. ``None`` means "not known", which callers must render
+        differently from a confirmed ``False``.
+
         :param ids: Session/conversation ids to check, e.g.
             ``["conv_abc123", "conv_def456"]``.
-        :returns: Mapping ``session_id -> SessionLiveness``. Ids with
-            no conversation row default to
-            ``SessionLiveness(runner_online=True, host_online=None)``
-            (mirrors the legacy single-session path, which treated a
-            missing row as reachable).
+        :returns: Mapping ``session_id -> SessionLiveness``. Ids the
+            connectivity batch doesn't answer for map to
+            ``SessionLiveness(runner_online=None, host_online=None)``.
         """
         connectivity = conversation_store.get_session_connectivity(ids)
 
@@ -1868,21 +1871,31 @@ def create_app(
         host_ids_to_check = {
             conn.host_id for conn in connectivity.values() if conn.host_id is not None
         }
-        online_hosts = _bulk_hosts_online(list(host_ids_to_check))
+        # A hosts lookup that fails leaves host liveness *unknown*. Falling
+        # back to an empty set would report every bound host as offline —
+        # an infrastructure hiccup rendered as a confident "your host is
+        # down".
+        try:
+            online_hosts: set[str] | None = _bulk_hosts_online(list(host_ids_to_check))
+        except Exception:  # noqa: BLE001 — unknown beats a fabricated "offline"
+            _logger.warning("Bulk host liveness lookup failed", exc_info=True)
+            online_hosts = None
         host_versions = _bulk_host_versions(list(host_ids_to_check))
         result: dict[str, SessionLiveness] = {}
         for sid in ids:
             conn = connectivity.get(sid)
             if conn is None:
-                # No conversation row — treat as reachable with no host
-                # binding, matching the legacy single-session behavior.
-                result[sid] = SessionLiveness(runner_online=True, host_online=None)
+                # No connectivity row came back for this id. That is
+                # ignorance, not reachability: the row may be missing, or
+                # the batch may have dropped it. Report unknown on both
+                # axes and let the caller decide how to render it.
+                result[sid] = SessionLiveness(runner_online=None, host_online=None)
                 continue
             if conn.host_id is None:
                 host_online: bool | None = None
                 host_version: str | None = None
             else:
-                host_online = conn.host_id in online_hosts
+                host_online = conn.host_id in online_hosts if online_hosts is not None else None
                 host_version = host_versions.get(conn.host_id)
             if conn.runner_id is None:
                 # No runner binding: an in-process executor (or a session
@@ -1949,9 +1962,9 @@ def create_app(
         # ``_bulk_session_liveness`` for the query-count reduction.
         all_ids = ([session_id] if session_id is not None else []) + batch_ids
         liveness = await asyncio.to_thread(_bulk_session_liveness, all_ids) if all_ids else {}
-        # Missing ids default to reachable / no-host, matching the bulk
-        # lookup's own missing-row terminal.
-        _missing = SessionLiveness(runner_online=True, host_online=None)
+        # Unresolved ids read unknown on both axes, matching the bulk
+        # lookup's own terminal — never a fabricated "reachable".
+        _missing = SessionLiveness(runner_online=None, host_online=None)
         if session_id is not None:
             single = liveness.get(session_id, _missing)
             result["session"] = {
@@ -2190,6 +2203,9 @@ def create_app(
             auth_provider=auth_provider,
             permission_store=permission_store,
             liveness_lookup=_bulk_session_liveness,
+            # Validates the host_id filter, so an unknown host is a 404
+            # instead of an empty feed that reads as "nothing running".
+            host_store=host_store,
         ),
         prefix="/v1",
         tags=["monitor"],

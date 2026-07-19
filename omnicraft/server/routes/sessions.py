@@ -2160,12 +2160,15 @@ class SessionLiveness:
         host-relaunch optimism (a dead runner on a live host reads
         ``False`` here, not ``True``). A session with no runner
         binding (in-process executor / not yet dispatched) reads
-        ``True``.
+        ``True``. ``None`` means the lookup could not resolve the
+        session at all — unknown, which is not the same claim as
+        ``False``.
     :param host_online: Whether the session's host tunnel is live
         (status online and fresh within ``HOST_LIVENESS_TTL_S``).
         ``True`` when the session's ``host_id`` is in the online-hosts
         set, ``False`` when a ``host_id`` is set but not online, and
-        ``None`` when the session has no ``host_id`` (CLI / local).
+        ``None`` when the session has no ``host_id`` (CLI / local) or
+        the hosts lookup itself failed — unknown, not offline.
         Used only to choose what the open view shows when
         ``runner_online`` is ``False``; never participates in the
         reachability decision.
@@ -2178,7 +2181,7 @@ class SessionLiveness:
         replica reads ``None`` here).
     """
 
-    runner_online: bool
+    runner_online: bool | None
     host_online: bool | None
     host_version: str | None = None
 
@@ -2302,7 +2305,11 @@ async def _apply_liveness_to_items(
         return
     liveness = await asyncio.to_thread(liveness_lookup, [item.id for item in items])
     for item in items:
-        result = liveness[item.id]
+        # An id the lookup skipped stays ``None`` on both axes: unknown,
+        # not reachable and not offline.
+        result = liveness.get(item.id)
+        if result is None:
+            continue
         item.runner_online = result.runner_online
         item.host_online = result.host_online
 

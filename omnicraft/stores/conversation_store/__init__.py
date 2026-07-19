@@ -518,6 +518,7 @@ class ConversationStore(ABC):
         project: str | None = None,
         arena_group: str | None = None,
         title: str | None = None,
+        host_id: str | None = None,
     ) -> PagedList[Conversation]:
         """
         List conversations with cursor-based pagination.
@@ -618,6 +619,12 @@ class ConversationStore(ABC):
             Powers the ``(agent, title)`` child-session lookup in
             ``sys_session_send`` so the server can resolve the target
             in a single indexed query instead of fetching all children.
+        :param host_id: When set, only return conversations bound to
+            this host, e.g. ``"host_a1b2c3"``. Applied in the query so
+            a host-scoped caller (the monitor feed) pages through that
+            host's sessions rather than filtering a global page down —
+            filtering after the cap silently hides everything the cap
+            cut. ``None`` disables the filter.
         :returns: A :class:`PagedList` of :class:`Conversation`
             objects.
         """

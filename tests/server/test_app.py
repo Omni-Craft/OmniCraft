@@ -277,9 +277,12 @@ async def test_health_batch_reports_strict_runner_and_host_liveness(
         "host_online": True,
         "host_version": None,
     }
-    # Unknown id (no conversation row) ⇒ reachable, no host.
+    # Unknown id (no conversation row) ⇒ unknown on both axes. Not
+    # "reachable": having no record of a session says nothing about whether
+    # something is running for it, and a True here would light a live dot
+    # for a session the server can't even find.
     assert sessions["conv_unknown"] == {
-        "runner_online": True,
+        "runner_online": None,
         "host_online": None,
         "host_version": None,
     }
@@ -320,6 +323,35 @@ async def test_health_single_session_reports_both_liveness_fields(
         "id": conv.id,
         "runner_online": False,
         "host_online": True,
+        "host_version": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_health_reports_unknown_liveness_for_an_unresolvable_session(
+    db_uri: str,
+    tmp_path: Path,
+) -> None:
+    """
+    A session the liveness lookup can't resolve reads ``None``, not
+    ``True``.
+
+    Reporting an unresolvable id as reachable turns "we have no record of
+    this" into "your runner is up" — the caller then shows a live dot for
+    a session nothing is running. ``None`` is the only honest answer, and
+    it must stay distinguishable from a confirmed ``False``.
+    """
+    wired = _build_liveness_app(db_uri, tmp_path)
+
+    transport = httpx.ASGITransport(app=wired.app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+        resp = await c.get("/health?session_id=conv_does_not_exist")
+
+    assert resp.status_code == 200
+    assert resp.json()["session"] == {
+        "id": "conv_does_not_exist",
+        "runner_online": None,
+        "host_online": None,
         "host_version": None,
     }
 

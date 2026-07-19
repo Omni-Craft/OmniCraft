@@ -1785,6 +1785,7 @@ class SqlAlchemyConversationStore(ConversationStore):
         project: str | None = None,
         arena_group: str | None = None,
         title: str | None = None,
+        host_id: str | None = None,
     ) -> PagedList[Conversation]:
         """
         List conversations with cursor-based pagination.
@@ -1879,6 +1880,8 @@ class SqlAlchemyConversationStore(ConversationStore):
                 stmt = stmt.where(SqlConversation.agent_id == agent_id)
             if title is not None:
                 stmt = stmt.where(SqlConversation.title == title)
+            if host_id is not None:
+                stmt = stmt.where(SqlConversation.host_id == host_id)
             if accessible_by is not None:
                 accessible_ids = select(SqlSessionPermission.conversation_id).where(
                     SqlSessionPermission.workspace_id == current_workspace_id(),

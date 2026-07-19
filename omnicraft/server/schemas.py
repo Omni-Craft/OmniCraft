@@ -2463,6 +2463,13 @@ class MonitorSessionItem(BaseModel):
         ``"idle"``. Rolls up direct sub-agent children: a parent
         whose child is running reads ``"running"``, and a parent
         whose child is blocked reads ``"waiting"``.
+        ``"unknown"`` means the server has no status on record for a
+        session that *could* be running (it has a runner or host
+        binding) — after a restart, or on another replica, a busy
+        session is indistinguishable from a quiet one, and the feed
+        says so instead of reporting ``"idle"``. Sessions never
+        dispatched anywhere still read ``"idle"``, which is a fact
+        off the row rather than an absence.
     :param pending_elicitations_count: Outstanding approval prompts
         on this session plus its direct sub-agent children (a child's
         prompt is mirrored into its ancestors' streams, so it is the
@@ -2474,13 +2481,14 @@ class MonitorSessionItem(BaseModel):
         with a ``None`` summary means the payload was unreadable —
         see ``degraded``.
     :param runner_online: Strict runner liveness, as in
-        :class:`SessionListItem`. ``None`` means **unknown** (no
-        liveness lookup wired, or the lookup failed), never
-        "offline"; ``degraded`` then carries
-        ``"liveness_unavailable"``.
+        :class:`SessionListItem`. ``None`` means **unknown**, never
+        "offline": ``degraded`` carries
+        ``"liveness_unavailable"`` when no lookup ran at all and
+        ``"liveness_partial"`` when the lookup ran but couldn't
+        resolve this session.
     :param host_online: Host tunnel liveness. ``None`` when the
         session has no ``host_id``, or when liveness is unknown —
-        the same ``degraded`` marker disambiguates.
+        the ``degraded`` markers above disambiguate the two.
     :param updated_at: Unix epoch seconds of last session update.
     :param cost_usd: Spend recorded on this session's own usage
         blob, e.g. ``0.42``. ``None`` when no cost has been recorded
@@ -2490,10 +2498,15 @@ class MonitorSessionItem(BaseModel):
         deliberately avoids.
     :param degraded: Stable slugs naming every part of this row that
         could not be resolved, e.g.
-        ``["liveness_unavailable", "status_unreadable"]``. Empty when
-        the row is fully resolved. A row with a non-empty list is
-        never filtered out by ``only_active`` — an unknown state must
-        not disappear as if it were idle.
+        ``["liveness_partial", "status_unknown"]``. Empty when the
+        row is fully resolved. A row with a non-empty list is never
+        filtered out by ``only_active`` — an unknown state must not
+        disappear as if it were idle. Current slugs:
+        ``status_unknown`` (no status on record for a dispatched
+        session), ``status_unreadable`` (a cached value this server
+        doesn't understand), ``pending_elicitation_unreadable``,
+        ``cost_unreadable``, ``liveness_unavailable``,
+        ``liveness_partial``.
     """
 
     session_id: str
@@ -2501,7 +2514,7 @@ class MonitorSessionItem(BaseModel):
     title: str | None = None
     project: str | None = None
     workspace: str | None = None
-    status: Literal["idle", "launching", "running", "waiting", "failed"]
+    status: Literal["idle", "launching", "running", "waiting", "failed", "unknown"]
     pending_elicitations_count: int = 0
     pending_elicitation: MonitorPendingElicitation | None = None
     runner_online: bool | None = None
@@ -2513,16 +2526,37 @@ class MonitorSessionItem(BaseModel):
 
 class MonitorCounts(BaseModel):
     """
-    Headline tallies over the rows in the same response.
+    Headline tallies over every session that matched the request.
 
-    :param active: Rows whose ``status`` is not ``"idle"`` — work in
-        flight or in an error state.
-    :param awaiting: Rows with at least one outstanding approval
-        prompt, i.e. blocked on a human.
+    The tallies cover the matching set, **not** just the rows carried
+    in ``sessions``: when the row cap drops the least urgent rows,
+    ``omitted`` says how many, and the other counts still describe the
+    whole set. A headline that shrank with the page would repeat the
+    exact failure the feed exists to avoid. What was never scanned is
+    a different matter — see ``MonitorFeedResponse.truncated`` and the
+    ``scan_truncated`` marker.
+
+    :param active: Sessions doing something — status ``launching``,
+        ``running``, ``waiting`` or ``failed``. ``idle`` and
+        ``unknown`` are excluded, so an idle session blocked on an
+        approval counts in ``awaiting`` but **not** in ``active``
+        (``active=0, awaiting=1`` is a session that needs a human and
+        is doing nothing until it gets one).
+    :param awaiting: Sessions with at least one outstanding approval
+        prompt, i.e. blocked on a human. Counted independently of
+        ``active``; a row can be in both.
+    :param unknown: Sessions whose status could not be resolved.
+        Tracked separately so a client can show "N unknown" rather
+        than folding them into either bucket.
+    :param omitted: Matching sessions dropped by the row cap after
+        ranking, i.e. present in the counts but absent from
+        ``sessions``. ``0`` when everything matching is carried.
     """
 
     active: int = 0
     awaiting: int = 0
+    unknown: int = 0
+    omitted: int = 0
 
 
 class MonitorFeedResponse(BaseModel):
@@ -2536,16 +2570,25 @@ class MonitorFeedResponse(BaseModel):
     :param generated_at: Unix epoch seconds the feed was built.
     :param host_id: The ``host_id`` filter that produced this feed,
         or ``None`` when unfiltered (all visible sessions).
-    :param sessions: The rows, most recently updated first.
-    :param counts: Tallies over ``sessions``.
-    :param truncated: ``True`` when more matching sessions existed
-        than the feed's cap — the tallies then describe the returned
-        rows only, not the whole account.
-    :param degraded: Stable slugs naming feed-wide failures, e.g.
-        ``["liveness_unavailable"]`` when no row could be resolved
-        for liveness, or ``["internal_error"]`` when the feed could
-        not be built at all (``sessions`` is then empty, and an empty
-        list must **not** be read as "nothing is running").
+    :param sessions: The rows, ordered by how much they need a human
+        — blocked first, then failed, then active work, then
+        unresolved, then idle; recency only breaks ties.
+    :param counts: Tallies over every matching session, including any
+        the row cap dropped.
+    :param truncated: ``True`` when the response does not carry every
+        matching session — either the store scan was cut
+        (``scan_truncated`` in ``degraded``, so even the counts are
+        partial) or the row cap dropped rows (``counts.omitted``).
+    :param degraded: Stable slugs naming feed-wide failures. Current
+        slugs: ``scan_truncated``, ``liveness_unavailable``,
+        ``permissions_unavailable``, ``agent_names_unavailable``,
+        ``child_sessions_unavailable``,
+        ``pending_elicitations_unavailable``,
+        ``attention_rescue_unavailable``,
+        ``attention_rescue_truncated``, ``host_unverified``, and
+        ``internal_error`` when the feed could not be built at all
+        (``sessions`` is then empty, and an empty list must **not**
+        be read as "nothing is running").
     """
 
     generated_at: int

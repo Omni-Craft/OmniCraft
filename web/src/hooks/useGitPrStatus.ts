@@ -78,20 +78,35 @@ const QUERY_KEY = "session-git-status";
 /** Poll cadence while the tab is visible. Slow — this is ambient status. */
 const POLL_MS = 20_000;
 
+const CI_STATES = ["success", "failure", "pending", "none", "unknown"] as const;
+const PRS_STATUSES = ["ok", "partial", "unavailable"] as const;
+
+/**
+ * Narrow `value` to one of `allowed`, or to `fallback`.
+ *
+ * The body is JSON off the network, cast rather than parsed: a state this
+ * build has never heard of, a legacy `null`, and a missing field all arrive
+ * as the same surprise, and the components downstream index icon and label
+ * tables with what they get. Each axis falls back to the reading that claims
+ * the least — an unrecognized CI state is "was not asked", an unrecognized
+ * list is "cannot tell" — so a server that grows a value never puts a
+ * meaning behind it here, and never renders one.
+ */
+function oneOf<T extends string>(value: unknown, allowed: readonly T[], fallback: T): T {
+  return allowed.includes(value as T) ? (value as T) : fallback;
+}
+
 async function fetchGitPrStatus(sessionId: string): Promise<GitPrStatus> {
   const res = await authenticatedFetch(`/v1/sessions/${encodeURIComponent(sessionId)}/git-status`);
   if (!res.ok) {
     throw new Error(`git status fetch failed: HTTP ${res.status}`);
   }
   const body = (await res.json()) as GitPrStatus;
-  // A body that doesn't say how complete its list is has not said it is
-  // complete — treated as `"unavailable"` so callers never read an empty
-  // list from an older server as proof that there is no pull request.
-  const known = ["ok", "partial", "unavailable"];
+  const prs = Array.isArray(body.prs) ? body.prs : [];
   return {
     ...body,
-    prs: body.prs ?? [],
-    prs_status: known.includes(body.prs_status) ? body.prs_status : "unavailable",
+    prs: prs.map((item) => ({ ...item, ci_status: oneOf(item?.ci_status, CI_STATES, "unknown") })),
+    prs_status: oneOf(body.prs_status, PRS_STATUSES, "unavailable"),
   };
 }
 

@@ -142,20 +142,25 @@ function CiIndicator({
   status: GitPullRequest["ci_status"];
   showLabel?: boolean;
 }) {
-  if (status === "unknown" && !showLabel) return null;
-  const Icon = CI_ICON[status];
+  // The tables are only as safe as the key reaching them, and the status
+  // arrives as JSON the hook narrows rather than something the type system
+  // enforces end to end. Anything these two don't hold is read as "not
+  // asked" — the state that claims nothing — instead of an absent icon.
+  const state = status in CI_ICON && status in CI_LABEL ? status : "unknown";
+  if (state === "unknown" && !showLabel) return null;
+  const Icon = CI_ICON[state];
   return (
     <span
-      data-testid={`ci-${status}`}
+      data-testid={`ci-${state}`}
       className={cn(
         "inline-flex shrink-0 items-center gap-1",
-        status === "success" && "text-success",
-        status === "failure" && "text-destructive",
-        (status === "none" || status === "unknown") && "text-muted-foreground",
+        state === "success" && "text-success",
+        state === "failure" && "text-destructive",
+        (state === "none" || state === "unknown") && "text-muted-foreground",
       )}
     >
-      <Icon className={cn("size-3 shrink-0", status === "pending" && "animate-spin")} />
-      <span className={showLabel ? undefined : "sr-only"}>{CI_LABEL[status]}</span>
+      <Icon className={cn("size-3 shrink-0", state === "pending" && "animate-spin")} />
+      <span className={showLabel ? undefined : "sr-only"}>{CI_LABEL[state]}</span>
     </span>
   );
 }
@@ -318,9 +323,11 @@ function GitStatusBar({
               the card. The branch owns the flexible slot and truncates. */}
           <CollapsibleTrigger
             className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 text-left text-muted-foreground hover:text-foreground"
-            aria-label="Detalhes do workspace"
-            // A caveat about the PR list costs no room here — it rides as the
-            // bar's tooltip and is spelled out once expanded.
+            // A caveat about the PR list costs no room here: it rides in the
+            // trigger's name, where a screen reader and a touch user meet it
+            // without a hover, and as the tooltip for a mouse. The expanded
+            // list spells it out again.
+            aria-label={caveat ? `Detalhes do workspace — ${caveat}` : "Detalhes do workspace"}
             title={caveat ?? undefined}
           >
             <ChevronRightIcon

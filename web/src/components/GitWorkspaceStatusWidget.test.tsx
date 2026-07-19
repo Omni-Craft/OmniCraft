@@ -129,7 +129,7 @@ describe("visibility", () => {
 describe("collapse / expand", () => {
   it("reveals the PR list only once expanded", async () => {
     await renderWidget(status({ diff: { added: 1, removed: 0, files: 1 }, prs: [pr()] }));
-    const trigger = await screen.findByRole("button", { name: "Detalhes do workspace" });
+    const trigger = await screen.findByRole("button", { name: /^Detalhes do workspace/ });
     expect(screen.queryByTestId("git-status-pr-42")).toBeNull();
 
     fireEvent.click(trigger);
@@ -497,7 +497,7 @@ describe("CI state", () => {
         ],
       }),
     );
-    fireEvent.click(await screen.findByRole("button", { name: "Detalhes do workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Detalhes do workspace/ }));
     await screen.findByTestId("git-status-pr-1");
   }
 
@@ -535,7 +535,7 @@ describe("CI state", () => {
   // than leave the PR looking like one whose CI nobody looked at.
   it("says a PR has no CI, distinctly from one that was not consulted", async () => {
     await renderWidget(status({ prs: [pr({ ci_status: "none" })] }));
-    fireEvent.click(await screen.findByRole("button", { name: "Detalhes do workspace" }));
+    fireEvent.click(await screen.findByRole("button", { name: /^Detalhes do workspace/ }));
     const row = within(await screen.findByTestId("git-status-pr-42"));
     expect(row.getByTestId("ci-none").textContent).toBe("sem CI");
     expect(row.queryByTestId("ci-unknown")).toBeNull();
@@ -551,7 +551,7 @@ describe("CI state", () => {
     expect(badge.textContent).not.toContain("CI");
     expect(screen.queryByTestId("ci-unknown")).toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Detalhes do workspace" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Detalhes do workspace/ }));
     const row = await screen.findByTestId("git-status-pr-42");
     expect(row.textContent).toContain("CI não consultado");
     expect(row.textContent).not.toContain("sem CI");
@@ -559,16 +559,55 @@ describe("CI state", () => {
     expect(screen.getByTestId("ci-unknown").className).toContain("text-muted-foreground");
     expect(screen.getByTestId("ci-unknown").className).not.toContain("text-destructive");
   });
+
+  // The body is JSON off the network: a CI state a later server grows, and
+  // the `null` older ones sent, both reach a build that has never heard of
+  // them. Reading either as a state would put an absent icon on screen and
+  // an unnamed one in the accessible text — they collapse to "not asked".
+  it.each([
+    ["a state this build does not know", "queued"],
+    ["the legacy null", null],
+    ["a missing field", undefined],
+    ["a value that isn't even a string", 7],
+  ])("falls back to neutral for %s", async (_label, raw) => {
+    const body = status({ ahead: 1, prs: [pr()] });
+    (body.prs[0] as { ci_status: unknown }).ci_status = raw;
+    const { client } = await renderWidget(body);
+
+    // Narrowed at the edge, so nothing downstream can be handed the surprise.
+    const cached = client.getQueryData<GitPrStatus>(["session-git-status", "sess_1"]);
+    expect(cached?.prs[0].ci_status).toBe("unknown");
+
+    // Nothing claimed in the collapsed badge, and no broken icon anywhere.
+    const badge = await screen.findByText("#42");
+    expect(badge.textContent).not.toContain("CI");
+    fireEvent.click(screen.getByRole("button", { name: /^Detalhes do workspace/ }));
+    const row = within(await screen.findByTestId("git-status-pr-42"));
+    expect(row.getByTestId("ci-unknown").textContent).toBe("CI não consultado");
+    expect(row.getByTestId("ci-unknown").querySelector("svg")).toBeTruthy();
+    expect(row.queryByTestId("ci-failure")).toBeNull();
+    expect(row.queryByTestId("ci-none")).toBeNull();
+  });
 });
 
 // A pull request the bar just opened is real whatever the next poll manages
 // to list. Only a list the server vouches for as complete can retire it —
 // anything else would put "Criar PR" back in front of an open pull request.
 describe("trusting the PR list", () => {
+  // The bar weighs a status only once it is stamped after the PR was opened,
+  // and on a real clock both stamps can land in the same millisecond. A
+  // clock that ticks once per reading keeps that ordering — the behaviour
+  // under test — without leaving it to how fast the machine ran.
   beforeEach(() => {
     listedPrs = [];
     listedPrsStatus = "ok";
     gitStatusFails = false;
+    let tick = Date.now();
+    vi.spyOn(Date, "now").mockImplementation(() => (tick += 1));
+  });
+
+  afterEach(() => {
+    vi.mocked(Date.now).mockRestore();
   });
 
   /**
@@ -595,9 +634,6 @@ describe("trusting the PR list", () => {
     fireEvent.click(button);
     fireEvent.click(button);
     expect((await screen.findByTestId("git-status-pr-link")).textContent).toBe("Ver PR #7");
-    // The bar weighs a status only once it is stamped after the PR was
-    // opened, and both stamps land in the same millisecond otherwise.
-    await new Promise((resolve) => setTimeout(resolve, 5));
     return client;
   }
 
@@ -614,7 +650,7 @@ describe("trusting the PR list", () => {
     const caveat = prsStatus === "partial" ? "incompleta" : "Não foi possível consultar";
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Detalhes do workspace" }).getAttribute("title"),
+        screen.getByRole("button", { name: /^Detalhes do workspace/ }).getAttribute("title"),
       ).toContain(caveat),
     );
   }
@@ -663,7 +699,10 @@ describe("trusting the PR list", () => {
 describe("an untrustworthy PR list", () => {
   it("says so rather than claiming the branch has no pull request", async () => {
     await renderWidget(status({ ahead: 1, prs: [], prs_status: "unavailable" }));
-    const trigger = await screen.findByRole("button", { name: "Detalhes do workspace" });
+    const trigger = await screen.findByRole("button", { name: /^Detalhes do workspace/ });
+    // Collapsed, the caveat has to reach someone who never hovers: it is
+    // part of the trigger's name, not only its tooltip.
+    expect(trigger.getAttribute("aria-label")).toContain("Não foi possível consultar");
     expect(trigger.getAttribute("title")).toContain("Não foi possível consultar");
 
     fireEvent.click(trigger);
@@ -674,7 +713,10 @@ describe("an untrustworthy PR list", () => {
 
   it("warns that a truncated list may be missing pull requests", async () => {
     await renderWidget(status({ ahead: 1, prs: [pr()], prs_status: "partial" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Detalhes do workspace" }));
+    const trigger = await screen.findByRole("button", { name: /^Detalhes do workspace/ });
+    expect(trigger.getAttribute("aria-label")).toContain("pode estar incompleta");
+
+    fireEvent.click(trigger);
     expect((await screen.findByTestId("git-status-prs-caveat")).textContent).toContain(
       "pode estar incompleta",
     );
@@ -682,7 +724,8 @@ describe("an untrustworthy PR list", () => {
 
   it("stays quiet when the list is complete", async () => {
     await renderWidget(status({ ahead: 1, prs: [] }));
-    const trigger = await screen.findByRole("button", { name: "Detalhes do workspace" });
+    const trigger = await screen.findByRole("button", { name: /^Detalhes do workspace/ });
+    expect(trigger.getAttribute("aria-label")).toBe("Detalhes do workspace");
     expect(trigger.getAttribute("title")).toBeNull();
 
     fireEvent.click(trigger);
@@ -690,14 +733,25 @@ describe("an untrustworthy PR list", () => {
     expect(screen.queryByTestId("git-status-prs-caveat")).toBeNull();
   });
 
-  // An older server that says nothing about completeness has not said the
-  // list is complete — the hook must not read the silence as "ok".
-  it("treats a body with no prs_status as untrustworthy", async () => {
+  // A body that doesn't say the list is complete hasn't said it — whether it
+  // stayed silent, sent a `null`, or sent a word this build has never seen.
+  // None of them may read as "ok", because "ok" is what erases a pull
+  // request the bar just opened.
+  it.each([
+    ["no prs_status at all", undefined],
+    ["the legacy null", null],
+    ["a value this build does not know", "truncated"],
+    ["a value that isn't even a string", 0],
+  ])("treats %s as untrustworthy", async (_label, raw) => {
     const body = status({ ahead: 1, prs: [] });
-    delete (body as Partial<GitPrStatus>).prs_status;
+    (body as { prs_status: unknown }).prs_status = raw;
     await renderWidget(body);
-    fireEvent.click(await screen.findByRole("button", { name: "Detalhes do workspace" }));
+    const trigger = await screen.findByRole("button", { name: /^Detalhes do workspace/ });
+    expect(trigger.getAttribute("aria-label")).toContain("Não foi possível consultar");
+
+    fireEvent.click(trigger);
     expect(await screen.findByTestId("git-status-prs-caveat")).toBeTruthy();
+    expect(screen.queryByText("Nenhum pull request para este branch.")).toBeNull();
   });
 });
 

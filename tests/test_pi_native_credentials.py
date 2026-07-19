@@ -811,6 +811,116 @@ def test_databricks_prefixed_override_normalized_for_inline_openai() -> None:
     assert cfg["providers"]["omnicraft"]["models"] == [{"id": "gpt-5-4"}]
 
 
+# ── ucode / workspace-hosted flow: sibling config scan + SDK-derived auth ──
+
+
+def test_cli_config_sibling_config_file_resolves(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A provider found only in a sibling ``config1.toml`` still resolves.
+
+    Codex app profile-switching (the ucode profile) writes the
+    ``[model_providers.X]`` table into a sibling file rather than the primary
+    ``~/.codex/config.toml``. The primary file exists but doesn't mention the
+    provider; ``config1.toml`` does.
+    """
+    _write_codex_config(tmp_path, 'model_provider = "Databricks"\n')
+    (tmp_path / ".codex" / "config1.toml").write_text(_DATABRICKS_CODEX_CONFIG, encoding="utf-8")
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    provider = creds.resolve_pi_native_provider(config_loader=_cli_config_databricks_config)
+
+    assert provider is not None
+    assert (
+        provider.base_url == "https://1965859176160743.ai-gateway.cloud.databricks.com/anthropic"
+    )
+    assert provider.api_key == (
+        "!jq -r .access_token /Users/me/.databricks/model-serving-token.json"
+    )
+
+
+_WORKSPACE_HOSTED_NO_AUTH_CONFIG = """
+model_provider = "Databricks"
+
+[model_providers.Databricks]
+name = "Databricks AI Gateway"
+base_url = "https://mycompany.cloud.databricks.com/ai-gateway/codex/v1"
+wire_api = "responses"
+"""
+
+
+def test_cli_config_workspace_hosted_no_auth_command_derives_sdk_auth(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A workspace-hosted Databricks provider with no auth command resolves via SDK auth.
+
+    ucode's setup omits an explicit ``[X.auth]`` command and relies on ambient
+    SDK auth instead. When the table carries no auth command but its base_url
+    already passed the trusted-host gate, the resolver must derive a
+    ``!command`` from the databricks-sdk credential resolver rather than
+    falling back to Pi's own login.
+    """
+    _write_codex_config(tmp_path, _WORKSPACE_HOSTED_NO_AUTH_CONFIG)
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    from omnicraft.runtime.credentials import databricks as databricks_creds
+
+    monkeypatch.setattr(
+        databricks_creds,
+        "resolve_databricks_workspace",
+        lambda profile: databricks_creds.WorkspaceCreds(
+            host="https://mycompany.cloud.databricks.com", token="sdk-token"
+        ),
+    )
+
+    provider = creds.resolve_pi_native_provider(config_loader=_cli_config_databricks_config)
+
+    assert provider is not None
+    assert provider.base_url == "https://mycompany.cloud.databricks.com/ai-gateway/anthropic"
+    assert provider.auth_header is True
+    # apiKey is a "!command" derived from the SDK-resolved workspace host, not
+    # a table-carried [X.auth] command (this table has none).
+    assert provider.api_key.startswith("!")
+    assert "mycompany.cloud.databricks.com" in provider.api_key
+
+
+def test_cli_config_lookalike_host_never_derives_sdk_auth(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A look-alike/untrusted host with no auth command returns None, and
+
+    NEVER calls the SDK auth derivation. The trusted-host-suffix gate
+    (``_is_databricks_ai_gateway_url``) must be checked before any auth
+    derivation is attempted — a look-alike host that also lacks an explicit
+    auth command must not trigger credential derivation/forwarding.
+    """
+    _write_codex_config(
+        tmp_path,
+        """
+model_provider = "Databricks"
+
+[model_providers.Databricks]
+name = "Look-alike Gateway"
+base_url = "https://mycompany.cloud.databricks.com.evil.test/ai-gateway/codex/v1"
+wire_api = "responses"
+""",
+    )
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    from omnicraft.runtime.credentials import databricks as databricks_creds
+
+    calls: list[str | None] = []
+
+    def _tracked_resolve(profile: str | None) -> databricks_creds.WorkspaceCreds:
+        calls.append(profile)
+        raise AssertionError("SDK auth derivation must not run for an untrusted host")
+
+    monkeypatch.setattr(databricks_creds, "resolve_databricks_workspace", _tracked_resolve)
+
+    assert creds.resolve_pi_native_provider(config_loader=_cli_config_databricks_config) is None
+    assert calls == []
+
+
 def test_inline_family_passes_non_mechanical_override_through() -> None:
     """A non-mechanical override (slash-shaped) passes through unchanged.
 

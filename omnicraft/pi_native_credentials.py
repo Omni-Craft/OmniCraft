@@ -246,15 +246,33 @@ def _cli_config_databricks_transport(entry: ProviderEntry) -> CodexConfigTranspo
     # Imported lazily: ambient pulls in onboarding-only deps, and this module
     # is imported on the runner's session-create hot path.
     from omnicraft.onboarding.ambient import (
+        CodexConfigTransport,
         _codex_config_path,
         codex_config_provider_transport,
     )
 
-    transport = codex_config_provider_transport(_codex_config_path(), entry.model_provider)
+    codex_config_path = _codex_config_path()
+    transport = codex_config_provider_transport(codex_config_path, entry.model_provider)
+    if transport is None:
+        # Codex app profile-switching (e.g. the ucode profile) stores the
+        # provider table in a sibling file (``config1.toml``, etc.) rather than
+        # the primary ``config.toml``. Scan those before giving up.
+        for alt_config in sorted(codex_config_path.parent.glob("config*.toml")):
+            if alt_config == codex_config_path:
+                continue
+            transport = codex_config_provider_transport(alt_config, entry.model_provider)
+            if transport is not None:
+                _LOGGER.info(
+                    "pi-native: cli-config provider %r (model_provider %r) found in %s",
+                    entry.name,
+                    entry.model_provider,
+                    alt_config.name,
+                )
+                break
     if transport is None:
         _LOGGER.info(
             "pi-native: cli-config provider %r (model_provider %r) has no resolvable "
-            "[model_providers.%s] base_url in ~/.codex/config.toml; Pi will use its own login.",
+            "[model_providers.%s] base_url in ~/.codex/config*.toml; Pi will use its own login.",
             entry.name,
             entry.model_provider,
             entry.model_provider,
@@ -275,13 +293,35 @@ def _cli_config_databricks_transport(entry: ProviderEntry) -> CodexConfigTranspo
         )
         return None
     if not transport.auth_command:
+        # Workspace-hosted setups (e.g. ucode) legitimately omit an explicit
+        # [X.auth] command and rely on ambient SDK auth instead. Derive a
+        # !command from the databricks-sdk's credential resolver, mirroring
+        # the ``databricks`` kind path (_databricks_pi_provider) — reached
+        # only for a table already proven to be a genuine Databricks AI
+        # Gateway by the trusted-host check above.
+        from omnicraft.inner.codex_executor import _databricks_codex_auth_command
+        from omnicraft.runtime.credentials.databricks import resolve_databricks_workspace
+
+        try:
+            workspace = resolve_databricks_workspace(None)
+        except Exception:  # noqa: BLE001 — no SDK-resolvable creds → fall back
+            _LOGGER.info(
+                "pi-native: Databricks cli-config provider %r carries no "
+                "[model_providers.%s.auth] token command and SDK auth is unavailable; "
+                "Pi will use its own login.",
+                entry.name,
+                entry.model_provider,
+            )
+            return None
+        auth_command = _databricks_codex_auth_command(workspace.host, None)
         _LOGGER.info(
-            "pi-native: Databricks cli-config provider %r carries no [model_providers.%s.auth] "
-            "token command; Pi will use its own login.",
+            "pi-native: cli-config provider %r has no [model_providers.%s.auth] command; "
+            "using SDK-derived auth for %s",
             entry.name,
             entry.model_provider,
+            workspace.host,
         )
-        return None
+        transport = CodexConfigTransport(base_url=transport.base_url, auth_command=auth_command)
     return transport
 
 

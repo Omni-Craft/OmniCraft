@@ -17,6 +17,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 // vi.mock factory (hoisted above imports) can reference it.
 const mocks = vi.hoisted(() => ({
   rename: { mutate: vi.fn() },
+  moveToProject: { mutate: vi.fn() },
 }));
 
 vi.mock("@/hooks/useConversations", () => ({
@@ -37,7 +38,7 @@ vi.mock("@/hooks/useConversations", () => ({
   useBulkStopSessions: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   useStopSession: () => ({ mutate: vi.fn() }),
   useProjects: () => ({ data: [] }),
-  useMoveToProject: () => ({ mutate: vi.fn() }),
+  useMoveToProject: () => mocks.moveToProject,
   useDeleteProject: () => ({ mutate: vi.fn(), isPending: false, isError: false }),
   fetchProjectSessionIds: () => Promise.resolve([]),
   PROJECT_LABEL_KEY: "omni_project",
@@ -118,6 +119,7 @@ function renderSidebar(activeId?: string) {
 
 beforeEach(() => {
   mocks.rename.mutate.mockReset();
+  mocks.moveToProject.mutate.mockReset();
   useConvMock.mockReset();
   // The read-state mirror is module-level (in-memory), so reset it between
   // tests to avoid a mark-unread leaking into later rows.
@@ -240,6 +242,25 @@ describe("double-click to rename", () => {
     expect(mocks.rename.mutate).toHaveBeenCalledWith({ id: "conv_1", title: "Renamed Session" });
   });
 
+  it("does not commit the rename on an IME composition Enter", () => {
+    renderSidebar();
+
+    fireEvent.dblClick(screen.getByRole("link", { name: /My Session/ }));
+    const input = screen.getByTestId("rename-conversation-input") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "半分の名前" } });
+
+    // Enter with keyCode 229 is the IME "confirm candidates" keystroke, not a
+    // submit — the half-composed title must stay in the field.
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(mocks.rename.mutate).not.toHaveBeenCalled();
+    expect(screen.getByTestId("rename-conversation-input")).toBeInTheDocument();
+
+    // A plain Enter once composition ends still commits.
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(mocks.rename.mutate).toHaveBeenCalledTimes(1);
+    expect(mocks.rename.mutate).toHaveBeenCalledWith({ id: "conv_1", title: "半分の名前" });
+  });
+
   it("does not enter rename on double-click for a viewer-only row", () => {
     // permission_level 1 is below the edit threshold (>= 2), so the kebab's
     // Rename item is disabled and double-click must be inert too. A viewer-only
@@ -254,6 +275,36 @@ describe("double-click to rename", () => {
 
     expect(screen.queryByTestId("rename-conversation-input")).toBeNull();
     expect(mocks.rename.mutate).not.toHaveBeenCalled();
+  });
+});
+
+describe("create-new-project input (IME guard)", () => {
+  // Reach the inline "Nome do projeto…" field: kebab → "Move to project"
+  // submenu → "Criar novo projeto". Committing it files the row via
+  // moveToProject.mutate, so that mock stands in for the commit.
+  function openNewProjectInput() {
+    fireEvent.pointerDown(screen.getByTestId("conversation-actions"), { button: 0 });
+    fireEvent.click(screen.getByTestId("move-to-project"));
+    fireEvent.click(screen.getByText("Criar novo projeto"));
+    return screen.getByPlaceholderText("Nome do projeto…") as HTMLInputElement;
+  }
+
+  it("does not create a project on an IME composition Enter, but a plain Enter commits", () => {
+    renderSidebar();
+    const input = openNewProjectInput();
+    fireEvent.change(input, { target: { value: "新規プロジェクト" } });
+
+    // keyCode 229 is the IME "confirm candidates" keystroke, not a submit.
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(mocks.moveToProject.mutate).not.toHaveBeenCalled();
+
+    // A plain Enter once composition ends still files the row into the project.
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(mocks.moveToProject.mutate).toHaveBeenCalledTimes(1);
+    expect(mocks.moveToProject.mutate).toHaveBeenCalledWith({
+      id: "conv_1",
+      project: "新規プロジェクト",
+    });
   });
 });
 

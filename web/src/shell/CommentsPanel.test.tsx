@@ -197,6 +197,22 @@ describe("CommentsPanel read-only collaborator gating", () => {
     expect(screen.getByRole("button", { name: "Adicionar comentário" })).toBeInTheDocument();
   });
 
+  it("does not publish on an IME composition Enter, but a plain Enter publishes", () => {
+    const onAddComment = vi.fn();
+    renderGated({ canEdit: true, activeSelection: FRESH_SELECTION, handlers: { onAddComment } });
+    const textarea = screen.getByPlaceholderText("Adicionar um comentário…");
+    fireEvent.change(textarea, { target: { value: "コメント" } });
+
+    // keyCode 229 is the IME "confirm candidates" keystroke, not a submit.
+    fireEvent.keyDown(textarea, { key: "Enter", keyCode: 229 });
+    expect(onAddComment).not.toHaveBeenCalled();
+
+    // A plain Enter once composition ends still publishes the comment.
+    fireEvent.keyDown(textarea, { key: "Enter" });
+    expect(onAddComment).toHaveBeenCalledTimes(1);
+    expect(onAddComment).toHaveBeenCalledWith("コメント");
+  });
+
   it("hides per-comment Edit and Delete actions when read-only", () => {
     renderGated({ canEdit: false, comments: [makeComment("c1")] });
     expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
@@ -207,6 +223,23 @@ describe("CommentsPanel read-only collaborator gating", () => {
     renderGated({ canEdit: true, comments: [makeComment("c1")] });
     expect(screen.getByRole("button", { name: "Editar" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Excluir" })).toBeInTheDocument();
+  });
+
+  it("does not save an edit on an IME composition Cmd+Enter, but a plain Cmd+Enter saves", () => {
+    const onEditComment = vi.fn();
+    renderGated({ canEdit: true, comments: [makeComment("c1")], handlers: { onEditComment } });
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    const textarea = screen.getByDisplayValue("Comment c1");
+    fireEvent.change(textarea, { target: { value: "修正版" } });
+
+    // keyCode 229 marks an IME confirm even with the Cmd modifier held.
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true, keyCode: 229 });
+    expect(onEditComment).not.toHaveBeenCalled();
+
+    // A plain Cmd+Enter once composition ends still saves the edit.
+    fireEvent.keyDown(textarea, { key: "Enter", metaKey: true });
+    expect(onEditComment).toHaveBeenCalledTimes(1);
+    expect(onEditComment).toHaveBeenCalledWith("c1", "修正版");
   });
 
   it("still lets a read-only viewer read comments and copy links", () => {

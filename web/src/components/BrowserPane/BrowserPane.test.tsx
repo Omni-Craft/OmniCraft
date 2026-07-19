@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BrowserPane } from "./BrowserPane";
 
@@ -264,5 +264,19 @@ describe("BrowserPane toolbar navigation + URL bar", () => {
         { force: true },
       ),
     );
+  });
+
+  it("does not navigate on an IME composition Enter, but a plain Enter navigates", async () => {
+    const { bridge } = await renderActive("conv_ime");
+    const bar = screen.getByRole("textbox", { name: /barra de endereço/i }) as HTMLInputElement;
+    fireEvent.change(bar, { target: { value: "みほん" } });
+
+    // keyCode 229 is the IME "confirm candidates" keystroke, not a submit.
+    fireEvent.keyDown(bar, { key: "Enter", keyCode: 229 });
+    expect(bridge.browserOpenOrNavigate).not.toHaveBeenCalled();
+
+    // A plain Enter once composition ends still navigates.
+    fireEvent.keyDown(bar, { key: "Enter" });
+    await waitFor(() => expect(bridge.browserOpenOrNavigate).toHaveBeenCalledTimes(1));
   });
 });

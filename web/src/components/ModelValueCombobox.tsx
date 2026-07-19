@@ -13,6 +13,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon } from "lucide-react";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { cn } from "@/lib/utils";
 
 export function ModelValueCombobox({
@@ -70,7 +71,10 @@ export function ModelValueCombobox({
         }}
         onFocus={() => setOpen(true)}
         onKeyDown={(e) => {
-          if (e.key === "Enter") {
+          // Enter confirms IME candidates mid-composition — here it only ever
+          // adds the free-typed query (list items are mouse-only), so don't
+          // add a half-composed value.
+          if (e.key === "Enter" && !isImeCompositionKeyEvent(e)) {
             e.preventDefault();
             pick(query);
           } else if (e.key === "Escape") {

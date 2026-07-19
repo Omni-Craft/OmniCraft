@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useResizableCommentsPanel } from "@/hooks/useResizableCommentsPanel";
 import { getCurrentAuthorId } from "@/lib/identity";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { cn } from "@/lib/utils";
 import type { Comment } from "@/hooks/useComments";
 import type { ActiveSelection } from "./codeViewerHelpers";
@@ -237,7 +238,14 @@ export function CommentsPanel({
                   if (pendingBodyRef) pendingBodyRef.current = e.target.value;
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey && body.trim()) {
+                  // Enter confirms IME candidates mid-composition — don't
+                  // publish a half-composed comment.
+                  if (
+                    e.key === "Enter" &&
+                    !e.shiftKey &&
+                    !isImeCompositionKeyEvent(e) &&
+                    body.trim()
+                  ) {
                     e.preventDefault();
                     onAddComment(body.trim());
                     setBody("");
@@ -423,7 +431,10 @@ function CommentCard({
             value={editBody}
             onChange={(e) => setEditBody(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) saveEdit();
+              // The IME guard is a no-op on the normal Cmd/Ctrl+Enter path (an
+              // IME confirm Enter carries no modifier) — it just closes the case.
+              if (e.key === "Enter" && (e.metaKey || e.ctrlKey) && !isImeCompositionKeyEvent(e))
+                saveEdit();
               if (e.key === "Escape") setEditing(false);
             }}
           />

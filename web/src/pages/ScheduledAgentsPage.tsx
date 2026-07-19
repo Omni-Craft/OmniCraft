@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { authenticatedFetch } from "@/lib/identity";
 import { useNavigate } from "@/lib/routing";
 
@@ -387,7 +388,10 @@ export function ScheduledAgentsPage() {
         ref={formRef}
         className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4"
         onKeyDown={(e) => {
-          if ((e.metaKey || e.ctrlKey) && e.key === "Enter") void submit();
+          // The IME guard is a no-op on the normal Cmd/Ctrl+Enter path (an IME
+          // confirm Enter carries no modifier) — it just closes the case.
+          if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !isImeCompositionKeyEvent(e))
+            void submit();
         }}
       >
         <div className="flex flex-wrap items-center justify-between gap-2">

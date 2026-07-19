@@ -846,7 +846,9 @@ function LandingProjectPicker({
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
+                  // Enter confirms IME candidates mid-composition — don't
+                  // create a project from a half-composed name.
+                  if (e.key === "Enter" && !isImeCompositionKeyEvent(e)) {
                     e.preventDefault();
                     commitNew();
                   }

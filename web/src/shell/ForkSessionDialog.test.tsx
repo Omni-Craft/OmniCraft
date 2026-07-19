@@ -208,6 +208,26 @@ describe("ForkSessionDialog", () => {
     await waitFor(() => expect(navigateMock).toHaveBeenCalledWith("/c/conv_fork"));
   });
 
+  it("does not fork on an IME composition Enter, but a plain Enter forks", async () => {
+    forkSessionMock.mockResolvedValue({
+      id: "conv_fork",
+    } as unknown as Awaited<ReturnType<typeof forkSession>>);
+    renderDialog();
+
+    openAdvanced();
+    const input = screen.getByTestId("fork-session-title-input");
+    fireEvent.change(input, { target: { value: "クローン" } });
+
+    // keyCode 229 is the IME "confirm candidates" keystroke, not a submit.
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(forkSessionMock).not.toHaveBeenCalled();
+
+    // A plain Enter once composition ends still forks with the typed title.
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(forkSessionMock).toHaveBeenCalledTimes(1));
+    expect(forkSessionMock).toHaveBeenCalledWith("conv_src", "クローン", undefined, undefined);
+  });
+
   it("passes the truncation point through on a 'fork from here' and retitles the dialog", async () => {
     forkSessionMock.mockResolvedValue({
       id: "conv_fork",

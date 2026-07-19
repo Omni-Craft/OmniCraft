@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { isElectronShell } from "@/lib/nativeBridge";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { normalizeTypedUrl } from "@/lib/normalizeTypedUrl";
 import { cn } from "@/lib/utils";
 
@@ -431,7 +432,9 @@ export function BrowserPane({ conversationId, className }: BrowserPaneProps) {
             urlEditingRef.current = false;
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            // Enter confirms IME candidates mid-composition — don't navigate to
+            // a half-composed URL.
+            if (e.key === "Enter" && !isImeCompositionKeyEvent(e)) {
               e.preventDefault();
               submitUrl();
               e.currentTarget.blur();

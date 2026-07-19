@@ -116,6 +116,7 @@ import { SessionStateBadge } from "@/components/SessionStateBadge";
 import { useSessionRunnerOnline } from "@/hooks/RunnerHealthProvider";
 import { useActiveRootSessionId } from "@/hooks/useSession";
 import { useCommentInbox } from "@/hooks/useCommentInbox";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { sumPendingApprovals } from "@/lib/inbox";
 import { isSessionStoppable } from "@/lib/sessionStop";
 import { isOwnerLevel } from "@/lib/permissionsApi";
@@ -3271,7 +3272,9 @@ function ProjectPickerMenu({
               onChange={(e) => setNewProjectName(e.target.value)}
               onKeyDown={(e) => {
                 e.stopPropagation();
-                if (e.key === "Enter") {
+                // Enter confirms IME candidates mid-composition — don't
+                // create a project from a half-composed name.
+                if (e.key === "Enter" && !isImeCompositionKeyEvent(e)) {
                   e.preventDefault();
                   handleNewProjectCommit();
                 }
@@ -3339,7 +3342,9 @@ function ConversationEditRow({ initialTitle, onCommit, onCancel }: ConversationE
   }, []);
 
   function handleKeyDown(e: KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "Enter") {
+    // Enter confirms IME candidates mid-composition — don't commit a
+    // half-composed title.
+    if (e.key === "Enter" && !isImeCompositionKeyEvent(e)) {
       e.preventDefault();
       onCommit(value);
       return;

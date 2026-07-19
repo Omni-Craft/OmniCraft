@@ -13,6 +13,7 @@ import {
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { useCreateHostDirectory, useHostFilesystem } from "@/hooks/useHostFilesystem";
 
 /**
@@ -487,7 +488,9 @@ export function WorkspacePicker({
             setPathInput(e.target.value);
           }}
           onKeyDown={(e) => {
-            if (e.key === "Enter") {
+            // Enter confirms IME candidates mid-composition — don't commit a
+            // half-composed path.
+            if (e.key === "Enter" && !isImeCompositionKeyEvent(e)) {
               e.preventDefault();
               commitPathInput();
             }
@@ -567,7 +570,9 @@ export function WorkspacePicker({
                 if (createError !== null) setCreateError(null);
               }}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                // Enter confirms IME candidates mid-composition — don't create
+                // a folder from a half-composed name.
+                if (e.key === "Enter" && !isImeCompositionKeyEvent(e)) {
                   e.preventDefault();
                   void commitNewFolder();
                 } else if (e.key === "Escape") {

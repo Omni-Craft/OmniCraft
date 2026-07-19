@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { authenticatedFetch } from "@/lib/identity";
 
 interface Snapshot {
@@ -162,7 +163,11 @@ export function CheckpointsButton({ sessionId }: { sessionId: string }) {
           <input
             value={label}
             onChange={(e) => setLabel(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !busy && void create()}
+            // Enter confirms IME candidates mid-composition — don't create a
+            // checkpoint from a half-composed label.
+            onKeyDown={(e) =>
+              e.key === "Enter" && !isImeCompositionKeyEvent(e) && !busy && void create()
+            }
             placeholder="Rótulo (opcional)"
             className="min-w-0 flex-1 rounded-md border border-border/60 bg-transparent px-2 py-1.5 text-sm outline-none focus:border-border"
           />

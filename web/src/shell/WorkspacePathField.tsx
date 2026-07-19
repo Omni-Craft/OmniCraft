@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { FolderIcon, FolderOpenIcon } from "lucide-react";
 
 import { useHostFilesystem } from "@/hooks/useHostFilesystem";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { isNavigablePath } from "./WorkspacePicker";
 
 // DOM-safety bound only; the dropdown scrolls and overflow is
@@ -226,7 +227,9 @@ export function WorkspacePathField({
         // A dropdown row is highlighted — pick it.
         e.preventDefault();
         select(items[highlight]);
-      } else if (trimmed !== "") {
+      } else if (trimmed !== "" && !isImeCompositionKeyEvent(e)) {
+        // No row highlighted: Enter confirms IME candidates mid-composition, so
+        // don't navigate to a half-composed path (row-pick above is unaffected).
         // No row highlighted: commit a navigable path (absolute or
         // ~-relative, which the host expands). The dialog (re)mounts the
         // tree browser at it, so Enter navigates there whether the browser

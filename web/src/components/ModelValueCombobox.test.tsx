@@ -88,6 +88,22 @@ describe("ModelValueCombobox", () => {
     expect(input).toHaveValue("");
   });
 
+  it("does not add the value on an IME composition Enter, but a plain Enter adds", () => {
+    render(<Harness />);
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "ジェミニ" } });
+
+    // keyCode 229 is the IME "confirm candidates" keystroke — Enter here only
+    // confirms candidates, it must not add the half-composed query.
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(screen.getByTestId("csv")).toHaveTextContent("");
+    expect(input).toHaveValue("ジェミニ");
+
+    // A plain Enter once composition ends still adds the typed value.
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByTestId("csv")).toHaveTextContent("ジェミニ");
+  });
+
   it("ignores Enter on blank / whitespace-only input", () => {
     render(<Harness />);
     const input = screen.getByRole("textbox");

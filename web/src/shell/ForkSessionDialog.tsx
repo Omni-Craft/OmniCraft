@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { forkSession, launchRunner } from "@/lib/sessionsApi";
 import { useAvailableAgents } from "@/hooks/useAvailableAgents";
 import { partitionAgentsByKind } from "@/lib/agentGrouping";
@@ -657,7 +658,15 @@ export function ForkSessionForm({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && !submitting && canSubmit) handleFork();
+                    // Enter confirms IME candidates mid-composition — don't
+                    // fork on a half-composed title.
+                    if (
+                      e.key === "Enter" &&
+                      !isImeCompositionKeyEvent(e) &&
+                      !submitting &&
+                      canSubmit
+                    )
+                      handleFork();
                   }}
                   placeholder={namePlaceholder}
                   className="rounded-md border border-input bg-background px-3 py-2 font-mono text-xs outline-none transition-colors focus-visible:border-ring"

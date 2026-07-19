@@ -237,6 +237,35 @@ describe("WorkspacePathField", () => {
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it("does not commit the typed path on an IME composition Enter, but a plain Enter commits", () => {
+    // The free-text commit branch is IME-guarded; the ArrowDown+Enter row-pick
+    // path (covered above) is deliberately left untouched.
+    mockListing(ENTRIES);
+    const onCommit = vi.fn();
+    render(
+      <WorkspacePathField
+        hostId="host_1"
+        value={VALUE}
+        onChange={vi.fn()}
+        onBrowse={vi.fn()}
+        onCommit={onCommit}
+        recent={[]}
+      />,
+    );
+    const input = screen.getByTestId("workspace-path-input");
+    fireEvent.focus(input);
+
+    // keyCode 229 is the IME "confirm candidates" keystroke — no commit, and
+    // the dropdown stays open.
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(onCommit).not.toHaveBeenCalled();
+    expect(screen.getByTestId("workspace-path-dropdown")).toBeTruthy();
+
+    // A plain Enter once composition ends still commits the typed path.
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(onCommit).toHaveBeenCalledWith("/Users/corey/");
+  });
+
   it("commits a tilde path on Enter (the host expands it)", () => {
     // Home-relative paths (~, ~/foo) are navigable — the host expands
     // them — so Enter must commit them just like absolute paths.

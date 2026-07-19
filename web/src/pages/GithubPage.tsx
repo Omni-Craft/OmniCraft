@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { setComposeSeed } from "@/lib/composeSeed";
+import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { authenticatedFetch } from "@/lib/identity";
 import { useNavigate } from "@/lib/routing";
 
@@ -182,7 +183,9 @@ export function GithubPage() {
         <input
           value={repoInput}
           onChange={(e) => setRepoInput(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && openRepo()}
+          // Enter confirms IME candidates mid-composition — don't open a repo
+          // from a half-composed name.
+          onKeyDown={(e) => e.key === "Enter" && !isImeCompositionKeyEvent(e) && openRepo()}
           placeholder="owner/repositório  (ex.: cli/cli)"
           className="min-w-64 flex-1 rounded-lg border border-white/10 bg-black/20 px-3 py-2 text-sm outline-none focus:border-white/25"
         />

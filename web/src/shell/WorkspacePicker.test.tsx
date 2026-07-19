@@ -512,6 +512,33 @@ describe("WorkspacePicker new folder", () => {
     });
   });
 
+  it("does not create a folder on an IME composition Enter, but a plain Enter creates", async () => {
+    listingWith([dir("app", "/Users/corey/projects/app")]);
+    const mutateAsync = vi.fn().mockResolvedValue("/Users/corey/projects/新規");
+    useCreateHostDirectoryMock.mockReturnValue({
+      mutateAsync,
+      isPending: false,
+    } as unknown as ReturnType<typeof useCreateHostDirectory>);
+
+    render(<WorkspacePicker hostId="host_1" initialPath="/Users/corey/projects" />);
+
+    fireEvent.click(screen.getByTestId("workspace-picker-new-folder"));
+    const input = screen.getByTestId("workspace-picker-new-folder-input");
+    fireEvent.change(input, { target: { value: "新規" } });
+
+    // keyCode 229 is the IME "confirm candidates" keystroke, not a submit.
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(mutateAsync).not.toHaveBeenCalled();
+
+    // A plain Enter once composition ends still creates the folder.
+    fireEvent.keyDown(input, { key: "Enter" });
+    await Promise.resolve();
+    expect(mutateAsync).toHaveBeenCalledWith({
+      hostId: "host_1",
+      path: "/Users/corey/projects/新規",
+    });
+  });
+
   it("shows the server error inline when creation fails", async () => {
     listingWith([dir("app", "/Users/corey/projects/app")]);
     const mutateAsync = vi.fn().mockRejectedValue(new Error("directory already exists"));

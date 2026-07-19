@@ -10,9 +10,9 @@
 // `authenticatedFetch` is stubbed at the seam so the real hook (query key,
 // enabled gate, response normalization) runs against canned bodies.
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   GitWorkspaceStatusWidget,
@@ -181,56 +181,77 @@ describe("PR action", () => {
   });
 });
 
-describe("creating the pull request", () => {
-  /**
-   * Render with the git-status GET answering `body` and the pull-request POST
-   * answering `post`, so the click path runs against the real hook.
-   */
-  async function renderCreatable(post: () => unknown, body: GitPrStatus = status({ ahead: 1 })) {
-    authenticatedFetchMock.mockImplementation(async (url: unknown) =>
-      String(url).endsWith("/pull-request")
-        ? post()
-        : { ok: true, status: 200, json: async () => body },
-    );
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <GitWorkspaceStatusWidget sessionId="sess_1" />
-      </QueryClientProvider>,
-    );
-    return {
-      button: await screen.findByTestId("git-status-create-pr"),
-      posts: () =>
-        authenticatedFetchMock.mock.calls.filter((call) =>
-          String(call[0]).endsWith("/pull-request"),
-        ),
-    };
-  }
+/**
+ * Pull requests the git-status endpoint reports from here on.
+ *
+ * A successful POST adds to it, the way the server starts listing the PR it
+ * just opened — so the tests exercise the same hand-off from the local answer
+ * to the polled one that the bar performs.
+ */
+let listedPrs: GitPrStatus["prs"] = [];
 
-  const created = (overrides = {}) => ({
-    ok: true,
-    status: 200,
-    json: async () => ({
-      object: "session.pull_request",
-      session_id: "sess_1",
-      number: 7,
-      url: "https://github.com/acme/omni/pull/7",
-      created: true,
-      title: "Add login",
-      ...overrides,
-    }),
+/** The pull-request POST answering with the PR it opened. */
+const created = (overrides: Record<string, unknown> = {}) => {
+  const body = {
+    object: "session.pull_request",
+    session_id: "sess_1",
+    number: 7,
+    url: "https://github.com/acme/omni/pull/7",
+    created: true,
+    title: "Add login",
+    ...overrides,
+  };
+  listedPrs = [pr({ number: body.number, title: body.title, url: body.url, ci_status: null })];
+  return { ok: true, status: 200, json: async () => body };
+};
+
+/** The pull-request POST refusing, in the endpoint's error shape. */
+const refused = (httpStatus: number, code: string, message: string) => ({
+  ok: false,
+  status: httpStatus,
+  json: async () => ({ error: { code, message } }),
+});
+
+const posts = () =>
+  authenticatedFetchMock.mock.calls.filter((call) => String(call[0]).endsWith("/pull-request"));
+
+/**
+ * Render with the git-status GET reporting `listedPrs` and the pull-request
+ * POST answering `post`, so the click path runs against the real hook.
+ *
+ * The client retries mutations by default here: the "open a pull request"
+ * mutation has to refuse retries on its own, not because the app happened to
+ * be configured that way.
+ */
+async function renderCreatable(post: () => unknown, sessionId = "sess_1") {
+  authenticatedFetchMock.mockImplementation(async (url: unknown) =>
+    String(url).endsWith("/pull-request")
+      ? post()
+      : {
+          ok: true,
+          status: 200,
+          json: async () =>
+            status({ session_id: String(url).split("/")[3], ahead: 1, prs: listedPrs }),
+        },
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: 3 } },
   });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <GitWorkspaceStatusWidget sessionId={sessionId} />
+    </QueryClientProvider>,
+  );
+  return { button: await screen.findByTestId("git-status-create-pr"), client, view };
+}
 
-  const refused = (httpStatus: number, code: string, message: string) => ({
-    ok: false,
-    status: httpStatus,
-    json: async () => ({ error: { code, message } }),
+describe("creating the pull request", () => {
+  beforeEach(() => {
+    listedPrs = [];
   });
 
   it("arms on the first click without opening anything", async () => {
-    const { button, posts } = await renderCreatable(created);
+    const { button } = await renderCreatable(created);
     fireEvent.click(button);
 
     await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
@@ -239,7 +260,7 @@ describe("creating the pull request", () => {
   });
 
   it("opens the pull request on the second click and shows it", async () => {
-    const { button, posts } = await renderCreatable(created);
+    const { button } = await renderCreatable(created);
     fireEvent.click(button);
     fireEvent.click(button);
 
@@ -251,18 +272,29 @@ describe("creating the pull request", () => {
     expect(screen.queryByTestId("git-status-create-pr")).toBeNull();
   });
 
-  it("sends a single POST however fast the button is clicked", async () => {
+  // The clicks land before React has re-rendered the disabled button and
+  // before `isPending` has flipped, which is the only window where a second
+  // POST could slip through — so nothing is awaited between them.
+  it("sends a single POST for clicks fired in one synchronous burst", async () => {
     let release: (value: unknown) => void = () => {};
-    const { button, posts } = await renderCreatable(
-      () => new Promise((resolve) => (release = resolve)),
-    );
+    const { button } = await renderCreatable(() => new Promise((resolve) => (release = resolve)));
     fireEvent.click(button);
-    fireEvent.click(button);
-    await waitFor(() => expect(button.getAttribute("aria-label")).toBe("Criando PR…"));
-    expect((button as HTMLButtonElement).disabled).toBe(true);
-    expect(button.textContent).toContain("Criando PR…");
+    await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
 
-    fireEvent.click(button);
+    // One batch from an armed button, so React re-renders only once at the
+    // end: `confirming` is still true and `isPending` still false when the
+    // second and third land. Only a lock taken at click time stops them.
+    act(() => {
+      button.click();
+      button.click();
+      button.click();
+    });
+
+    await waitFor(() => expect(button.getAttribute("aria-label")).toBe("Criando PR…"));
+    expect(posts()).toHaveLength(1);
+    expect((button as HTMLButtonElement).disabled).toBe(true);
+    expect(button.getAttribute("aria-busy")).toBe("true");
+    expect(button.querySelector(".animate-spin")).toBeTruthy();
     fireEvent.click(button);
     expect(posts()).toHaveLength(1);
 
@@ -292,6 +324,10 @@ describe("creating the pull request", () => {
 
     const error = await screen.findByTestId("git-status-pr-error");
     expect(error.textContent).toContain(message);
+    expect(error.getAttribute("role")).toBe("status");
+    // A refusal is not retried behind the user's back, whatever the client's
+    // default: publishing again is their call.
+    expect(posts()).toHaveLength(1);
     expect(screen.getByTestId("git-status-compare-link").getAttribute("href")).toBe(
       "https://github.com/acme/omni/compare/main...feature%2Flogin?expand=1",
     );
@@ -302,7 +338,7 @@ describe("creating the pull request", () => {
   });
 
   it("disarms on Escape", async () => {
-    const { button, posts } = await renderCreatable(created);
+    const { button } = await renderCreatable(created);
     fireEvent.click(button);
     await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
 
@@ -314,7 +350,7 @@ describe("creating the pull request", () => {
   });
 
   it("disarms when the button loses focus", async () => {
-    const { button, posts } = await renderCreatable(created);
+    const { button } = await renderCreatable(created);
     fireEvent.click(button);
     await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
 
@@ -322,6 +358,140 @@ describe("creating the pull request", () => {
     await waitFor(() => expect(button.textContent).toBe("Criar PR"));
     fireEvent.click(button);
     expect(posts()).toHaveLength(0);
+  });
+
+  // The local answer is a bridge until the poll catches up, not a claim of
+  // its own: once the server has spoken and doesn't list the PR — closed,
+  // deleted, or never really there — the bar goes back to offering to open it.
+  it("gives up the created PR when the next status disagrees", async () => {
+    const { button, client } = await renderCreatable(() => {
+      // The server does not start listing it: `created` is bypassed.
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          object: "session.pull_request",
+          session_id: "sess_1",
+          number: 7,
+          url: "https://github.com/acme/omni/pull/7",
+          created: true,
+          title: "Add login",
+        }),
+      };
+    });
+    fireEvent.click(button);
+    fireEvent.click(button);
+    expect((await screen.findByTestId("git-status-pr-link")).textContent).toBe("Ver PR #7");
+
+    await client.refetchQueries({ queryKey: ["session-git-status", "sess_1"] });
+    await waitFor(() =>
+      expect(screen.getByTestId("git-status-create-pr").textContent).toBe("Criar PR"),
+    );
+    expect(screen.queryByTestId("git-status-pr-link")).toBeNull();
+  });
+});
+
+describe("session switching while the button is armed", () => {
+  beforeEach(() => {
+    listedPrs = [];
+  });
+
+  /**
+   * Both sessions seeded in the cache, so switching renders the other one at
+   * once — no gap where the bar disappears and takes its state with it. That
+   * gap is what would make these assertions pass on their own.
+   */
+  async function renderSwitchable() {
+    authenticatedFetchMock.mockImplementation(async (url: unknown) =>
+      String(url).endsWith("/pull-request")
+        ? created()
+        : {
+            ok: true,
+            status: 200,
+            json: async () => status({ session_id: String(url).split("/")[3], ahead: 1 }),
+          },
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    for (const id of ["sess_1", "sess_2"]) {
+      client.setQueryData(["session-git-status", id], status({ session_id: id, ahead: 1 }));
+    }
+    const ui = (id: string) => (
+      <QueryClientProvider client={client}>
+        <GitWorkspaceStatusWidget sessionId={id} />
+      </QueryClientProvider>
+    );
+    const { rerender } = render(ui("sess_1"));
+    await screen.findByTestId("git-status-create-pr");
+    return { rerender: (id: string) => rerender(ui(id)) };
+  }
+
+  // Arming belongs to the workspace it was armed on. Carrying it across would
+  // let the next click open a pull request on a session nobody aimed at.
+  it("does not carry an armed button into the next session", async () => {
+    const { rerender } = await renderSwitchable();
+    fireEvent.click(screen.getByTestId("git-status-create-pr"));
+    await waitFor(() =>
+      expect(screen.getByTestId("git-status-create-pr").textContent).toBe("Confirmar?"),
+    );
+
+    rerender("sess_2");
+    await waitFor(() =>
+      expect(screen.getByTestId("git-status-create-pr").textContent).toBe("Criar PR"),
+    );
+
+    // The first click on the new session can only arm it, never post.
+    fireEvent.click(screen.getByTestId("git-status-create-pr"));
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("does not show one session's new PR on the next one", async () => {
+    const { rerender } = await renderSwitchable();
+    fireEvent.click(screen.getByTestId("git-status-create-pr"));
+    fireEvent.click(screen.getByTestId("git-status-create-pr"));
+    expect((await screen.findByTestId("git-status-pr-link")).textContent).toBe("Ver PR #7");
+
+    rerender("sess_2");
+    await waitFor(() =>
+      expect(screen.getByTestId("git-status-create-pr").textContent).toBe("Criar PR"),
+    );
+    expect(screen.queryByTestId("git-status-pr-link")).toBeNull();
+  });
+});
+
+describe("the disarm timer", () => {
+  beforeEach(() => {
+    listedPrs = [];
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("disarms the button on its own after a short wait", async () => {
+    const { button } = await renderCreatable(created);
+    fireEvent.click(button);
+    await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
+
+    await act(async () => {
+      vi.advanceTimersByTime(5_000);
+    });
+    expect(button.textContent).toBe("Criar PR");
+    fireEvent.click(button);
+    expect(posts()).toHaveLength(0);
+  });
+
+  it("drops the disarm timer when the bar goes away", async () => {
+    const { button, view } = await renderCreatable(created);
+    const setSpy = vi.spyOn(globalThis, "setTimeout");
+    fireEvent.click(button);
+    await waitFor(() => expect(button.textContent).toBe("Confirmar?"));
+
+    const armed = setSpy.mock.calls.findIndex((call) => call[1] === 5_000);
+    expect(armed).toBeGreaterThanOrEqual(0);
+    const clearSpy = vi.spyOn(globalThis, "clearTimeout");
+    view.unmount();
+    expect(clearSpy).toHaveBeenCalledWith(setSpy.mock.results[armed].value);
   });
 });
 

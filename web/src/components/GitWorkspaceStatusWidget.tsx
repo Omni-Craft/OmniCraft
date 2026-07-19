@@ -19,7 +19,7 @@ import {
   Loader2Icon,
   XIcon,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -164,22 +164,42 @@ const CONFIRM_TIMEOUT_MS = 5_000;
  * @param sessionId Session/conversation id. Nullish renders nothing.
  */
 export function GitWorkspaceStatusWidget({ sessionId }: { sessionId: string | null | undefined }) {
-  const { data } = useGitPrStatus(sessionId);
+  const { data, dataUpdatedAt } = useGitPrStatus(sessionId);
 
   if (!sessionId || !isGitWorkspaceStatusVisible(data) || !data) return null;
-  return <GitStatusBar sessionId={sessionId} data={data} />;
+  // Keyed by session: an armed button, a just-opened PR and an in-flight
+  // request all belong to the workspace they were started on. Switching
+  // sessions mounts a fresh bar instead of carrying them over — otherwise a
+  // click armed on one session would open a pull request on the next.
+  return (
+    <GitStatusBar key={sessionId} sessionId={sessionId} data={data} dataUpdatedAt={dataUpdatedAt} />
+  );
 }
 
 /** The bar itself, mounted only once there is a status worth showing. */
-function GitStatusBar({ sessionId, data }: { sessionId: string; data: GitPrStatus }) {
+function GitStatusBar({
+  sessionId,
+  data,
+  dataUpdatedAt,
+}: {
+  sessionId: string;
+  data: GitPrStatus;
+  /** When the shown status was last written, to date `createdPr` against. */
+  dataUpdatedAt: number;
+}) {
   const [open, setOpen] = useState(false);
   // Opening a PR is outward-facing, so the button arms on the first click and
   // fires on the second. It disarms on blur, Escape or a short timeout so a
   // forgotten click never sits there waiting to publish something.
   const [confirming, setConfirming] = useState(false);
-  // The PR the click just opened. Kept aside from the query so the button
-  // stays "Ver PR #N" even if the next git-status doesn't list it yet.
-  const [createdPr, setCreatedPr] = useState<GitPullRequest | null>(null);
+  // The PR the click just opened, with the moment it was opened. It bridges
+  // the gap until the next git-status lands and is dropped as soon as that
+  // status disagrees — the server owns the answer, this is only the wait.
+  const [createdPr, setCreatedPr] = useState<{ pr: GitPullRequest; at: number } | null>(null);
+  // The request is in flight from the click that started it, not from the
+  // re-render that follows: `isPending` only turns true a microtask later,
+  // and every click until then would post again.
+  const submitting = useRef(false);
   const createPr = useCreateSessionPullRequest(sessionId);
 
   useEffect(() => {
@@ -188,30 +208,45 @@ function GitStatusBar({ sessionId, data }: { sessionId: string; data: GitPrStatu
     return () => clearTimeout(timer);
   }, [confirming]);
 
+  useEffect(() => {
+    if (!createdPr || dataUpdatedAt <= createdPr.at) return;
+    const listed = data.prs.some(
+      (item) => item.number === createdPr.pr.number && item.state === "open",
+    );
+    if (!listed) setCreatedPr(null);
+  }, [createdPr, data, dataUpdatedAt]);
+
   const branch = data.branch as string;
   const diff = data.diff;
   const ahead = data.ahead ?? 0;
   const behind = data.behind ?? 0;
-  const pr = openPullRequest(data.prs) ?? createdPr;
+  const pr = openPullRequest(data.prs) ?? createdPr?.pr ?? null;
   const compare = pr ? null : compareUrl(data);
   const failure = createPr.isError ? createPr.error.message : null;
 
   function handleCreateClick() {
-    if (createPr.isPending) return;
+    if (submitting.current || createPr.isPending) return;
     if (!confirming) {
       setConfirming(true);
       return;
     }
     setConfirming(false);
+    submitting.current = true;
     createPr.mutate(undefined, {
       onSuccess: (result) =>
         setCreatedPr({
-          number: result.number,
-          title: result.title,
-          state: "open",
-          ci_status: null,
-          url: result.url,
+          pr: {
+            number: result.number,
+            title: result.title,
+            state: "open",
+            ci_status: null,
+            url: result.url,
+          },
+          at: Date.now(),
         }),
+      onSettled: () => {
+        submitting.current = false;
+      },
     });
   }
 

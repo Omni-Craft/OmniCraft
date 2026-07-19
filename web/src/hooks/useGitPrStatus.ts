@@ -166,6 +166,10 @@ async function pullRequestError(res: Response): Promise<Error> {
 export function useCreateSessionPullRequest(sessionId: string) {
   const queryClient = useQueryClient();
   return useMutation({
+    // Never retried, whatever the app's default is: a retry would be a
+    // second attempt to publish that nobody asked for. The endpoint is
+    // idempotent, but the decision to try again is the user's.
+    retry: false,
     mutationFn: async (): Promise<SessionPullRequest> => {
       const res = await authenticatedFetch(
         `/v1/sessions/${encodeURIComponent(sessionId)}/pull-request`,

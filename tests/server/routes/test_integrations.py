@@ -83,16 +83,17 @@ def test_normalize_tolerates_missing_fields() -> None:
 
 
 @pytest.mark.asyncio
-async def test_branch_pull_requests_returns_empty_without_a_token(
+async def test_branch_pull_requests_is_unavailable_without_a_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """An unconfigured integration is not an error — it has no PRs."""
+    """An unconfigured integration is not an error, but it is not an answer either."""
 
     async def _no_token() -> None:
         return None
 
     monkeypatch.setattr(integrations, "_github_token", _no_token)
-    assert await github_pull_requests_for_branch("o/r", "feature") == []
+    found = await github_pull_requests_for_branch("o/r", "feature")
+    assert (found.cards, found.status) == ([], "unavailable")
 
 
 @pytest.mark.asyncio
@@ -151,7 +152,8 @@ async def test_branch_pull_requests_maps_cards_and_ci_state(
 
     monkeypatch.setattr(integrations, "_github_get", _get)
 
-    assert await github_pull_requests_for_branch("o/r", "feature") == [
+    found = await github_pull_requests_for_branch("o/r", "feature")
+    assert found.cards == [
         {
             "number": 7,
             "title": "Add login",
@@ -160,6 +162,8 @@ async def test_branch_pull_requests_maps_cards_and_ci_state(
             "url": "https://github.com/o/r/pull/7",
         }
     ]
+    # One short page back from GitHub: the list is everything there is.
+    assert found.status == "ok"
 
 
 @pytest.mark.asyncio
@@ -202,25 +206,28 @@ async def test_ci_state_falls_back_to_check_runs(
 
     monkeypatch.setattr(integrations, "_github_get", _get)
 
-    cards = await github_pull_requests_for_branch("o/r", "feature")
+    cards = (await github_pull_requests_for_branch("o/r", "feature")).cards
     assert cards[0]["ci_status"] == "pending"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "raw",
+    ("raw", "expected_status"),
     [
-        pytest.param({"message": "Not Found"}, id="object_instead_of_list"),
-        pytest.param(None, id="null_body"),
-        pytest.param(["nonsense"], id="list_of_scalars"),
-        pytest.param([{"number": 1, "head": "not-an-object"}], id="head_is_a_string"),
+        pytest.param({"message": "Not Found"}, "unavailable", id="object_instead_of_list"),
+        pytest.param(None, "unavailable", id="null_body"),
+        pytest.param(["nonsense"], "unavailable", id="list_of_scalars"),
+        # A well-formed list whose one row cannot be matched to the
+        # branch is a real (if useless) answer, not a broken lookup.
+        pytest.param([{"number": 1, "head": "not-an-object"}], "ok", id="head_is_a_string"),
     ],
 )
 async def test_branch_pull_requests_degrades_on_unexpected_shapes(
     monkeypatch: pytest.MonkeyPatch,
     raw: object,
+    expected_status: str,
 ) -> None:
-    """An unexpected GitHub body yields no PRs rather than an exception."""
+    """An unexpected GitHub body yields an unavailable list, not an exception."""
 
     async def _token() -> str:
         return "t"
@@ -232,12 +239,13 @@ async def test_branch_pull_requests_degrades_on_unexpected_shapes(
     monkeypatch.setattr(integrations, "_github_token", _token)
     monkeypatch.setattr(integrations, "_github_get", _get)
 
-    assert await github_pull_requests_for_branch("o/r", "feature") == []
+    found = await github_pull_requests_for_branch("o/r", "feature")
+    assert (found.cards, found.status) == ([], expected_status)
 
 
 @pytest.mark.asyncio
 async def test_ci_lookups_are_capped_per_poll(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Only the first few PRs get a CI lookup; the rest report ``None``."""
+    """Only the first few PRs get a CI lookup; the rest report ``"unknown"``."""
 
     async def _token() -> str:
         return "t"
@@ -263,13 +271,17 @@ async def test_ci_lookups_are_capped_per_poll(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(integrations, "_github_token", _token)
     monkeypatch.setattr(integrations, "_github_get", _get)
 
-    cards = await github_pull_requests_for_branch("o/r", "feature")
+    found = await github_pull_requests_for_branch("o/r", "feature")
+    cards = found.cards
 
     # Every matching PR is still reported — only the CI enrichment is bounded.
     assert len(cards) == 12
+    assert found.status == "ok"
     assert len(status_calls) == integrations._MAX_CI_LOOKUPS
     assert [c["ci_status"] for c in cards[: integrations._MAX_CI_LOOKUPS]] == ["success"] * 5
-    assert all(c["ci_status"] is None for c in cards[integrations._MAX_CI_LOOKUPS :])
+    # Past the cap CI was never asked about, so nothing is claimed — an
+    # unasked PR must not read as "no CI configured".
+    assert all(c["ci_status"] == "unknown" for c in cards[integrations._MAX_CI_LOOKUPS :])
 
 
 @pytest.mark.asyncio
@@ -296,9 +308,129 @@ async def test_ci_status_survives_a_failing_lookup(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(integrations, "_github_token", _token)
     monkeypatch.setattr(integrations, "_github_get", _get)
 
-    cards = await github_pull_requests_for_branch("o/r", "feature")
+    cards = (await github_pull_requests_for_branch("o/r", "feature")).cards
     assert len(cards) == 1
-    assert cards[0]["ci_status"] is None
+    # The lookup blew up, so the state is unknown — not "no checks".
+    assert cards[0]["ci_status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_ci_status_is_none_when_the_commit_has_no_checks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A commit GitHub confirms has no CI reports ``"none"``, not ``"unknown"``."""
+
+    async def _token() -> str:
+        return "t"
+
+    async def _get(path: str, params: dict[str, object] | None = None, **_kw: object) -> object:
+        del params
+        if path.endswith("/pulls"):
+            return [
+                {
+                    "number": 1,
+                    "title": "PR",
+                    "html_url": "u",
+                    "state": "open",
+                    "head": {"ref": "feature", "sha": "abc", "repo": {"full_name": "o/r"}},
+                }
+            ]
+        if path == "/repos/o/r/commits/abc/status":
+            return {"total_count": 0, "state": "pending"}
+        if path == "/repos/o/r/commits/abc/check-runs":
+            return {"check_runs": []}
+        raise AssertionError(f"unexpected path {path}")
+
+    monkeypatch.setattr(integrations, "_github_token", _token)
+    monkeypatch.setattr(integrations, "_github_get", _get)
+
+    cards = (await github_pull_requests_for_branch("o/r", "feature")).cards
+    # Asked and answered: this repo simply runs no CI on the branch.
+    assert cards[0]["ci_status"] == "none"
+
+
+@pytest.mark.asyncio
+async def test_ci_status_is_unknown_when_the_checks_call_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A refused check-runs call is unknown, never mistaken for "no CI"."""
+
+    async def _token() -> str:
+        return "t"
+
+    async def _get(path: str, params: dict[str, object] | None = None, **_kw: object) -> object:
+        del params
+        if path.endswith("/pulls"):
+            return [
+                {
+                    "number": 1,
+                    "title": "PR",
+                    "html_url": "u",
+                    "state": "open",
+                    "head": {"ref": "feature", "sha": "abc", "repo": {"full_name": "o/r"}},
+                }
+            ]
+        if path == "/repos/o/r/commits/abc/status":
+            return {"total_count": 0, "state": "pending"}
+        raise OmniCraftError("check-runs refused")
+
+    monkeypatch.setattr(integrations, "_github_token", _token)
+    monkeypatch.setattr(integrations, "_github_get", _get)
+
+    cards = (await github_pull_requests_for_branch("o/r", "feature")).cards
+    assert cards[0]["ci_status"] == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_branch_pull_requests_reports_a_full_page_as_partial(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A page-sized answer may be hiding more PRs, and says so."""
+
+    async def _token() -> str:
+        return "t"
+
+    async def _get(path: str, params: dict[str, object] | None = None, **_kw: object) -> object:
+        del params
+        if path.endswith("/pulls"):
+            return [
+                {
+                    "number": n,
+                    "title": f"PR {n}",
+                    "html_url": f"https://github.com/o/r/pull/{n}",
+                    "state": "open",
+                    "head": {"ref": "feature", "sha": f"sha{n}", "repo": {"full_name": "o/r"}},
+                }
+                for n in range(integrations._PAGE_SIZE)
+            ]
+        return {"total_count": 1, "state": "success"}
+
+    monkeypatch.setattr(integrations, "_github_token", _token)
+    monkeypatch.setattr(integrations, "_github_get", _get)
+
+    found = await github_pull_requests_for_branch("o/r", "feature")
+    assert len(found.cards) == integrations._PAGE_SIZE
+    assert found.status == "partial"
+
+
+@pytest.mark.asyncio
+async def test_branch_pull_requests_is_unavailable_when_github_refuses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A rejected list call is "cannot tell", not "this branch has no PR"."""
+
+    async def _token() -> str:
+        return "t"
+
+    async def _get(path: str, params: dict[str, object] | None = None, **_kw: object) -> object:
+        del path, params
+        raise OmniCraftError("bad credentials")
+
+    monkeypatch.setattr(integrations, "_github_token", _token)
+    monkeypatch.setattr(integrations, "_github_get", _get)
+
+    found = await github_pull_requests_for_branch("o/r", "feature")
+    assert (found.cards, found.status) == ([], "unavailable")
 
 
 @pytest.mark.asyncio

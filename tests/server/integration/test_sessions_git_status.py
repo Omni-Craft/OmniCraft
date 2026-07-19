@@ -207,6 +207,8 @@ async def test_session_without_workspace_is_an_empty_success(
         "diff": None,
         "repo_slug": None,
         "prs": [],
+        # Nothing to ask GitHub about, so the empty list is the truth.
+        "prs_status": "ok",
         "error": None,
     }
 
@@ -249,17 +251,20 @@ async def test_branch_with_diff_and_ahead_behind_passes_through(
     )
     set_runner_client(runner)  # type: ignore[arg-type]
 
-    async def _prs(repo: str, branch: str) -> list[dict[str, Any]]:
+    async def _prs(repo: str, branch: str) -> integrations.BranchPullRequests:
         assert (repo, branch) == ("octocat/hello-world", "feature/login")
-        return [
-            {
-                "number": 12,
-                "title": "Add login",
-                "state": "open",
-                "ci_status": "pending",
-                "url": "https://github.com/octocat/hello-world/pull/12",
-            }
-        ]
+        return integrations.BranchPullRequests(
+            cards=[
+                {
+                    "number": 12,
+                    "title": "Add login",
+                    "state": "open",
+                    "ci_status": "pending",
+                    "url": "https://github.com/octocat/hello-world/pull/12",
+                }
+            ],
+            status="ok",
+        )
 
     monkeypatch.setattr(integrations, "github_pull_requests_for_branch", _prs)
 
@@ -279,6 +284,7 @@ async def test_branch_with_diff_and_ahead_behind_passes_through(
             "url": "https://github.com/octocat/hello-world/pull/12",
         }
     ]
+    assert body["prs_status"] == "ok"
     # The slug drives the "create PR" / compare URL, so it must be
     # present even though a PR already exists here.
     assert body["repo_slug"] == "octocat/hello-world"
@@ -344,6 +350,9 @@ async def test_unconfigured_github_yields_no_prs_and_no_error(
     body = resp.json()
     assert resp.status_code == 200
     assert body["prs"] == []
+    # No token means the list is unknowable, not empty — and it is still
+    # not a git ``error``.
+    assert body["prs_status"] == "unavailable"
     assert body["error"] is None
     assert body["branch"] == "feature/login"
 
@@ -353,7 +362,7 @@ async def test_pull_request_lookup_never_raises(
     client: httpx.AsyncClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A GitHub outage degrades to an empty PR list, keeping the git half."""
+    """A GitHub outage degrades to an unavailable PR list, keeping the git half."""
 
     async def _token() -> str:
         return "t"
@@ -379,7 +388,130 @@ async def test_pull_request_lookup_never_raises(
     body = resp.json()
     assert resp.status_code == 200
     assert body["prs"] == []
+    # The outage is confessed here, never through ``error`` — that field
+    # belongs to git and the runner alone.
+    assert body["prs_status"] == "unavailable"
+    assert body["error"] is None
     assert body["branch"] == "feature/login"
+
+
+@pytest.mark.asyncio
+async def test_truncated_pull_request_list_is_reported_as_partial(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A list GitHub may have cut short says so, so a client can stop trusting it."""
+
+    async def _prs(repo: str, branch: str) -> integrations.BranchPullRequests:
+        del repo, branch
+        return integrations.BranchPullRequests(
+            cards=[
+                {
+                    "number": n,
+                    "title": f"PR {n}",
+                    "state": "open",
+                    "ci_status": "unknown",
+                    "url": f"https://github.com/octocat/hello-world/pull/{n}",
+                }
+                for n in range(30)
+            ],
+            status="partial",
+        )
+
+    monkeypatch.setattr(integrations, "github_pull_requests_for_branch", _prs)
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(
+            payload=_runner_payload(
+                workspace="/repo",
+                branch="feature/login",
+                repo_slug="octocat/hello-world",
+            )
+        )
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert len(body["prs"]) == 30
+    assert body["prs_status"] == "partial"
+    assert body["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_pull_request_lookup_crash_is_reported_as_unavailable(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A lookup that blows up outright still answers, and admits it knows nothing."""
+
+    async def _prs(repo: str, branch: str) -> integrations.BranchPullRequests:
+        del repo, branch
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(integrations, "github_pull_requests_for_branch", _prs)
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(
+            payload=_runner_payload(
+                workspace="/repo",
+                branch="feature/login",
+                repo_slug="octocat/hello-world",
+            )
+        )
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert (body["prs"], body["prs_status"]) == ([], "unavailable")
+    assert body["error"] is None
+    assert body["branch"] == "feature/login"
+
+
+@pytest.mark.asyncio
+async def test_ci_state_distinguishes_no_checks_from_not_asked(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``none`` and ``unknown`` reach the client as distinct answers."""
+
+    async def _prs(repo: str, branch: str) -> integrations.BranchPullRequests:
+        del repo, branch
+        return integrations.BranchPullRequests(
+            cards=[
+                {
+                    "number": 1,
+                    "title": "No CI here",
+                    "state": "open",
+                    "ci_status": "none",
+                    "url": "https://github.com/octocat/hello-world/pull/1",
+                },
+                {
+                    "number": 2,
+                    "title": "Never asked",
+                    "state": "open",
+                    "ci_status": "unknown",
+                    "url": "https://github.com/octocat/hello-world/pull/2",
+                },
+            ],
+            status="ok",
+        )
+
+    monkeypatch.setattr(integrations, "github_pull_requests_for_branch", _prs)
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(
+            payload=_runner_payload(
+                workspace="/repo",
+                branch="feature/login",
+                repo_slug="octocat/hello-world",
+            )
+        )
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert [p["ci_status"] for p in body["prs"]] == ["none", "unknown"]
 
 
 def test_merged_pull_request_state_is_distinguished_from_closed() -> None:
@@ -464,3 +596,4 @@ async def test_repo_slug_is_present_without_any_pull_request(
     body = resp.json()
     assert body["repo_slug"] == "octocat/hello-world"
     assert body["prs"] == []
+    assert body["prs_status"] == "unavailable"

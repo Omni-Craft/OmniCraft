@@ -1506,15 +1506,18 @@ class SessionGitPullRequest(BaseModel):
     :param number: PR number, e.g. ``2345``.
     :param title: PR title.
     :param state: ``"open"``, ``"merged"``, or ``"closed"``.
-    :param ci_status: Aggregate CI state — ``"success"``, ``"failure"``,
-        or ``"pending"``. ``None`` when no checks reported.
+    :param ci_status: Aggregate CI state — ``"success"``, ``"failure"``
+        or ``"pending"`` when CI reported, ``"none"`` when CI was asked
+        and this PR has no checks at all, and ``"unknown"`` when it was
+        not asked or the question went unanswered. ``"unknown"`` is the
+        absence of information, never a failure and never "no CI".
     :param url: Web URL of the pull request.
     """
 
     number: int
     title: str
     state: str
-    ci_status: str | None = None
+    ci_status: Literal["success", "failure", "pending", "none", "unknown"] = "unknown"
     url: str
 
 
@@ -1547,9 +1550,18 @@ class SessionGitStatusResponse(BaseModel):
         "create PR" URL for a branch that has no PR yet. ``None`` when
         there is no remote or it is not hosted on github.com.
     :param prs: Pull requests whose head branch is ``branch``. Empty
-        when GitHub is not configured — never an error.
+        when GitHub is not configured — never an error. Read together
+        with ``prs_status``, which says whether the list can be trusted.
+    :param prs_status: How complete ``prs`` is. ``"ok"`` — the list is
+        everything GitHub has (also when there was nothing to query, so
+        an empty list really means "no pull request"). ``"partial"`` —
+        GitHub returned a full page and more may exist. ``"unavailable"``
+        — the lookup produced no answer (GitHub unconfigured,
+        unreachable, or refusing), so an empty list means "cannot tell",
+        not "no pull request".
     :param error: Git failure reason, e.g. a timeout. ``None`` on
-        success.
+        success. Only git or the runner sets it; a GitHub lookup that
+        fails is reported through ``prs_status``, never here.
     """
 
     object: Literal["session.git_status"] = "session.git_status"
@@ -1562,6 +1574,7 @@ class SessionGitStatusResponse(BaseModel):
     diff: SessionGitDiffStat | None = None
     repo_slug: str | None = None
     prs: list[SessionGitPullRequest] = Field(default_factory=list)
+    prs_status: Literal["ok", "partial", "unavailable"] = "ok"
     error: str | None = None
 
 

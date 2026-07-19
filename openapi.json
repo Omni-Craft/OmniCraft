@@ -3607,16 +3607,17 @@
         "description": "A pull request opened from the workspace's current branch.",
         "properties": {
           "ci_status": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
+            "default": "unknown",
+            "description": "Aggregate CI state \u2014 `\"success\"`, `\"failure\"` or `\"pending\"` when CI reported, `\"none\"` when CI was asked and this PR has no checks at all, and `\"unknown\"` when it was not asked or the question went unanswered. `\"unknown\"` is the absence of information, never a failure and never \"no CI\".",
+            "enum": [
+              "success",
+              "failure",
+              "pending",
+              "none",
+              "unknown"
             ],
-            "description": "Aggregate CI state \u2014 `\"success\"`, `\"failure\"`, or `\"pending\"`. `None` when no checks reported.",
-            "title": "Ci Status"
+            "title": "Ci Status",
+            "type": "string"
           },
           "number": {
             "description": "PR number, e.g. `2345`.",
@@ -3719,7 +3720,7 @@
                 "type": "null"
               }
             ],
-            "description": "Git failure reason, e.g. a timeout. `None` on success.",
+            "description": "Git failure reason, e.g. a timeout. `None` on success. Only git or the runner sets it; a GitHub lookup that fails is reported through `prs_status`, never here.",
             "title": "Error"
           },
           "object": {
@@ -3730,12 +3731,23 @@
             "type": "string"
           },
           "prs": {
-            "description": "Pull requests whose head branch is `branch`. Empty when GitHub is not configured \u2014 never an error.",
+            "description": "Pull requests whose head branch is `branch`. Empty when GitHub is not configured \u2014 never an error. Read together with `prs_status`, which says whether the list can be trusted.",
             "items": {
               "$ref": "#/components/schemas/SessionGitPullRequest"
             },
             "title": "Prs",
             "type": "array"
+          },
+          "prs_status": {
+            "default": "ok",
+            "description": "How complete `prs` is. `\"ok\"` \u2014 the list is everything GitHub has (also when there was nothing to query, so an empty list really means \"no pull request\"). `\"partial\"` \u2014 GitHub returned a full page and more may exist. `\"unavailable\"` \u2014 the lookup produced no answer (GitHub unconfigured, unreachable, or refusing), so an empty list means \"cannot tell\", not \"no pull request\".",
+            "enum": [
+              "ok",
+              "partial",
+              "unavailable"
+            ],
+            "title": "Prs Status",
+            "type": "string"
           },
           "repo_slug": {
             "anyOf": [

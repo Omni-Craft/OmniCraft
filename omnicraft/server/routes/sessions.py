@@ -18979,17 +18979,25 @@ def create_sessions_router(
         branch = raw.get("branch")
         repo_slug = raw.get("repo_slug")
         prs: list[SessionGitPullRequest] = []
+        # No branch or no GitHub remote is not a failed lookup: there is
+        # nothing to ask about, so the empty list is the whole truth.
+        prs_status: Literal["ok", "partial", "unavailable"] = "ok"
         if isinstance(branch, str) and isinstance(repo_slug, str):
             from omnicraft.server.routes.integrations import github_pull_requests_for_branch
 
             try:
-                prs = [
-                    SessionGitPullRequest(**card)
-                    for card in await github_pull_requests_for_branch(repo_slug, branch)
-                ]
+                found = await github_pull_requests_for_branch(repo_slug, branch)
+                prs = [SessionGitPullRequest(**card) for card in found.cards]
+                prs_status = cast(
+                    'Literal["ok", "partial", "unavailable"]',
+                    found.status,
+                )
             except Exception:  # noqa: BLE001
-                # PRs are decoration; the git half must survive without them.
+                # PRs are decoration; the git half must survive without
+                # them — but the client is told the list means nothing.
                 _logger.warning("pull-request lookup failed", extra={"session_id": session_id})
+                prs = []
+                prs_status = "unavailable"
         return SessionGitStatusResponse(
             session_id=session_id,
             workspace=raw.get("workspace"),
@@ -19000,6 +19008,7 @@ def create_sessions_router(
             diff=SessionGitDiffStat(**diff) if isinstance(diff, Mapping) else None,
             repo_slug=repo_slug,
             prs=prs,
+            prs_status=prs_status,
             error=raw.get("error"),
         )
 

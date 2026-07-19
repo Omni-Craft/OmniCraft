@@ -20,6 +20,7 @@ Linear (and other trackers) can slot in later as sibling providers under
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import os
 import re
 import subprocess
@@ -214,38 +215,47 @@ async def _commit_ci_status(
     sha: str,
     *,
     client: httpx.AsyncClient | None = None,
-) -> str | None:
-    """Aggregate CI state for a commit, or ``None`` when unavailable.
+) -> str:
+    """Aggregate CI state for a commit.
 
     Reads the legacy combined status first (that is what most status
     reporters write), then falls back to check-runs, which is where
-    GitHub Actions reports. ``None`` means "nothing to show", never
-    "failing" — including when GitHub answers with a shape we do not
-    recognize.
+    GitHub Actions reports.
+
+    "No CI at all" and "we could not ask" are different answers and are
+    kept apart: ``"none"`` means GitHub was asked and reported no checks,
+    ``"unknown"`` means the question went unanswered — the request failed
+    or came back in a shape we do not recognize. Neither ever means
+    "failing".
 
     :param repo: ``owner/name`` slug.
     :param sha: Head commit SHA of the pull request.
     :param client: Optional shared HTTP client.
-    :returns: ``"success"``, ``"failure"``, ``"pending"``, or ``None``.
+    :returns: ``"success"``, ``"failure"``, ``"pending"``, ``"none"``, or
+        ``"unknown"``.
     """
     try:
         combined = await _github_get(f"/repos/{repo}/commits/{sha}/status", client=client)
     except OmniCraftError:
-        return None
-    if isinstance(combined, dict) and combined.get("total_count"):
+        return "unknown"
+    if not isinstance(combined, dict):
+        return "unknown"
+    if combined.get("total_count"):
         state = combined.get("state")
         if state in {"error", "failure"}:
             return "failure"
-        return state if state in {"success", "pending"} else None
+        return state if state in {"success", "pending"} else "unknown"
 
     try:
         checks = await _github_get(f"/repos/{repo}/commits/{sha}/check-runs", client=client)
     except OmniCraftError:
-        return None
+        return "unknown"
     raw_runs = checks.get("check_runs") if isinstance(checks, dict) else None
-    runs = [r for r in raw_runs if isinstance(r, dict)] if isinstance(raw_runs, list) else []
+    if not isinstance(raw_runs, list):
+        return "unknown"
+    runs = [r for r in raw_runs if isinstance(r, dict)]
     if not runs:
-        return None
+        return "none"
     if any(r.get("status") != "completed" for r in runs):
         return "pending"
     conclusions = {r.get("conclusion") for r in runs}
@@ -254,30 +264,52 @@ async def _commit_ci_status(
     return "success"
 
 
-async def github_pull_requests_for_branch(repo: str, branch: str) -> list[dict[str, Any]]:
+@dataclasses.dataclass(frozen=True)
+class BranchPullRequests:
+    """A branch's pull-request cards plus how far the list can be trusted.
+
+    :param cards: Card dicts with ``number``, ``title``, ``state``,
+        ``ci_status``, and ``url``.
+    :param status: ``"ok"`` when the list is everything GitHub has,
+        ``"partial"`` when a full page came back and more may exist, and
+        ``"unavailable"`` when the lookup never produced an answer — an
+        unconfigured, unreachable or refusing GitHub. An empty
+        ``"unavailable"`` list means "cannot tell", never "no PRs".
+    """
+
+    cards: list[dict[str, Any]]
+    status: str
+
+
+_PRS_UNAVAILABLE = BranchPullRequests(cards=[], status="unavailable")
+
+
+async def github_pull_requests_for_branch(repo: str, branch: str) -> BranchPullRequests:
     """Pull requests opened from ``branch``, with their CI state.
 
     Queries both open and closed PRs so a merged branch still shows its
-    PR. Returns ``[]`` — never raises — when GitHub is unconfigured,
-    unreachable, rejects the request, or answers with an unexpected
-    shape, so a status readout degrades to "no PRs" instead of failing.
+    PR. Never raises: when GitHub is unconfigured, unreachable, rejects
+    the request, or answers with an unexpected shape, the result is an
+    empty ``"unavailable"`` list, so a status readout degrades instead of
+    failing — but the caller can still tell that apart from a branch that
+    genuinely has no pull request.
 
     One HTTP client is shared across every call, and CI lookups for the
     matching PRs run concurrently, capped at :data:`_MAX_CI_LOOKUPS` —
     this runs on a UI poll, so an unbounded serial fan-out would cost a
-    request per PR every time.
+    request per PR every time. PRs past that cap keep ``ci_status
+    == "unknown"``: not asked, so nothing is claimed.
 
     :param repo: ``owner/name`` slug, e.g. ``"octocat/hello-world"``.
     :param branch: Head branch name, e.g. ``"feature/login"``.
-    :returns: Card dicts with ``number``, ``title``, ``state``,
-        ``ci_status``, and ``url``.
+    :returns: The cards and the list's trustworthiness.
     """
     if not await _github_token():
-        return []
+        return _PRS_UNAVAILABLE
     try:
         _validate_repo(repo)
     except OmniCraftError:
-        return []
+        return _PRS_UNAVAILABLE
     owner = repo.split("/")[0]
     try:
         async with httpx.AsyncClient(timeout=_TIMEOUT_S) as client:
@@ -286,8 +318,11 @@ async def github_pull_requests_for_branch(repo: str, branch: str) -> list[dict[s
                 {"state": "all", "head": f"{owner}:{branch}", "per_page": _PAGE_SIZE},
                 client=client,
             )
-            if not isinstance(raw, list):
-                return []
+            if not isinstance(raw, list) or not all(isinstance(item, dict) for item in raw):
+                return _PRS_UNAVAILABLE
+            # A full page means GitHub may be holding more on page two,
+            # which this single-request lookup never fetches.
+            status = "partial" if len(raw) >= _PAGE_SIZE else "ok"
             matches = [
                 card
                 for card, item in (
@@ -304,7 +339,7 @@ async def github_pull_requests_for_branch(repo: str, branch: str) -> list[dict[s
                     "number": card["number"],
                     "title": card["title"],
                     "state": card["state"],
-                    "ci_status": None,
+                    "ci_status": "unknown",
                     "url": card["url"],
                 }
                 for card in matches
@@ -314,15 +349,15 @@ async def github_pull_requests_for_branch(repo: str, branch: str) -> list[dict[s
                 for card, match in zip(cards, matches, strict=True)
                 if match["head_sha"]
             ][:_MAX_CI_LOOKUPS]
-            statuses = await asyncio.gather(
+            ci_states = await asyncio.gather(
                 *(_commit_ci_status(repo, sha, client=client) for _card, sha in inspected),
                 return_exceptions=True,
             )
-            for (card, _sha), status in zip(inspected, statuses, strict=True):
-                card["ci_status"] = status if isinstance(status, str) else None
-            return cards
+            for (card, _sha), ci in zip(inspected, ci_states, strict=True):
+                card["ci_status"] = ci if isinstance(ci, str) else "unknown"
+            return BranchPullRequests(cards=cards, status=status)
     except OmniCraftError:
-        return []
+        return _PRS_UNAVAILABLE
 
 
 def _validate_ref(ref: str) -> None:

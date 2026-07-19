@@ -200,14 +200,22 @@ def _pr_item(number: int = 7, *, state: str = "open", title: str = "Add login") 
     }
 
 
-def _unrelated_pr_item(number: int) -> dict[str, Any]:
-    """An open pull request for a different branch, to fill a page.
+def _fork_pr_item(number: int) -> dict[str, Any]:
+    """A pull request from a fork's same-named branch.
+
+    GitHub's owner-scoped ``head`` filter really does return these, so
+    they are what fills the pages ahead of this repository's own pull
+    request — and the lookup must skip them, not stop at them.
 
     :param number: Pull request number.
     :returns: The raw item as the pulls endpoint returns it.
     """
-    item = _pr_item(number=number, title=f"Other work {number}")
-    item["head"] = {"ref": f"other/branch-{number}", "sha": "def456"}
+    item = _pr_item(number=number, title=f"Fork work {number}")
+    item["head"] = {
+        "ref": _BRANCH,
+        "sha": "def456",
+        "repo": {"full_name": f"fork{number}/hello-world"},
+    }
     return item
 
 
@@ -223,9 +231,10 @@ def _commits(*subjects: str) -> dict[str, Any]:
 class _FakeGitHub:
     """In-memory GitHub API double for ``_github_get``/``_github_post``.
 
-    The pulls endpoint honours ``state``, ``page`` and ``per_page`` the
-    way GitHub does, so a lookup that only reads the first page cannot
-    pass by accident.
+    The pulls endpoint honours ``state``, ``head``, ``page`` and
+    ``per_page`` the way GitHub does — including the head filter's owner
+    scope, which lets a fork's same-named branch through — so a lookup
+    that only reads the first page cannot pass by accident.
 
     :param pulls: Raw pull-request items the pulls endpoint lists.
     :param commits: Compare response for the base..head range.
@@ -279,6 +288,13 @@ class _FakeGitHub:
         state = params.get("state")
         if state in {"open", "closed"}:
             items = [item for item in items if item.get("state") == state]
+        head = params.get("head")
+        if head:
+            # GitHub's ``head`` filter is ``owner:branch`` and owner-scoped:
+            # it keeps every pull request with that branch name, including
+            # one opened from a fork of the same owner.
+            branch = str(head).split(":", 1)[-1]
+            items = [item for item in items if (item.get("head") or {}).get("ref") == branch]
         per_page = int(params.get("per_page") or 30)
         page = int(params.get("page") or 1)
         self.pull_pages.append(page)
@@ -517,7 +533,7 @@ async def test_open_pull_request_past_the_first_page_is_still_found(
     github: _FakeGitHub,
 ) -> None:
     """A repository busy enough to paginate must not get a duplicate PR."""
-    github.pulls = [_unrelated_pr_item(n) for n in range(100, 130)] + [_pr_item(number=9)]
+    github.pulls = [_fork_pr_item(n) for n in range(100, 130)] + [_pr_item(number=9)]
     _use_runner()
 
     resp = await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
@@ -537,9 +553,7 @@ async def test_422_recovery_reads_past_the_first_page(
     """The race recovery paginates too, instead of reporting bad input."""
     github.post_status = 422
     github.post_body = {"message": "Validation Failed"}
-    github.pulls_after_post = [_unrelated_pr_item(n) for n in range(100, 130)] + [
-        _pr_item(number=11)
-    ]
+    github.pulls_after_post = [_fork_pr_item(n) for n in range(100, 130)] + [_pr_item(number=11)]
     _use_runner()
 
     resp = await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
@@ -547,6 +561,29 @@ async def test_422_recovery_reads_past_the_first_page(
     body = resp.json()
     assert resp.status_code == 200
     assert (body["number"], body["created"]) == (11, False)
+
+
+@pytest.mark.asyncio
+async def test_lookup_hitting_the_page_cap_refuses_instead_of_duplicating(
+    client: httpx.AsyncClient,
+    github: _FakeGitHub,
+) -> None:
+    """Stopping the search is never reported as "there is no pull request".
+
+    More matching pull requests than the walk is willing to read leaves
+    the answer unknown, and an unknown answer must not become a POST.
+    """
+    pages = integrations._MAX_PR_LOOKUP_PAGES
+    github.pulls = [_fork_pr_item(n) for n in range(100, 100 + pages * 30 + 5)]
+    _use_runner()
+
+    resp = await client.post(f"/v1/sessions/{_SESSION_ID}/pull-request")
+
+    assert resp.status_code == 409
+    assert "stopped looking" in resp.json()["error"]["message"]
+    # Decisive: no second pull request was opened on a partial answer.
+    assert github.posts == []
+    assert github.pull_pages == list(range(1, pages + 1))
 
 
 @pytest.mark.asyncio

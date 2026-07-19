@@ -44,8 +44,9 @@ _MAX_CI_LOOKUPS = 5
 # Cap on commit subjects quoted in a generated pull-request body.
 _MAX_PR_COMMITS = 20
 # Pages walked when looking for a branch's open pull request. The query
-# is already filtered to one head branch, so this only guards against a
-# repository whose matching pull requests somehow overflow a page.
+# is already filtered to one head branch, so a second page is already
+# unusual; this is a runaway guard, and hitting it refuses rather than
+# answering "no pull request".
 _MAX_PR_LOOKUP_PAGES = 5
 _REPO_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
 
@@ -479,14 +480,17 @@ async def _open_pull_request_for_branch(repo: str, branch: str) -> dict[str, Any
     failed lookup as "there is none", or it opens a duplicate.
 
     Asks GitHub for open pull requests with this exact head and walks the
-    pages, so a repository with more open pull requests than fit on one
-    page still finds it.
+    pages until a short one ends the list, so a repository with more open
+    pull requests than fit on one page still finds it. The page cap is a
+    runaway guard, not an answer: reaching it refuses the lookup, because
+    "we stopped looking" must never be reported as "there is none".
 
     :param repo: ``owner/name`` slug.
     :param branch: Head branch name.
     :returns: The card, or ``None`` when no open pull request exists.
     :raises OmniCraftError: If GitHub is unreachable, denies the request,
-        or answers with an unexpected shape — never silently ``None``.
+        answers with an unexpected shape, or has more pages of matching
+        pull requests than the cap allows — never silently ``None``.
     """
     owner = repo.split("/")[0]
     for page in range(1, _MAX_PR_LOOKUP_PAGES + 1):
@@ -516,7 +520,12 @@ async def _open_pull_request_for_branch(repo: str, branch: str) -> dict[str, Any
                     return card
         if len(raw) < _PAGE_SIZE:
             return None
-    return None
+    raise OmniCraftError(
+        f"{repo} has more than {_MAX_PR_LOOKUP_PAGES * _PAGE_SIZE} open pull "
+        f"requests for {branch!r}; OmniCraft stopped looking and will not open "
+        f"another one — close or merge the existing ones first",
+        code=ErrorCode.CONFLICT,
+    )
 
 
 async def github_open_pull_request(

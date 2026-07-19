@@ -42,7 +42,6 @@ import time
 from typing import Any, Literal
 
 from fastapi import APIRouter, Query, Request
-from sqlalchemy.exc import SQLAlchemyError
 
 from omnicraft.entities.conversation import Conversation
 from omnicraft.entities.permission import SessionPermission
@@ -315,6 +314,45 @@ def _row_rank(row: MonitorSessionItem) -> tuple[int, int, int]:
     )
 
 
+class _Degradation:
+    """
+    The feed's one channel for "the server could not work this out".
+
+    Every unresolved part of a response goes through :meth:`note` (or,
+    when there is no feed-wide slug to add, :meth:`note_floor`), and
+    both mark the tallies as a floor. Keeping the marker and the slug in
+    a single call is the point: with N separate ``append`` sites, one of
+    them eventually forgets to also set ``partial`` and an incomplete
+    count ships as a total. Here that combination is unreachable.
+
+    :param slugs: Feed-level degradation slugs, in first-seen order.
+    :param partial: Whether anything at all went unresolved.
+    """
+
+    def __init__(self) -> None:
+        self.slugs: list[str] = []
+        self.partial: bool = False
+
+    def note(self, slug: str) -> None:
+        """
+        Record a feed-level failure and mark the tallies a floor.
+
+        :param slug: Stable slug, e.g. ``"child_sessions_unavailable"``.
+        """
+        if slug not in self.slugs:
+            self.slugs.append(slug)
+        self.partial = True
+
+    def note_floor(self) -> None:
+        """Mark the tallies a floor without adding a feed-level slug.
+
+        For gaps already named on the row that carries them (an
+        unreadable prompt count), where the feed-wide list would only
+        duplicate the row's own marker.
+        """
+        self.partial = True
+
+
 def create_monitor_router(
     conversation_store: ConversationStore,
     agent_store: Any,
@@ -373,7 +411,7 @@ def create_monitor_router(
             )
         try:
             host = await asyncio.to_thread(host_store.get_host, host_id)
-        except (SQLAlchemyError, OSError, TimeoutError) as exc:
+        except Exception as exc:
             _logger.warning("Monitor feed host lookup failed for %s", host_id, exc_info=True)
             raise OmniCraftError(
                 "host registry is unreachable; cannot scope the feed to this host",
@@ -388,7 +426,7 @@ def create_monitor_router(
                     if permission_store is not None
                     else False
                 )
-            except (SQLAlchemyError, OSError, TimeoutError) as exc:
+            except Exception as exc:
                 _logger.warning("Monitor feed host admin check failed", exc_info=True)
                 raise OmniCraftError(
                     "cannot verify access to this host right now",
@@ -403,31 +441,32 @@ def create_monitor_router(
         conv_ids: list[str],
         unique_agent_ids: list[str],
         user_id: str | None,
+        degradation: _Degradation,
     ) -> tuple[
         dict[str, list[SessionPermission]],
         dict[str, str | None],
         dict[str, list[str]],
         bool,
-        list[str],
     ]:
         """
         Pull the per-page batches ``GET /v1/sessions`` pulls, same shape.
 
         Each batch is independent: one that fails degrades its own field
         (a missing agent name, no owner level) instead of taking the feed
-        down or, worse, coming back as a confident empty value.
+        down or, worse, coming back as a confident empty value. A lost
+        batch also costs coverage — no child ids means a parent's blocked
+        sub-agent is invisible to the tallies — so every fallback goes
+        through *degradation*, which marks the counts a floor.
 
-        :returns: ``(grants, agent_names, child_ids, is_admin,
-            degraded)``.
+        :returns: ``(grants, agent_names, child_ids, is_admin)``.
         """
-        degraded: list[str] = []
 
         async def _safe(coro: Any, slug: str, fallback: Any) -> Any:
             try:
                 return await coro
-            except (SQLAlchemyError, OSError, TimeoutError):
+            except Exception:  # noqa: BLE001 — any failed batch degrades, none 500s
                 _logger.warning("Monitor feed batch %s failed", slug, exc_info=True)
-                degraded.append(slug)
+                degradation.note(slug)
                 return fallback
 
         perms = permission_store
@@ -468,7 +507,7 @@ def create_monitor_router(
                 names_task, children_task
             )
             perms_by_conv, user_is_admin = {}, False
-        return perms_by_conv, agent_names_by_id, child_ids_by_parent, user_is_admin, degraded
+        return perms_by_conv, agent_names_by_id, child_ids_by_parent, user_is_admin
 
     def _load_attention_rows(
         session_ids: list[str],
@@ -510,7 +549,8 @@ def create_monitor_router(
         already: set[str],
         user_id: str | None,
         host_id: str | None,
-    ) -> tuple[list[Conversation], list[str], int]:
+        degradation: _Degradation,
+    ) -> tuple[list[Conversation], int]:
         """
         Pull in sessions that need a human but fell outside the scan.
 
@@ -527,9 +567,10 @@ def create_monitor_router(
         :param already: Session ids the scan already returned.
         :param user_id: The authenticated caller, or ``None``.
         :param host_id: Active host filter, or ``None``.
-        :returns: ``(conversations, degraded, unresolved)`` — where
-            ``unresolved`` is the number of attention-bearing candidates
-            this call could not resolve into rows.
+        :param degradation: Accumulator every failure is reported to.
+        :returns: ``(conversations, unresolved)`` — where ``unresolved``
+            is the number of attention-bearing candidates this call
+            could not resolve into rows.
         """
         candidates = set(pending_elicitations.pending_session_ids())
         candidates |= {
@@ -539,26 +580,27 @@ def create_monitor_router(
         }
         candidates -= already
         if not candidates:
-            return [], [], 0
+            return [], 0
         if permission_store is None and user_id is not None:
             # No grants to check against; including these rows could leak
             # another user's session, dropping them silently could hide the
             # caller's own. Say how many were left unresolved.
-            return [], ["attention_rescue_unavailable"], len(candidates)
-        degraded: list[str] = []
+            degradation.note("attention_rescue_unavailable")
+            return [], len(candidates)
         ordered = sorted(candidates)
         unresolved = 0
         if len(ordered) > _RESCUE_MAX:
             unresolved = len(ordered) - _RESCUE_MAX
-            degraded.append("attention_rescue_truncated")
+            degradation.note("attention_rescue_truncated")
             ordered = ordered[:_RESCUE_MAX]
         try:
             convs = await asyncio.to_thread(_load_attention_rows, ordered, already, host_id)
-        except (SQLAlchemyError, OSError, TimeoutError):
+        except Exception:  # noqa: BLE001 — an unresolved sweep degrades, never 500s
             _logger.warning("Monitor feed attention rescue failed", exc_info=True)
-            return [], ["attention_rescue_unavailable"], len(candidates)
+            degradation.note("attention_rescue_unavailable")
+            return [], len(candidates)
         if not convs or permission_store is None:
-            return convs, degraded, unresolved
+            return convs, unresolved
         rescued_ids = [conv.id for conv in convs]
         try:
             grants = await asyncio.to_thread(permission_store.list_for_sessions, rescued_ids)
@@ -567,9 +609,10 @@ def create_monitor_router(
                 if user_id is not None
                 else False
             )
-        except (SQLAlchemyError, OSError, TimeoutError):
+        except Exception:  # noqa: BLE001 — an unresolved sweep degrades, never 500s
             _logger.warning("Monitor feed attention rescue authz failed", exc_info=True)
-            return [], [*degraded, "attention_rescue_unavailable"], len(candidates)
+            degradation.note("attention_rescue_unavailable")
+            return [], len(candidates)
         allowed = [
             conv
             for conv in convs
@@ -581,13 +624,13 @@ def create_monitor_router(
         ]
         # Rows the ACL excluded are resolved, not unresolved — "not yours"
         # is an answer, so they must not inflate the unresolved tally.
-        return allowed, degraded, unresolved
+        return allowed, unresolved
 
     async def _build_feed(
         user_id: str | None,
         host_id: str | None,
         only_active: bool,
-        feed_degraded: list[str],
+        degradation: _Degradation,
     ) -> MonitorFeedResponse:
         """Assemble the feed; see the route docstring for the semantics."""
         page = await asyncio.to_thread(
@@ -605,22 +648,20 @@ def create_monitor_router(
         if page.has_more:
             # More sessions exist than were scanned, so the counts below
             # describe the scan, not the account.
-            feed_degraded.append("scan_truncated")
-        rescued, rescue_degraded, unresolved_attention = await _rescue_attention(
-            {conv.id for conv in convs}, user_id, host_id
-        )
-        convs.extend(rescued)
-        feed_degraded.extend(rescue_degraded)
+            degradation.note("scan_truncated")
         # A session that may be waiting on a human is either carried as a
         # row or counted here. It is never simply gone.
-        counts_partial = page.has_more or unresolved_attention > 0
+        rescued, unresolved_attention = await _rescue_attention(
+            {conv.id for conv in convs}, user_id, host_id, degradation
+        )
+        convs.extend(rescued)
         if not convs:
             return MonitorFeedResponse(
                 generated_at=int(time.time()),
                 host_id=host_id,
-                counts=MonitorCounts(omitted=unresolved_attention, partial=counts_partial),
+                counts=MonitorCounts(omitted=unresolved_attention, partial=degradation.partial),
                 truncated=page.has_more or unresolved_attention > 0,
-                degraded=feed_degraded,
+                degraded=degradation.slugs,
             )
 
         conv_ids = [conv.id for conv in convs]
@@ -630,9 +671,7 @@ def create_monitor_router(
             agent_names_by_id,
             child_ids_by_parent,
             user_is_admin,
-            batch_degraded,
-        ) = await _batch_context(conv_ids, unique_agent_ids, user_id)
-        feed_degraded.extend(batch_degraded)
+        ) = await _batch_context(conv_ids, unique_agent_ids, user_id, degradation)
         # One in-memory sweep covering parents and their children, so the
         # child rollup below adds no lookups of its own.
         pending_ids = list(conv_ids)
@@ -647,7 +686,7 @@ def create_monitor_router(
             # exists to avoid claiming.
             _logger.warning("Monitor feed pending-elicitation counts failed", exc_info=True)
             pending_counts = None
-            feed_degraded.append("pending_elicitations_unavailable")
+            degradation.note("pending_elicitations_unavailable")
 
         items = [
             sessions_module._build_session_list_item(
@@ -675,7 +714,7 @@ def create_monitor_router(
                 _logger.warning("Monitor feed liveness lookup failed", exc_info=True)
                 liveness_resolved = False
         if not liveness_resolved:
-            feed_degraded.append("liveness_unavailable")
+            degradation.note("liveness_unavailable")
             for item in items:
                 item.runner_online = None
                 item.host_online = None
@@ -706,6 +745,9 @@ def create_monitor_router(
                 degraded.append("liveness_partial")
             # An unresolved row is never filtered out: "we don't know"
             # must not disappear from the feed as if it were idle.
+            if pending_count is None:
+                # The row says it can't tell; the tallies must say the same.
+                degradation.note_floor()
             if only_active and status == "idle" and pending_count == 0 and not degraded:
                 continue
             rows.append(
@@ -728,10 +770,10 @@ def create_monitor_router(
         rows.sort(key=_row_rank)
         # Counts describe every matching session, including the ones the
         # row cap dropped — a headline that shrank with the page would be
-        # the same lie as an empty feed. ``partial`` marks the counts as an
-        # undercount whenever something matching was never resolved at all
-        # (scan cut, attention rescue cut, unreadable prompt index), so a
-        # client reading them knows they are a floor, not a total.
+        # the same lie as an empty feed. ``partial`` comes straight off the
+        # degradation accumulator: anything the server failed to work out
+        # already went through it, so the counts cannot claim to be a total
+        # while some part of the answer is missing.
         capped = max(0, len(rows) - _MAX_ROWS)
         counts = MonitorCounts(
             active=sum(1 for row in rows if row.status not in ("idle", "unknown")),
@@ -743,9 +785,7 @@ def create_monitor_router(
             ),
             unknown=sum(1 for row in rows if row.status == "unknown"),
             omitted=capped + unresolved_attention,
-            partial=(
-                counts_partial or any(row.pending_elicitations_count is None for row in rows)
-            ),
+            partial=degradation.partial,
         )
         return MonitorFeedResponse(
             generated_at=int(time.time()),
@@ -753,7 +793,7 @@ def create_monitor_router(
             sessions=rows[:_MAX_ROWS],
             counts=counts,
             truncated=page.has_more or counts.omitted > 0,
-            degraded=feed_degraded,
+            degraded=degradation.slugs,
         )
 
     @router.get(
@@ -784,30 +824,41 @@ def create_monitor_router(
             always kept, so an unresolved state is never mistaken for an
             idle one. ``False`` returns every non-archived session in
             the scan.
-        :returns: A :class:`MonitorFeedResponse`. Infrastructure
-            failures inside the feed degrade into explicit markers on
-            the payload rather than an error status, so the contract is
-            ``200`` plus ``degraded`` / ``counts.partial``, or one of
-            the typed ``400`` / ``404`` / ``503`` above.
+        :returns: A :class:`MonitorFeedResponse`. Any failure inside the
+            feed degrades into explicit markers on the payload rather
+            than an error status, so the contract is ``200`` plus
+            ``degraded`` / ``counts.partial``, or one of the typed
+            ``400`` / ``404`` / ``503`` above. The route does not emit
+            ``500``: a monitor that answers "server error" and one that
+            answers "nothing needs you" are equally useless to the human
+            watching it, so a crash is reported as an unreadable feed
+            (and logged with a traceback for whoever owns the bug).
         """
         # Fail closed on auth: ``accessible_by=None`` means "no ACL
         # filter", so an unauthenticated caller slipping through as
         # ``None`` would monitor every user's sessions.
         user_id = require_user(request, auth_provider)
-        feed_degraded: list[str] = []
-        if host_id is not None:
-            await _validate_host(host_id, user_id)
+        degradation = _Degradation()
         try:
-            return await _build_feed(user_id, host_id, only_active, feed_degraded)
-        except (SQLAlchemyError, OSError, TimeoutError):
-            # Infrastructure, not logic: report an unreadable feed. A bug
-            # in this route must NOT land here — it would ship a 200 that
-            # says "nothing needs you".
+            if host_id is not None:
+                await _validate_host(host_id, user_id)
+            return await _build_feed(user_id, host_id, only_active, degradation)
+        except OmniCraftError:
+            # Typed answers about the request itself (auth, host filter)
+            # are the caller's business and keep their status.
+            raise
+        except Exception:
             _logger.exception("Monitor feed build failed")
+            degradation.note("internal_error")
             return MonitorFeedResponse(
                 generated_at=int(time.time()),
                 host_id=host_id,
-                degraded=[*feed_degraded, "internal_error"],
+                # Zeroed tallies here would be an assertion the server
+                # cannot make: it doesn't know what is running, so the
+                # counts are a floor of zero, not a total of zero.
+                counts=MonitorCounts(partial=degradation.partial),
+                truncated=True,
+                degraded=degradation.slugs,
             )
 
     return router

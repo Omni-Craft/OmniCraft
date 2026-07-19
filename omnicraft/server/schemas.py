@@ -2559,10 +2559,15 @@ class MonitorCounts(BaseModel):
         is either a row or part of this number — never silently
         absent. ``0`` when everything matching is carried.
     :param partial: ``True`` when these tallies are a floor rather
-        than a total, because something matching was never resolved
-        at all — the store scan was cut, the attention sweep was cut,
-        or a row's prompt count could not be read. Pair it with
-        ``degraded`` on the response to see which.
+        than a total, because some part of the answer was never
+        resolved — a cut scan or attention sweep, a failed batch
+        (lost child ids hide a blocked sub-agent), an unreadable
+        prompt count, or a feed that failed outright. It is set by
+        the same call that records each failure, so a degraded feed
+        can never present its counts as complete; pair it with
+        ``degraded`` on the response to see what was lost. Note that
+        an ``internal_error`` response reports ``partial`` with zeroed
+        tallies: a floor of zero, not a total of zero.
     """
 
     active: int = 0

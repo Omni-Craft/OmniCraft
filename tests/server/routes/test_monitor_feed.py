@@ -885,10 +885,38 @@ def test_child_batch_failure_degrades_only_the_rollup(db_uri: str) -> None:
 
     assert [row["session_id"] for row in body["sessions"]] == [running]
     assert "child_sessions_unavailable" in body["degraded"]
+    # Without child ids a parent's blocked sub-agent is invisible to the
+    # rollup, so the tallies are an undercount and have to say so.
+    assert body["counts"]["partial"] is True
+
+
+def test_every_feed_level_degradation_marks_the_counts_partial(db_uri: str) -> None:
+    """The invariant behind the accumulator: there is no way to report a
+    feed-level failure while still presenting the counts as complete."""
+    running = _seed(db_uri, title="Running")
+    sessions_module._session_status_cache[running] = "running"
+
+    class _BrokenAgentStore(SqlAlchemyAgentStore):
+        def get_names(self, *args: Any, **kwargs: Any) -> Any:
+            raise SQLAlchemyError("agents table unreachable")
+
+    class _BrokenPermissionStore(SqlAlchemyPermissionStore):
+        def list_for_sessions(self, *args: Any, **kwargs: Any) -> Any:
+            raise SQLAlchemyError("permissions table unreachable")
+
+    for label, app in (
+        ("agent names", _app(db_uri, agent_store=_BrokenAgentStore(db_uri))),
+        ("permissions", _app(db_uri, permission_store=_BrokenPermissionStore(db_uri))),
+        ("liveness", _app(db_uri, liveness_lookup=None)),
+    ):
+        body = _get(app)
+        assert body["degraded"], label
+        assert body["counts"]["partial"] is True, label
 
 
 def test_infrastructure_failure_degrades_instead_of_500(db_uri: str) -> None:
-    """A broken feed is explicit; an empty list alone would read as "all clear"."""
+    """A broken feed is explicit; an empty list alone would read as "all clear"
+    — and so would zeroed tallies presented as totals."""
 
     class _BrokenStore:
         def list_conversations(self, **kwargs: Any) -> Any:
@@ -899,12 +927,18 @@ def test_infrastructure_failure_degrades_instead_of_500(db_uri: str) -> None:
     resp = TestClient(app).get("/v1/monitor/sessions", headers={"X-Forwarded-Email": ALICE})
 
     assert resp.status_code == 200
-    assert resp.json()["degraded"] == ["internal_error"]
-    assert resp.json()["sessions"] == []
+    body = resp.json()
+    assert body["degraded"] == ["internal_error"]
+    assert body["sessions"] == []
+    # The counts are a floor of zero, not a total of zero.
+    assert body["counts"]["partial"] is True
+    assert body["truncated"] is True
 
 
-def test_programming_error_surfaces_instead_of_a_clean_empty_feed(db_uri: str) -> None:
-    """A bug in the route must not ship a 200 that says "nothing needs you"."""
+def test_unexpected_error_is_contained_as_an_unreadable_feed(db_uri: str) -> None:
+    """No failure escapes as a 500. A monitor that answers "server error" is
+    as useless as one that answers "nothing needs you", so a crash comes
+    back as an explicitly unreadable feed (and a logged traceback)."""
 
     class _BuggyStore:
         def list_conversations(self, **kwargs: Any) -> Any:
@@ -912,8 +946,32 @@ def test_programming_error_surfaces_instead_of_a_clean_empty_feed(db_uri: str) -
 
     app = _app(db_uri, conversation_store=_BuggyStore(), permission_store=None)
 
-    with pytest.raises(TypeError):
-        TestClient(app).get("/v1/monitor/sessions", headers={"X-Forwarded-Email": ALICE})
+    resp = TestClient(app).get("/v1/monitor/sessions", headers={"X-Forwarded-Email": ALICE})
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["degraded"] == ["internal_error"]
+    assert body["sessions"] == []
+    assert body["counts"]["partial"] is True
+
+
+def test_unexpected_host_lookup_error_is_contained_as_503(db_uri: str) -> None:
+    """The host filter's own boundary holds too: unverifiable is a typed 503
+    whatever the lookup raised, never a 500 and never a scoped-to-nothing
+    200."""
+
+    class _BuggyHostStore:
+        def get_host(self, host_id: str) -> Any:
+            raise TypeError("host store contract changed")
+
+    app = _app(db_uri, host_store=_BuggyHostStore())
+
+    resp = TestClient(app).get(
+        "/v1/monitor/sessions?host_id=host_a", headers={"X-Forwarded-Email": ALICE}
+    )
+
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "host_unverifiable"
 
 
 def test_caller_without_identity_sees_no_one_elses_sessions(db_uri: str) -> None:

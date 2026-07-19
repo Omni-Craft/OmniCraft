@@ -2073,7 +2073,7 @@
           },
           "partial": {
             "default": false,
-            "description": "`True` when these tallies are a floor rather than a total, because something matching was never resolved at all \u2014 the store scan was cut, the attention sweep was cut, or a row's prompt count could not be read. Pair it with `degraded` on the response to see which.",
+            "description": "`True` when these tallies are a floor rather than a total, because some part of the answer was never resolved \u2014 a cut scan or attention sweep, a failed batch (lost child ids hide a blocked sub-agent), an unreadable prompt count, or a feed that failed outright. It is set by the same call that records each failure, so a degraded feed can never present its counts as complete; pair it with `degraded` on the response to see what was lost. Note that an `internal_error` response reports `partial` with zeroed tallies: a floor of zero, not a total of zero.",
             "title": "Partial",
             "type": "boolean"
           },
@@ -8243,7 +8243,7 @@
     },
     "/v1/monitor/sessions": {
       "get": {
-        "description": "Monitor feed of the caller's sessions, most in need of a human first.\n\n**Returns:** A `MonitorFeedResponse`. Infrastructure failures inside the feed degrade into explicit markers on the payload rather than an error status, so the contract is `200` plus `degraded` / `counts.partial`, or one of the typed `400` / `404` / `503` above.",
+        "description": "Monitor feed of the caller's sessions, most in need of a human first.\n\n**Returns:** A `MonitorFeedResponse`. Any failure inside the feed degrades into explicit markers on the payload rather than an error status, so the contract is `200` plus `degraded` / `counts.partial`, or one of the typed `400` / `404` / `503` above. The route does not emit `500`: a monitor that answers \"server error\" and one that answers \"nothing needs you\" are equally useless to the human watching it, so a crash is reported as an unreadable feed (and logged with a traceback for whoever owns the bug).",
         "operationId": "monitor_sessions_v1_monitor_sessions_get",
         "parameters": [
           {

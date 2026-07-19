@@ -30,7 +30,6 @@ from omnicraft.inner.hermes_executor import (
     _build_hermes_args,
     _extract_last_user_message,
     _parse_session_id,
-    _populate_hermes_home,
     _strip_hermes_metadata,
 )
 
@@ -146,51 +145,55 @@ class TestUtils:
 # ---------------------------------------------------------------------------
 
 
-class TestPopulateHermesHome:
-    """Tests for the per-session HERMES_HOME setup."""
+class TestSetupHermesHome:
+    """The headless executor's HERMES_HOME setup, via the shared
+    ``write_policy_hook_config`` helper (also used by hermes-native)."""
 
-    def test_creates_config_with_hook(self, tmp_path: pathlib.Path) -> None:
+    @pytest.fixture
+    def setup(self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch):
+        """Build an executor with a fake bridge root + conversation id.
+
+        Returns the HERMES_HOME path written by ``_setup_hermes_home``.
+        """
+        import omnicraft.hermes_native_bridge as hnb
+
+        monkeypatch.setattr(hnb, "_BRIDGE_ROOT", tmp_path)
+        monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:6767")
+        monkeypatch.setattr("sys.argv", ["harness", "--conversation-id", "conv_test123"])
+        monkeypatch.setattr(pathlib.Path, "home", classmethod(lambda cls: tmp_path / "nohome"))
+        executor = HermesExecutor(hermes_path="/usr/bin/hermes-fake", cwd="/tmp")
+        assert executor._hermes_home is not None
+        return executor._hermes_home
+
+    def test_creates_config_with_hook(self, setup: pathlib.Path) -> None:
         """config.yaml contains the pre_tool_call hook registration."""
-        _populate_hermes_home(
-            tmp_path,
-            "/path/to/hook.py",
-            "http://127.0.0.1:6767",
-            "conv_test123",
-        )
-        config_path = tmp_path / "config.yaml"
-        assert config_path.exists()
-        config = json.loads(config_path.read_text())
+        config = json.loads((setup / "config.yaml").read_text())
         assert config["hooks_auto_accept"] is True
         hooks = config["hooks"]["pre_tool_call"]
         assert len(hooks) == 1
         assert "omnicraft-policy-hook.sh" in hooks[0]["command"]
 
-    def test_creates_wrapper_script(self, tmp_path: pathlib.Path) -> None:
+    def test_creates_omnicraft_mcp_server(self, setup: pathlib.Path) -> None:
+        """config.yaml carries mcp_servers.omnicraft (serve-mcp) — the parity gap.
+
+        Fails on the previous setup, which wrote no ``mcp_servers`` key: a headless
+        Hermes agent had zero OmniCraft builtin tools.
+        """
+        omnicraft_mcp = json.loads((setup / "config.yaml").read_text())["mcp_servers"]["omnicraft"]
+        assert omnicraft_mcp["args"][:2] == ["-m", "omnicraft.claude_native_bridge"]
+        assert "serve-mcp" in omnicraft_mcp["args"]
+
+    def test_creates_wrapper_script(self, setup: pathlib.Path) -> None:
         """Wrapper script exports env vars and execs the Python hook."""
-        _populate_hermes_home(
-            tmp_path,
-            "/path/to/hook.py",
-            "http://127.0.0.1:6767",
-            "conv_test123",
-        )
-        wrapper = tmp_path / "omnicraft-policy-hook.sh"
+        wrapper = setup / "omnicraft-policy-hook.sh"
         assert wrapper.exists()
         content = wrapper.read_text()
         assert "http://127.0.0.1:6767" in content
         assert "conv_test123" in content
-        assert "/path/to/hook.py" in content
 
-    def test_creates_allowlist(self, tmp_path: pathlib.Path) -> None:
+    def test_creates_allowlist(self, setup: pathlib.Path) -> None:
         """shell-hooks-allowlist.json is pre-populated with correct format."""
-        _populate_hermes_home(
-            tmp_path,
-            "/path/to/hook.py",
-            "http://127.0.0.1:6767",
-            "conv_test123",
-        )
-        allowlist_path = tmp_path / "shell-hooks-allowlist.json"
-        assert allowlist_path.exists()
-        allowlist = json.loads(allowlist_path.read_text())
+        allowlist = json.loads((setup / "shell-hooks-allowlist.json").read_text())
         approvals = allowlist["approvals"]
         assert len(approvals) == 1
         assert approvals[0]["event"] == "pre_tool_call"
@@ -452,6 +455,9 @@ def test_hermes_home_setup_creates_config(
     tmp_path: pathlib.Path,
 ) -> None:
     """When server URL and conv ID are available, HERMES_HOME is populated."""
+    import omnicraft.hermes_native_bridge as hnb
+
+    monkeypatch.setattr(hnb, "_BRIDGE_ROOT", tmp_path / "bridge-root")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:6767")
     monkeypatch.setattr("sys.argv", ["harness", "--conversation-id", "conv_test123"])
     executor = HermesExecutor(hermes_path="/usr/bin/hermes-fake", cwd=str(tmp_path))
@@ -469,6 +475,9 @@ async def test_run_turn_passes_hermes_home_env(
     tmp_path: pathlib.Path,
 ) -> None:
     """When HERMES_HOME is set up, it's passed to the subprocess env."""
+    import omnicraft.hermes_native_bridge as hnb
+
+    monkeypatch.setattr(hnb, "_BRIDGE_ROOT", tmp_path / "bridge-root")
     monkeypatch.setenv("RUNNER_SERVER_URL", "http://127.0.0.1:6767")
     monkeypatch.setattr("sys.argv", ["harness", "--conversation-id", "conv_test456"])
     executor = HermesExecutor(hermes_path="/usr/bin/hermes-fake", cwd=str(tmp_path))

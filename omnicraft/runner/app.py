@@ -17051,6 +17051,111 @@ def create_runner_app(
             content={"object": "list", "data": data, "has_more": False},
         )
 
+    def _read_git_status(workspace: Path) -> dict[str, Any]:
+        """Collect the workspace's git state. Blocking — call in a thread.
+
+        Every field is optional: a workspace that is not a git repository
+        yields all-``None`` with no error, and ``base_ref``/``ahead``/
+        ``behind`` stay ``None`` on a detached HEAD or a branch with no
+        upstream. ``repo`` is consumed by the server to look up pull
+        requests and is not part of the public response.
+
+        :param workspace: Resolved workspace directory.
+        :returns: Dict of git fields, or ``{"error": ...}`` on git failure.
+        """
+        from omnicraft.host.git_worktree import (
+            WorktreeError,
+            git_ahead_behind,
+            git_diff_stat,
+            git_remote_slug,
+            git_upstream_ref,
+            list_worktrees,
+        )
+
+        empty: dict[str, Any] = {
+            "branch": None,
+            "base_branch": None,
+            "ahead": None,
+            "behind": None,
+            "diff": None,
+            "repo": None,
+            "error": None,
+        }
+        try:
+            worktrees = list_worktrees(repo_path=str(workspace))
+        except WorktreeError:
+            # Not a git repository (or not readable as one) — a valid,
+            # empty status rather than an error the status bar must render.
+            return empty
+
+        resolved = workspace.resolve()
+        current = next(
+            (w for w in worktrees if Path(w.path).resolve() == resolved),
+            None,
+        )
+        branch = None if current is None or current.detached else current.branch
+
+        try:
+            base_ref = None if branch is None else git_upstream_ref(worktree_path=str(workspace))
+            ahead = behind = None
+            if base_ref is not None:
+                ahead, behind = git_ahead_behind(
+                    worktree_path=str(workspace),
+                    base_ref=base_ref,
+                )
+            # Without a base to compare against, the uncommitted working-tree
+            # change set is still worth showing, so diff falls back to HEAD.
+            stat = git_diff_stat(worktree_path=str(workspace), base_ref=base_ref or "HEAD")
+            repo = git_remote_slug(worktree_path=str(workspace))
+        except WorktreeError as exc:
+            return {**empty, "branch": branch, "error": exc.message}
+
+        return {
+            "branch": branch,
+            "base_branch": base_ref,
+            "ahead": ahead,
+            "behind": behind,
+            "diff": {"added": stat.added, "removed": stat.removed, "files": stat.files},
+            "repo": repo,
+            "error": None,
+        }
+
+    @app.get("/v1/sessions/{session_id}/git-status")
+    async def read_session_git_status(session_id: str) -> JSONResponse:
+        """Report the git state of the session's workspace.
+
+        Feeds the status bar above the composer: current branch, its
+        upstream base, how far ahead/behind, and the size of the change
+        set. Always answers 200 — a session with no workspace, a
+        workspace that is not a git repository, and a git command that
+        failed are all normal states the bar renders, not HTTP errors.
+
+        :param session_id: Session/conversation identifier,
+            e.g. ``"conv_abc123"``.
+        :returns: JSON git status. ``error`` is set (and the other
+            fields ``None``) only when git itself failed.
+        """
+        base: dict[str, Any] = {
+            "object": "session.git_status",
+            "session_id": session_id,
+            "workspace": None,
+            "branch": None,
+            "base_branch": None,
+            "ahead": None,
+            "behind": None,
+            "diff": None,
+            "repo": None,
+            "error": None,
+        }
+        workspace = await _session_runtime_cwd(session_id)
+        if workspace is None:
+            return JSONResponse(status_code=200, content=base)
+        status = await asyncio.to_thread(_read_git_status, workspace)
+        return JSONResponse(
+            status_code=200,
+            content={**base, "workspace": str(workspace), **status},
+        )
+
     @app.get(
         "/v1/sessions/{session_id}/resources/environments"
         "/{environment_id}/diff/{relative_path:path}"

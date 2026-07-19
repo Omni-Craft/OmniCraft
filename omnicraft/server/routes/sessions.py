@@ -236,7 +236,10 @@ from omnicraft.server.schemas import (
     SessionCreateRequest,
     SessionEventInput,
     SessionForkRequest,
+    SessionGitDiffStat,
     SessionGitOptions,
+    SessionGitPullRequest,
+    SessionGitStatusResponse,
     SessionInputConsumedEvent,
     SessionInputConsumedPayload,
     SessionInterruptedEvent,
@@ -18891,6 +18894,66 @@ def create_sessions_router(
         path = f"/v1/sessions/{session_id}/resources/environments/{environment_id}/changes"
         await _validate_session(session_id, request, LEVEL_READ)
         return await _proxy_get_to_runner(session_id, path)
+
+    @router.get(
+        "/sessions/{session_id}/git-status",
+        response_model=SessionGitStatusResponse,
+    )
+    async def read_session_git_status(
+        request: Request,
+        session_id: str,
+    ) -> SessionGitStatusResponse:
+        """
+        Return the git and pull-request state of a session's workspace.
+
+        Feeds the status bar above the composer. The workspace lives on
+        the runner, so the git half is proxied there; the pull-request
+        half is resolved here, where the GitHub integration and its
+        token live.
+
+        Degrades rather than fails: a session with no workspace or a
+        workspace that is not a git repository answers with all-``None``
+        fields, an unreachable runner or a failed git command fills
+        ``error``, and an unconfigured GitHub integration simply yields
+        an empty ``prs``.
+
+        :param request: The incoming FastAPI request (for auth).
+        :param session_id: Session/conversation identifier,
+            e.g. ``"conv_abc123"``.
+        :returns: The session's git status.
+        """
+        await _validate_session(session_id, request, LEVEL_READ)
+        try:
+            raw = await _proxy_get_to_runner(session_id, f"/v1/sessions/{session_id}/git-status")
+        except (HTTPException, OmniCraftError) as exc:
+            detail = getattr(exc, "detail", None) or getattr(exc, "message", None)
+            return SessionGitStatusResponse(
+                session_id=session_id,
+                error=str(detail or "git status unavailable"),
+            )
+
+        diff = raw.get("diff")
+        branch = raw.get("branch")
+        repo = raw.get("repo")
+        prs: list[SessionGitPullRequest] = []
+        if branch and repo:
+            from omnicraft.server.routes.integrations import github_pull_requests_for_branch
+
+            prs = [
+                SessionGitPullRequest(**card)
+                for card in await github_pull_requests_for_branch(repo, branch)
+            ]
+        return SessionGitStatusResponse(
+            session_id=session_id,
+            workspace=raw.get("workspace"),
+            branch=branch,
+            base_branch=raw.get("base_branch"),
+            ahead=raw.get("ahead"),
+            behind=raw.get("behind"),
+            diff=SessionGitDiffStat(**diff) if diff else None,
+            prs=prs,
+            error=raw.get("error"),
+        )
 
     @router.get(
         "/sessions/{session_id}/resources/environments/{environment_id}/diff/{relative_path:path}",

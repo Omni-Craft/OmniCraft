@@ -3543,6 +3543,33 @@
         "title": "SessionForkRequest",
         "type": "object"
       },
+      "SessionGitDiffStat": {
+        "description": "Size of a workspace's change set against its base.",
+        "properties": {
+          "added": {
+            "description": "Inserted lines across all changed files.",
+            "title": "Added",
+            "type": "integer"
+          },
+          "files": {
+            "description": "Number of changed files. Binary files count here but contribute no lines.",
+            "title": "Files",
+            "type": "integer"
+          },
+          "removed": {
+            "description": "Deleted lines across all changed files.",
+            "title": "Removed",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "added",
+          "removed",
+          "files"
+        ],
+        "title": "SessionGitDiffStat",
+        "type": "object"
+      },
       "SessionGitOptions": {
         "description": "Git worktree options for `POST /v1/sessions`.\n\nRequires `host_id` to be set (and therefore `workspace`, which\nis interpreted as the source repository directory). Two modes,\nselected by `existing_worktree`:\n\n- **create** (default): the server creates a git worktree on the\n  host for a new branch and starts the runner in that worktree\n  instead of the picked directory.\n- **bind** (`existing_worktree=True`): `workspace` already IS a\n  pre-existing worktree; no worktree is created. `branch_name` is\n  recorded as the session's `git_branch` for display and opt-in\n  cleanup, and `base_branch` must not be set.\n\nSee designs/SESSION_GIT_WORKTREE.md.",
         "properties": {
@@ -3574,6 +3601,164 @@
           "branch_name"
         ],
         "title": "SessionGitOptions",
+        "type": "object"
+      },
+      "SessionGitPullRequest": {
+        "description": "A pull request opened from the workspace's current branch.",
+        "properties": {
+          "ci_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Aggregate CI state \u2014 `\"success\"`, `\"failure\"`, or `\"pending\"`. `None` when no checks reported.",
+            "title": "Ci Status"
+          },
+          "number": {
+            "description": "PR number, e.g. `2345`.",
+            "title": "Number",
+            "type": "integer"
+          },
+          "state": {
+            "description": "`\"open\"`, `\"merged\"`, or `\"closed\"`.",
+            "title": "State",
+            "type": "string"
+          },
+          "title": {
+            "description": "PR title.",
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "description": "Web URL of the pull request.",
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "number",
+          "title",
+          "state",
+          "url"
+        ],
+        "title": "SessionGitPullRequest",
+        "type": "object"
+      },
+      "SessionGitStatusResponse": {
+        "description": "Response body for `GET /v1/sessions/{id}/git-status`.\n\nDrives the status bar above the composer. Every git field is\noptional: a session with no workspace, or a workspace that is not a\ngit repository, is a normal all-`None` answer rather than an\nerror. `error` is set only when git itself failed, in which case\nthe other fields are `None`.",
+        "properties": {
+          "ahead": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Commits on `branch` not on `base_branch`. `None` without a base.",
+            "title": "Ahead"
+          },
+          "base_branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The branch's upstream ref, e.g. `\"origin/main\"`. `None` when the branch tracks nothing.",
+            "title": "Base Branch"
+          },
+          "behind": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Commits on `base_branch` not on `branch`. `None` without a base.",
+            "title": "Behind"
+          },
+          "branch": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Checked-out branch. `None` on a detached HEAD or outside a git repository.",
+            "title": "Branch"
+          },
+          "diff": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionGitDiffStat"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Change-set size against the base (against `HEAD`, i.e. uncommitted work only, when there is no base)."
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Git failure reason, e.g. a timeout. `None` on success.",
+            "title": "Error"
+          },
+          "object": {
+            "const": "session.git_status",
+            "default": "session.git_status",
+            "description": "Fixed type, always `\"session.git_status\"`.",
+            "title": "Object",
+            "type": "string"
+          },
+          "prs": {
+            "description": "Pull requests whose head branch is `branch`. Empty when GitHub is not configured \u2014 never an error.",
+            "items": {
+              "$ref": "#/components/schemas/SessionGitPullRequest"
+            },
+            "title": "Prs",
+            "type": "array"
+          },
+          "session_id": {
+            "description": "Session/conversation identifier.",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Absolute workspace path on the runner. `None` when the session has no workspace.",
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "session_id"
+        ],
+        "title": "SessionGitStatusResponse",
         "type": "object"
       },
       "SessionHeartbeatEvent": {
@@ -10225,6 +10410,50 @@
         "summary": "Update Comment",
         "tags": [
           "comments"
+        ]
+      }
+    },
+    "/v1/sessions/{session_id}/git-status": {
+      "get": {
+        "description": "Return the git and pull-request state of a session's workspace.\n\nFeeds the status bar above the composer. The workspace lives on\nthe runner, so the git half is proxied there; the pull-request\nhalf is resolved here, where the GitHub integration and its\ntoken live.\n\nDegrades rather than fails: a session with no workspace or a\nworkspace that is not a git repository answers with all-`None`\nfields, an unreachable runner or a failed git command fills\n`error`, and an unconfigured GitHub integration simply yields\nan empty `prs`.\n\n**Returns:** The session's git status.",
+        "operationId": "read_session_git_status_v1_sessions__session_id__git_status_get",
+        "parameters": [
+          {
+            "description": "Session/conversation identifier, e.g. `\"conv_abc123\"`.",
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionGitStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Read Session Git Status",
+        "tags": [
+          "sessions"
         ]
       }
     },

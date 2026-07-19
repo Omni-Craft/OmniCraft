@@ -19,7 +19,11 @@ from omnicraft.host.git_worktree import (
     WorktreeError,
     create_worktree,
     delete_snapshot,
+    git_ahead_behind,
     git_diff,
+    git_diff_stat,
+    git_remote_slug,
+    git_upstream_ref,
     list_snapshots,
     list_worktrees,
     merge_worktree,
@@ -602,3 +606,106 @@ def test_restore_rejects_unknown_or_malformed_id(git_repo: Path) -> None:
         restore_snapshot(worktree_path=str(git_repo), snapshot_id="../../evil")
     with pytest.raises(WorktreeError):
         restore_snapshot(worktree_path=str(git_repo), snapshot_id="1783-nope")
+
+
+def test_ahead_behind_counts_both_directions(git_repo: Path) -> None:
+    """``git_ahead_behind`` separates the two sides of a diverged history."""
+    _git(git_repo, "branch", "base")
+    _write(git_repo, "a.txt", "a\n")
+    _git(git_repo, "add", "-A")
+    _git(git_repo, "commit", "-q", "-m", "on main")
+    _write(git_repo, "b.txt", "b\n")
+    _git(git_repo, "add", "-A")
+    _git(git_repo, "commit", "-q", "-m", "on main 2")
+
+    ahead, behind = git_ahead_behind(worktree_path=str(git_repo), base_ref="base")
+    # main moved twice, base did not — the argument order must not swap
+    # these (rev-list --left-right prints behind first).
+    assert (ahead, behind) == (2, 0)
+
+
+def test_ahead_behind_sees_commits_only_on_the_base(git_repo: Path) -> None:
+    """Commits added to the base alone count as ``behind``, not ``ahead``."""
+    _git(git_repo, "checkout", "-q", "-b", "topic")
+    _git(git_repo, "checkout", "-q", "main")
+    _write(git_repo, "a.txt", "a\n")
+    _git(git_repo, "add", "-A")
+    _git(git_repo, "commit", "-q", "-m", "on main")
+    _git(git_repo, "checkout", "-q", "topic")
+
+    ahead, behind = git_ahead_behind(worktree_path=str(git_repo), base_ref="main")
+    assert (ahead, behind) == (0, 1)
+
+
+def test_ahead_behind_rejects_an_unresolvable_base(git_repo: Path) -> None:
+    """A base ref that does not exist is an error, not a silent zero."""
+    with pytest.raises(WorktreeError):
+        git_ahead_behind(worktree_path=str(git_repo), base_ref="origin/nope")
+
+
+def test_diff_stat_sums_committed_and_uncommitted_changes(git_repo: Path) -> None:
+    """``git_diff_stat`` aggregates numstat over the whole change set."""
+    _git(git_repo, "branch", "base")
+    _write(git_repo, "a.txt", "1\n2\n3\n")
+    _git(git_repo, "add", "-A")
+    _git(git_repo, "commit", "-q", "-m", "committed")
+    # Uncommitted on top of the commit — both must land in the totals.
+    _write(git_repo, "README.md", "hi\nthere\n")
+
+    stat = git_diff_stat(worktree_path=str(git_repo), base_ref="base")
+    assert (stat.files, stat.added, stat.removed) == (2, 5, 1)
+
+
+def test_diff_stat_counts_binary_files_without_lines(git_repo: Path) -> None:
+    """A binary file counts as a changed file but adds no line counts."""
+    _git(git_repo, "branch", "base")
+    (git_repo / "blob.bin").write_bytes(b"\x00\x01\x02\x00")
+    _git(git_repo, "add", "-A")
+    _git(git_repo, "commit", "-q", "-m", "binary")
+
+    stat = git_diff_stat(worktree_path=str(git_repo), base_ref="base")
+    # numstat reports "-\t-" here; parsing it as an int would crash.
+    assert (stat.files, stat.added, stat.removed) == (1, 0, 0)
+
+
+def test_diff_stat_is_empty_on_a_clean_tree(git_repo: Path) -> None:
+    """No changes means zeroes, not an error."""
+    stat = git_diff_stat(worktree_path=str(git_repo), base_ref="HEAD")
+    assert (stat.files, stat.added, stat.removed) == (0, 0, 0)
+
+
+def test_upstream_ref_is_none_without_tracking(git_repo: Path) -> None:
+    """A branch that tracks nothing yields ``None`` rather than raising."""
+    assert git_upstream_ref(worktree_path=str(git_repo)) is None
+
+
+def test_upstream_ref_reports_the_tracking_branch(git_repo: Path) -> None:
+    """A configured upstream comes back in ``remote/branch`` form."""
+    _git(git_repo, "remote", "add", "origin", "https://github.com/octocat/hello-world.git")
+    _git(git_repo, "update-ref", "refs/remotes/origin/main", "HEAD")
+    _git(git_repo, "branch", "--set-upstream-to=origin/main", "main")
+    assert git_upstream_ref(worktree_path=str(git_repo)) == "origin/main"
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("https://github.com/octocat/hello-world.git", "octocat/hello-world"),
+        ("https://github.com/octocat/hello-world", "octocat/hello-world"),
+        ("git@github.com:octocat/hello-world.git", "octocat/hello-world"),
+        ("https://gitlab.com/octocat/hello-world.git", None),
+    ],
+)
+def test_remote_slug_parses_both_url_forms(
+    git_repo: Path,
+    url: str,
+    expected: str | None,
+) -> None:
+    """Only github.com remotes yield an ``owner/name`` slug."""
+    _git(git_repo, "remote", "add", "origin", url)
+    assert git_remote_slug(worktree_path=str(git_repo)) == expected
+
+
+def test_remote_slug_is_none_without_a_remote(git_repo: Path) -> None:
+    """A repo with no ``origin`` is not an error."""
+    assert git_remote_slug(worktree_path=str(git_repo)) is None

@@ -22,6 +22,10 @@ from pathlib import Path
 # host's tunnel loop.
 _GIT_TIMEOUT_S: float = 120.0
 
+# Read-only status queries sit in front of a UI request, so they get a much
+# tighter budget than the mutating worktree operations above.
+_GIT_READ_TIMEOUT_S: float = 5.0
+
 # Max directory-collision suffixes (``-2`` .. ``-N``) before giving up.
 _MAX_DIR_COLLISION_SUFFIX: int = 50
 
@@ -108,6 +112,7 @@ def _run_git(
     *,
     cwd: str,
     env: dict[str, str] | None = None,
+    timeout: float = _GIT_TIMEOUT_S,
 ) -> subprocess.CompletedProcess[str]:
     """Run a git command, returning the completed process.
 
@@ -119,9 +124,12 @@ def _run_git(
     :param env: Full environment for the subprocess (e.g. a scratch
         ``GIT_INDEX_FILE`` for snapshot plumbing). ``None`` inherits the
         host process environment.
+    :param timeout: Seconds before the command is killed. Defaults to
+        :data:`_GIT_TIMEOUT_S`; read-only status queries pass the much
+        shorter :data:`_GIT_READ_TIMEOUT_S`.
     :returns: The completed process with captured text stdout/stderr.
     :raises WorktreeError: If git is not installed, or the command
-        exceeds :data:`_GIT_TIMEOUT_S`.
+        exceeds *timeout*.
     """
     try:
         return subprocess.run(
@@ -129,14 +137,14 @@ def _run_git(
             cwd=cwd,
             capture_output=True,
             text=True,
-            timeout=_GIT_TIMEOUT_S,
+            timeout=timeout,
             check=False,
             env=env,
         )
     except FileNotFoundError as exc:
         raise WorktreeError("git is not installed on the host") from exc
     except subprocess.TimeoutExpired as exc:
-        raise WorktreeError(f"git command timed out after {_GIT_TIMEOUT_S:.0f}s") from exc
+        raise WorktreeError(f"git command timed out after {timeout:.0f}s") from exc
 
 
 def _git_error(label: str, result: subprocess.CompletedProcess[str]) -> WorktreeError:
@@ -538,6 +546,129 @@ def git_diff(*, worktree_path: str, base_ref: str) -> DiffResult:
             truncated=True,
         )
     return DiffResult(diff=text, truncated=False)
+
+
+@dataclass
+class DiffStat:
+    """Line/file counts of a change set, for a compact status readout.
+
+    :param added: Total inserted lines across all changed files.
+    :param removed: Total deleted lines across all changed files.
+    :param files: Number of changed files. Binary files count toward
+        ``files`` but contribute no lines (git reports ``-`` for them).
+    """
+
+    added: int
+    removed: int
+    files: int
+
+
+def git_ahead_behind(*, worktree_path: str, base_ref: str) -> tuple[int, int]:
+    """Count commits ``HEAD`` is ahead of and behind ``base_ref``.
+
+    Uses a single ``git rev-list --left-right --count <base>...HEAD``,
+    whose output is ``<behind>\\t<ahead>`` — the left side counts commits
+    reachable only from the base, the right side only from ``HEAD``.
+
+    :param worktree_path: Absolute path of the workspace, e.g.
+        ``"/Users/alice/myrepo"``.
+    :param base_ref: Ref to compare against, e.g. ``"origin/main"``.
+    :returns: ``(ahead, behind)`` commit counts.
+    :raises WorktreeError: If git fails or ``base_ref`` does not resolve.
+    """
+    result = _run_git(
+        ["rev-list", "--left-right", "--count", "--end-of-options", f"{base_ref}...HEAD"],
+        cwd=worktree_path,
+        timeout=_GIT_READ_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        raise _git_error("git rev-list failed", result)
+    fields = result.stdout.split()
+    if len(fields) != 2:
+        raise WorktreeError(f"unexpected git rev-list output: {result.stdout.strip()!r}")
+    try:
+        behind, ahead = int(fields[0]), int(fields[1])
+    except ValueError as exc:
+        raise WorktreeError(f"unexpected git rev-list output: {result.stdout.strip()!r}") from exc
+    return ahead, behind
+
+
+def git_diff_stat(*, worktree_path: str, base_ref: str) -> DiffStat:
+    """Summarize the workspace's changes against ``base_ref``.
+
+    Runs ``git diff --numstat <base_ref>``, which covers committed *and*
+    uncommitted tracked changes. Untracked files are not counted — they
+    are not part of the diff git reports.
+
+    :param worktree_path: Absolute path of the workspace.
+    :param base_ref: Ref to diff against, e.g. ``"origin/main"`` or
+        ``"HEAD"`` for uncommitted changes only.
+    :returns: A :class:`DiffStat` with the aggregate counts.
+    :raises WorktreeError: If git fails or ``base_ref`` does not resolve.
+    """
+    result = _run_git(
+        ["diff", "--numstat", "--end-of-options", base_ref],
+        cwd=worktree_path,
+        timeout=_GIT_READ_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        raise _git_error("git diff --numstat failed", result)
+    added = removed = files = 0
+    for line in result.stdout.splitlines():
+        fields = line.split("\t")
+        if len(fields) < 3:
+            continue
+        files += 1
+        # Binary files report "-" for both counts; they add no lines.
+        if fields[0] != "-":
+            added += int(fields[0])
+        if fields[1] != "-":
+            removed += int(fields[1])
+    return DiffStat(added=added, removed=removed, files=files)
+
+
+def git_upstream_ref(*, worktree_path: str) -> str | None:
+    """Return the current branch's upstream ref, or ``None`` if unset.
+
+    :param worktree_path: Absolute path of the workspace.
+    :returns: The upstream ref name, e.g. ``"origin/main"``. ``None``
+        when the branch tracks nothing or ``HEAD`` is detached.
+    :raises WorktreeError: If git is not installed or times out.
+    """
+    result = _run_git(
+        ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        cwd=worktree_path,
+        timeout=_GIT_READ_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip() or None
+
+
+def git_remote_slug(*, worktree_path: str, remote: str = "origin") -> str | None:
+    """Return the ``owner/name`` GitHub slug of a remote, if it is one.
+
+    Handles both URL forms git writes: ``https://github.com/o/n.git`` and
+    ``git@github.com:o/n.git``.
+
+    :param worktree_path: Absolute path of the workspace.
+    :param remote: Remote name to read, e.g. ``"origin"``.
+    :returns: ``"owner/name"``, or ``None`` when the remote is missing or
+        is not hosted on github.com.
+    :raises WorktreeError: If git is not installed or times out.
+    """
+    result = _run_git(
+        ["remote", "get-url", "--end-of-options", remote],
+        cwd=worktree_path,
+        timeout=_GIT_READ_TIMEOUT_S,
+    )
+    if result.returncode != 0:
+        return None
+    url = result.stdout.strip()
+    match = re.search(r"github\.com[:/]([^/]+)/(.+?)(?:\.git)?/?$", url)
+    if match is None:
+        return None
+    return f"{match.group(1)}/{match.group(2)}"
 
 
 @dataclass

@@ -1,0 +1,380 @@
+"""Tests for ``GET /v1/sessions/{id}/git-status``.
+
+The workspace lives on the runner, so the route proxies the git half
+there and joins it with pull requests resolved server-side. These tests
+stub the runner and the GitHub integration to pin the contract the
+composer status bar consumes — in particular that a missing workspace,
+a non-git workspace, and an unconfigured GitHub integration are all
+*successful* responses, never errors.
+"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator, Iterator
+from typing import Any
+
+import httpx
+import pytest
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from omnicraft.entities import Conversation
+from omnicraft.errors import OmniCraftError
+from omnicraft.runtime import _globals, set_runner_client, set_runner_router
+from omnicraft.server.routes import integrations
+from omnicraft.server.routes.sessions import create_sessions_router
+
+_SESSION_ID = "conv_git"
+
+
+class _ConversationStore:
+    """Single-conversation store — enough for route auth/validation."""
+
+    def get_conversation(self, conversation_id: str) -> Conversation | None:
+        """
+        :param conversation_id: Conversation id to look up.
+        :returns: The canned conversation, or ``None``.
+        """
+        if conversation_id != _SESSION_ID:
+            return None
+        return Conversation(
+            id=_SESSION_ID,
+            created_at=1,
+            updated_at=1,
+            root_conversation_id=_SESSION_ID,
+            agent_id="ag_test",
+        )
+
+
+class _StubAgentStore:
+    """Agent store stub — these routes never resolve an agent."""
+
+    def get(self, agent_id: str) -> None:
+        """
+        :param agent_id: Agent id.
+        :returns: None (no agents in the stub).
+        """
+        return
+
+
+class _FakeRunnerClient:
+    """Runner client returning one canned git-status payload.
+
+    :param payload: JSON body the runner answers with.
+    :param exc: Exception raised instead of answering, to simulate an
+        unreachable runner.
+    """
+
+    def __init__(
+        self,
+        *,
+        payload: dict[str, Any] | None = None,
+        exc: Exception | None = None,
+    ) -> None:
+        """
+        :param payload: Canned runner response body.
+        :param exc: Exception to raise on every request.
+        :returns: None.
+        """
+        self._payload = payload or {}
+        self._exc = exc
+        self.calls: list[str] = []
+
+    async def get(self, url: str, **_kwargs: Any) -> httpx.Response:
+        """
+        :param url: Runner-relative path being fetched.
+        :param _kwargs: Ignored transport options.
+        :returns: The canned response.
+        """
+        self.calls.append(url)
+        if self._exc is not None:
+            raise self._exc
+        return httpx.Response(
+            200,
+            json=self._payload,
+            request=httpx.Request("GET", f"http://runner{url}"),
+        )
+
+
+@pytest.fixture
+def runner_globals_reset() -> Iterator[None]:
+    """Restore the process-global runner client/router after each test.
+
+    :returns: Iterator yielding once, inside the reset window.
+    """
+    prior_client = _globals._runner_client
+    prior_router = _globals._runner_router
+    set_runner_client(None)
+    set_runner_router(None)
+    yield
+    set_runner_client(prior_client)
+    set_runner_router(prior_router)
+
+
+@pytest.fixture
+def app(runner_globals_reset: None) -> FastAPI:
+    """Build a FastAPI app with just the sessions router mounted.
+
+    :param runner_globals_reset: Ensures clean runner globals.
+    :returns: The configured app.
+    """
+    del runner_globals_reset
+    app = FastAPI()
+
+    @app.exception_handler(OmniCraftError)
+    async def _handle_omnicraft_error(request: Request, exc: OmniCraftError) -> JSONResponse:
+        del request
+        return JSONResponse(
+            status_code=exc.http_status,
+            content={"error": {"code": exc.code, "message": exc.message}},
+        )
+
+    app.include_router(
+        create_sessions_router(
+            _ConversationStore(),  # type: ignore[arg-type]
+            _StubAgentStore(),  # type: ignore[arg-type]
+        ),
+        prefix="/v1",
+    )
+    return app
+
+
+@pytest.fixture
+async def client(app: FastAPI) -> AsyncIterator[httpx.AsyncClient]:
+    """HTTP client bound to the test app.
+
+    :param app: The FastAPI app under test.
+    :returns: Iterator yielding the client.
+    """
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://server") as c:
+        yield c
+
+
+def _runner_payload(**overrides: Any) -> dict[str, Any]:
+    """Build a runner git-status body, defaulting to the empty shape.
+
+    :param overrides: Fields to override on the empty payload.
+    :returns: The runner response body.
+    """
+    return {
+        "object": "session.git_status",
+        "session_id": _SESSION_ID,
+        "workspace": None,
+        "branch": None,
+        "base_branch": None,
+        "ahead": None,
+        "behind": None,
+        "diff": None,
+        "repo": None,
+        "error": None,
+        **overrides,
+    }
+
+
+@pytest.fixture(autouse=True)
+def no_github_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep every test off the network unless it opts into GitHub.
+
+    :param monkeypatch: Pytest patcher.
+    :returns: None.
+    """
+    monkeypatch.setattr(integrations, "_github_token", lambda: None)
+
+
+@pytest.mark.asyncio
+async def test_session_without_workspace_is_an_empty_success(
+    client: httpx.AsyncClient,
+) -> None:
+    """No workspace is a normal all-``None`` answer, not a 404 or an error."""
+    set_runner_client(_FakeRunnerClient(payload=_runner_payload()))  # type: ignore[arg-type]
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    assert resp.status_code == 200
+    assert resp.json() == {
+        "object": "session.git_status",
+        "session_id": _SESSION_ID,
+        "workspace": None,
+        "branch": None,
+        "base_branch": None,
+        "ahead": None,
+        "behind": None,
+        "diff": None,
+        "prs": [],
+        "error": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_non_git_workspace_reports_the_path_and_nothing_else(
+    client: httpx.AsyncClient,
+) -> None:
+    """A workspace outside a git repo keeps ``error`` clear."""
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(payload=_runner_payload(workspace="/tmp/plain"))
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["workspace"] == "/tmp/plain"
+    assert body["branch"] is None
+    assert body["diff"] is None
+    assert body["error"] is None
+
+
+@pytest.mark.asyncio
+async def test_branch_with_diff_and_ahead_behind_passes_through(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Git fields and matching PRs are joined into one response."""
+    runner = _FakeRunnerClient(
+        payload=_runner_payload(
+            workspace="/repo",
+            branch="feature/login",
+            base_branch="origin/main",
+            ahead=3,
+            behind=1,
+            diff={"added": 42, "removed": 7, "files": 4},
+            repo="octocat/hello-world",
+        )
+    )
+    set_runner_client(runner)  # type: ignore[arg-type]
+
+    async def _prs(repo: str, branch: str) -> list[dict[str, Any]]:
+        assert (repo, branch) == ("octocat/hello-world", "feature/login")
+        return [
+            {
+                "number": 12,
+                "title": "Add login",
+                "state": "open",
+                "ci_status": "pending",
+                "url": "https://github.com/octocat/hello-world/pull/12",
+            }
+        ]
+
+    monkeypatch.setattr(integrations, "github_pull_requests_for_branch", _prs)
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert (body["branch"], body["base_branch"]) == ("feature/login", "origin/main")
+    assert (body["ahead"], body["behind"]) == (3, 1)
+    assert body["diff"] == {"added": 42, "removed": 7, "files": 4}
+    assert body["prs"] == [
+        {
+            "number": 12,
+            "title": "Add login",
+            "state": "open",
+            "ci_status": "pending",
+            "url": "https://github.com/octocat/hello-world/pull/12",
+        }
+    ]
+    # The internal ``repo`` hint the server uses for the PR lookup must
+    # not leak into the public contract.
+    assert "repo" not in body
+    assert runner.calls == [f"/v1/sessions/{_SESSION_ID}/git-status"]
+
+
+@pytest.mark.asyncio
+async def test_git_failure_surfaces_as_the_error_field(
+    client: httpx.AsyncClient,
+) -> None:
+    """A failed git command is reported in-band, still with a 200."""
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(
+            payload=_runner_payload(
+                workspace="/repo",
+                error="git command timed out after 5s",
+            )
+        )
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["error"] == "git command timed out after 5s"
+    assert body["branch"] is None
+    assert body["prs"] == []
+
+
+@pytest.mark.asyncio
+async def test_unreachable_runner_becomes_an_error_not_a_502(
+    client: httpx.AsyncClient,
+) -> None:
+    """The status bar must keep rendering when the runner is down."""
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(exc=httpx.ConnectError("no runner"))
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    assert resp.status_code == 200
+    assert resp.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_unconfigured_github_yields_no_prs_and_no_error(
+    client: httpx.AsyncClient,
+) -> None:
+    """Without a token the PR lookup is skipped, not failed."""
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(
+            payload=_runner_payload(
+                workspace="/repo",
+                branch="feature/login",
+                repo="octocat/hello-world",
+                diff={"added": 1, "removed": 0, "files": 1},
+            )
+        )
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["prs"] == []
+    assert body["error"] is None
+    assert body["branch"] == "feature/login"
+
+
+@pytest.mark.asyncio
+async def test_pull_request_lookup_never_raises(
+    client: httpx.AsyncClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A GitHub outage degrades to an empty PR list, keeping the git half."""
+    monkeypatch.setattr(integrations, "_github_token", lambda: "t")
+
+    async def _boom(_path: str, _params: dict[str, Any] | None = None) -> Any:
+        raise OmniCraftError("could not reach GitHub")
+
+    monkeypatch.setattr(integrations, "_github_get", _boom)
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(
+            payload=_runner_payload(
+                workspace="/repo",
+                branch="feature/login",
+                repo="octocat/hello-world",
+            )
+        )
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["prs"] == []
+    assert body["branch"] == "feature/login"
+
+
+def test_merged_pull_request_state_is_distinguished_from_closed() -> None:
+    """``_pr_state`` splits merged out of GitHub's ``closed``."""
+    assert integrations._pr_state({"state": "open"}) == "open"
+    assert integrations._pr_state({"state": "closed"}) == "closed"
+    assert integrations._pr_state({"state": "closed", "merged_at": "2026-01-01"}) == "merged"

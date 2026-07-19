@@ -1484,6 +1484,82 @@ class SessionLabelsResponse(BaseModel):
     labels: dict[str, str] = Field(default_factory=dict)
 
 
+class SessionGitDiffStat(BaseModel):
+    """
+    Size of a workspace's change set against its base.
+
+    :param added: Inserted lines across all changed files.
+    :param removed: Deleted lines across all changed files.
+    :param files: Number of changed files. Binary files count here but
+        contribute no lines.
+    """
+
+    added: int
+    removed: int
+    files: int
+
+
+class SessionGitPullRequest(BaseModel):
+    """
+    A pull request opened from the workspace's current branch.
+
+    :param number: PR number, e.g. ``2345``.
+    :param title: PR title.
+    :param state: ``"open"``, ``"merged"``, or ``"closed"``.
+    :param ci_status: Aggregate CI state — ``"success"``, ``"failure"``,
+        or ``"pending"``. ``None`` when no checks reported.
+    :param url: Web URL of the pull request.
+    """
+
+    number: int
+    title: str
+    state: str
+    ci_status: str | None = None
+    url: str
+
+
+class SessionGitStatusResponse(BaseModel):
+    """
+    Response body for ``GET /v1/sessions/{id}/git-status``.
+
+    Drives the status bar above the composer. Every git field is
+    optional: a session with no workspace, or a workspace that is not a
+    git repository, is a normal all-``None`` answer rather than an
+    error. ``error`` is set only when git itself failed, in which case
+    the other fields are ``None``.
+
+    :param object: Fixed type, always ``"session.git_status"``.
+    :param session_id: Session/conversation identifier.
+    :param workspace: Absolute workspace path on the runner. ``None``
+        when the session has no workspace.
+    :param branch: Checked-out branch. ``None`` on a detached HEAD or
+        outside a git repository.
+    :param base_branch: The branch's upstream ref, e.g.
+        ``"origin/main"``. ``None`` when the branch tracks nothing.
+    :param ahead: Commits on ``branch`` not on ``base_branch``.
+        ``None`` without a base.
+    :param behind: Commits on ``base_branch`` not on ``branch``.
+        ``None`` without a base.
+    :param diff: Change-set size against the base (against ``HEAD``,
+        i.e. uncommitted work only, when there is no base).
+    :param prs: Pull requests whose head branch is ``branch``. Empty
+        when GitHub is not configured — never an error.
+    :param error: Git failure reason, e.g. a timeout. ``None`` on
+        success.
+    """
+
+    object: Literal["session.git_status"] = "session.git_status"
+    session_id: str
+    workspace: str | None = None
+    branch: str | None = None
+    base_branch: str | None = None
+    ahead: int | None = None
+    behind: int | None = None
+    diff: SessionGitDiffStat | None = None
+    prs: list[SessionGitPullRequest] = Field(default_factory=list)
+    error: str | None = None
+
+
 # Stages of a managed-sandbox launch, in pipeline order: the sandbox
 # is provisioned, the repository workspace is cloned into it (skipped
 # when the session has no repo workspace), the in-sandbox host starts

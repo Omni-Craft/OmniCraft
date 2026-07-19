@@ -630,6 +630,24 @@ def test_is_databricks_ai_gateway_url_accepts_real_hosts(gateway_url: str) -> No
 @pytest.mark.parametrize(
     "gateway_url",
     [
+        # ucode / workspace-hosted gateway: ai-gateway is a path segment, not
+        # a DNS label, but the hostname is a trusted workspace domain.
+        "https://mycompany.cloud.databricks.com/ai-gateway/codex/v1",
+        "https://wkspc.staging.cloud.databricks.com/ai-gateway/codex/v1",
+        "https://wkspc.azuredatabricks.net/ai-gateway/codex/v1",
+        "https://wkspc.gcp.databricks.com/ai-gateway/codex/v1",
+    ],
+)
+def test_is_databricks_ai_gateway_url_accepts_workspace_hosted_path(gateway_url: str) -> None:
+    """A trusted workspace hostname with ``/ai-gateway/`` as a path segment
+    is accepted — the ucode / Codex-app profile setup puts the gateway
+    under the workspace's own hostname instead of a dedicated subdomain."""
+    assert creds._is_databricks_ai_gateway_url(gateway_url) is True
+
+
+@pytest.mark.parametrize(
+    "gateway_url",
+    [
         *_LOOKALIKE_GATEWAY_URLS,
         # ai-gateway label, databricks substring, but non-databricks suffix.
         "https://ai-gateway.databricks.evil.test/codex/v1",
@@ -637,6 +655,9 @@ def test_is_databricks_ai_gateway_url_accepts_real_hosts(gateway_url: str) -> No
         "https://wkspc.cloud.databricks.com/codex/v1",
         # ai-gateway only as a substring of a label, not a full label.
         "https://my-ai-gateway-proxy.cloud.databricks.com/codex/v1",
+        # /ai-gateway/ path segment on an untrusted host — the new path-based
+        # acceptance must not bypass the hostname-suffix gate.
+        "https://evil.test/ai-gateway/codex/v1",
         # Garbage / no hostname.
         "not-a-url",
         "",

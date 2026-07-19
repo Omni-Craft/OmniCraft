@@ -101,9 +101,18 @@ def _is_databricks_ai_gateway_url(base_url: str) -> bool:
     ``https://x.cloud.databricks.com.evil.test/...`` or
     ``https://evil.test/databricks/ai-gateway/v1`` all defeated — leaking the
     workspace bearer token to an attacker-controlled host. We parse the URL and
-    validate the *hostname* (not the raw string): require an ``https`` scheme, a
-    resolvable hostname carrying the ``ai-gateway`` DNS label, and a hostname
-    that ends with a trusted Databricks-owned parent domain suffix.
+    validate the *hostname* (not the raw string): require an ``https`` scheme
+    and a hostname that ends with a trusted Databricks-owned parent domain
+    suffix. That suffix check is the security boundary and gates both shapes
+    below; nothing is accepted on the path or ``ai-gateway`` label alone.
+
+    Two URL shapes are accepted once the hostname is trusted:
+
+    1. **Dedicated AI Gateway subdomain** — ``ai-gateway`` is a full DNS label
+       in the hostname (e.g. ``<id>.ai-gateway.cloud.databricks.com``).
+    2. **Workspace-hosted gateway** — the hostname is a plain Databricks
+       workspace and the path starts with ``/ai-gateway/`` (e.g.
+       ``<workspace>.cloud.databricks.com/ai-gateway/...``).
 
     :param base_url: The codex provider table's ``base_url``.
     :returns: ``True`` iff the URL is an https Databricks AI Gateway endpoint.
@@ -115,12 +124,16 @@ def _is_databricks_ai_gateway_url(base_url: str) -> bool:
     if not hostname:
         return False
     hostname = hostname.lower()
-    # ``ai-gateway`` must be a full DNS label, not a substring of one (so
-    # ``databricks-ai-gateway.evil.test`` does not qualify on the label alone).
-    labels = hostname.split(".")
-    if _DATABRICKS_AI_GATEWAY_LABEL not in labels:
+    if not any(hostname.endswith(suffix) for suffix in _DATABRICKS_TRUSTED_HOST_SUFFIXES):
         return False
-    return any(hostname.endswith(suffix) for suffix in _DATABRICKS_TRUSTED_HOST_SUFFIXES)
+    # ``ai-gateway`` as a full DNS label (not a substring, so
+    # ``databricks-ai-gateway.evil.test`` wouldn't qualify on the label alone —
+    # moot here since it already failed the trusted-suffix check above).
+    labels = hostname.split(".")
+    if _DATABRICKS_AI_GATEWAY_LABEL in labels:
+        return True
+    path = parsed.path or ""
+    return path.startswith("/ai-gateway/")
 
 
 @dataclass(frozen=True)

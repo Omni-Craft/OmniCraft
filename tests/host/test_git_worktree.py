@@ -16,6 +16,7 @@ import pytest
 
 from omnicraft.host.git_worktree import (
     CreatedWorktree,
+    NotAGitRepositoryError,
     WorktreeError,
     create_worktree,
     delete_snapshot,
@@ -709,3 +710,64 @@ def test_remote_slug_parses_both_url_forms(
 def test_remote_slug_is_none_without_a_remote(git_repo: Path) -> None:
     """A repo with no ``origin`` is not an error."""
     assert git_remote_slug(worktree_path=str(git_repo)) is None
+
+
+def test_list_worktrees_outside_a_repo_is_typed_as_not_a_repository(tmp_path: Path) -> None:
+    """A plain directory raises the *specific* error, not a generic failure.
+
+    Callers key off this to answer "no repo here" with empty fields
+    instead of an error, so the subclass must survive refactors.
+    """
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    with pytest.raises(NotAGitRepositoryError):
+        list_worktrees(repo_path=str(plain))
+
+
+def test_list_worktrees_missing_path_is_not_a_repository(tmp_path: Path) -> None:
+    """A path that does not exist is 'nothing here', not a git failure."""
+    with pytest.raises(NotAGitRepositoryError):
+        list_worktrees(repo_path=str(tmp_path / "gone"))
+
+
+def test_list_worktrees_timeout_is_a_plain_worktree_error(
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A timeout must NOT be mistaken for 'not a git repository'.
+
+    The two produce opposite UI: an empty status bar versus a visible
+    error. Collapsing them hides a hung repo behind a clean-looking
+    readout.
+    """
+    import subprocess as sp
+
+    def _timeout(*_args: object, **_kwargs: object) -> None:
+        raise sp.TimeoutExpired(cmd="git", timeout=5)
+
+    monkeypatch.setattr(sp, "run", _timeout)
+    with pytest.raises(WorktreeError) as excinfo:
+        list_worktrees(repo_path=str(git_repo))
+    assert not isinstance(excinfo.value, NotAGitRepositoryError)
+    assert "timed out" in excinfo.value.message
+
+
+def test_list_worktrees_uses_the_timeout_it_is_given(
+    git_repo: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The short read budget reaches git, rather than the 120s default."""
+    import subprocess as sp
+
+    seen: list[float | None] = []
+    real_run = sp.run
+
+    def _record(*args: object, **kwargs: object) -> object:
+        seen.append(kwargs.get("timeout"))
+        return real_run(*args, **kwargs)
+
+    monkeypatch.setattr(sp, "run", _record)
+    list_worktrees(repo_path=str(git_repo), timeout=5.0)
+    # Both the main-work-tree resolution and the listing itself, so a
+    # regression that threads the timeout into only one is caught.
+    assert seen == [5.0, 5.0]

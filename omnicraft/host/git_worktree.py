@@ -61,6 +61,16 @@ class WorktreeError(Exception):
         self.message = message
 
 
+class NotAGitRepositoryError(WorktreeError):
+    """Raised when a path simply is not inside a git repository.
+
+    Split out of :class:`WorktreeError` so callers can tell "there is no
+    repo here" (an ordinary, reportable state) apart from "git failed"
+    (a timeout, a broken install, a corrupt repo) — the two must not
+    collapse into the same empty answer.
+    """
+
+
 def validate_branch_name(name: str) -> None:
     """Validate a git branch name against ``git check-ref-format`` rules.
 
@@ -162,7 +172,7 @@ def _git_error(label: str, result: subprocess.CompletedProcess[str]) -> Worktree
     return WorktreeError(f"{label} (exit {result.returncode}){suffix}")
 
 
-def _main_work_tree(repo_path: str) -> str:
+def _main_work_tree(repo_path: str, *, timeout: float = _GIT_TIMEOUT_S) -> str:
     """Resolve the MAIN work tree for any path inside a git repo.
 
     ``git worktree list --porcelain`` enumerates every work tree of the
@@ -178,16 +188,25 @@ def _main_work_tree(repo_path: str) -> str:
     :param repo_path: Absolute path inside a git repository — the
         directory the user picked, e.g.
         ``"/Users/alice/myrepo-worktrees/feature"``.
+    :param timeout: Seconds before git is killed. Defaults to the
+        mutation budget; status reads pass the short read budget.
     :returns: Absolute path of the main work tree, e.g.
         ``"/Users/alice/myrepo"``.
-    :raises WorktreeError: If ``repo_path`` is not a directory or not
-        inside a git work tree.
+    :raises NotAGitRepositoryError: If ``repo_path`` is not a directory
+        or not inside a git work tree.
+    :raises WorktreeError: If git itself failed (timeout, not installed,
+        unreadable repository).
     """
     if not Path(repo_path).is_dir():
-        raise WorktreeError(f"path is not a directory: {repo_path}")
-    result = _run_git(["worktree", "list", "--porcelain"], cwd=repo_path)
+        raise NotAGitRepositoryError(f"path is not a directory: {repo_path}")
+    result = _run_git(["worktree", "list", "--porcelain"], cwd=repo_path, timeout=timeout)
     if result.returncode != 0:
-        raise WorktreeError(f"not a git repository: {repo_path}")
+        # Only git's own "not a repository" wording means there is
+        # nothing here; any other non-zero exit is a real failure and
+        # must not masquerade as an empty workspace.
+        if "not a git repository" in result.stderr.lower():
+            raise NotAGitRepositoryError(f"not a git repository: {repo_path}")
+        raise _git_error("git worktree list failed", result)
     for line in result.stdout.splitlines():
         # Porcelain format: the first record's ``worktree <path>`` line is
         # the main work tree; linked worktrees follow.
@@ -218,7 +237,7 @@ class WorktreeInfo:
     detached: bool
 
 
-def list_worktrees(*, repo_path: str) -> list[WorktreeInfo]:
+def list_worktrees(*, repo_path: str, timeout: float = _GIT_TIMEOUT_S) -> list[WorktreeInfo]:
     """List the git worktrees of the repository containing ``repo_path``.
 
     Resolves the main work tree first (so a linked worktree resolves the
@@ -228,12 +247,15 @@ def list_worktrees(*, repo_path: str) -> list[WorktreeInfo]:
 
     :param repo_path: Absolute path inside a git repository — the
         directory the user picked, e.g. ``"/Users/alice/myrepo"``.
+    :param timeout: Seconds before each git call is killed. Defaults to
+        the mutation budget; status reads pass the short read budget.
     :returns: One :class:`WorktreeInfo` per worktree, main first.
-    :raises WorktreeError: If ``repo_path`` is not a directory or not
-        inside a git work tree, or if ``git worktree list`` fails.
+    :raises NotAGitRepositoryError: If ``repo_path`` is not a directory
+        or not inside a git work tree.
+    :raises WorktreeError: If ``git worktree list`` fails.
     """
-    repo_root = _main_work_tree(repo_path)
-    result = _run_git(["worktree", "list", "--porcelain"], cwd=repo_root)
+    repo_root = _main_work_tree(repo_path, timeout=timeout)
+    result = _run_git(["worktree", "list", "--porcelain"], cwd=repo_root, timeout=timeout)
     if result.returncode != 0:
         raise _git_error("git worktree list failed", result)
 

@@ -18931,18 +18931,56 @@ def create_sessions_router(
                 session_id=session_id,
                 error=str(detail or "git status unavailable"),
             )
+        except Exception:  # noqa: BLE001
+            # The proxy decodes the body itself, so a non-JSON answer
+            # (an HTML gateway page) surfaces here, not as a clean error.
+            _logger.warning("unreadable git status from runner", extra={"session_id": session_id})
+            return SessionGitStatusResponse(
+                session_id=session_id,
+                error="git status unavailable",
+            )
 
+        try:
+            return await _build_git_status(session_id, raw)
+        except Exception:  # noqa: BLE001
+            # A runner speaking an unexpected dialect is a degraded status
+            # bar, not a 500 — the contract is that this endpoint always
+            # answers.
+            _logger.warning("malformed git status from runner", extra={"session_id": session_id})
+            return SessionGitStatusResponse(
+                session_id=session_id,
+                error="runner returned a malformed git status",
+            )
+
+    async def _build_git_status(session_id: str, raw: Any) -> SessionGitStatusResponse:
+        """Map a runner git-status body onto the public response.
+
+        Split out so the caller can contain *any* parsing failure over
+        the whole mapping, including the pull-request join.
+
+        :param session_id: Session/conversation identifier.
+        :param raw: Parsed runner response body.
+        :returns: The public git-status response.
+        :raises Exception: On any unexpected runner shape; the caller
+            degrades it to an ``error`` response.
+        """
+        if not isinstance(raw, Mapping):
+            raise TypeError(f"expected a JSON object, got {type(raw).__name__}")
         diff = raw.get("diff")
         branch = raw.get("branch")
-        repo = raw.get("repo")
+        repo_slug = raw.get("repo_slug")
         prs: list[SessionGitPullRequest] = []
-        if branch and repo:
+        if isinstance(branch, str) and isinstance(repo_slug, str):
             from omnicraft.server.routes.integrations import github_pull_requests_for_branch
 
-            prs = [
-                SessionGitPullRequest(**card)
-                for card in await github_pull_requests_for_branch(repo, branch)
-            ]
+            try:
+                prs = [
+                    SessionGitPullRequest(**card)
+                    for card in await github_pull_requests_for_branch(repo_slug, branch)
+                ]
+            except Exception:  # noqa: BLE001
+                # PRs are decoration; the git half must survive without them.
+                _logger.warning("pull-request lookup failed", extra={"session_id": session_id})
         return SessionGitStatusResponse(
             session_id=session_id,
             workspace=raw.get("workspace"),
@@ -18950,7 +18988,8 @@ def create_sessions_router(
             base_branch=raw.get("base_branch"),
             ahead=raw.get("ahead"),
             behind=raw.get("behind"),
-            diff=SessionGitDiffStat(**diff) if diff else None,
+            diff=SessionGitDiffStat(**diff) if isinstance(diff, Mapping) else None,
+            repo_slug=repo_slug,
             prs=prs,
             error=raw.get("error"),
         )

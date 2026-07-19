@@ -17057,13 +17057,15 @@ def create_runner_app(
         Every field is optional: a workspace that is not a git repository
         yields all-``None`` with no error, and ``base_ref``/``ahead``/
         ``behind`` stay ``None`` on a detached HEAD or a branch with no
-        upstream. ``repo`` is consumed by the server to look up pull
-        requests and is not part of the public response.
+        upstream. A git call that actually *failed* (timeout, unreadable
+        repo) fills ``error`` instead — the two must not look alike.
 
         :param workspace: Resolved workspace directory.
         :returns: Dict of git fields, or ``{"error": ...}`` on git failure.
         """
         from omnicraft.host.git_worktree import (
+            _GIT_READ_TIMEOUT_S,
+            NotAGitRepositoryError,
             WorktreeError,
             git_ahead_behind,
             git_diff_stat,
@@ -17078,15 +17080,19 @@ def create_runner_app(
             "ahead": None,
             "behind": None,
             "diff": None,
-            "repo": None,
+            "repo_slug": None,
             "error": None,
         }
         try:
-            worktrees = list_worktrees(repo_path=str(workspace))
-        except WorktreeError:
-            # Not a git repository (or not readable as one) — a valid,
-            # empty status rather than an error the status bar must render.
+            worktrees = list_worktrees(
+                repo_path=str(workspace),
+                timeout=_GIT_READ_TIMEOUT_S,
+            )
+        except NotAGitRepositoryError:
+            # Nothing to report, and nothing wrong — a plain directory.
             return empty
+        except WorktreeError as exc:
+            return {**empty, "error": exc.message}
 
         resolved = workspace.resolve()
         current = next(
@@ -17106,7 +17112,7 @@ def create_runner_app(
             # Without a base to compare against, the uncommitted working-tree
             # change set is still worth showing, so diff falls back to HEAD.
             stat = git_diff_stat(worktree_path=str(workspace), base_ref=base_ref or "HEAD")
-            repo = git_remote_slug(worktree_path=str(workspace))
+            repo_slug = git_remote_slug(worktree_path=str(workspace))
         except WorktreeError as exc:
             return {**empty, "branch": branch, "error": exc.message}
 
@@ -17116,7 +17122,7 @@ def create_runner_app(
             "ahead": ahead,
             "behind": behind,
             "diff": {"added": stat.added, "removed": stat.removed, "files": stat.files},
-            "repo": repo,
+            "repo_slug": repo_slug,
             "error": None,
         }
 
@@ -17144,7 +17150,7 @@ def create_runner_app(
             "ahead": None,
             "behind": None,
             "diff": None,
-            "repo": None,
+            "repo_slug": None,
             "error": None,
         }
         workspace = await _session_runtime_cwd(session_id)

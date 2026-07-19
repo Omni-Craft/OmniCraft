@@ -166,7 +166,7 @@ def _runner_payload(**overrides: Any) -> dict[str, Any]:
         "ahead": None,
         "behind": None,
         "diff": None,
-        "repo": None,
+        "repo_slug": None,
         "error": None,
         **overrides,
     }
@@ -179,7 +179,11 @@ def no_github_token(monkeypatch: pytest.MonkeyPatch) -> None:
     :param monkeypatch: Pytest patcher.
     :returns: None.
     """
-    monkeypatch.setattr(integrations, "_github_token", lambda: None)
+
+    async def _no_token() -> None:
+        return None
+
+    monkeypatch.setattr(integrations, "_github_token", _no_token)
 
 
 @pytest.mark.asyncio
@@ -201,6 +205,7 @@ async def test_session_without_workspace_is_an_empty_success(
         "ahead": None,
         "behind": None,
         "diff": None,
+        "repo_slug": None,
         "prs": [],
         "error": None,
     }
@@ -239,7 +244,7 @@ async def test_branch_with_diff_and_ahead_behind_passes_through(
             ahead=3,
             behind=1,
             diff={"added": 42, "removed": 7, "files": 4},
-            repo="octocat/hello-world",
+            repo_slug="octocat/hello-world",
         )
     )
     set_runner_client(runner)  # type: ignore[arg-type]
@@ -274,9 +279,9 @@ async def test_branch_with_diff_and_ahead_behind_passes_through(
             "url": "https://github.com/octocat/hello-world/pull/12",
         }
     ]
-    # The internal ``repo`` hint the server uses for the PR lookup must
-    # not leak into the public contract.
-    assert "repo" not in body
+    # The slug drives the "create PR" / compare URL, so it must be
+    # present even though a PR already exists here.
+    assert body["repo_slug"] == "octocat/hello-world"
     assert runner.calls == [f"/v1/sessions/{_SESSION_ID}/git-status"]
 
 
@@ -328,7 +333,7 @@ async def test_unconfigured_github_yields_no_prs_and_no_error(
             payload=_runner_payload(
                 workspace="/repo",
                 branch="feature/login",
-                repo="octocat/hello-world",
+                repo_slug="octocat/hello-world",
                 diff={"added": 1, "removed": 0, "files": 1},
             )
         )
@@ -349,7 +354,11 @@ async def test_pull_request_lookup_never_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A GitHub outage degrades to an empty PR list, keeping the git half."""
-    monkeypatch.setattr(integrations, "_github_token", lambda: "t")
+
+    async def _token() -> str:
+        return "t"
+
+    monkeypatch.setattr(integrations, "_github_token", _token)
 
     async def _boom(_path: str, _params: dict[str, Any] | None = None) -> Any:
         raise OmniCraftError("could not reach GitHub")
@@ -360,7 +369,7 @@ async def test_pull_request_lookup_never_raises(
             payload=_runner_payload(
                 workspace="/repo",
                 branch="feature/login",
-                repo="octocat/hello-world",
+                repo_slug="octocat/hello-world",
             )
         )
     )
@@ -378,3 +387,80 @@ def test_merged_pull_request_state_is_distinguished_from_closed() -> None:
     assert integrations._pr_state({"state": "open"}) == "open"
     assert integrations._pr_state({"state": "closed"}) == "closed"
     assert integrations._pr_state({"state": "closed", "merged_at": "2026-01-01"}) == "merged"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        pytest.param(["not", "an", "object"], id="list_instead_of_object"),
+        pytest.param({"branch": {"unexpected": "shape"}}, id="branch_is_an_object"),
+        pytest.param({"diff": {"added": "lots"}}, id="diff_counts_are_not_ints"),
+        pytest.param({"ahead": "three"}, id="ahead_is_not_an_int"),
+        pytest.param({}, id="empty_object"),
+    ],
+)
+@pytest.mark.asyncio
+async def test_malformed_runner_payload_never_becomes_a_500(
+    client: httpx.AsyncClient,
+    payload: Any,
+) -> None:
+    """A runner speaking a different dialect degrades, it does not crash."""
+    set_runner_client(_FakeRunnerClient(payload=payload))  # type: ignore[arg-type]
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["object"] == "session.git_status"
+    assert body["prs"] == []
+
+
+@pytest.mark.asyncio
+async def test_non_json_runner_body_never_becomes_a_500(
+    client: httpx.AsyncClient,
+) -> None:
+    """An HTML error page from the runner is contained, not re-raised."""
+
+    class _HtmlRunner(_FakeRunnerClient):
+        async def get(self, url: str, **_kwargs: Any) -> httpx.Response:
+            """
+            :param url: Requested path.
+            :param _kwargs: Ignored.
+            :returns: A 200 carrying HTML instead of JSON.
+            """
+            self.calls.append(url)
+            return httpx.Response(
+                200,
+                text="<html>gateway</html>",
+                request=httpx.Request("GET", f"http://runner{url}"),
+            )
+
+    set_runner_client(_HtmlRunner())  # type: ignore[arg-type]
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    assert resp.status_code == 200
+    assert resp.json()["error"]
+
+
+@pytest.mark.asyncio
+async def test_repo_slug_is_present_without_any_pull_request(
+    client: httpx.AsyncClient,
+) -> None:
+    """A dirty branch with no PR still gets the slug, so "create PR" can render."""
+    set_runner_client(  # type: ignore[arg-type]
+        _FakeRunnerClient(
+            payload=_runner_payload(
+                workspace="/repo",
+                branch="feature/login",
+                repo_slug="octocat/hello-world",
+                diff={"added": 3, "removed": 1, "files": 2},
+            )
+        )
+    )
+
+    resp = await client.get(f"/v1/sessions/{_SESSION_ID}/git-status")
+
+    body = resp.json()
+    assert body["repo_slug"] == "octocat/hello-world"
+    assert body["prs"] == []

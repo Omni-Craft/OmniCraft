@@ -1542,6 +1542,10 @@ class SessionGitStatusResponse(BaseModel):
         ``None`` without a base.
     :param diff: Change-set size against the base (against ``HEAD``,
         i.e. uncommitted work only, when there is no base).
+    :param repo_slug: ``owner/name`` of the workspace's GitHub remote,
+        e.g. ``"octocat/hello-world"``. Lets a client build a compare or
+        "create PR" URL for a branch that has no PR yet. ``None`` when
+        there is no remote or it is not hosted on github.com.
     :param prs: Pull requests whose head branch is ``branch``. Empty
         when GitHub is not configured — never an error.
     :param error: Git failure reason, e.g. a timeout. ``None`` on
@@ -1556,6 +1560,7 @@ class SessionGitStatusResponse(BaseModel):
     ahead: int | None = None
     behind: int | None = None
     diff: SessionGitDiffStat | None = None
+    repo_slug: str | None = None
     prs: list[SessionGitPullRequest] = Field(default_factory=list)
     error: str | None = None
 

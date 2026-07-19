@@ -32,6 +32,11 @@ class ErrorCode:
         the ``error.code`` on a ``TaskStatus.FAILED`` response
         (HTTP 500). See ``designs/SERVER_HARNESS_CONTRACT.md``
         §Elicitation completion invariant.
+    :cvar HOST_UNVERIFIABLE: A request scoped to a ``host_id`` cannot
+        be honoured because the host registry is missing or
+        unreachable, so the host can be neither confirmed nor denied
+        (HTTP 503). Answering 200 with an empty result would read as
+        "nothing is running on that host".
     :cvar RUNNER_UNAVAILABLE: No online runner can serve the
         requested dispatch (HTTP 503).
     :cvar UNAUTHORIZED: No valid authentication credentials (HTTP 401).
@@ -60,6 +65,7 @@ class ErrorCode:
     # Keep the string equal to frames.HARNESS_NOT_CONFIGURED_ERROR_CODE —
     # the host's wire error code passes through as the API error code.
     HARNESS_NOT_CONFIGURED = "harness_not_configured"
+    HOST_UNVERIFIABLE = "host_unverifiable"
 
 
 # Single source of truth for error code → HTTP status.
@@ -75,6 +81,7 @@ _CODE_TO_HTTP_STATUS: dict[str, int] = {
     # harness implementation — surface as 500 (no client action
     # can fix them; investigation needed in the harness wrap).
     ErrorCode.HARNESS_PROTOCOL_VIOLATION: 500,
+    ErrorCode.HOST_UNVERIFIABLE: 503,
     ErrorCode.RUNNER_UNAVAILABLE: 503,
     ErrorCode.RUNNER_CAPABILITY_MISMATCH: 503,
     # 412 Precondition Failed: the request is well-formed but the host

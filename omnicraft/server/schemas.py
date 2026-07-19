@@ -2474,7 +2474,10 @@ class MonitorSessionItem(BaseModel):
         on this session plus its direct sub-agent children (a child's
         prompt is mirrored into its ancestors' streams, so it is the
         parent row that a human acts on). ``0`` when nothing is
-        blocked.
+        blocked. ``None`` when the prompt index could not be read —
+        the row may or may not be blocked, and a ``0`` there would be
+        an all-clear the server cannot back up; ``degraded`` then
+        carries ``pending_elicitations_unknown``.
     :param pending_elicitation: Summary of the first outstanding
         prompt, own prompts first. ``None`` when
         ``pending_elicitations_count`` is ``0``. A non-zero count
@@ -2504,9 +2507,10 @@ class MonitorSessionItem(BaseModel):
         disappear as if it were idle. Current slugs:
         ``status_unknown`` (no status on record for a dispatched
         session), ``status_unreadable`` (a cached value this server
-        doesn't understand), ``pending_elicitation_unreadable``,
-        ``cost_unreadable``, ``liveness_unavailable``,
-        ``liveness_partial``.
+        doesn't understand), ``pending_elicitations_unknown`` (the
+        prompt index could not be read for this row),
+        ``pending_elicitation_unreadable``, ``cost_unreadable``,
+        ``liveness_unavailable``, ``liveness_partial``.
     """
 
     session_id: str
@@ -2515,7 +2519,7 @@ class MonitorSessionItem(BaseModel):
     project: str | None = None
     workspace: str | None = None
     status: Literal["idle", "launching", "running", "waiting", "failed", "unknown"]
-    pending_elicitations_count: int = 0
+    pending_elicitations_count: int | None = 0
     pending_elicitation: MonitorPendingElicitation | None = None
     runner_online: bool | None = None
     host_online: bool | None = None
@@ -2548,24 +2552,37 @@ class MonitorCounts(BaseModel):
     :param unknown: Sessions whose status could not be resolved.
         Tracked separately so a client can show "N unknown" rather
         than folding them into either bucket.
-    :param omitted: Matching sessions dropped by the row cap after
-        ranking, i.e. present in the counts but absent from
-        ``sessions``. ``0`` when everything matching is carried.
+    :param omitted: Matching sessions not carried in ``sessions``:
+        rows the cap dropped after ranking, plus any
+        attention-bearing session (blocked or failed) the server
+        could not resolve into a row. A session that may need a human
+        is either a row or part of this number — never silently
+        absent. ``0`` when everything matching is carried.
+    :param partial: ``True`` when these tallies are a floor rather
+        than a total, because something matching was never resolved
+        at all — the store scan was cut, the attention sweep was cut,
+        or a row's prompt count could not be read. Pair it with
+        ``degraded`` on the response to see which.
     """
 
     active: int = 0
     awaiting: int = 0
     unknown: int = 0
     omitted: int = 0
+    partial: bool = False
 
 
 class MonitorFeedResponse(BaseModel):
     """
     Response body of ``GET /v1/monitor/sessions``.
 
-    The single source a monitor surface polls. Never fails with a
-    5xx: a broken part degrades into an explicit marker rather than
-    an error or a falsely-clean feed.
+    The single source a monitor surface polls. A broken part degrades
+    into an explicit marker on this payload rather than an error or a
+    falsely-clean feed, so the feed itself always answers ``200``.
+    The only error statuses on the route come from the ``host_id``
+    filter (``400`` malformed, ``404`` unknown / not the caller's,
+    ``503`` no host registry to check against), because an empty feed
+    must never stand in for an answer about a host.
 
     :param generated_at: Unix epoch seconds the feed was built.
     :param host_id: The ``host_id`` filter that produced this feed,
@@ -2585,10 +2602,11 @@ class MonitorFeedResponse(BaseModel):
         ``child_sessions_unavailable``,
         ``pending_elicitations_unavailable``,
         ``attention_rescue_unavailable``,
-        ``attention_rescue_truncated``, ``host_unverified``, and
-        ``internal_error`` when the feed could not be built at all
-        (``sessions`` is then empty, and an empty list must **not**
-        be read as "nothing is running").
+        ``attention_rescue_truncated``, and ``internal_error`` when
+        the feed could not be built at all (``sessions`` is then
+        empty, and an empty list must **not** be read as "nothing is
+        running"). Each of these also sets ``counts.partial`` when it
+        makes the tallies an undercount.
     """
 
     generated_at: int

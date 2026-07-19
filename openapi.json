@@ -2067,9 +2067,15 @@
           },
           "omitted": {
             "default": 0,
-            "description": "Matching sessions dropped by the row cap after ranking, i.e. present in the counts but absent from `sessions`. `0` when everything matching is carried.",
+            "description": "Matching sessions not carried in `sessions`: rows the cap dropped after ranking, plus any attention-bearing session (blocked or failed) the server could not resolve into a row. A session that may need a human is either a row or part of this number \u2014 never silently absent. `0` when everything matching is carried.",
             "title": "Omitted",
             "type": "integer"
+          },
+          "partial": {
+            "default": false,
+            "description": "`True` when these tallies are a floor rather than a total, because something matching was never resolved at all \u2014 the store scan was cut, the attention sweep was cut, or a row's prompt count could not be read. Pair it with `degraded` on the response to see which.",
+            "title": "Partial",
+            "type": "boolean"
           },
           "unknown": {
             "default": 0,
@@ -2082,14 +2088,14 @@
         "type": "object"
       },
       "MonitorFeedResponse": {
-        "description": "Response body of `GET /v1/monitor/sessions`.\n\nThe single source a monitor surface polls. Never fails with a\n5xx: a broken part degrades into an explicit marker rather than\nan error or a falsely-clean feed.",
+        "description": "Response body of `GET /v1/monitor/sessions`.\n\nThe single source a monitor surface polls. A broken part degrades\ninto an explicit marker on this payload rather than an error or a\nfalsely-clean feed, so the feed itself always answers `200`.\nThe only error statuses on the route come from the `host_id`\nfilter (`400` malformed, `404` unknown / not the caller's,\n`503` no host registry to check against), because an empty feed\nmust never stand in for an answer about a host.",
         "properties": {
           "counts": {
             "$ref": "#/components/schemas/MonitorCounts",
             "description": "Tallies over every matching session, including any the row cap dropped."
           },
           "degraded": {
-            "description": "Stable slugs naming feed-wide failures. Current slugs: `scan_truncated`, `liveness_unavailable`, `permissions_unavailable`, `agent_names_unavailable`, `child_sessions_unavailable`, `pending_elicitations_unavailable`, `attention_rescue_unavailable`, `attention_rescue_truncated`, `host_unverified`, and `internal_error` when the feed could not be built at all (`sessions` is then empty, and an empty list must **not** be read as \"nothing is running\").",
+            "description": "Stable slugs naming feed-wide failures. Current slugs: `scan_truncated`, `liveness_unavailable`, `permissions_unavailable`, `agent_names_unavailable`, `child_sessions_unavailable`, `pending_elicitations_unavailable`, `attention_rescue_unavailable`, `attention_rescue_truncated`, and `internal_error` when the feed could not be built at all (`sessions` is then empty, and an empty list must **not** be read as \"nothing is running\"). Each of these also sets `counts.partial` when it makes the tallies an undercount.",
             "items": {
               "type": "string"
             },
@@ -2201,7 +2207,7 @@
             "title": "Cost Usd"
           },
           "degraded": {
-            "description": "Stable slugs naming every part of this row that could not be resolved, e.g. `[\"liveness_partial\", \"status_unknown\"]`. Empty when the row is fully resolved. A row with a non-empty list is never filtered out by `only_active` \u2014 an unknown state must not disappear as if it were idle. Current slugs: `status_unknown` (no status on record for a dispatched session), `status_unreadable` (a cached value this server doesn't understand), `pending_elicitation_unreadable`, `cost_unreadable`, `liveness_unavailable`, `liveness_partial`.",
+            "description": "Stable slugs naming every part of this row that could not be resolved, e.g. `[\"liveness_partial\", \"status_unknown\"]`. Empty when the row is fully resolved. A row with a non-empty list is never filtered out by `only_active` \u2014 an unknown state must not disappear as if it were idle. Current slugs: `status_unknown` (no status on record for a dispatched session), `status_unreadable` (a cached value this server doesn't understand), `pending_elicitations_unknown` (the prompt index could not be read for this row), `pending_elicitation_unreadable`, `cost_unreadable`, `liveness_unavailable`, `liveness_partial`.",
             "items": {
               "type": "string"
             },
@@ -2232,10 +2238,17 @@
             "description": "Summary of the first outstanding prompt, own prompts first. `None` when `pending_elicitations_count` is `0`. A non-zero count with a `None` summary means the payload was unreadable \u2014 see `degraded`."
           },
           "pending_elicitations_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "default": 0,
-            "description": "Outstanding approval prompts on this session plus its direct sub-agent children (a child's prompt is mirrored into its ancestors' streams, so it is the parent row that a human acts on). `0` when nothing is blocked.",
-            "title": "Pending Elicitations Count",
-            "type": "integer"
+            "description": "Outstanding approval prompts on this session plus its direct sub-agent children (a child's prompt is mirrored into its ancestors' streams, so it is the parent row that a human acts on). `0` when nothing is blocked. `None` when the prompt index could not be read \u2014 the row may or may not be blocked, and a `0` there would be an all-clear the server cannot back up; `degraded` then carries `pending_elicitations_unknown`.",
+            "title": "Pending Elicitations Count"
           },
           "project": {
             "anyOf": [
@@ -8230,11 +8243,11 @@
     },
     "/v1/monitor/sessions": {
       "get": {
-        "description": "Monitor feed of the caller's sessions, most in need of a human first.\n\n**Returns:** A `MonitorFeedResponse`. Infrastructure failures degrade into explicit markers instead of a 5xx; programming errors are left to surface as a 500 rather than being disguised as a clean, empty feed.",
+        "description": "Monitor feed of the caller's sessions, most in need of a human first.\n\n**Returns:** A `MonitorFeedResponse`. Infrastructure failures inside the feed degrade into explicit markers on the payload rather than an error status, so the contract is `200` plus `degraded` / `counts.partial`, or one of the typed `400` / `404` / `503` above.",
         "operationId": "monitor_sessions_v1_monitor_sessions_get",
         "parameters": [
           {
-            "description": "When set, only sessions bound to this host, e.g. `\"host_abc123\"`. Applied in the store query and validated first: an unknown host \u2014 or one the caller doesn't own \u2014 is a 404, never an empty feed that reads as \"nothing running there\". `None` (default) returns every session visible to the caller, including ones on other people's hosts that are shared with them.",
+            "description": "When set, only sessions bound to this host, e.g. `\"host_abc123\"`. Applied in the store query and validated first \u2014 an empty feed must never stand in for an answer about a host: `400` when the id is malformed, `404` when it is unknown or not the caller's, `503` when no host registry is available to check it against. `None` (default) returns every session visible to the caller, including ones on other people's hosts shared with them.",
             "in": "query",
             "name": "host_id",
             "required": false,

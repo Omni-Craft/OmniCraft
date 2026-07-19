@@ -204,7 +204,13 @@ def test_feed_shape_and_counts(db_uri: str) -> None:
     # No cost has been recorded — null, never a made-up zero.
     assert row["cost_usd"] is None
     assert row["degraded"] == []
-    assert body["counts"] == {"active": 1, "awaiting": 0, "unknown": 0, "omitted": 0}
+    assert body["counts"] == {
+        "active": 1,
+        "awaiting": 0,
+        "unknown": 0,
+        "omitted": 0,
+        "partial": False,
+    }
 
 
 # ── Status granularity ─────────────────────────────────────────────
@@ -511,6 +517,101 @@ def test_rescued_session_of_another_user_is_not_leaked(
     assert [row["session_id"] for row in body["sessions"]] == [mine]
 
 
+def test_attention_beyond_the_rescue_cap_is_counted_not_dropped(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The sweep is bounded, but what it can't carry must still be
+    reported: a blocked session either lands in the response or shows up
+    in ``counts.omitted`` with the tallies marked partial. Vanishing is
+    the one thing it may not do."""
+    blocked = []
+    for index in range(3):
+        sid = _seed(db_uri, title=f"Blocked {index}")
+        sessions_module._session_status_cache[sid] = "idle"
+        pending_elicitations.record_publish(sid, _elicitation(f"elicit_{index}"))
+        blocked.append(sid)
+    newest = _seed(db_uri, title="Newest")
+    sessions_module._session_status_cache[newest] = "idle"
+    # Only the newest session is scanned; all three blocked ones are out,
+    # and the sweep can only carry one of them.
+    monkeypatch.setattr(monitor_module, "_SCAN_LIMIT", 1)
+    monkeypatch.setattr(monitor_module, "_RESCUE_MAX", 1)
+
+    body = _get(_app(db_uri))
+
+    carried = {row["session_id"] for row in body["sessions"]}
+    assert len(carried & set(blocked)) == 1
+    assert body["counts"]["omitted"] == 2
+    assert body["counts"]["partial"] is True
+    assert body["truncated"] is True
+    assert "attention_rescue_truncated" in body["degraded"]
+
+
+def test_unresolvable_attention_sweep_is_counted(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A sweep that fails outright still reports how many sessions it
+    could not account for."""
+    blocked = _seed(db_uri, title="Blocked")
+    sessions_module._session_status_cache[blocked] = "idle"
+    pending_elicitations.record_publish(blocked, _elicitation("elicit_x"))
+    newest = _seed(db_uri, title="Newest")
+    sessions_module._session_status_cache[newest] = "idle"
+    monkeypatch.setattr(monitor_module, "_SCAN_LIMIT", 1)
+
+    class _BrokenLookupStore(SqlAlchemyConversationStore):
+        def get_conversation(self, *args: Any, **kwargs: Any) -> Any:
+            raise SQLAlchemyError("conversations table unreachable")
+
+    body = _get(_app(db_uri, conversation_store=_BrokenLookupStore(db_uri)))
+
+    assert blocked not in {row["session_id"] for row in body["sessions"]}
+    assert body["counts"]["omitted"] == 1
+    assert body["counts"]["partial"] is True
+    assert "attention_rescue_unavailable" in body["degraded"]
+
+
+def test_cut_scan_marks_the_counts_as_a_floor(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tallies over a cut scan are an undercount and have to say so."""
+    for index in range(3):
+        sid = _seed(db_uri, title=f"Running {index}")
+        sessions_module._session_status_cache[sid] = "running"
+    monkeypatch.setattr(monitor_module, "_SCAN_LIMIT", 1)
+
+    body = _get(_app(db_uri))
+
+    assert body["counts"]["active"] == 1
+    assert body["counts"]["partial"] is True
+    assert body["truncated"] is True
+    assert "scan_truncated" in body["degraded"]
+
+
+def test_unreadable_prompt_index_leaves_the_count_unknown_not_zero(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A prompt index that can't be read must not publish every row as
+    "0 prompts outstanding" — that is the all-clear this feed exists to
+    never fake."""
+    session = _seed(db_uri, title="Maybe blocked")
+    sessions_module._session_status_cache[session] = "idle"
+
+    def _boom(ids: list[str]) -> dict[str, int]:
+        raise RuntimeError("index lock poisoned")
+
+    monkeypatch.setattr(pending_elicitations, "counts_for", _boom)
+
+    body = _get(_app(db_uri))
+
+    row = body["sessions"][0]
+    assert row["session_id"] == session
+    assert row["pending_elicitations_count"] is None
+    assert "pending_elicitations_unknown" in row["degraded"]
+    assert body["counts"]["partial"] is True
+    assert "pending_elicitations_unavailable" in body["degraded"]
+
+
 # ── Host filter ────────────────────────────────────────────────────
 
 
@@ -601,15 +702,37 @@ def test_malformed_host_id_is_a_bad_request(db_uri: str) -> None:
     assert resp.status_code == 400
 
 
-def test_unverifiable_host_filter_says_so(db_uri: str) -> None:
-    """No host store wired: the filter still applies, but it is unverified."""
+def test_unverifiable_host_filter_is_refused_not_answered(db_uri: str) -> None:
+    """With no registry to check against, a typo and a real host look the
+    same — so the request is refused instead of answered with a feed that
+    could be silently scoped to nothing."""
     on_a = _seed(db_uri, title="On A", host_id="host_a")
     sessions_module._session_status_cache[on_a] = "running"
 
-    body = _get(_app(db_uri), "?host_id=host_a")
+    resp = TestClient(_app(db_uri)).get(
+        "/v1/monitor/sessions?host_id=host_a", headers={"X-Forwarded-Email": ALICE}
+    )
 
-    assert [row["session_id"] for row in body["sessions"]] == [on_a]
-    assert "host_unverified" in body["degraded"]
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "host_unverifiable"
+
+
+def test_host_lookup_failure_is_refused_not_a_500(db_uri: str) -> None:
+    """An unreachable host registry is a typed 503, not a leaked 500 and
+    not a 200 that scopes the feed to nothing."""
+
+    class _BrokenHostStore:
+        def get_host(self, host_id: str) -> Any:
+            raise SQLAlchemyError("hosts table unreachable")
+
+    app = _app(db_uri, host_store=_BrokenHostStore())
+
+    resp = TestClient(app).get(
+        "/v1/monitor/sessions?host_id=host_a", headers={"X-Forwarded-Email": ALICE}
+    )
+
+    assert resp.status_code == 503
+    assert resp.json()["error"]["code"] == "host_unverifiable"
 
 
 # ── Liveness ───────────────────────────────────────────────────────
@@ -714,7 +837,13 @@ def test_only_active_false_returns_idle_sessions(db_uri: str) -> None:
     assert _get(_app(db_uri))["sessions"] == []
     body = _get(_app(db_uri), "?only_active=false")
     assert [row["session_id"] for row in body["sessions"]] == [idle]
-    assert body["counts"] == {"active": 0, "awaiting": 0, "unknown": 0, "omitted": 0}
+    assert body["counts"] == {
+        "active": 0,
+        "awaiting": 0,
+        "unknown": 0,
+        "omitted": 0,
+        "partial": False,
+    }
 
 
 def test_archived_sessions_are_excluded(db_uri: str) -> None:

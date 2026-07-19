@@ -18,11 +18,14 @@ Three things make it different from ``GET /v1/sessions``:
   updates ago becomes an empty feed.
 * An unresolved part is named, not smoothed over. A status this
   server has no record of is ``unknown``, not ``idle``; liveness it
-  can't compute is ``null``, not "offline"; an elicitation payload it
-  can't read keeps its count and says so. Each degrades into an
+  can't compute is ``null``, not "offline"; a prompt index it can't
+  read leaves the count ``null``, not ``0``. Each degrades into an
   explicit marker on the row (or the feed), and a degraded row is
   never filtered out by ``only_active`` — that is how "we don't know"
-  would silently become "nothing to see".
+  would silently become "nothing to see". Anything matching that the
+  server never resolved at all is still counted (``counts.omitted``)
+  and flagged (``counts.partial``), so the tallies read as a floor
+  rather than a total.
 
 Row assembly reuses the session-list builder and the same batched
 pulls ``GET /v1/sessions`` makes (labels, permission grants, agent
@@ -153,6 +156,10 @@ def _monitor_status(
         return "running", degraded
     if raw == "launching":
         return "launching", degraded
+    # ``idle`` is only ever asserted from proof: either the relay said so
+    # (cached ``idle``), or the row itself shows the session was never
+    # dispatched anywhere. Silence about a session that HAS a binding is
+    # ignorance — it reports ``unknown``.
     if raw == "idle":
         return "idle", degraded
     if unreadable:
@@ -165,8 +172,8 @@ def _monitor_status(
 def _pending_for_row(
     conversation_id: str,
     child_session_ids: list[str],
-    counts: dict[str, int],
-) -> tuple[int, MonitorPendingElicitation | None, list[str]]:
+    counts: dict[str, Any] | None,
+) -> tuple[int | None, MonitorPendingElicitation | None, list[str]]:
     """
     Total outstanding prompts for a row, plus a summary of the first one.
 
@@ -179,14 +186,18 @@ def _pending_for_row(
     :param child_session_ids: Direct sub-agent child ids.
     :param counts: Batched pending counts from
         :func:`pending_elicitations.counts_for`, covering the session
-        and its children.
-    :returns: ``(total, summary, degraded)``. ``summary`` is ``None``
-        with a ``"pending_elicitation_unreadable"`` slug when the count
-        is non-zero but no readable payload backs it — an absent summary
-        must never read as "nothing to decide". A count that isn't a
+        and its children. ``None`` when that lookup failed.
+    :returns: ``(total, summary, degraded)``. ``total`` is ``None``
+        when the index could not be read at all — a session that may be
+        blocked must not be published as ``0``, which reads as "nobody
+        is waiting on you". ``summary`` is ``None`` with a
+        ``"pending_elicitation_unreadable"`` slug when the count is
+        non-zero but no readable payload backs it. A count that isn't a
         usable number is treated as one unreadable prompt rather than
         dropped to zero.
     """
+    if counts is None:
+        return None, None, ["pending_elicitations_unknown"]
     own, own_degraded = _pending_count(counts.get(conversation_id))
     total = own
     degraded = list(own_degraded)
@@ -290,13 +301,15 @@ def _row_rank(row: MonitorSessionItem) -> tuple[int, int, int]:
     active work, then unknown, then idle. Recency only breaks ties —
     it is the wrong primary key for a monitor, because the session that
     has been stuck waiting the longest is the one that updated least
-    recently.
+    recently. A row whose pending count is *unknown* ranks with the
+    blocked ones: it may be blocked, and the cap must not drop it.
 
     :param row: The assembled row.
     :returns: An ascending sort key.
     """
+    pending = row.pending_elicitations_count
     return (
-        0 if row.pending_elicitations_count > 0 else 1,
+        0 if pending is None or pending > 0 else 1,
         _STATUS_RANK.get(row.status, len(_STATUS_RANK)),
         -row.updated_at,
     )
@@ -332,41 +345,59 @@ def create_monitor_router(
     """
     router = APIRouter()
 
-    async def _validate_host(host_id: str, user_id: str | None) -> list[str]:
+    async def _validate_host(host_id: str, user_id: str | None) -> None:
         """
-        Reject a host filter that is malformed, unknown, or not the
-        caller's.
+        Reject a host filter that is malformed, unknown, not the
+        caller's, or unverifiable.
 
         An unknown host must not answer with an empty feed — that reads
-        as "nothing running on it". It is a bad request, and says so.
+        as "nothing running on it". Neither may an *unverifiable* one:
+        with no host registry to check against, a typo and a real host
+        are indistinguishable, so the request is refused rather than
+        answered with a feed that looks clean.
 
         :param host_id: The requested host filter.
         :param user_id: The authenticated caller, or ``None``.
-        :returns: Degradation slugs (``"host_unverified"`` when no host
-            store is wired).
         :raises OmniCraftError: 400 when malformed, 404 when unknown or
-            owned by someone else.
+            owned by someone else, 503 when the registry is missing or
+            unreachable.
         """
         if not host_id.strip() or len(host_id) > _HOST_ID_MAX:
             raise OmniCraftError(
                 "host_id is not a valid host identifier", code=ErrorCode.INVALID_INPUT
             )
         if host_store is None:
-            return ["host_unverified"]
-        host = await asyncio.to_thread(host_store.get_host, host_id)
+            raise OmniCraftError(
+                "host_id filtering is unavailable: this server has no host registry",
+                code=ErrorCode.HOST_UNVERIFIABLE,
+            )
+        try:
+            host = await asyncio.to_thread(host_store.get_host, host_id)
+        except (SQLAlchemyError, OSError, TimeoutError) as exc:
+            _logger.warning("Monitor feed host lookup failed for %s", host_id, exc_info=True)
+            raise OmniCraftError(
+                "host registry is unreachable; cannot scope the feed to this host",
+                code=ErrorCode.HOST_UNVERIFIABLE,
+            ) from exc
         if host is None:
             raise OmniCraftError("Host not found", code=ErrorCode.NOT_FOUND)
         if user_id is not None and host.owner != user_id:
-            is_admin = (
-                await asyncio.to_thread(permission_store.is_admin, user_id)
-                if permission_store is not None
-                else False
-            )
+            try:
+                is_admin = (
+                    await asyncio.to_thread(permission_store.is_admin, user_id)
+                    if permission_store is not None
+                    else False
+                )
+            except (SQLAlchemyError, OSError, TimeoutError) as exc:
+                _logger.warning("Monitor feed host admin check failed", exc_info=True)
+                raise OmniCraftError(
+                    "cannot verify access to this host right now",
+                    code=ErrorCode.HOST_UNVERIFIABLE,
+                ) from exc
             if not is_admin:
                 # Same answer as an unknown host: a caller who doesn't own
                 # it learns nothing about whether it exists.
                 raise OmniCraftError("Host not found", code=ErrorCode.NOT_FOUND)
-        return []
 
     async def _batch_context(
         conv_ids: list[str],
@@ -479,7 +510,7 @@ def create_monitor_router(
         already: set[str],
         user_id: str | None,
         host_id: str | None,
-    ) -> tuple[list[Conversation], list[str]]:
+    ) -> tuple[list[Conversation], list[str], int]:
         """
         Pull in sessions that need a human but fell outside the scan.
 
@@ -488,10 +519,17 @@ def create_monitor_router(
         is the only way a session that has been waiting since long
         before the scan window still reaches the HUD.
 
+        Whatever this path cannot resolve is *counted*, never dropped in
+        silence: a session waiting on a human either lands in the
+        response or is reported as unresolved, so the client can say
+        "N more may need you" instead of showing an all-clear.
+
         :param already: Session ids the scan already returned.
         :param user_id: The authenticated caller, or ``None``.
         :param host_id: Active host filter, or ``None``.
-        :returns: ``(conversations, degraded)``.
+        :returns: ``(conversations, degraded, unresolved)`` — where
+            ``unresolved`` is the number of attention-bearing candidates
+            this call could not resolve into rows.
         """
         candidates = set(pending_elicitations.pending_session_ids())
         candidates |= {
@@ -501,24 +539,26 @@ def create_monitor_router(
         }
         candidates -= already
         if not candidates:
-            return [], []
+            return [], [], 0
         if permission_store is None and user_id is not None:
             # No grants to check against; including these rows could leak
             # another user's session, dropping them silently could hide the
-            # caller's own. Say which happened.
-            return [], ["attention_rescue_unavailable"]
+            # caller's own. Say how many were left unresolved.
+            return [], ["attention_rescue_unavailable"], len(candidates)
         degraded: list[str] = []
         ordered = sorted(candidates)
+        unresolved = 0
         if len(ordered) > _RESCUE_MAX:
+            unresolved = len(ordered) - _RESCUE_MAX
             degraded.append("attention_rescue_truncated")
             ordered = ordered[:_RESCUE_MAX]
         try:
             convs = await asyncio.to_thread(_load_attention_rows, ordered, already, host_id)
         except (SQLAlchemyError, OSError, TimeoutError):
             _logger.warning("Monitor feed attention rescue failed", exc_info=True)
-            return [], ["attention_rescue_unavailable"]
+            return [], ["attention_rescue_unavailable"], len(candidates)
         if not convs or permission_store is None:
-            return convs, degraded
+            return convs, degraded, unresolved
         rescued_ids = [conv.id for conv in convs]
         try:
             grants = await asyncio.to_thread(permission_store.list_for_sessions, rescued_ids)
@@ -529,7 +569,7 @@ def create_monitor_router(
             )
         except (SQLAlchemyError, OSError, TimeoutError):
             _logger.warning("Monitor feed attention rescue authz failed", exc_info=True)
-            return [], [*degraded, "attention_rescue_unavailable"]
+            return [], [*degraded, "attention_rescue_unavailable"], len(candidates)
         allowed = [
             conv
             for conv in convs
@@ -539,7 +579,9 @@ def create_monitor_router(
             )
             is not None
         ]
-        return allowed, degraded
+        # Rows the ACL excluded are resolved, not unresolved — "not yours"
+        # is an answer, so they must not inflate the unresolved tally.
+        return allowed, degraded, unresolved
 
     async def _build_feed(
         user_id: str | None,
@@ -564,16 +606,20 @@ def create_monitor_router(
             # More sessions exist than were scanned, so the counts below
             # describe the scan, not the account.
             feed_degraded.append("scan_truncated")
-        rescued, rescue_degraded = await _rescue_attention(
+        rescued, rescue_degraded, unresolved_attention = await _rescue_attention(
             {conv.id for conv in convs}, user_id, host_id
         )
         convs.extend(rescued)
         feed_degraded.extend(rescue_degraded)
+        # A session that may be waiting on a human is either carried as a
+        # row or counted here. It is never simply gone.
+        counts_partial = page.has_more or unresolved_attention > 0
         if not convs:
             return MonitorFeedResponse(
                 generated_at=int(time.time()),
                 host_id=host_id,
-                truncated=page.has_more,
+                counts=MonitorCounts(omitted=unresolved_attention, partial=counts_partial),
+                truncated=page.has_more or unresolved_attention > 0,
                 degraded=feed_degraded,
             )
 
@@ -592,11 +638,15 @@ def create_monitor_router(
         pending_ids = list(conv_ids)
         for cid in conv_ids:
             pending_ids.extend(child_ids_by_parent.get(cid, []))
+        pending_counts: dict[str, Any] | None
         try:
-            pending_counts: dict[str, Any] = pending_elicitations.counts_for(pending_ids)
+            pending_counts = pending_elicitations.counts_for(pending_ids)
         except Exception:  # noqa: BLE001 — the index is in-memory; degrade, never 500
+            # ``None``, not ``{}``: an empty map would publish every row as
+            # "0 prompts outstanding", which is the all-clear this feed
+            # exists to avoid claiming.
             _logger.warning("Monitor feed pending-elicitation counts failed", exc_info=True)
-            pending_counts = {}
+            pending_counts = None
             feed_degraded.append("pending_elicitations_unavailable")
 
         items = [
@@ -607,7 +657,11 @@ def create_monitor_router(
                 user_id=user_id,
                 user_is_admin=user_is_admin,
                 permissions_enabled=permission_store is not None,
-                pending_count=_pending_count(pending_counts.get(conv.id))[0],
+                pending_count=(
+                    _pending_count(pending_counts.get(conv.id))[0]
+                    if pending_counts is not None
+                    else 0
+                ),
                 child_session_ids=child_ids_by_parent.get(conv.id, []),
                 comments_fingerprint=None,
             )
@@ -674,12 +728,24 @@ def create_monitor_router(
         rows.sort(key=_row_rank)
         # Counts describe every matching session, including the ones the
         # row cap dropped — a headline that shrank with the page would be
-        # the same lie as an empty feed.
+        # the same lie as an empty feed. ``partial`` marks the counts as an
+        # undercount whenever something matching was never resolved at all
+        # (scan cut, attention rescue cut, unreadable prompt index), so a
+        # client reading them knows they are a floor, not a total.
+        capped = max(0, len(rows) - _MAX_ROWS)
         counts = MonitorCounts(
             active=sum(1 for row in rows if row.status not in ("idle", "unknown")),
-            awaiting=sum(1 for row in rows if row.pending_elicitations_count > 0),
+            awaiting=sum(
+                1
+                for row in rows
+                if row.pending_elicitations_count is not None
+                and row.pending_elicitations_count > 0
+            ),
             unknown=sum(1 for row in rows if row.status == "unknown"),
-            omitted=max(0, len(rows) - _MAX_ROWS),
+            omitted=capped + unresolved_attention,
+            partial=(
+                counts_partial or any(row.pending_elicitations_count is None for row in rows)
+            ),
         )
         return MonitorFeedResponse(
             generated_at=int(time.time()),
@@ -705,11 +771,12 @@ def create_monitor_router(
 
         :param host_id: When set, only sessions bound to this host,
             e.g. ``"host_abc123"``. Applied in the store query and
-            validated first: an unknown host — or one the caller doesn't
-            own — is a 404, never an empty feed that reads as "nothing
-            running there". ``None`` (default) returns every session
-            visible to the caller, including ones on other people's
-            hosts that are shared with them.
+            validated first — an empty feed must never stand in for an
+            answer about a host: ``400`` when the id is malformed,
+            ``404`` when it is unknown or not the caller's, ``503`` when
+            no host registry is available to check it against. ``None``
+            (default) returns every session visible to the caller,
+            including ones on other people's hosts shared with them.
         :param only_active: When ``True`` (the default), drop rows that
             are idle **and** have no outstanding prompt **and** resolved
             cleanly — the "needs an eye on it" view. Rows carrying a
@@ -718,9 +785,10 @@ def create_monitor_router(
             idle one. ``False`` returns every non-archived session in
             the scan.
         :returns: A :class:`MonitorFeedResponse`. Infrastructure
-            failures degrade into explicit markers instead of a 5xx;
-            programming errors are left to surface as a 500 rather than
-            being disguised as a clean, empty feed.
+            failures inside the feed degrade into explicit markers on
+            the payload rather than an error status, so the contract is
+            ``200`` plus ``degraded`` / ``counts.partial``, or one of
+            the typed ``400`` / ``404`` / ``503`` above.
         """
         # Fail closed on auth: ``accessible_by=None`` means "no ACL
         # filter", so an unauthenticated caller slipping through as
@@ -728,7 +796,7 @@ def create_monitor_router(
         user_id = require_user(request, auth_provider)
         feed_degraded: list[str] = []
         if host_id is not None:
-            feed_degraded.extend(await _validate_host(host_id, user_id))
+            await _validate_host(host_id, user_id)
         try:
             return await _build_feed(user_id, host_id, only_active, feed_degraded)
         except (SQLAlchemyError, OSError, TimeoutError):

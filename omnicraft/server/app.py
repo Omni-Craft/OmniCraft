@@ -68,6 +68,7 @@ from omnicraft.server.routes.evals import create_evals_router
 from omnicraft.server.routes.gallery import create_gallery_router
 from omnicraft.server.routes.harnesses import create_harnesses_router
 from omnicraft.server.routes.integrations import create_integrations_router
+from omnicraft.server.routes.monitor import create_monitor_router
 from omnicraft.server.routes.observability import create_observability_router
 from omnicraft.server.routes.policy_registry import create_policy_registry_router
 from omnicraft.server.routes.policy_simulate import create_policy_simulate_router
@@ -2178,6 +2179,20 @@ def create_app(
         create_observability_router(conversation_store, auth_provider=auth_provider),
         prefix="/v1",
         tags=["observability"],
+    )
+    # Single feed every monitor surface polls (Electron HUD, native app).
+    # Gets the same liveness lookup the session stream uses so a row can
+    # say "unknown" instead of guessing at reachability.
+    app.include_router(
+        create_monitor_router(
+            conversation_store,
+            agent_store,
+            auth_provider=auth_provider,
+            permission_store=permission_store,
+            liveness_lookup=_bulk_session_liveness,
+        ),
+        prefix="/v1",
+        tags=["monitor"],
     )
     app.include_router(
         create_code_stats_router(conversation_store, agent_store, auth_provider=auth_provider),

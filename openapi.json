@@ -2050,6 +2050,260 @@
         "title": "ModelUsage",
         "type": "object"
       },
+      "MonitorCounts": {
+        "description": "Headline tallies over the rows in the same response.",
+        "properties": {
+          "active": {
+            "default": 0,
+            "description": "Rows whose `status` is not `\"idle\"` \u2014 work in flight or in an error state.",
+            "title": "Active",
+            "type": "integer"
+          },
+          "awaiting": {
+            "default": 0,
+            "description": "Rows with at least one outstanding approval prompt, i.e. blocked on a human.",
+            "title": "Awaiting",
+            "type": "integer"
+          }
+        },
+        "title": "MonitorCounts",
+        "type": "object"
+      },
+      "MonitorFeedResponse": {
+        "description": "Response body of `GET /v1/monitor/sessions`.\n\nThe single source a monitor surface polls. Never fails with a\n5xx: a broken part degrades into an explicit marker rather than\nan error or a falsely-clean feed.",
+        "properties": {
+          "counts": {
+            "$ref": "#/components/schemas/MonitorCounts",
+            "description": "Tallies over `sessions`."
+          },
+          "degraded": {
+            "description": "Stable slugs naming feed-wide failures, e.g. `[\"liveness_unavailable\"]` when no row could be resolved for liveness, or `[\"internal_error\"]` when the feed could not be built at all (`sessions` is then empty, and an empty list must **not** be read as \"nothing is running\").",
+            "items": {
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
+          "generated_at": {
+            "description": "Unix epoch seconds the feed was built.",
+            "title": "Generated At",
+            "type": "integer"
+          },
+          "host_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The `host_id` filter that produced this feed, or `None` when unfiltered (all visible sessions).",
+            "title": "Host Id"
+          },
+          "sessions": {
+            "description": "The rows, most recently updated first.",
+            "items": {
+              "$ref": "#/components/schemas/MonitorSessionItem"
+            },
+            "title": "Sessions",
+            "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "description": "`True` when more matching sessions existed than the feed's cap \u2014 the tallies then describe the returned rows only, not the whole account.",
+            "title": "Truncated",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "generated_at"
+        ],
+        "title": "MonitorFeedResponse",
+        "type": "object"
+      },
+      "MonitorPendingElicitation": {
+        "description": "Compact summary of the approval prompt a session is blocked on.\n\nJust enough for a monitor surface to render \"this session needs\nyou, and here's what for\" without opening the chat. The full\npayload stays on `GET /v1/sessions/{id}`.",
+        "properties": {
+          "id": {
+            "description": "Elicitation correlation id, e.g. `\"elicit_abc123\"`.",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "unknown",
+            "description": "Coarse label for what is being asked, in precedence order: the triggering policy name, else the policy phase, else the MCP elicitation mode (`\"form\"` / `\"url\"`). `\"unknown\"` when the stored payload carries none of them \u2014 never silently blank.",
+            "title": "Kind",
+            "type": "string"
+          },
+          "session_id": {
+            "description": "Session whose resolve endpoint owns this prompt. Usually the row's own id, but a sub-agent child's prompt is surfaced on its parent row, in which case this is the child's id \u2014 the verdict must be posted there.",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The human-readable prompt, truncated. `None` when the stored payload has no readable message; the row's `degraded` list then carries `\"pending_elicitation_unreadable\"` so an absent summary is never read as \"nothing to decide\".",
+            "title": "Summary"
+          }
+        },
+        "required": [
+          "id",
+          "session_id"
+        ],
+        "title": "MonitorPendingElicitation",
+        "type": "object"
+      },
+      "MonitorSessionItem": {
+        "description": "One session row of `GET /v1/monitor/sessions`.\n\nDeliberately narrower than `SessionListItem`: only what a\nmonitor surface (the Electron HUD today, a native app later)\nneeds to answer \"what is running, and what needs me\".",
+        "properties": {
+          "agent_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bound agent's display name, e.g. `\"research-agent\"`. `None` when the agent row is gone.",
+            "title": "Agent Name"
+          },
+          "cost_usd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Spend recorded on this session's own usage blob, e.g. `0.42`. `None` when no cost has been recorded or the blob is unreadable \u2014 an honest \"unknown\", never rendered as `0`. Sub-agent children's spend is **not** rolled in: that needs a paginated subtree walk this feed deliberately avoids.",
+            "title": "Cost Usd"
+          },
+          "degraded": {
+            "description": "Stable slugs naming every part of this row that could not be resolved, e.g. `[\"liveness_unavailable\", \"status_unreadable\"]`. Empty when the row is fully resolved. A row with a non-empty list is never filtered out by `only_active` \u2014 an unknown state must not disappear as if it were idle.",
+            "items": {
+              "type": "string"
+            },
+            "title": "Degraded",
+            "type": "array"
+          },
+          "host_online": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Host tunnel liveness. `None` when the session has no `host_id`, or when liveness is unknown \u2014 the same `degraded` marker disambiguates.",
+            "title": "Host Online"
+          },
+          "pending_elicitation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MonitorPendingElicitation"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Summary of the first outstanding prompt, own prompts first. `None` when `pending_elicitations_count` is `0`. A non-zero count with a `None` summary means the payload was unreadable \u2014 see `degraded`."
+          },
+          "pending_elicitations_count": {
+            "default": 0,
+            "description": "Outstanding approval prompts on this session plus its direct sub-agent children (a child's prompt is mirrored into its ancestors' streams, so it is the parent row that a human acts on). `0` when nothing is blocked.",
+            "title": "Pending Elicitations Count",
+            "type": "integer"
+          },
+          "project": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Sidebar project folder the session is filed under, or `None` when unfiled.",
+            "title": "Project"
+          },
+          "runner_online": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Strict runner liveness, as in `SessionListItem`. `None` means **unknown** (no liveness lookup wired, or the lookup failed), never \"offline\"; `degraded` then carries `\"liveness_unavailable\"`.",
+            "title": "Runner Online"
+          },
+          "session_id": {
+            "description": "Session/conversation identifier, e.g. `\"conv_abc123\"`.",
+            "title": "Session Id",
+            "type": "string"
+          },
+          "status": {
+            "description": "Lifecycle status. Unlike `SessionListItem`, `\"waiting\"` is **preserved** (the list shape collapses it into `\"running\"`) \u2014 a monitor's whole job is telling \"still working\" apart from \"blocked on a human\". `\"launching\"` is likewise kept distinct from `\"idle\"`. Rolls up direct sub-agent children: a parent whose child is running reads `\"running\"`, and a parent whose child is blocked reads `\"waiting\"`.",
+            "enum": [
+              "idle",
+              "launching",
+              "running",
+              "waiting",
+              "failed"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Human-readable session title, or `None`.",
+            "title": "Title"
+          },
+          "updated_at": {
+            "description": "Unix epoch seconds of last session update.",
+            "title": "Updated At",
+            "type": "integer"
+          },
+          "workspace": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Absolute path the runner works in, or `None` when the session has no bound workspace.",
+            "title": "Workspace"
+          }
+        },
+        "required": [
+          "session_id",
+          "status",
+          "updated_at"
+        ],
+        "title": "MonitorSessionItem",
+        "type": "object"
+      },
       "NativeToolData": {
         "description": "A provider-native tool output item (e.g. `web_search_call`).\n\nThese are executed server-side by the LLM provider and returned\nas opaque dicts. Agent-plane persists and replays them so the\nLLM sees its own tool results on subsequent iterations.",
         "properties": {
@@ -7958,6 +8212,68 @@
         "summary": "Me",
         "tags": [
           "system"
+        ]
+      }
+    },
+    "/v1/monitor/sessions": {
+      "get": {
+        "description": "Monitor feed of the caller's sessions, newest activity first.\n\n**Returns:** A `MonitorFeedResponse`. Never 5xx \u2014 an internal failure comes back as an empty `sessions` list with `degraded=[\"internal_error\"]`.",
+        "operationId": "monitor_sessions_v1_monitor_sessions_get",
+        "parameters": [
+          {
+            "description": "When set, only sessions bound to this host, e.g. `\"host_abc123\"`. `None` (default) returns every session visible to the caller.",
+            "in": "query",
+            "name": "host_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Host Id"
+            }
+          },
+          {
+            "description": "When `True` (the default), drop rows that are idle **and** have no outstanding prompt **and** resolved cleanly \u2014 the \"needs an eye on it\" view. Rows carrying a `degraded` marker are always kept, so an unknown state is never mistaken for an idle one. `False` returns every non-archived session in the page.",
+            "in": "query",
+            "name": "only_active",
+            "required": false,
+            "schema": {
+              "default": true,
+              "title": "Only Active",
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MonitorFeedResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Monitor Sessions",
+        "tags": [
+          "monitor"
         ]
       }
     },

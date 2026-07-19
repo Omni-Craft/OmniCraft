@@ -2404,6 +2404,158 @@ class ChildSessionList(BaseModel):
     has_more: bool = False
 
 
+# ── Monitor feed ───────────────────────────────────────────────────
+
+
+class MonitorPendingElicitation(BaseModel):
+    """
+    Compact summary of the approval prompt a session is blocked on.
+
+    Just enough for a monitor surface to render "this session needs
+    you, and here's what for" without opening the chat. The full
+    payload stays on ``GET /v1/sessions/{id}``.
+
+    :param id: Elicitation correlation id, e.g. ``"elicit_abc123"``.
+    :param session_id: Session whose resolve endpoint owns this
+        prompt. Usually the row's own id, but a sub-agent child's
+        prompt is surfaced on its parent row, in which case this is
+        the child's id — the verdict must be posted there.
+    :param kind: Coarse label for what is being asked, in
+        precedence order: the triggering policy name, else the
+        policy phase, else the MCP elicitation mode
+        (``"form"`` / ``"url"``). ``"unknown"`` when the stored
+        payload carries none of them — never silently blank.
+    :param summary: The human-readable prompt, truncated. ``None``
+        when the stored payload has no readable message; the row's
+        ``degraded`` list then carries
+        ``"pending_elicitation_unreadable"`` so an absent summary is
+        never read as "nothing to decide".
+    """
+
+    id: str
+    session_id: str
+    kind: str = "unknown"
+    summary: str | None = None
+
+
+class MonitorSessionItem(BaseModel):
+    """
+    One session row of ``GET /v1/monitor/sessions``.
+
+    Deliberately narrower than :class:`SessionListItem`: only what a
+    monitor surface (the Electron HUD today, a native app later)
+    needs to answer "what is running, and what needs me".
+
+    :param session_id: Session/conversation identifier,
+        e.g. ``"conv_abc123"``.
+    :param agent_name: Bound agent's display name, e.g.
+        ``"research-agent"``. ``None`` when the agent row is gone.
+    :param title: Human-readable session title, or ``None``.
+    :param project: Sidebar project folder the session is filed
+        under, or ``None`` when unfiled.
+    :param workspace: Absolute path the runner works in, or ``None``
+        when the session has no bound workspace.
+    :param status: Lifecycle status. Unlike
+        :class:`SessionListItem`, ``"waiting"`` is **preserved** (the
+        list shape collapses it into ``"running"``) — a monitor's
+        whole job is telling "still working" apart from "blocked on
+        a human". ``"launching"`` is likewise kept distinct from
+        ``"idle"``. Rolls up direct sub-agent children: a parent
+        whose child is running reads ``"running"``, and a parent
+        whose child is blocked reads ``"waiting"``.
+    :param pending_elicitations_count: Outstanding approval prompts
+        on this session plus its direct sub-agent children (a child's
+        prompt is mirrored into its ancestors' streams, so it is the
+        parent row that a human acts on). ``0`` when nothing is
+        blocked.
+    :param pending_elicitation: Summary of the first outstanding
+        prompt, own prompts first. ``None`` when
+        ``pending_elicitations_count`` is ``0``. A non-zero count
+        with a ``None`` summary means the payload was unreadable —
+        see ``degraded``.
+    :param runner_online: Strict runner liveness, as in
+        :class:`SessionListItem`. ``None`` means **unknown** (no
+        liveness lookup wired, or the lookup failed), never
+        "offline"; ``degraded`` then carries
+        ``"liveness_unavailable"``.
+    :param host_online: Host tunnel liveness. ``None`` when the
+        session has no ``host_id``, or when liveness is unknown —
+        the same ``degraded`` marker disambiguates.
+    :param updated_at: Unix epoch seconds of last session update.
+    :param cost_usd: Spend recorded on this session's own usage
+        blob, e.g. ``0.42``. ``None`` when no cost has been recorded
+        or the blob is unreadable — an honest "unknown", never
+        rendered as ``0``. Sub-agent children's spend is **not**
+        rolled in: that needs a paginated subtree walk this feed
+        deliberately avoids.
+    :param degraded: Stable slugs naming every part of this row that
+        could not be resolved, e.g.
+        ``["liveness_unavailable", "status_unreadable"]``. Empty when
+        the row is fully resolved. A row with a non-empty list is
+        never filtered out by ``only_active`` — an unknown state must
+        not disappear as if it were idle.
+    """
+
+    session_id: str
+    agent_name: str | None = None
+    title: str | None = None
+    project: str | None = None
+    workspace: str | None = None
+    status: Literal["idle", "launching", "running", "waiting", "failed"]
+    pending_elicitations_count: int = 0
+    pending_elicitation: MonitorPendingElicitation | None = None
+    runner_online: bool | None = None
+    host_online: bool | None = None
+    updated_at: int
+    cost_usd: float | None = None
+    degraded: list[str] = Field(default_factory=list)
+
+
+class MonitorCounts(BaseModel):
+    """
+    Headline tallies over the rows in the same response.
+
+    :param active: Rows whose ``status`` is not ``"idle"`` — work in
+        flight or in an error state.
+    :param awaiting: Rows with at least one outstanding approval
+        prompt, i.e. blocked on a human.
+    """
+
+    active: int = 0
+    awaiting: int = 0
+
+
+class MonitorFeedResponse(BaseModel):
+    """
+    Response body of ``GET /v1/monitor/sessions``.
+
+    The single source a monitor surface polls. Never fails with a
+    5xx: a broken part degrades into an explicit marker rather than
+    an error or a falsely-clean feed.
+
+    :param generated_at: Unix epoch seconds the feed was built.
+    :param host_id: The ``host_id`` filter that produced this feed,
+        or ``None`` when unfiltered (all visible sessions).
+    :param sessions: The rows, most recently updated first.
+    :param counts: Tallies over ``sessions``.
+    :param truncated: ``True`` when more matching sessions existed
+        than the feed's cap — the tallies then describe the returned
+        rows only, not the whole account.
+    :param degraded: Stable slugs naming feed-wide failures, e.g.
+        ``["liveness_unavailable"]`` when no row could be resolved
+        for liveness, or ``["internal_error"]`` when the feed could
+        not be built at all (``sessions`` is then empty, and an empty
+        list must **not** be read as "nothing is running").
+    """
+
+    generated_at: int
+    host_id: str | None = None
+    sessions: list[MonitorSessionItem] = Field(default_factory=list)
+    counts: MonitorCounts = Field(default_factory=MonitorCounts)
+    truncated: bool = False
+    degraded: list[str] = Field(default_factory=list)
+
+
 # ── Permissions ────────────────────────────────────────────────────
 
 

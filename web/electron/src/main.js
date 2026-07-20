@@ -43,7 +43,12 @@ const { registerWorkspaceChromeHide } = require("./workspace-chrome");
 const { mergeHudSettings, readHudSettings } = require("./hudVisibility");
 const { createHudPolicy } = require("./hudPolicy");
 const { registerHudIpc } = require("./hudIpc");
-const { createHudNotifier } = require("./hudNotifications");
+const {
+  createHudNotifier,
+  isCategoryEnabled,
+  isWithinQuietHours,
+  minutesOfDay,
+} = require("./hudNotifications");
 const { createBrowserViewRegistry } = require("./browserViewRegistry");
 const { createBrowserViewBoundsController } = require("./browserViewBounds");
 const { registerBrowserIpc } = require("./browserIpc");
@@ -1675,6 +1680,11 @@ function hudWindowHandle() {
  */
 const hudNotifier = createHudNotifier({
   deliver: (event) => {
+    // A silenced category is not DELIVERED — but it was still detected, and the
+    // detector's "already notified" state moved on with it. That is the whole
+    // point: turning a category back on picks up from now, instead of firing a
+    // toast for every approval that has been pending since it was switched off.
+    if (!isCategoryEnabled(hudSettingsState().notifications, event.category)) return;
     showDesktopNotification({
       title: event.title,
       body: event.body,
@@ -1685,6 +1695,9 @@ const hudNotifier = createHudNotifier({
       hostLabel: hudOriginHost(),
     });
   },
+  // Read per report, not captured once: a threshold changed in Settings has to
+  // take effect on the next poll, not on the next launch.
+  budgetThreshold: () => hudSettingsState().notifications?.budgetThreshold,
   onError: (message, err) => console.warn(`[omnicraft] ${message}:`, err),
 });
 
@@ -2004,8 +2017,36 @@ function shouldPlayNotificationSound(key) {
 }
 
 /**
+ * Whether the user's quiet hours are running right now.
+ *
+ * Quiet hours DISCARD, they do not queue. Holding the night's alerts and
+ * emptying them at 07:00 would be worse than dropping them: a wall of toasts
+ * about decisions that stopped mattering hours ago, on top of the fact that
+ * nothing was answered anyway. The HUD window still shows every one of them
+ * whenever the user looks — this only silences the interruption.
+ *
+ * Unreadable settings silence NOTHING. Unknown is not "quiet" any more than it
+ * is "off" anywhere else in this file.
+ */
+function inQuietHours() {
+  const prefs = hudSettingsState().notifications;
+  if (prefs === null) return false;
+  return isWithinQuietHours({
+    quietFrom: prefs.quietFrom,
+    quietTo: prefs.quietTo,
+    nowMinutes: minutesOfDay(new Date()),
+  });
+}
+
+/**
  * Post one OS notification: the title, the click that focuses and routes, the
  * foreground cue and the sound.
+ *
+ * Quiet hours are enforced here rather than at any one caller: this is the one
+ * place a toast can come out of, so "no interruptions between 22:00 and 07:00"
+ * means every toast the shell raises, whether the HUD detected it or a
+ * connected page asked for it. A rule that covered only half of them would not
+ * be a quiet hour.
  *
  * The DELIVERY, separated from who asked for it. It has two callers with
  * different shapes: a pinned SPA page over IPC (which names its own window and
@@ -2026,6 +2067,7 @@ function shouldPlayNotificationSound(key) {
  */
 function showDesktopNotification({ title, body, navigatePath, sender = null, hostLabel = null }) {
   if (!Notification.isSupported()) return false;
+  if (inQuietHours()) return false;
   const senderWindow = sender ? BrowserWindow.fromWebContents(sender) : null;
   // With windows pinned to more than one server (multi-server), prefix the
   // firing server's hostname so alerts are attributable.

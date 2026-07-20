@@ -133,7 +133,7 @@ interface ElectronDesktopApi extends NativeShellApi {
   /** The floating HUD's persisted settings, with unreadable kept distinct from off. */
   getHudSettings?: () => Promise<HudSettingsRead | null>;
   /** Turn the HUD on/off or change its visibility mode; resolves the new settings. */
-  setHudSettings?: (patch: Partial<HudSettings>) => Promise<HudSettingsRead | null>;
+  setHudSettings?: (patch: HudSettingsPatch) => Promise<HudSettingsRead | null>;
 }
 
 /**
@@ -145,11 +145,43 @@ interface ElectronDesktopApi extends NativeShellApi {
  */
 export type HudVisibilityMode = "always" | "hide-when-idle" | "attention-only";
 
+/** A notification the shell can raise from the HUD's feed. */
+export type HudNotificationCategory = "permission" | "budget" | "stuck" | "completion";
+
+/**
+ * Which of the shell's notifications get through, and when.
+ *
+ * `quietFrom`/`quietTo` are local `HH:MM` and move together — both set or both
+ * null. A range whose start is after its end wraps midnight; a range whose ends
+ * are equal silences nothing. `budgetThreshold` is a fraction of the declared
+ * budget, between 0.01 and 1.
+ */
+export interface HudNotificationSettings {
+  permission: boolean;
+  budget: boolean;
+  stuck: boolean;
+  completion: boolean;
+  quietFrom: string | null;
+  quietTo: string | null;
+  budgetThreshold: number;
+}
+
 /** The floating HUD's settings, as the shell persists them. */
 export interface HudSettings {
   enabled: boolean;
   mode: HudVisibilityMode;
+  notifications: HudNotificationSettings;
+  /** The app-wide notification sound, not a HUD-only copy of it. */
+  sound: boolean;
 }
+
+/**
+ * A patch: the top-level fields are replaced, and `notifications` is merged
+ * field by field by the shell, so sending one toggle leaves the others alone.
+ */
+export type HudSettingsPatch = Partial<Omit<HudSettings, "notifications">> & {
+  notifications?: Partial<HudNotificationSettings>;
+};
 
 /**
  * A read of those settings. `readable: false` means settings.json could not be
@@ -159,6 +191,8 @@ export interface HudSettingsRead {
   readable: boolean;
   enabled: boolean | null;
   mode: HudVisibilityMode | null;
+  notifications: HudNotificationSettings | null;
+  sound: boolean | null;
 }
 
 /** How long a HUD-settings IPC call may hang before it counts as no answer. */
@@ -628,7 +662,7 @@ export async function getHudSettings(): Promise<HudSettingsRead | null> {
  * {@link getHudSettings} — including a rejected write, where the change did
  * NOT land.
  */
-export async function setHudSettings(patch: Partial<HudSettings>): Promise<HudSettingsRead | null> {
+export async function setHudSettings(patch: HudSettingsPatch): Promise<HudSettingsRead | null> {
   const electron = electronApi();
   if (!electron?.setHudSettings) return null;
   return withIpcTimeout(electron.setHudSettings(patch));

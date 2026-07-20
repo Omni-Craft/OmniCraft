@@ -12,7 +12,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import type { HudSettingsRead } from "@/lib/nativeBridge";
+import type { HudNotificationSettings, HudSettingsRead } from "@/lib/nativeBridge";
 
 const mocks = vi.hoisted(() => ({
   isElectronShell: true,
@@ -47,9 +47,32 @@ vi.mock("@/hooks/useConversations", () => ({
 
 import { SettingsPage } from "./SettingsPage";
 
+/** The notification preferences a never-configured install runs on. */
+function notifications(
+  overrides: Partial<HudNotificationSettings> = {},
+): HudNotificationSettings {
+  return {
+    permission: true,
+    budget: true,
+    stuck: true,
+    completion: true,
+    quietFrom: null,
+    quietTo: null,
+    budgetThreshold: 0.8,
+    ...overrides,
+  };
+}
+
 /** A readable settings answer from the shell. */
 function settings(overrides: Partial<HudSettingsRead> = {}): HudSettingsRead {
-  return { readable: true, enabled: true, mode: "always", ...overrides };
+  return {
+    readable: true,
+    enabled: true,
+    mode: "always",
+    notifications: notifications(),
+    sound: false,
+    ...overrides,
+  };
 }
 
 function renderHudSection() {
@@ -129,7 +152,13 @@ describe("Settings → HUD flutuante", () => {
   });
 
   it("says the state is UNKNOWN when settings.json could not be read", async () => {
-    mocks.getHudSettings.mockResolvedValue({ readable: false, enabled: null, mode: null });
+    mocks.getHudSettings.mockResolvedValue({
+      readable: false,
+      enabled: null,
+      mode: null,
+      notifications: null,
+      sound: null,
+    });
     await renderSettled();
 
     expect(screen.getByTestId("hud-settings-unknown")).toBeInTheDocument();
@@ -176,5 +205,116 @@ describe("Settings → HUD flutuante", () => {
     expect(screen.queryByTestId("hud-settings-unknown")).not.toBeInTheDocument();
     // Nothing to ask: there is no shell on the other end of the bridge.
     expect(mocks.getHudSettings).not.toHaveBeenCalled();
+  });
+
+  describe("notificações", () => {
+    it("says outright that nothing fires with the HUD turned off", async () => {
+      // The trap this text exists for: four switches sitting at "on" read as
+      // "I will be told", and with the HUD off nobody is watching the feed.
+      mocks.getHudSettings.mockResolvedValue(settings({ enabled: false }));
+      await renderSettled();
+
+      expect(screen.getByTestId("hud-notifications-scope")).toHaveTextContent(
+        /só funcionam com o HUD ligado/i,
+      );
+      expect(screen.getByTestId("hud-notifications-scope")).toHaveTextContent(
+        /escondido.*continua observando/i,
+      );
+      expect(screen.getByTestId("hud-notifications-hud-off")).toBeInTheDocument();
+    });
+
+    it("reflects each stored category and sends ONE of them when toggled", async () => {
+      mocks.getHudSettings.mockResolvedValue(
+        settings({ notifications: notifications({ budget: false }) }),
+      );
+      mocks.setHudSettings.mockResolvedValue(settings());
+      await renderSettled();
+
+      expect(screen.getByTestId("hud-notify-budget")).toHaveAttribute("data-state", "unchecked");
+      expect(screen.getByTestId("hud-notify-permission")).toHaveAttribute("data-state", "checked");
+
+      fireEvent.click(screen.getByTestId("hud-notify-stuck"));
+      // The patch names only what changed; the shell merges it into the rest,
+      // so the page must not send a whole sub-object built from its own state.
+      expect(mocks.setHudSettings).toHaveBeenCalledWith({ notifications: { stuck: false } });
+      await waitFor(() =>
+        expect(screen.getByTestId("hud-notify-budget")).toHaveAttribute("data-state", "checked"),
+      );
+    });
+
+    it("toggles the app-wide sound, not a HUD-only copy of it", async () => {
+      mocks.getHudSettings.mockResolvedValue(settings({ sound: false }));
+      mocks.setHudSettings.mockResolvedValue(settings({ sound: true }));
+      await renderSettled();
+
+      fireEvent.click(screen.getByTestId("hud-notify-sound"));
+      expect(mocks.setHudSettings).toHaveBeenCalledWith({ sound: true });
+      await waitFor(() =>
+        expect(screen.getByTestId("hud-notify-sound")).toHaveAttribute("data-state", "checked"),
+      );
+    });
+
+    it("turns quiet hours on with a range, and clears BOTH ends when turned off", async () => {
+      mocks.getHudSettings.mockResolvedValue(settings());
+      mocks.setHudSettings.mockResolvedValue(
+        settings({ notifications: notifications({ quietFrom: "22:00", quietTo: "07:00" }) }),
+      );
+      await renderSettled();
+
+      expect(screen.queryByTestId("hud-quiet-from")).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId("hud-quiet-enabled"));
+      expect(mocks.setHudSettings).toHaveBeenCalledWith({
+        notifications: { quietFrom: "22:00", quietTo: "07:00" },
+      });
+
+      await waitFor(() => expect(screen.getByTestId("hud-quiet-from")).toBeInTheDocument());
+      expect(screen.getByTestId("hud-quiet-to")).toHaveValue("07:00");
+
+      // Half a range is not a span the shell can silence on, so both go.
+      fireEvent.click(screen.getByTestId("hud-quiet-enabled"));
+      expect(mocks.setHudSettings).toHaveBeenLastCalledWith({
+        notifications: { quietFrom: null, quietTo: null },
+      });
+      await waitFor(() => expect(screen.getByTestId("hud-quiet-from")).toBeInTheDocument());
+    });
+
+    it("sends both ends when one is edited, and ignores a half-typed time", async () => {
+      mocks.getHudSettings.mockResolvedValue(
+        settings({ notifications: notifications({ quietFrom: "22:00", quietTo: "07:00" }) }),
+      );
+      mocks.setHudSettings.mockResolvedValue(settings());
+      await renderSettled();
+
+      fireEvent.change(screen.getByTestId("hud-quiet-to"), { target: { value: "" } });
+      expect(mocks.setHudSettings).not.toHaveBeenCalled();
+
+      fireEvent.change(screen.getByTestId("hud-quiet-to"), { target: { value: "08:30" } });
+      expect(mocks.setHudSettings).toHaveBeenCalledWith({
+        notifications: { quietFrom: "22:00", quietTo: "08:30" },
+      });
+      await waitFor(() => expect(screen.queryByTestId("hud-quiet-from")).not.toBeInTheDocument());
+    });
+
+    it("shows the stored budget threshold", async () => {
+      mocks.getHudSettings.mockResolvedValue(
+        settings({ notifications: notifications({ budgetThreshold: 0.5 }) }),
+      );
+      await renderSettled();
+
+      expect(screen.getByTestId("hud-budget-threshold")).toHaveTextContent("50%");
+    });
+
+    it("says UNKNOWN — never off — when only the notifications failed to read", async () => {
+      // A settings.json whose hud blob parsed but whose notification block did
+      // not. Four switches resting at "off" would be the page inventing it.
+      mocks.getHudSettings.mockResolvedValue(
+        settings({ readable: false, enabled: null, mode: null, notifications: null, sound: null }),
+      );
+      await renderSettled();
+
+      expect(screen.getByTestId("hud-settings-unknown")).toHaveTextContent(/desconhecido/i);
+      expect(screen.queryByTestId("hud-notify-permission")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("hud-quiet-enabled")).not.toBeInTheDocument();
+    });
   });
 });

@@ -134,7 +134,9 @@ import {
   type CliStatus,
   getCliStatus,
   getHudSettings,
-  type HudSettings,
+  type HudNotificationCategory,
+  type HudNotificationSettings,
+  type HudSettingsPatch,
   type HudSettingsRead,
   type HudVisibilityMode,
   isElectronShell,
@@ -1102,6 +1104,211 @@ const hudModeCards: { value: HudVisibilityMode; title: string; helper: string }[
   },
 ];
 
+/** The four alerts the shell raises, in the order they matter. */
+const hudNotificationCards: { key: HudNotificationCategory; title: string; helper: string }[] = [
+  {
+    key: "permission",
+    title: "Pedidos de permissão",
+    helper: "Uma sessão parou e espera a sua decisão para continuar.",
+  },
+  {
+    key: "budget",
+    title: "Orçamento",
+    helper: "Uma sessão passou da fração do orçamento declarado escolhida abaixo.",
+  },
+  {
+    key: "stuck",
+    title: "Sessões paradas",
+    helper: "Uma sessão está em execução mas não registra atividade há um bom tempo.",
+  },
+  {
+    key: "completion",
+    title: "Conclusões",
+    helper: "Uma sessão terminou ou falhou.",
+  },
+];
+
+/** Fractions offered for the budget alert; the shell's default is 80%. */
+const hudBudgetThresholds = [0.5, 0.6, 0.7, 0.8, 0.9, 1];
+
+/** When quiet hours are turned on without a range having ever been chosen. */
+const DEFAULT_QUIET_FROM = "22:00";
+const DEFAULT_QUIET_TO = "07:00";
+
+/** `HH:MM`, the only shape the shell accepts (and what `<input type="time">` gives). */
+const QUIET_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * The notification preferences, inside the HUD section because that is what
+ * they depend on: these alerts are raised from the HUD's feed reports, so they
+ * only exist while the HUD is ON. A HUD hidden by its visibility mode still
+ * notifies (the modes hide the window, they don't close it) — a HUD turned off
+ * watches nothing. The section says so outright: a user who reads these
+ * switches as "I'll be told" while the HUD is off would be told nothing.
+ */
+function HudNotificationsFields({
+  notifications,
+  sound,
+  busy,
+  hudEnabled,
+  apply,
+}: {
+  notifications: HudNotificationSettings;
+  sound: boolean;
+  busy: boolean;
+  hudEnabled: boolean;
+  apply: (patch: HudSettingsPatch) => void;
+}) {
+  const quietOn = notifications.quietFrom !== null && notifications.quietTo !== null;
+  const thresholdId = useId();
+
+  // Both ends travel together — the shell rejects half a range, since half a
+  // range names no span it could silence.
+  const setQuietEnd = (end: "quietFrom" | "quietTo", value: string) => {
+    if (!QUIET_TIME_PATTERN.test(value)) return;
+    apply({
+      notifications: {
+        quietFrom: notifications.quietFrom ?? DEFAULT_QUIET_FROM,
+        quietTo: notifications.quietTo ?? DEFAULT_QUIET_TO,
+        [end]: value,
+      },
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-5 border-t border-border pt-6">
+      <div className="flex flex-col gap-1">
+        <span className="text-sm font-medium">Notificações</span>
+        <p data-testid="hud-notifications-scope" className="text-sm text-muted-foreground">
+          Estes avisos saem do que o próprio HUD observa, então{" "}
+          <strong className="font-medium">só funcionam com o HUD ligado</strong>. Escondido por um
+          modo de visibilidade ele continua observando e avisando; desligado, ninguém está olhando
+          o feed e nada é avisado.
+        </p>
+        {!hudEnabled && (
+          <p data-testid="hud-notifications-hud-off" className="text-sm text-warning">
+            O HUD está desligado agora — nada aqui vai disparar até você ligá-lo.
+          </p>
+        )}
+      </div>
+
+      <div className="flex flex-col gap-4">
+        {hudNotificationCards.map((card) => (
+          <label key={card.key} className="flex items-center justify-between gap-4">
+            <span className="flex flex-col">
+              <span className="text-sm font-medium">{card.title}</span>
+              <span className="text-sm text-muted-foreground">{card.helper}</span>
+            </span>
+            <Switch
+              data-testid={`hud-notify-${card.key}`}
+              checked={notifications[card.key]}
+              disabled={busy}
+              onCheckedChange={(checked) => apply({ notifications: { [card.key]: checked } })}
+            />
+          </label>
+        ))}
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <label className="flex flex-col gap-1" htmlFor={thresholdId}>
+          <span className="text-sm font-medium">Avisar do orçamento a partir de</span>
+          <span className="text-sm text-muted-foreground">
+            Só vale para sessões com um limite declarado — sem limite não há porcentagem para
+            comparar, e nada é avisado.
+          </span>
+        </label>
+        <Select
+          value={String(notifications.budgetThreshold)}
+          disabled={busy}
+          onValueChange={(value) =>
+            apply({ notifications: { budgetThreshold: Number(value) } })
+          }
+        >
+          <SelectTrigger id={thresholdId} data-testid="hud-budget-threshold" className="w-40">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {hudBudgetThresholds.map((fraction) => (
+              <SelectItem key={fraction} value={String(fraction)}>
+                {Math.round(fraction * 100)}%
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <label className="flex items-center justify-between gap-4">
+        <span className="flex flex-col">
+          <span className="text-sm font-medium">Som</span>
+          <span className="text-sm text-muted-foreground">
+            Toca um som do sistema junto do aviso. É a mesma preferência de som do app inteiro (a
+            do menu Notificações), não uma segunda chave só para o HUD.
+          </span>
+        </span>
+        <Switch
+          data-testid="hud-notify-sound"
+          checked={sound}
+          disabled={busy}
+          onCheckedChange={(checked) => apply({ sound: checked })}
+        />
+      </label>
+
+      <div className="flex flex-col gap-3">
+        <label className="flex items-center justify-between gap-4">
+          <span className="flex flex-col">
+            <span className="text-sm font-medium">Horário de silêncio</span>
+            <span className="text-sm text-muted-foreground">
+              No intervalo escolhido nada é notificado. Os avisos são <em>descartados</em>, não
+              guardados: ninguém quer uma pilha de alertas da madrugada às 7h. O HUD continua
+              mostrando tudo quando você olhar.
+            </span>
+          </span>
+          <Switch
+            data-testid="hud-quiet-enabled"
+            checked={quietOn}
+            disabled={busy}
+            onCheckedChange={(checked) =>
+              apply({
+                notifications: checked
+                  ? { quietFrom: DEFAULT_QUIET_FROM, quietTo: DEFAULT_QUIET_TO }
+                  : { quietFrom: null, quietTo: null },
+              })
+            }
+          />
+        </label>
+        {quietOn && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm text-muted-foreground">Das</span>
+            <Input
+              type="time"
+              aria-label="Início do horário de silêncio"
+              data-testid="hud-quiet-from"
+              className="w-32"
+              disabled={busy}
+              value={notifications.quietFrom ?? DEFAULT_QUIET_FROM}
+              onChange={(event) => setQuietEnd("quietFrom", event.target.value)}
+            />
+            <span className="text-sm text-muted-foreground">às</span>
+            <Input
+              type="time"
+              aria-label="Fim do horário de silêncio"
+              data-testid="hud-quiet-to"
+              className="w-32"
+              disabled={busy}
+              value={notifications.quietTo ?? DEFAULT_QUIET_TO}
+              onChange={(event) => setQuietEnd("quietTo", event.target.value)}
+            />
+            <span className="text-xs text-muted-foreground">
+              Horário local. Um intervalo que começa depois de terminar atravessa a meia-noite;
+              começo e fim iguais não silenciam nada.
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /**
  * Desktop-only: the floating HUD's on/off switch and when it shows itself.
  *
@@ -1134,7 +1341,7 @@ function HudSection() {
     load();
   }, [load]);
 
-  const apply = useCallback(async (patch: Partial<HudSettings>) => {
+  const apply = useCallback(async (patch: HudSettingsPatch) => {
     setBusy(true);
     setSaveFailed(false);
     const next = await setHudSettings(patch);
@@ -1174,8 +1381,18 @@ function HudSection() {
   // Unknown covers every shape we can't trust: no answer, an unreadable
   // settings file, or a partial blob. None of them is "desligado".
   const settings =
-    read !== null && read.readable && read.enabled !== null && read.mode !== null
-      ? { enabled: read.enabled, mode: read.mode }
+    read !== null &&
+    read.readable &&
+    read.enabled !== null &&
+    read.mode !== null &&
+    read.notifications !== null &&
+    read.sound !== null
+      ? {
+          enabled: read.enabled,
+          mode: read.mode,
+          notifications: read.notifications,
+          sound: read.sound,
+        }
       : null;
 
   return (
@@ -1240,6 +1457,14 @@ function HudSection() {
               }))}
             />
           </div>
+
+          <HudNotificationsFields
+            notifications={settings.notifications}
+            sound={settings.sound}
+            busy={busy}
+            hudEnabled={settings.enabled}
+            apply={(patch) => void apply(patch)}
+          />
         </div>
       )}
     </Section>

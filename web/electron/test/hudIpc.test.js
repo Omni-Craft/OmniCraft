@@ -148,3 +148,67 @@ describe("hudIpc — the Settings section's calls", () => {
     assert.deepEqual(h.calls, [], "the policy must not run on a write that failed");
   });
 });
+
+describe("hudIpc — notification preferences", () => {
+  /** Every patch this section can send, exercised end to end. */
+  const set = (h, patch) => h.invoke("omnicraft:hud-set-settings", h.fromHud, patch);
+
+  it("persists a category toggle as a nested patch", async () => {
+    const h = harness();
+    await set(h, { notifications: { completion: false } });
+    assert.deepEqual(h.calls, [
+      ["writeSettings", { notifications: { completion: false } }],
+      ["applyPolicy"],
+    ]);
+  });
+
+  it("persists a quiet range and a threshold", async () => {
+    const h = harness();
+    await set(h, { notifications: { quietFrom: "22:00", quietTo: "07:00" } });
+    await set(h, { notifications: { budgetThreshold: 0.5 } });
+    assert.deepEqual(h.calls[0], [
+      "writeSettings",
+      { notifications: { quietFrom: "22:00", quietTo: "07:00" } },
+    ]);
+    assert.deepEqual(h.calls[2], ["writeSettings", { notifications: { budgetThreshold: 0.5 } }]);
+  });
+
+  it("clears the range when both ends are nulled", async () => {
+    const h = harness();
+    await set(h, { notifications: { quietFrom: null, quietTo: null } });
+    assert.deepEqual(h.calls[0], [
+      "writeSettings",
+      { notifications: { quietFrom: null, quietTo: null } },
+    ]);
+  });
+
+  // A value that slipped past here would be WRITTEN, and read back next launch
+  // as a blob this build can't interpret — one bad call turning the section
+  // into a permanent "desconhecido".
+  it("refuses anything it would not be able to read back", async () => {
+    const h = harness();
+    const bad = [
+      { notifications: "all" },
+      { notifications: { permission: "yes" } },
+      { notifications: { nothingIKnow: true } },
+      { notifications: { quietFrom: "25:00", quietTo: "07:00" } },
+      { notifications: { quietFrom: "9:5", quietTo: "07:00" } },
+      { notifications: { quietFrom: "22:00" } },
+      { notifications: { quietTo: "07:00" } },
+      { notifications: { budgetThreshold: 0 } },
+      { notifications: { budgetThreshold: 1.5 } },
+      { notifications: { budgetThreshold: "80%" } },
+      { sound: "on" },
+    ];
+    for (const patch of bad) {
+      await assert.rejects(() => set(h, patch), `${JSON.stringify(patch)} must be refused`);
+    }
+    assert.deepEqual(h.calls, [], "nothing reached the file");
+  });
+
+  it("passes the sound through as the app-wide preference", async () => {
+    const h = harness();
+    await set(h, { sound: true });
+    assert.deepEqual(h.calls[0], ["writeSettings", { sound: true }]);
+  });
+});

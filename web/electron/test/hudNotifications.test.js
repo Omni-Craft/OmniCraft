@@ -19,7 +19,11 @@ const { describe, it } = require("node:test");
 const assert = require("node:assert/strict");
 
 const {
+  DEFAULT_BUDGET_THRESHOLD,
   DEFAULT_STUCK_AFTER_MS,
+  isCategoryEnabled,
+  isWithinQuietHours,
+  minutesOfDay,
   detectHudNotifications,
   createHudNotifier,
 } = require("../src/hudNotifications");
@@ -613,5 +617,169 @@ describe("createHudNotifier", () => {
     // A finish that happened while no HUD was watching is not news.
     notifier.observe(report([session({ status: "idle" })]));
     assert.deepEqual(delivered, []);
+  });
+});
+
+describe("isWithinQuietHours", () => {
+  /** Minutes past local midnight, written the way a user reads a clock. */
+  const at = (text) => minutesOfDay(new Date(`2024-03-05T${text}:00`));
+  const quiet = (from, to, now) =>
+    isWithinQuietHours({ quietFrom: from, quietTo: to, nowMinutes: at(now) });
+
+  it("silences inside a plain daytime range and not outside it", () => {
+    assert.equal(quiet("09:00", "17:00", "12:00"), true);
+    assert.equal(quiet("09:00", "17:00", "08:59"), false);
+    assert.equal(quiet("09:00", "17:00", "17:00"), false, "the end is exclusive");
+    assert.equal(quiet("09:00", "17:00", "09:00"), true, "the start is inclusive");
+  });
+
+  // The case a range is usually FOR: a night crosses midnight, so the start is
+  // after the end and the window is both ends of the day.
+  it("silences across midnight when the start is after the end", () => {
+    assert.equal(quiet("22:00", "07:00", "23:30"), true);
+    assert.equal(quiet("22:00", "07:00", "03:00"), true);
+    assert.equal(quiet("22:00", "07:00", "06:59"), true);
+    assert.equal(quiet("22:00", "07:00", "07:00"), false);
+    assert.equal(quiet("22:00", "07:00", "12:00"), false);
+    assert.equal(quiet("22:00", "07:00", "21:59"), false);
+  });
+
+  // Nothing in "08:00-08:00" says whether the user meant no time at all or
+  // every time, and one of those readings silences the product forever.
+  it("treats a start equal to the end as an EMPTY range, never as all day", () => {
+    assert.equal(quiet("08:00", "08:00", "08:00"), false);
+    assert.equal(quiet("08:00", "08:00", "20:00"), false);
+    assert.equal(quiet("00:00", "00:00", "00:00"), false);
+  });
+
+  // The failure that would be invisible: a hand-edited file silencing every
+  // alert, including the permission prompt a session is blocked on.
+  it("silences NOTHING when the range can't be read", () => {
+    for (const [from, to] of [
+      [null, null],
+      ["22:00", null],
+      [undefined, undefined],
+      ["25:00", "07:00"],
+      ["22:00", "7:00"],
+      ["22h", "07h"],
+      [2200, 700],
+      [{}, []],
+    ]) {
+      assert.equal(
+        isWithinQuietHours({ quietFrom: from, quietTo: to, nowMinutes: at("23:00") }),
+        false,
+        `${String(from)}-${String(to)} must not silence`,
+      );
+    }
+  });
+
+  it("silences nothing when the clock reading itself is unusable", () => {
+    const range = { quietFrom: "22:00", quietTo: "07:00" };
+    assert.equal(isWithinQuietHours({ ...range, nowMinutes: Number.NaN }), false);
+    assert.equal(isWithinQuietHours({ ...range, nowMinutes: null }), false);
+  });
+});
+
+describe("isCategoryEnabled", () => {
+  it("delivers a category that is on and drops one that is off", () => {
+    const prefs = { permission: true, budget: false };
+    assert.equal(isCategoryEnabled(prefs, "permission"), true);
+    assert.equal(isCategoryEnabled(prefs, "budget"), false);
+  });
+
+  it("delivers when the preferences could not be read - unknown is not off", () => {
+    assert.equal(isCategoryEnabled(null, "permission"), true);
+    // A category this build doesn't know is delivered too: silence has to be
+    // asked for, and nobody asked for this one.
+    assert.equal(isCategoryEnabled({}, "permission"), true);
+  });
+});
+
+describe("createHudNotifier - configured threshold", () => {
+  /** A session at `ratio` of a US$ 10 budget. */
+  const spender = (ratio) =>
+    session({ costUsd: 10 * ratio, maxCostUsd: 10, budgetUnreadable: false });
+
+  it("fires at the configured point, not at the default one", () => {
+    const delivered = [];
+    const notifier = createHudNotifier({
+      deliver: (event) => delivered.push(event.category),
+      budgetThreshold: 0.5,
+    });
+    notifier.observe(report([spender(0.1)]));
+    notifier.observe(report([spender(0.55)]));
+    assert.deepEqual(delivered, ["budget"], "0.55 is under the 0.8 default but over 0.5");
+  });
+
+  it("re-reads the threshold on every report, so a change takes effect at once", () => {
+    const delivered = [];
+    let threshold = 0.9;
+    const notifier = createHudNotifier({
+      deliver: (event) => delivered.push(event.category),
+      budgetThreshold: () => threshold,
+    });
+    notifier.observe(report([spender(0.1)]));
+    notifier.observe(report([spender(0.85)]));
+    assert.deepEqual(delivered, [], "under the 90% the user chose");
+    threshold = 0.8;
+    notifier.observe(report([spender(0.85)]));
+    assert.deepEqual(delivered, ["budget"]);
+  });
+
+  it("falls back to the default when the stored threshold can't be used", () => {
+    // Never silently 0 (which would warn about every budgeted session) and
+    // never silently 1 (which would warn about none until it is all spent).
+    for (const stored of [0, -1, 1.5, "80%", null, undefined, Number.NaN]) {
+      const delivered = [];
+      const notifier = createHudNotifier({
+        deliver: (event) => delivered.push(event.category),
+        budgetThreshold: () => stored,
+      });
+      notifier.observe(report([spender(0.1)]));
+      notifier.observe(report([spender(DEFAULT_BUDGET_THRESHOLD - 0.05)]));
+      assert.deepEqual(delivered, [], `${String(stored)} must not fire below the default`);
+      notifier.observe(report([spender(DEFAULT_BUDGET_THRESHOLD + 0.05)]));
+      assert.deepEqual(delivered, ["budget"], `${String(stored)} must fire at the default`);
+    }
+  });
+
+  it("falls back to the default when reading the threshold throws", () => {
+    const delivered = [];
+    const notifier = createHudNotifier({
+      deliver: (event) => delivered.push(event.category),
+      budgetThreshold: () => {
+        throw new Error("settings.json is gone");
+      },
+    });
+    notifier.observe(report([spender(0.1)]));
+    notifier.observe(report([spender(0.85)]));
+    assert.deepEqual(delivered, ["budget"]);
+  });
+
+  // The orientation behind the whole category filter: a category that is off
+  // still ADVANCES the "already notified" state, because the event happened -
+  // it just wasn't delivered. Otherwise turning it back on would dump every
+  // event it slept through.
+  it("a filtered-out delivery still advances the state", () => {
+    const seen = [];
+    let silent = true;
+    const notifier = createHudNotifier({
+      deliver: (event) => {
+        if (silent) return;
+        seen.push(event.category);
+      },
+    });
+    const blocked = session({ pending: 1, elicitationId: "elic_1" });
+    notifier.observe(report([session()]));
+    notifier.observe(report([blocked]));
+    assert.deepEqual(seen, [], "silenced");
+    silent = false;
+    // The same prompt is still pending. Re-enabling must not re-announce it.
+    notifier.observe(report([blocked]));
+    notifier.observe(report([blocked]));
+    assert.deepEqual(seen, []);
+    // A genuinely new prompt still gets through.
+    notifier.observe(report([session({ pending: 1, elicitationId: "elic_2" })]));
+    assert.deepEqual(seen, ["permission"]);
   });
 });

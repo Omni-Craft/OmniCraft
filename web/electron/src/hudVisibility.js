@@ -15,14 +15,112 @@
 
 "use strict";
 
+const {
+  DEFAULT_BUDGET_THRESHOLD,
+  HUD_NOTIFICATION_CATEGORIES,
+  isValidBudgetThreshold,
+  parseQuietTime,
+} = require("./hudNotifications");
+
 /** The three visibility modes offered in Settings → Desktop → HUD. */
 const HUD_VISIBILITY_MODES = ["always", "hide-when-idle", "attention-only"];
 
 /** Mode a never-configured install runs in: no hiding without being asked. */
 const DEFAULT_HUD_VISIBILITY = "always";
 
+/**
+ * Notification preferences a never-configured install runs on: every category
+ * on, no quiet hours, the documented budget threshold.
+ *
+ * Everything defaults to ON because the alternative is a monitor that watches
+ * in silence — the user turned the HUD on to be told things.
+ */
+const DEFAULT_HUD_NOTIFICATIONS = Object.freeze({
+  permission: true,
+  budget: true,
+  stuck: true,
+  completion: true,
+  quietFrom: null,
+  quietTo: null,
+  budgetThreshold: DEFAULT_BUDGET_THRESHOLD,
+});
+
 /** What an unreadable settings blob reads as — never "off". */
-const HUD_SETTINGS_UNREADABLE = Object.freeze({ readable: false, enabled: null, mode: null });
+const HUD_SETTINGS_UNREADABLE = Object.freeze({
+  readable: false,
+  enabled: null,
+  mode: null,
+  notifications: null,
+  sound: null,
+});
+
+/** Whether a quiet-hours endpoint was left unset at all. */
+function unsetQuietTime(value) {
+  return value === undefined || value === null;
+}
+
+/**
+ * Read the notification preferences out of a `hud` blob, or `null` when they
+ * cannot be interpreted.
+ *
+ * The rule is the one `mode` already follows, and following it is what keeps
+ * this backwards-compatible: a field that is ABSENT is a settings.json written
+ * by a build that had no such field, which is a fact and reads as the default.
+ * A field that is PRESENT but malformed is a file we cannot interpret, and the
+ * whole read degrades to unknown rather than to a set of defaults the user
+ * never chose.
+ *
+ * A key this build does not KNOW is ignored instead: it comes from a newer
+ * build, and it makes none of the fields here wrong. (Writing one is another
+ * matter — hudIpc refuses unknown keys, so this build never creates them.)
+ *
+ * @param {unknown} value `hud.notifications`.
+ * @returns {object | null}
+ */
+function readNotificationSettings(value) {
+  if (value === undefined) return { ...DEFAULT_HUD_NOTIFICATIONS };
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const prefs = { ...DEFAULT_HUD_NOTIFICATIONS };
+
+  for (const category of HUD_NOTIFICATION_CATEGORIES) {
+    const enabled = value[category];
+    if (enabled === undefined) continue;
+    if (typeof enabled !== "boolean") return null;
+    prefs[category] = enabled;
+  }
+
+  // Both ends or neither: half a range names no span, and inventing the other
+  // end would invent a silence nobody asked for.
+  const { quietFrom, quietTo } = value;
+  if (unsetQuietTime(quietFrom) !== unsetQuietTime(quietTo)) return null;
+  if (!unsetQuietTime(quietFrom)) {
+    if (parseQuietTime(quietFrom) === null || parseQuietTime(quietTo) === null) return null;
+    prefs.quietFrom = quietFrom;
+    prefs.quietTo = quietTo;
+  }
+
+  if (value.budgetThreshold !== undefined) {
+    if (!isValidBudgetThreshold(value.budgetThreshold)) return null;
+    prefs.budgetThreshold = value.budgetThreshold;
+  }
+  return prefs;
+}
+
+/**
+ * Whether the notification sound is on, or `null` when the stored value cannot
+ * be read.
+ *
+ * This is the app-wide `notification_sound_enabled` — the same preference the
+ * native Notifications menu toggles and every desktop toast already obeys.
+ * Surfacing it here rather than adding a HUD-only copy keeps one answer to "is
+ * there sound", instead of two switches that can disagree.
+ *
+ * Absent is a FACT: the sound is opt-in, so a fresh install is silent.
+ */
+function readNotificationSound(value) {
+  if (value === undefined) return false;
+  return typeof value === "boolean" ? value : null;
+}
 
 /**
  * Read the `hud` blob out of a parsed settings.json.
@@ -33,21 +131,34 @@ const HUD_SETTINGS_UNREADABLE = Object.freeze({ readable: false, enabled: null, 
  * unreadable, so the UI can say "desconhecido" rather than claim it is off.
  *
  * @param {unknown} settings Parsed settings.json, or null when unreadable.
- * @returns {{readable: boolean, enabled: boolean | null, mode: string | null}}
+ * @returns {{readable: boolean, enabled: boolean | null, mode: string | null,
+ *   notifications: object | null, sound: boolean | null}}
  */
 function readHudSettings(settings) {
   if (settings === null || typeof settings !== "object" || Array.isArray(settings)) {
     return HUD_SETTINGS_UNREADABLE;
   }
+  const sound = readNotificationSound(settings.notification_sound_enabled);
+  if (sound === null) return HUD_SETTINGS_UNREADABLE;
   const hud = settings.hud;
-  if (hud === undefined) return { readable: true, enabled: false, mode: DEFAULT_HUD_VISIBILITY };
+  if (hud === undefined) {
+    return {
+      readable: true,
+      enabled: false,
+      mode: DEFAULT_HUD_VISIBILITY,
+      notifications: { ...DEFAULT_HUD_NOTIFICATIONS },
+      sound,
+    };
+  }
   if (hud === null || typeof hud !== "object" || Array.isArray(hud)) return HUD_SETTINGS_UNREADABLE;
   if (typeof hud.enabled !== "boolean") return HUD_SETTINGS_UNREADABLE;
   // A missing mode on an otherwise valid blob is the default; a mode that is
   // present but unrecognized is a file we cannot interpret.
   const mode = hud.mode === undefined ? DEFAULT_HUD_VISIBILITY : hud.mode;
   if (!HUD_VISIBILITY_MODES.includes(mode)) return HUD_SETTINGS_UNREADABLE;
-  return { readable: true, enabled: hud.enabled, mode };
+  const notifications = readNotificationSettings(hud.notifications);
+  if (notifications === null) return HUD_SETTINGS_UNREADABLE;
+  return { readable: true, enabled: hud.enabled, mode, notifications, sound };
 }
 
 /**
@@ -63,10 +174,20 @@ function readHudSettings(settings) {
  * A hud blob that is malformed inside a READABLE file is different: there is
  * nothing in it to preserve, so it is replaced.
  *
+ * The merge is TWO levels deep, and has to be. The notification preferences are
+ * a sub-object the UI patches one field at a time — one toggle, one threshold —
+ * so a shallow spread would replace the whole sub-object and switch off the
+ * three categories the user did not touch.
+ *
+ * The sound is deliberately NOT part of the hud blob: it is the app-wide
+ * `notification_sound_enabled`, shared with the native Notifications menu, and
+ * a patch writes that same top-level key.
+ *
  * @param {{ok: boolean, settings: object | null}} read Result of reading
  *   settings.json, with "absent" (first launch) distinct from "unreadable".
- * @param {{enabled?: boolean, mode?: string}} patch
- * @returns {{settings: object, hud: {enabled: boolean, mode: string}}}
+ * @param {{enabled?: boolean, mode?: string, notifications?: object,
+ *   sound?: boolean}} patch
+ * @returns {{settings: object, hud: object, sound: boolean}}
  */
 function mergeHudSettings(read, patch) {
   if (!read || read.ok !== true || read.settings === null || typeof read.settings !== "object") {
@@ -74,10 +195,21 @@ function mergeHudSettings(read, patch) {
   }
   const current = readHudSettings(read.settings);
   const base = current.readable
-    ? { enabled: current.enabled, mode: current.mode }
-    : { enabled: false, mode: DEFAULT_HUD_VISIBILITY };
-  const hud = { ...base, ...patch };
-  return { settings: { ...read.settings, hud }, hud };
+    ? { enabled: current.enabled, mode: current.mode, notifications: current.notifications }
+    : {
+        enabled: false,
+        mode: DEFAULT_HUD_VISIBILITY,
+        notifications: { ...DEFAULT_HUD_NOTIFICATIONS },
+      };
+  const { notifications: notificationsPatch, sound, ...top } = patch ?? {};
+  const hud = {
+    ...base,
+    ...top,
+    notifications: { ...base.notifications, ...(notificationsPatch ?? {}) },
+  };
+  const settings = { ...read.settings, hud };
+  if (sound !== undefined) settings.notification_sound_enabled = sound;
+  return { settings, hud, sound: settings.notification_sound_enabled === true };
 }
 
 /**
@@ -304,6 +436,7 @@ function isRestingCertain(report) {
 module.exports = {
   HUD_VISIBILITY_MODES,
   DEFAULT_HUD_VISIBILITY,
+  DEFAULT_HUD_NOTIFICATIONS,
   UNNAMED_DISMISSAL,
   readHudSettings,
   mergeHudSettings,

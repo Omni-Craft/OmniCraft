@@ -30,6 +30,103 @@
 const DEFAULT_BUDGET_THRESHOLD = 0.8;
 
 /**
+ * Bounds a CONFIGURED budget threshold has to sit in.
+ *
+ * Neither end is arbitrary. Zero (or less) would fire on every session that
+ * declares a limit, the moment it declares it — an alert that says nothing,
+ * which the user reads as the feature being broken. Above 1 can never be
+ * reached by a ratio, so it silently disables the alert while Settings shows a
+ * number. A value outside the range is refused rather than clamped: clamping
+ * would answer a question the user did not ask.
+ */
+const MIN_BUDGET_THRESHOLD = 0.01;
+const MAX_BUDGET_THRESHOLD = 1;
+
+/** Whether a value can serve as the budget threshold at all. */
+function isValidBudgetThreshold(value) {
+  return (
+    typeof value === "number" &&
+    Number.isFinite(value) &&
+    value >= MIN_BUDGET_THRESHOLD &&
+    value <= MAX_BUDGET_THRESHOLD
+  );
+}
+
+/** The categories a user can silence one by one; mirrors `event.category`. */
+const HUD_NOTIFICATION_CATEGORIES = ["permission", "budget", "stuck", "completion"];
+
+/** `HH:MM`, 24-hour and zero-padded — the only quiet-hours shape accepted. */
+const QUIET_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * Minutes past local midnight for a `HH:MM` string, or `null` when it is not
+ * one. Never a partial reading: `"9:5"` is not 9:05, it is unparseable.
+ */
+function parseQuietTime(value) {
+  if (typeof value !== "string" || !QUIET_TIME_PATTERN.test(value)) return null;
+  const [hours, minutes] = value.split(":");
+  return Number(hours) * 60 + Number(minutes);
+}
+
+/** Minutes past local midnight for a Date — the shell's own wall clock. */
+function minutesOfDay(date) {
+  return date.getHours() * 60 + date.getMinutes();
+}
+
+/**
+ * Whether `nowMinutes` (minutes past LOCAL midnight) falls inside the quiet
+ * range. Three decisions live here, each the conservative reading:
+ *
+ *   - **A range may wrap midnight.** 22:00–07:00 is a night, not a mistake: a
+ *     start after the end covers both ends of the day.
+ *   - **start === end is EMPTY**, never the whole day. The value alone cannot
+ *     tell the two apart, and one of them silences every alert forever. Silence
+ *     is asked for by naming a span; a user who wants none at all turns the
+ *     categories off.
+ *   - **Anything unparseable silences NOTHING.** A malformed range must not
+ *     become "quiet always" and swallow the prompt a session is blocked on —
+ *     failing loud is recoverable, failing silent is not.
+ *
+ * Local wall clock on purpose: "nothing after 22:00" means the user's 22:00. A
+ * DST change makes that day's window an hour shorter or longer, which is what a
+ * wall-clock rule means and beats a window that drifts off the hour they typed.
+ *
+ * @param {{quietFrom: unknown, quietTo: unknown, nowMinutes: number}} input
+ * @returns {boolean}
+ */
+function isWithinQuietHours({ quietFrom, quietTo, nowMinutes }) {
+  const start = parseQuietTime(quietFrom);
+  const end = parseQuietTime(quietTo);
+  if (start === null || end === null) return false;
+  if (typeof nowMinutes !== "number" || !Number.isFinite(nowMinutes)) return false;
+  if (start === end) return false;
+  if (start < end) return nowMinutes >= start && nowMinutes < end;
+  return nowMinutes >= start || nowMinutes < end;
+}
+
+/**
+ * Whether an event of this category may be DELIVERED, given the preferences as
+ * they were read.
+ *
+ * `null` preferences means settings.json could not be read, and unknown is not
+ * off here either: a user who never asked for silence must not get it because
+ * a file failed to parse. The same goes for a category this build does not
+ * know — it is delivered rather than dropped.
+ *
+ * Only delivery is filtered. The detector's "already notified" state advances
+ * exactly the same either way, which is what stops re-enabling a category from
+ * dumping every event it missed.
+ *
+ * @param {{[category: string]: unknown} | null} preferences
+ * @param {unknown} category
+ * @returns {boolean}
+ */
+function isCategoryEnabled(preferences, category) {
+  if (preferences === null || typeof preferences !== "object") return true;
+  return preferences[category] !== false;
+}
+
+/**
  * How long a session may sit at the same `updated_at` before it is called
  * stuck.
  *
@@ -400,6 +497,36 @@ function declaresBudget(sessions, sessionId) {
 }
 
 /**
+ * Resolve a tuning knob that may be a fixed number or a function read fresh on
+ * every report — the user can change the threshold in Settings while the HUD is
+ * running, and a value captured once at construction would ignore them until
+ * the next launch.
+ *
+ * A value that is not usable — unreadable settings, a hand-edited number out of
+ * range, a reader that threw — falls back to the DEFAULT. That is the honest
+ * degradation: the alert keeps working at the documented point while Settings
+ * says the stored value could not be read. The two failures worth naming are
+ * the ones this refuses to do silently — 0, which would fire on every session,
+ * and 1, which would fire on none until the budget is fully spent.
+ */
+function resolveTuning(source, fallback, isValid) {
+  let value = source;
+  if (typeof source === "function") {
+    try {
+      value = source();
+    } catch {
+      return fallback;
+    }
+  }
+  return isValid(value) ? value : fallback;
+}
+
+/** Whether a value can serve as the stuck window: a real, positive duration. */
+function isValidStuckAfterMs(value) {
+  return typeof value === "number" && Number.isFinite(value) && value > 0;
+}
+
+/**
  * Stateful wrapper: hold the state between reports and hand each event to
  * `deliver`.
  *
@@ -410,8 +537,9 @@ function declaresBudget(sessions, sessionId) {
  *
  * @param {object} deps
  * @param {(event: object) => void} deps.deliver Show one notification.
- * @param {number} [deps.budgetThreshold]
- * @param {number} [deps.stuckAfterMs]
+ * @param {number | (() => unknown)} [deps.budgetThreshold] A number, or a
+ *   reader called per report so a change in Settings takes effect at once.
+ * @param {number | (() => unknown)} [deps.stuckAfterMs]
  * @param {(message: string, error: unknown) => void} [deps.onError]
  */
 function createHudNotifier({ deliver, budgetThreshold, stuckAfterMs, onError }) {
@@ -424,8 +552,12 @@ function createHudNotifier({ deliver, budgetThreshold, stuckAfterMs, onError }) 
       const result = detectHudNotifications({
         state,
         report,
-        budgetThreshold,
-        stuckAfterMs,
+        budgetThreshold: resolveTuning(
+          budgetThreshold,
+          DEFAULT_BUDGET_THRESHOLD,
+          isValidBudgetThreshold,
+        ),
+        stuckAfterMs: resolveTuning(stuckAfterMs, DEFAULT_STUCK_AFTER_MS, isValidStuckAfterMs),
       });
       state = result.state;
       for (const event of result.events) {
@@ -457,9 +589,17 @@ function createHudNotifier({ deliver, budgetThreshold, stuckAfterMs, onError }) 
 module.exports = {
   DEFAULT_BUDGET_THRESHOLD,
   DEFAULT_STUCK_AFTER_MS,
+  MIN_BUDGET_THRESHOLD,
+  MAX_BUDGET_THRESHOLD,
+  HUD_NOTIFICATION_CATEGORIES,
   EMPTY_NOTIFICATION_STATE,
   IN_FLIGHT_STATUSES,
   TERMINAL_STATUSES,
+  isValidBudgetThreshold,
+  parseQuietTime,
+  minutesOfDay,
+  isWithinQuietHours,
+  isCategoryEnabled,
   detectHudNotifications,
   createHudNotifier,
 };

@@ -13,6 +13,50 @@
 "use strict";
 
 const { HUD_VISIBILITY_MODES } = require("./hudVisibility");
+const {
+  HUD_NOTIFICATION_CATEGORIES,
+  isValidBudgetThreshold,
+  parseQuietTime,
+} = require("./hudNotifications");
+
+/**
+ * Validate a notification-preferences patch, returning what may be persisted.
+ *
+ * Every key is checked HERE, not only in the page. A value that slipped through
+ * would be written to settings.json and read back on the next launch as a blob
+ * this build cannot interpret — turning one bad click into a Settings section
+ * stuck on "desconhecido".
+ *
+ * @param {unknown} patch
+ * @returns {object}
+ */
+function validateNotificationsPatch(patch) {
+  if (patch === null || typeof patch !== "object" || Array.isArray(patch)) {
+    throw new Error("hud notifications must be an object");
+  }
+  const next = {};
+  for (const [key, value] of Object.entries(patch)) {
+    if (HUD_NOTIFICATION_CATEGORIES.includes(key)) {
+      if (typeof value !== "boolean") throw new Error(`hud notification ${key} must be a boolean`);
+      next[key] = value;
+    } else if (key === "quietFrom" || key === "quietTo") {
+      if (value !== null && parseQuietTime(value) === null) {
+        throw new Error("quiet hours must be HH:MM or null");
+      }
+      next[key] = value;
+    } else if (key === "budgetThreshold") {
+      if (!isValidBudgetThreshold(value)) throw new Error("budget threshold out of range");
+      next[key] = value;
+    } else {
+      throw new Error(`unknown hud notification setting: ${key}`);
+    }
+  }
+  // Clearing one end of the range while leaving the other set would persist
+  // half a span, which reads back as uninterpretable. The two move together.
+  const ends = ["quietFrom", "quietTo"].filter((key) => key in next);
+  if (ends.length === 1) throw new Error("quiet hours need both ends");
+  return next;
+}
 
 /**
  * @param {object} deps
@@ -21,8 +65,10 @@ const { HUD_VISIBILITY_MODES } = require("./hudVisibility");
  * @param {() => unknown} deps.getHudWebContents The live HUD's webContents, or
  *   null when no HUD is open.
  * @param {(event: unknown) => boolean} deps.isPinnedOriginSender
- * @param {() => {readable: boolean, enabled: boolean | null, mode: string | null}} deps.readSettings
- * @param {(patch: {enabled?: boolean, mode?: string}) => void} deps.writeSettings
+ * @param {() => {readable: boolean, enabled: boolean | null, mode: string | null,
+ *   notifications: object | null, sound: boolean | null}} deps.readSettings
+ * @param {(patch: {enabled?: boolean, mode?: string, notifications?: object,
+ *   sound?: boolean}) => void} deps.writeSettings
  *   Throws when settings.json is present but unreadable — the rejection is the
  *   point: Settings renders "não pôde ser salva" instead of a stale value.
  * @param {(message: string) => void} [deps.onWarn]
@@ -101,6 +147,15 @@ function registerHudIpc({
       if (!HUD_VISIBILITY_MODES.includes(patch.mode))
         throw new Error("unknown hud visibility mode");
       next.mode = patch.mode;
+    }
+    if (patch?.notifications !== undefined) {
+      next.notifications = validateNotificationsPatch(patch.notifications);
+    }
+    // The app-wide notification sound, reached through the same call so the HUD
+    // section can offer it next to the categories it applies to.
+    if (patch?.sound !== undefined) {
+      if (typeof patch.sound !== "boolean") throw new Error("hud sound must be a boolean");
+      next.sound = patch.sound;
     }
     // Throws through to the renderer when the file can't be read — the write is
     // refused rather than clobbering settings we never parsed.

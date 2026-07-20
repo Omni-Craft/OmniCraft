@@ -14,6 +14,7 @@ const assert = require("node:assert/strict");
 const {
   HUD_VISIBILITY_MODES,
   DEFAULT_HUD_VISIBILITY,
+  DEFAULT_HUD_NOTIFICATIONS,
   readHudSettings,
   mergeHudSettings,
   summarizeFeedReport,
@@ -47,12 +48,28 @@ function dismissalOf(...ids) {
   return acknowledgeAttention(waitingOn(...ids));
 }
 
+/** The notification preferences a file that never mentioned them reads as. */
+function defaultNotifications(overrides = {}) {
+  return { ...DEFAULT_HUD_NOTIFICATIONS, ...overrides };
+}
+
+/** Every field of a read that could not be made — unknown, never off. */
+const unknown = {
+  readable: false,
+  enabled: null,
+  mode: null,
+  notifications: null,
+  sound: null,
+};
+
 describe("readHudSettings", () => {
   it("reads a never-configured install as off, on the default mode", () => {
     assert.deepEqual(readHudSettings({}), {
       readable: true,
       enabled: false,
       mode: DEFAULT_HUD_VISIBILITY,
+      notifications: defaultNotifications(),
+      sound: false,
     });
   });
 
@@ -61,6 +78,8 @@ describe("readHudSettings", () => {
       readable: true,
       enabled: true,
       mode: "attention-only",
+      notifications: defaultNotifications(),
+      sound: false,
     });
   });
 
@@ -69,19 +88,19 @@ describe("readHudSettings", () => {
       readable: true,
       enabled: true,
       mode: DEFAULT_HUD_VISIBILITY,
+      notifications: defaultNotifications(),
+      sound: false,
     });
   });
 
   it("reports an unreadable settings file as unknown, NOT as off", () => {
     // null is what main.js passes when settings.json could not be read.
-    const unknown = { readable: false, enabled: null, mode: null };
     assert.deepEqual(readHudSettings(null), unknown);
     assert.deepEqual(readHudSettings("nonsense"), unknown);
     assert.deepEqual(readHudSettings([]), unknown);
   });
 
   it("reports a malformed hud blob as unknown, NOT as off", () => {
-    const unknown = { readable: false, enabled: null, mode: null };
     // Hand-edited files: a non-object blob, a missing/non-boolean `enabled`,
     // and a mode this build doesn't know are all uninterpretable.
     assert.deepEqual(readHudSettings({ hud: null }), unknown);
@@ -97,6 +116,84 @@ describe("readHudSettings", () => {
   });
 });
 
+describe("readHudSettings — notification preferences", () => {
+  // The compatibility case, and the reason the rule is "absent = default"
+  // rather than "absent = unreadable": this file was written by a build that
+  // had no notification settings at all, and it is perfectly interpretable.
+  it("reads a blob written by an older build as the DEFAULTS, not as unknown", () => {
+    const read = readHudSettings({ hud: { enabled: true, mode: "hide-when-idle" } });
+    assert.equal(read.readable, true);
+    assert.deepEqual(read.notifications, defaultNotifications());
+  });
+
+  it("reads stored preferences back, filling only what was never written", () => {
+    const read = readHudSettings({
+      hud: {
+        enabled: true,
+        notifications: { budget: false, quietFrom: "22:00", quietTo: "07:00", budgetThreshold: 0.5 },
+      },
+    });
+    assert.deepEqual(
+      read.notifications,
+      defaultNotifications({
+        budget: false,
+        quietFrom: "22:00",
+        quietTo: "07:00",
+        budgetThreshold: 0.5,
+      }),
+    );
+  });
+
+  it("reports a malformed preference as unknown, NOT as off", () => {
+    const hud = (notifications) => ({ hud: { enabled: true, notifications } });
+    assert.deepEqual(readHudSettings(hud(null)), unknown);
+    assert.deepEqual(readHudSettings(hud("all")), unknown);
+    assert.deepEqual(readHudSettings(hud([])), unknown);
+    assert.deepEqual(readHudSettings(hud({ permission: "yes" })), unknown);
+  });
+
+  it("ignores a key it doesn't know, rather than calling the file unreadable", () => {
+    // A key from a NEWER build is not a value we misread — every field this
+    // build knows is still there and still right. Refusing to read the file
+    // would break a downgrade for no gain. (Writing one is another matter:
+    // hudIpc rejects unknown keys so this build never produces them.)
+    const read = readHudSettings({ hud: { enabled: true, notifications: { fromTheFuture: 1 } } });
+    assert.equal(read.readable, true);
+    assert.deepEqual(read.notifications, defaultNotifications());
+  });
+
+  it("refuses half a quiet range, and any time that isn't HH:MM", () => {
+    const hud = (notifications) => ({ hud: { enabled: true, notifications } });
+    assert.deepEqual(readHudSettings(hud({ quietFrom: "22:00" })), unknown);
+    assert.deepEqual(readHudSettings(hud({ quietTo: "07:00" })), unknown);
+    assert.deepEqual(readHudSettings(hud({ quietFrom: "9:5", quietTo: "07:00" })), unknown);
+    assert.deepEqual(readHudSettings(hud({ quietFrom: "24:00", quietTo: "07:00" })), unknown);
+    // Explicit nulls are how the UI clears the range: no quiet hours, readable.
+    const cleared = readHudSettings(hud({ quietFrom: null, quietTo: null }));
+    assert.equal(cleared.readable, true);
+    assert.equal(cleared.notifications.quietFrom, null);
+  });
+
+  it("refuses a threshold that would fire on everything or on nothing", () => {
+    const hud = (budgetThreshold) => ({ hud: { enabled: true, notifications: { budgetThreshold } } });
+    // 0 would warn about every session that declares a limit, the moment it
+    // does; above 1 can never be reached. Neither may be read as a setting.
+    assert.deepEqual(readHudSettings(hud(0)), unknown);
+    assert.deepEqual(readHudSettings(hud(-0.5)), unknown);
+    assert.deepEqual(readHudSettings(hud(1.5)), unknown);
+    assert.deepEqual(readHudSettings(hud("80%")), unknown);
+    assert.deepEqual(readHudSettings(hud(Number.NaN)), unknown);
+    assert.equal(readHudSettings(hud(1)).notifications.budgetThreshold, 1);
+  });
+
+  it("surfaces the app-wide sound preference, and unknown when it can't be read", () => {
+    assert.equal(readHudSettings({ notification_sound_enabled: true }).sound, true);
+    // Opt-in: never written means silent, which is a fact.
+    assert.equal(readHudSettings({}).sound, false);
+    assert.deepEqual(readHudSettings({ notification_sound_enabled: "on" }), unknown);
+  });
+});
+
 describe("mergeHudSettings", () => {
   it("keeps every other preference in the file", () => {
     const read = { ok: true, settings: { server_url: "https://a", recent_servers: ["https://a"] } };
@@ -104,7 +201,11 @@ describe("mergeHudSettings", () => {
     assert.deepEqual(settings, {
       server_url: "https://a",
       recent_servers: ["https://a"],
-      hud: { enabled: true, mode: DEFAULT_HUD_VISIBILITY },
+      hud: {
+        enabled: true,
+        mode: DEFAULT_HUD_VISIBILITY,
+        notifications: defaultNotifications(),
+      },
     });
   });
 
@@ -118,15 +219,80 @@ describe("mergeHudSettings", () => {
 
   it("writes on first launch, when the file is merely absent", () => {
     const { settings, hud } = mergeHudSettings({ ok: true, settings: {} }, { enabled: true });
-    assert.deepEqual(hud, { enabled: true, mode: DEFAULT_HUD_VISIBILITY });
-    assert.deepEqual(settings, { hud: { enabled: true, mode: DEFAULT_HUD_VISIBILITY } });
+    assert.deepEqual(hud, {
+      enabled: true,
+      mode: DEFAULT_HUD_VISIBILITY,
+      notifications: defaultNotifications(),
+    });
+    assert.deepEqual(settings.hud, hud);
   });
 
   it("replaces a malformed hud blob inside a readable file", () => {
     const read = { ok: true, settings: { server_url: "https://a", hud: "on" } };
     const { settings } = mergeHudSettings(read, { mode: "attention-only" });
-    assert.deepEqual(settings.hud, { enabled: false, mode: "attention-only" });
+    assert.deepEqual(settings.hud, {
+      enabled: false,
+      mode: "attention-only",
+      notifications: defaultNotifications(),
+    });
     assert.equal(settings.server_url, "https://a", "the rest of the file survives");
+  });
+
+  // The whole reason the merge is two levels deep. The UI patches ONE switch
+  // at a time, and a shallow spread would replace the sub-object — turning
+  // "silence completions" into "silence everything except completions".
+  it("a partial notifications patch leaves the other preferences alone", () => {
+    const read = {
+      ok: true,
+      settings: {
+        hud: {
+          enabled: true,
+          notifications: {
+            permission: true,
+            budget: false,
+            stuck: true,
+            completion: true,
+            quietFrom: "22:00",
+            quietTo: "07:00",
+            budgetThreshold: 0.5,
+          },
+        },
+      },
+    };
+    const { hud } = mergeHudSettings(read, { notifications: { completion: false } });
+    assert.deepEqual(hud.notifications, {
+      permission: true,
+      budget: false,
+      stuck: true,
+      completion: false,
+      quietFrom: "22:00",
+      quietTo: "07:00",
+      budgetThreshold: 0.5,
+    });
+  });
+
+  it("keeps the visibility settings when only a notification changes", () => {
+    const read = { ok: true, settings: { hud: { enabled: true, mode: "attention-only" } } };
+    const { hud } = mergeHudSettings(read, { notifications: { budgetThreshold: 0.9 } });
+    assert.equal(hud.enabled, true);
+    assert.equal(hud.mode, "attention-only");
+    assert.equal(hud.notifications.budgetThreshold, 0.9);
+  });
+
+  it("writes the sound to the APP-WIDE key, not into the hud blob", () => {
+    // One sound preference, shared with the native Notifications menu. A copy
+    // under `hud` would be a second switch that could disagree with it.
+    const read = { ok: true, settings: { hud: { enabled: true } } };
+    const { settings, sound } = mergeHudSettings(read, { sound: true });
+    assert.equal(settings.notification_sound_enabled, true);
+    assert.equal(sound, true);
+    assert.ok(!("sound" in settings.hud));
+  });
+
+  it("leaves the sound untouched when the patch doesn't mention it", () => {
+    const read = { ok: true, settings: { notification_sound_enabled: true } };
+    const { settings } = mergeHudSettings(read, { enabled: true });
+    assert.equal(settings.notification_sound_enabled, true);
   });
 });
 

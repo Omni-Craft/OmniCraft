@@ -1,0 +1,48 @@
+name: native macOS
+
+# Builds the native macOS surfaces (the notch island and the floating widgets)
+# on every non-draft PR that touches native/macos/** and on push to main.
+# They are Swift packages with no external dependencies, so the build is the
+# check: it catches a broken source tree before anyone opens Xcode.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths:
+      - "native/macos/**"
+  push:
+    branches:
+      - main
+    paths:
+      - "native/macos/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  # PRs key by number (old runs cancel); push keys by SHA (each merge runs).
+  group: native-macos-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  swift-build:
+    name: swift build
+    if: ${{ !github.event.pull_request.draft }}
+    runs-on: macos-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [OmniCraftNotch, OmniCraftWidgets]
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Build ${{ matrix.package }}
+        working-directory: native/macos/${{ matrix.package }}
+        run: swift build

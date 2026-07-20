@@ -116,3 +116,34 @@ describe("floating HUD window options (src/main.js)", () => {
     assert.match(hudWindow, /show:\s*false/);
   });
 });
+
+// The desktop notifications (src/hudNotifications.js) decide and deliver in
+// modules with their own behavior tests. What only main.js can lose is the
+// connection between them: a notifier that is never handed to the policy is a
+// module nobody calls, and every test in hudNotifications.test.js would still
+// pass.
+describe("desktop notifications wiring (src/main.js)", () => {
+  it("hands the notifier to the HUD policy as live code", () => {
+    const start = liveCode.indexOf("const hudPolicy = createHudPolicy(");
+    const call = liveCode.slice(start, liveCode.indexOf("});", start));
+    assert.match(
+      call,
+      /notifier:\s*hudNotifier/,
+      [
+        "src/main.js no longer passes the notifier to createHudPolicy. The policy is the",
+        "only thing that sees the HUD's feed reports, so without it nothing in the shell",
+        "raises a desktop notification — silently, with every notification test still",
+        "green. Re-add `notifier: hudNotifier`; do not delete this test.",
+      ].join(" "),
+    );
+  });
+
+  it("posts the notifier's events through the shared delivery", () => {
+    // Title, click-to-focus, the foreground cue and the sound all live in
+    // showDesktopNotification; a second, hand-rolled `new Notification` here
+    // would drift from the IPC path the SPA uses.
+    const start = liveCode.indexOf("const hudNotifier = createHudNotifier(");
+    const call = liveCode.slice(start, liveCode.indexOf("const hudPolicy", start));
+    assert.match(call, /showDesktopNotification\(/);
+  });
+});

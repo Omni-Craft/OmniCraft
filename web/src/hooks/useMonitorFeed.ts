@@ -107,6 +107,7 @@ export const FEED_DEGRADED_LABELS: Record<string, string> = {
   session_labels_unreadable: "parte da identificação desta sessão não pôde ser lida",
   updated_at_unreadable: "a hora da última atividade desta sessão não pôde ser lida",
   truncated_unreadable: "não dá para saber se a lista está completa",
+  settled_unreadable: "não dá para saber quais sessões terminaram há pouco",
   degraded_unreadable: "a lista de falhas de uma sessão não pôde ser lida",
   [ENVELOPE_UNREADABLE]: "a resposta do feed não pôde ser lida",
   [ROW_UNREADABLE]: "alguma linha do feed não pôde ser lida",
@@ -250,6 +251,20 @@ export interface MonitorFeed {
   counts: MonitorCounts | null;
   /** `true` also when we could not tell: an unknown list length is not a full one. */
   truncated: boolean;
+  /**
+   * Sessions that FINISHED inside the requested grace window — carried so a
+   * watcher can witness the transition, and deliberately not part of
+   * `sessions`: they are not the active view, and nothing that renders "what
+   * needs me" should list them.
+   */
+  settled: MonitorSession[];
+  /**
+   * Whether `settled` holds every session that finished in the window. `false`
+   * also when we could not tell — an unknown is not a proof of completeness,
+   * and this is the only field that can answer "did I see every completion?".
+   * `truncated` cannot: it describes the active view.
+   */
+  settledComplete: boolean;
   /** Every degraded slug, known or not, feed-wide. Empty means fully resolved. */
   degraded: string[];
   /**
@@ -697,6 +712,8 @@ function unreadableFeed(faults: FeedFaults, hostId: string | null = null): Monit
     sessions: [],
     counts: null,
     truncated: true,
+    settled: [],
+    settledComplete: false,
     degraded: faults.slugs,
     unreadable: true,
     countsPartial: true,
@@ -753,6 +770,21 @@ export function parseMonitorFeed(body: unknown): MonitorFeed {
   // Not knowing whether the list is complete is not the same as knowing it is.
   const truncated = required(raw, "truncated", readBool, faults, "truncated_unreadable");
 
+  // Sessions that settled in the grace window, and whether we got all of them.
+  // Absent is the normal case (nobody asked for a window) and reads as an empty
+  // COMPLETE collection; present-but-unreadable does not — a list we could not
+  // parse may have been hiding a completion.
+  const settledAsked = "settled" in raw || "settled_omitted" in raw;
+  const rawSettled = optional(raw, "settled", readArray, faults, "settled_unreadable");
+  const settledRows = rawSettled ?? [];
+  const settled = settledRows
+    .map((row) => parseSession(row, faults))
+    .filter((row): row is MonitorSession => row !== null);
+  const settledOmitted = optional(raw, "settled_omitted", readNumber, faults, "settled_unreadable");
+  const settledComplete = settledAsked
+    ? settled.length === settledRows.length && settledOmitted === 0
+    : true;
+
   // Unfiltered feeds carry no `host_id` at all; one of the wrong shape means we
   // cannot say which host these numbers describe.
   const hostId = optional(raw, "host_id", readString, faults, "host_id_unreadable");
@@ -764,6 +796,8 @@ export function parseMonitorFeed(body: unknown): MonitorFeed {
     sessions,
     counts: counts.ok ? counts.value : null,
     truncated: truncated.ok ? truncated.value : true,
+    settled,
+    settledComplete,
     degraded: faults.slugs,
     unreadable: false,
     countsPartial: !counts.ok || counts.value.partial || faults.partial,
@@ -791,9 +825,28 @@ export function monitorFeedErrorMessage(error: unknown): string {
   return "Não foi possível ler o feed de sessões.";
 }
 
+/**
+ * How long a settled session keeps being carried by the feed, for callers that
+ * need to WITNESS one finishing.
+ *
+ * The active view drops a session the moment it goes idle, so a watcher sees an
+ * absence — which is equally what a row cap, a deleted session or a changed
+ * filter look like. Acting on that gap would be exactly the "it disappeared, so
+ * it must have finished" inference this codebase refuses to make everywhere
+ * else. Two minutes is many poll intervals, so a blip, a retry or a stalled tab
+ * can all be crossed without the transition being missed.
+ */
+export const MONITOR_SETTLED_GRACE_SECONDS = 120;
+
 /** Fetch one snapshot of the feed. */
-export async function fetchMonitorFeed(hostId?: string | null): Promise<MonitorFeed> {
+export async function fetchMonitorFeed(
+  hostId?: string | null,
+  settledGraceSeconds = 0,
+): Promise<MonitorFeed> {
   const params = new URLSearchParams({ only_active: "true" });
+  if (settledGraceSeconds > 0) {
+    params.set("settled_grace_seconds", String(Math.floor(settledGraceSeconds)));
+  }
   if (hostId) params.set("host_id", hostId);
   let res: Response;
   try {
@@ -856,16 +909,27 @@ export interface UseMonitorFeedOptions {
   hostId?: string | null;
   /** Held false until the viewer identity resolves in a fresh renderer. */
   enabled?: boolean;
+  /**
+   * Seconds of settled sessions to carry ALONGSIDE the active view. `0` (the
+   * default) asks for none. They arrive in `feed.settled`, never mixed into
+   * `feed.sessions`, so a surface that renders the active view needs to do
+   * nothing to keep them out.
+   */
+  settledGraceSeconds?: number;
 }
 
 /**
  * Poll the monitor feed. `staleTime: 0` so every tick is a real read — the
  * feed's whole value is being current.
  */
-export function useMonitorFeed({ hostId = null, enabled = true }: UseMonitorFeedOptions = {}) {
+export function useMonitorFeed({
+  hostId = null,
+  enabled = true,
+  settledGraceSeconds = 0,
+}: UseMonitorFeedOptions = {}) {
   return useQuery({
-    queryKey: ["monitor-feed", hostId],
-    queryFn: () => fetchMonitorFeed(hostId),
+    queryKey: ["monitor-feed", hostId, settledGraceSeconds],
+    queryFn: () => fetchMonitorFeed(hostId, settledGraceSeconds),
     enabled,
     refetchInterval: MONITOR_POLL_MS,
     staleTime: 0,

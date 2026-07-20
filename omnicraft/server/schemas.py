@@ -2706,6 +2706,19 @@ class MonitorFeedResponse(BaseModel):
         matching session — either the store scan was cut
         (``scan_truncated`` in ``degraded``, so even the counts are
         partial) or the row cap dropped rows (``counts.omitted``).
+    :param settled: Sessions that finished inside the caller's
+        ``settled_grace_seconds`` window, carried so a poller can WITNESS
+        a session finishing instead of inferring it from a row that
+        stopped appearing. Empty unless that window was asked for. These
+        are **not** part of the active view: they are ranked, capped and
+        counted separately, so they never displace an active row, never
+        move ``counts`` and never set ``truncated``.
+    :param settled_omitted: Settled sessions that matched the window but
+        could not be carried (the collection has its own cap). ``0``
+        means this collection is COMPLETE — the one thing a consumer
+        watching for finished work needs to know, and the reason it is
+        reported here rather than folded into ``truncated``, which
+        describes the active view only.
     :param degraded: Stable slugs naming feed-wide failures. Current
         slugs: ``scan_truncated``, ``liveness_unavailable``,
         ``permissions_unavailable``, ``agent_names_unavailable``,
@@ -2724,6 +2737,8 @@ class MonitorFeedResponse(BaseModel):
     sessions: list[MonitorSessionItem] = Field(default_factory=list)
     counts: MonitorCounts = Field(default_factory=MonitorCounts)
     truncated: bool = False
+    settled: list[MonitorSessionItem] = Field(default_factory=list)
+    settled_omitted: int = 0
     degraded: list[str] = Field(default_factory=list)
 
 

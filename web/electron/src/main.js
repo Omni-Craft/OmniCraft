@@ -43,6 +43,7 @@ const { registerWorkspaceChromeHide } = require("./workspace-chrome");
 const { mergeHudSettings, readHudSettings } = require("./hudVisibility");
 const { createHudPolicy } = require("./hudPolicy");
 const { registerHudIpc } = require("./hudIpc");
+const { createHudNotifier } = require("./hudNotifications");
 const { createBrowserViewRegistry } = require("./browserViewRegistry");
 const { createBrowserViewBoundsController } = require("./browserViewBounds");
 const { registerBrowserIpc } = require("./browserIpc");
@@ -1377,6 +1378,24 @@ function isFindBarSender(event) {
  */
 let hudWindow = null;
 
+/** The origin the open HUD is pinned to; names the server on its alerts. */
+let hudOrigin = null;
+
+/**
+ * Host of the server the HUD is watching, for the multi-server title prefix.
+ * Null when no HUD is open — there is then nothing it could be notifying about.
+ *
+ * @returns {string | null}
+ */
+function hudOriginHost() {
+  if (!hudOrigin) return null;
+  try {
+    return new URL(hudOrigin).host;
+  } catch {
+    return null;
+  }
+}
+
 /** Whether the open HUD shows the expanded list rather than the counts pill. */
 let hudExpanded = false;
 
@@ -1557,6 +1576,7 @@ function openHud() {
   });
   hudWindow = hud;
   hudExpanded = false;
+  hudOrigin = new URL(target).origin;
   hardenHudNavigation(hud, new URL(target).origin);
   if (process.platform === "darwin") {
     // "floating" keeps it above ordinary windows without the screen-saver
@@ -1590,6 +1610,7 @@ function openHud() {
     hudWindow = null;
     hudReady = false;
     hudExpanded = false;
+    hudOrigin = null;
     // A close the shell didn't announce (see hudPolicy.shellClosing) is the
     // user dismissing the HUD, and that persists as off — otherwise the next
     // policy pass reopens a window they just closed.
@@ -1641,11 +1662,38 @@ function hudWindowHandle() {
  * is shown, hidden, expanded or closed. Kept out of here so it can be driven
  * by tests rather than only by a running Electron.
  */
+/**
+ * Desktop notifications raised by the shell itself (src/hudNotifications.js):
+ * a session asking for a decision, one that just finished, one crossing its
+ * declared budget, one that stopped moving.
+ *
+ * These ride on the HUD's feed reports because the HUD's renderer is the only
+ * thing here with an authenticated session to poll the feed — so they work
+ * while the HUD is on, INCLUDING while a visibility mode keeps it hidden (the
+ * modes hide the window, they don't close it, and a hidden HUD keeps polling).
+ * With the HUD off, nobody is watching and nothing is notified.
+ */
+const hudNotifier = createHudNotifier({
+  deliver: (event) => {
+    showDesktopNotification({
+      title: event.title,
+      body: event.body,
+      navigatePath: event.navigatePath,
+      // No sender: the HUD's own page doesn't listen for the click, so the
+      // click routes to a shell window instead. The prefix still has to name
+      // the server, so it comes from the origin the HUD is pinned to.
+      hostLabel: hudOriginHost(),
+    });
+  },
+  onError: (message, err) => console.warn(`[omnicraft] ${message}:`, err),
+});
+
 const hudPolicy = createHudPolicy({
   readSettings: hudSettingsState,
   writeSettings: writeHudSettings,
   getWindow: hudWindowHandle,
   openWindow: () => openHud(),
+  notifier: hudNotifier,
   onError: (message, err) => console.warn(`[omnicraft] ${message}:`, err),
 });
 
@@ -1952,6 +2000,87 @@ function shouldPlayNotificationSound(key) {
   const now = Date.now();
   if (now - (lastSoundAtByKey.get(key) ?? 0) < SOUND_THROTTLE_MS) return false;
   lastSoundAtByKey.set(key, now);
+  return true;
+}
+
+/**
+ * Post one OS notification: the title, the click that focuses and routes, the
+ * foreground cue and the sound.
+ *
+ * The DELIVERY, separated from who asked for it. It has two callers with
+ * different shapes: a pinned SPA page over IPC (which names its own window and
+ * routes the click back to itself), and the main process itself, watching the
+ * HUD's feed — that one has no sender, so the click lands on whichever shell
+ * window is around.
+ *
+ * @param {object} params
+ * @param {unknown} params.title
+ * @param {unknown} params.body
+ * @param {unknown} [params.navigatePath] In-app route to open on click, e.g.
+ *   ``"/c/conv_abc"``.
+ * @param {import("electron").WebContents | null} [params.sender] The page that
+ *   asked, when one did.
+ * @param {string | null} [params.hostLabel] Server host to prefix the title
+ *   with; used when there is no sender to derive it from.
+ * @returns {boolean} Whether a notification was shown.
+ */
+function showDesktopNotification({ title, body, navigatePath, sender = null, hostLabel = null }) {
+  if (!Notification.isSupported()) return false;
+  const senderWindow = sender ? BrowserWindow.fromWebContents(sender) : null;
+  // With windows pinned to more than one server (multi-server), prefix the
+  // firing server's hostname so alerts are attributable.
+  let text = String(title ?? "");
+  if (multipleServersActive()) {
+    const origin = pinnedOrigin(senderWindow);
+    const host = origin ? new URL(origin).host : hostLabel;
+    if (host) text = `[${host}] ${text}`;
+  }
+  // On macOS we play the notification sound ourselves (afplay, after show())
+  // so the alert is audible in the foreground too — macOS suppresses the
+  // frontmost app's OWN notification sound, so we mute the toast there and
+  // play it explicitly, which also keeps the cue consistent when backgrounded
+  // (no double sound). Off macOS, let the OS play its default sound, gated on
+  // the same enable switch.
+  const isMac = process.platform === "darwin";
+  const soundOn = notificationSoundEnabled();
+  const notification = new Notification({
+    title: text,
+    body: String(body ?? ""),
+    silent: isMac ? true : !soundOn,
+  });
+  const path = typeof navigatePath === "string" ? navigatePath : "";
+  // Focus the window that fired the notification (so a click lands on the
+  // right one in a multi-window setup), falling back to any open window.
+  notification.on("click", () => {
+    const win = senderWindow ?? activeWindow();
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.focus();
+    }
+    // Route the originating window (it owns that conversation's state); with
+    // no sender, the window we just focused — but only if it is a connected
+    // server page, since that is the only renderer that listens.
+    const target = sender ?? (win && pinnedOrigin(win) ? win.webContents : null);
+    // isDestroyed() and send() aren't atomic — the window can close between
+    // them — so the try/catch absorbs the benign "Object has been destroyed"
+    // throw instead of crashing the main process from this async callback.
+    if (path && target && !target.isDestroyed()) {
+      try {
+        target.send("omnicraft:notification-activated", path);
+      } catch {
+        // Target went away after the notification was posted; nothing to do.
+      }
+    }
+  });
+  notification.show();
+  signalForeground();
+  // Foreground + background audible cue on macOS: play the user's chosen
+  // system sound. macOS muted the toast's own sound above, so this is the one
+  // and only sound. Throttled per session so a chunked/flapping response
+  // sounds once, not once per intermediate notification.
+  if (isMac && soundOn && shouldPlayNotificationSound(path || text)) {
+    playSystemSound(currentNotificationSoundName());
+  }
   return true;
 }
 
@@ -2459,61 +2588,14 @@ function registerIpc() {
       console.warn("[omnicraft] notify from untrusted sender dropped");
       return false;
     }
-    if (!Notification.isSupported()) return false;
-    // With windows pinned to more than one server (multi-server),
-    // prefix the firing server's hostname so alerts are attributable.
-    let title = String(params?.title ?? "");
-    if (multipleServersActive()) {
-      const origin = pinnedOrigin(BrowserWindow.fromWebContents(event.sender));
-      // isPinnedOriginSender above guarantees a pinned, parseable origin.
-      title = `[${new URL(origin).host}] ${title}`;
-    }
-    // On macOS we play the notification sound ourselves (afplay, after show())
-    // so the alert is audible in the foreground too — macOS suppresses the
-    // frontmost app's OWN notification sound, so we mute the toast there and
-    // play it explicitly, which also keeps the cue consistent when backgrounded
-    // (no double sound). Off macOS, let the OS play its default sound, gated on
-    // the same enable switch.
-    const isMac = process.platform === "darwin";
-    const soundOn = notificationSoundEnabled();
-    const notification = new Notification({
-      title,
-      body: String(params?.body ?? ""),
-      silent: isMac ? true : !soundOn,
+    return showDesktopNotification({
+      title: params?.title,
+      body: params?.body,
+      navigatePath: params?.navigatePath,
+      // isPinnedOriginSender guarantees the sender is a pinned SPA page, so it
+      // both names the server for the prefix and is where the click routes.
+      sender: event.sender,
     });
-    // In-app path the SPA wants opened on click (e.g. "/c/conv_abc"). Captured
-    // here so the click handler can tell the renderer where to route.
-    const navigatePath = typeof params?.navigatePath === "string" ? params.navigatePath : "";
-    // Focus the window that fired the notification (so a click lands on the
-    // right one in a multi-window setup), falling back to any open window.
-    notification.on("click", () => {
-      const win = BrowserWindow.fromWebContents(event.sender) ?? activeWindow();
-      if (win) {
-        if (win.isMinimized()) win.restore();
-        win.focus();
-      }
-      // Route only the originating window (it owns that conversation's state).
-      // isDestroyed() and send() aren't atomic — the window can close between
-      // them — so the try/catch absorbs the benign "Object has been destroyed"
-      // throw instead of crashing the main process from this async callback.
-      if (navigatePath && !event.sender.isDestroyed()) {
-        try {
-          event.sender.send("omnicraft:notification-activated", navigatePath);
-        } catch {
-          // Sender went away after the notification was posted; nothing to do.
-        }
-      }
-    });
-    notification.show();
-    signalForeground();
-    // Foreground + background audible cue on macOS: play the user's chosen
-    // system sound. macOS muted the toast's own sound above, so this is the one
-    // and only sound. Throttled per session so a chunked/flapping response
-    // sounds once, not once per intermediate notification.
-    if (isMac && soundOn && shouldPlayNotificationSound(navigatePath || title)) {
-      playSystemSound(currentNotificationSoundName());
-    }
-    return true;
   });
 
   // -------------------------------------------------------------------------

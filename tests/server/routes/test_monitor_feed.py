@@ -10,6 +10,7 @@ listing N sessions stays a fixed number of store calls.
 
 from __future__ import annotations
 
+from time import time as _real_time
 from types import SimpleNamespace
 from typing import Any
 
@@ -188,6 +189,10 @@ def test_feed_shape_and_counts(db_uri: str) -> None:
         "sessions",
         "counts",
         "truncated",
+        # Carried only for callers that ask for a grace window, and stating
+        # its own completeness rather than borrowing ``truncated``.
+        "settled",
+        "settled_omitted",
         "degraded",
     }
     assert body["host_id"] is None
@@ -1139,6 +1144,182 @@ def test_only_active_false_returns_idle_sessions(db_uri: str) -> None:
         "omitted": 0,
         "partial": False,
     }
+
+
+def test_settled_rows_are_kept_out_of_the_active_view(db_uri: str) -> None:
+    """The settled collection is separate, and everything follows from that.
+
+    A settled row that entered ``sessions`` would be ranked with the active
+    view, counted with it, take a slot from its cap and be dropped by it —
+    which would hide the very transition it was carried to show.
+    """
+    active = _seed(db_uri, title="Running")
+    done = _seed(db_uri, title="Done")
+    sessions_module._session_status_cache[active] = "running"
+    sessions_module._session_status_cache[done] = "idle"
+
+    body = _get(_app(db_uri), "?settled_grace_seconds=120")
+    assert [row["session_id"] for row in body["sessions"]] == [active]
+    assert [row["session_id"] for row in body["settled"]] == [done]
+    assert body["counts"] == {
+        "active": 1,
+        "awaiting": 0,
+        "unknown": 0,
+        "omitted": 0,
+        "partial": False,
+    }
+    assert body["truncated"] is False
+    assert body["settled_omitted"] == 0
+
+
+def test_a_full_active_view_still_carries_the_settled_rows(db_uri: str) -> None:
+    """The row cap must not be able to drop a completion.
+
+    With the active view brimming, a settled row ranked alongside it would
+    sort last (idle is the least urgent) and fall off the end — the shell
+    would never witness the session finishing, which is the whole point of
+    asking for the window.
+    """
+    monkeypatched_rows = 4
+    active = [_seed(db_uri, title=f"Running {i}") for i in range(monkeypatched_rows + 2)]
+    for conv_id in active:
+        sessions_module._session_status_cache[conv_id] = "running"
+    done = _seed(db_uri, title="Done")
+    sessions_module._session_status_cache[done] = "idle"
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(monitor_module, "_MAX_ROWS", monkeypatched_rows)
+        body = _get(_app(db_uri), "?settled_grace_seconds=120")
+
+    assert len(body["sessions"]) == monkeypatched_rows
+    assert body["counts"]["omitted"] == 2, "the active view reports its own cap"
+    assert [row["session_id"] for row in body["settled"]] == [done]
+    assert body["settled_omitted"] == 0
+
+
+def test_settled_rows_beyond_their_cap_are_reported_not_dropped(db_uri: str) -> None:
+    """A burst of completions states its own incompleteness.
+
+    ``truncated`` describes the active view, so it cannot answer "did I see
+    every session that finished?" — ``settled_omitted`` is what does, and a
+    consumer watching for completions needs it to know when it may have
+    missed one.
+    """
+    for i in range(3):
+        conv_id = _seed(db_uri, title=f"Done {i}")
+        sessions_module._session_status_cache[conv_id] = "idle"
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(monitor_module, "_MAX_SETTLED_ROWS", 2)
+        body = _get(_app(db_uri), "?settled_grace_seconds=120")
+
+    assert len(body["settled"]) == 2
+    assert body["settled_omitted"] == 1
+    # None of that is the active view's business: it is empty, complete and
+    # says so. A pill reading "lista parcial" here would be a lie about work
+    # that is finished.
+    assert body["sessions"] == []
+    assert body["counts"]["omitted"] == 0
+    assert body["truncated"] is False
+
+
+def test_a_flood_of_settlements_leaves_the_active_view_alone(db_uri: str) -> None:
+    """More settled sessions than the ROW cap, and no active work at all.
+
+    Mixed into ``sessions`` these would blow past ``_MAX_ROWS``, so
+    ``counts.omitted`` would climb and ``truncated`` would go true — a pill
+    reading "lista parcial" with nothing running and nothing omitted from the
+    active view. The active view is empty here, and says so.
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(monitor_module, "_MAX_ROWS", 3)
+        patch.setattr(monitor_module, "_MAX_SETTLED_ROWS", 100)
+        for i in range(5):
+            conv_id = _seed(db_uri, title=f"Done {i}")
+            sessions_module._session_status_cache[conv_id] = "idle"
+        body = _get(_app(db_uri), "?settled_grace_seconds=120")
+
+    assert body["sessions"] == []
+    assert len(body["settled"]) == 5
+    assert body["settled_omitted"] == 0
+    assert body["counts"]["omitted"] == 0
+    assert body["truncated"] is False
+
+
+def test_settled_rows_do_not_take_slots_from_a_nearly_full_active_view(db_uri: str) -> None:
+    """The active view fills its cap with active work, and the settled rows
+    are carried alongside — neither collection eats the other's quota."""
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(monitor_module, "_MAX_ROWS", 3)
+        patch.setattr(monitor_module, "_MAX_SETTLED_ROWS", 50)
+        for i in range(3):
+            conv_id = _seed(db_uri, title=f"Running {i}")
+            sessions_module._session_status_cache[conv_id] = "running"
+        for i in range(2):
+            conv_id = _seed(db_uri, title=f"Done {i}")
+            sessions_module._session_status_cache[conv_id] = "idle"
+        body = _get(_app(db_uri), "?settled_grace_seconds=120")
+
+    assert len(body["sessions"]) == 3
+    assert {row["status"] for row in body["sessions"]} == {"running"}
+    assert len(body["settled"]) == 2
+    assert body["counts"] == {
+        "active": 3,
+        "awaiting": 0,
+        "unknown": 0,
+        "omitted": 0,
+        "partial": False,
+    }
+    assert body["truncated"] is False
+
+
+def test_settled_grace_carries_a_session_that_just_finished(db_uri: str) -> None:
+    """A poller must be able to WITNESS a session finishing.
+
+    Under the plain ``only_active`` view a finished session simply stops
+    appearing, and a caller watching for "it ended" sees an absence — which
+    is also what a row cap, a deleted session or a changed filter look like.
+    The grace window carries the settled row for a moment so the transition
+    to ``idle`` is observable rather than inferred from a gap.
+    """
+    done = _seed(db_uri, title="Done")
+    sessions_module._session_status_cache[done] = "idle"
+
+    assert _get(_app(db_uri))["sessions"] == []
+    body = _get(_app(db_uri), "?settled_grace_seconds=120")
+    assert [row["session_id"] for row in body["settled"]] == [done]
+    assert body["settled"][0]["status"] == "idle"
+    # The tallies do not change: a settled row was never "active", and the
+    # grace window must not inflate the headline the HUD renders.
+    assert body["counts"]["active"] == 0
+    assert body["counts"]["omitted"] == 0
+    assert body["truncated"] is False
+
+
+def test_settled_grace_drops_a_session_that_finished_long_ago(
+    db_uri: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The window is a moment, not a history page: an old idle session stays
+    out, so the view a caller polls does not fill up with finished work."""
+    done = _seed(db_uri, title="Done long ago")
+    sessions_module._session_status_cache[done] = "idle"
+    app = _app(db_uri)
+    # Move the server's clock an hour past the session's last write, rather
+    # than reaching into the store to backdate a row.
+    monkeypatch.setattr(monitor_module, "time", SimpleNamespace(time=lambda: _real_time() + 3600))
+
+    body = _get(app, "?settled_grace_seconds=120")
+    assert body["settled"] == []
+    assert body["sessions"] == []
+
+
+def test_settled_grace_is_rejected_beyond_its_ceiling(db_uri: str) -> None:
+    """An unbounded window would drag the whole idle backlog back in."""
+    resp = TestClient(_app(db_uri)).get(
+        "/v1/monitor/sessions?settled_grace_seconds=99999",
+        headers={"X-Forwarded-Email": ALICE},
+    )
+    assert resp.status_code == 422
 
 
 def test_archived_sessions_are_excluded(db_uri: str) -> None:

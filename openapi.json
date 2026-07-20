@@ -2127,6 +2127,20 @@
             "title": "Sessions",
             "type": "array"
           },
+          "settled": {
+            "description": "Sessions that finished inside the caller's `settled_grace_seconds` window, carried so a poller can WITNESS a session finishing instead of inferring it from a row that stopped appearing. Empty unless that window was asked for. These are **not** part of the active view: they are ranked, capped and counted separately, so they never displace an active row, never move `counts` and never set `truncated`.",
+            "items": {
+              "$ref": "#/components/schemas/MonitorSessionItem"
+            },
+            "title": "Settled",
+            "type": "array"
+          },
+          "settled_omitted": {
+            "default": 0,
+            "description": "Settled sessions that matched the window but could not be carried (the collection has its own cap). `0` means this collection is COMPLETE \u2014 the one thing a consumer watching for finished work needs to know, and the reason it is reported here rather than folded into `truncated`, which describes the active view only.",
+            "title": "Settled Omitted",
+            "type": "integer"
+          },
           "truncated": {
             "default": false,
             "description": "`True` when the response does not carry every matching session \u2014 either the store scan was cut (`scan_truncated` in `degraded`, so even the counts are partial) or the row cap dropped rows (`counts.omitted`).",
@@ -8407,6 +8421,19 @@
               "default": true,
               "title": "Only Active",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Widens `only_active` to also carry sessions that settled within this many seconds, e.g. `120`. Ignored when `only_active` is `False`. It exists for pollers that must WITNESS a session finishing: without it a finished session simply stops appearing, and a caller cannot tell \"it ended\" from \"the row cap dropped it\" or \"it was deleted\" \u2014 the same ambiguity that makes an absent row unsafe to act on. Bounded (`0`\u2013`3600`) and defaulted to `0`, so the plain view is unchanged and the window cannot be widened into a history page. The rows come back in `settled`, NOT in `sessions`: they are not part of the active view, so they neither move `counts` nor take room from it, and `settled_omitted` states whether that collection is complete on its own terms.",
+            "in": "query",
+            "name": "settled_grace_seconds",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "maximum": 3600,
+              "minimum": 0,
+              "title": "Settled Grace Seconds",
+              "type": "integer"
             }
           }
         ],

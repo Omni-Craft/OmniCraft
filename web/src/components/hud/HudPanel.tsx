@@ -42,6 +42,7 @@ import {
   FEED_DEGRADED_LABELS,
   isFeedStale,
   monitorFeedErrorMessage,
+  MONITOR_SETTLED_GRACE_SECONDS,
   useMonitorFeed,
   type MonitorPendingElicitation,
   type MonitorSession,
@@ -186,7 +187,18 @@ export function HudPanel({
   const [expanded, setExpanded] = useState(false);
   const [responded, setResponded] = useState<Record<string, "accept" | "decline">>({});
   const [resolveErrors, setResolveErrors] = useState<Record<string, string>>({});
-  const query = useMonitorFeed({ hostId, enabled });
+  // The feed is asked to carry sessions that settled in the last couple of
+  // minutes. They arrive in `feed.settled`, a collection of their own that
+  // this component never renders: the panel lists the active view, unchanged.
+  // They are carried for the shell, which raises a desktop notification when a
+  // session finishes and can only do that if it SEES the session finish —
+  // under the plain active view a finished session just stops appearing, and
+  // an absence is not a fact (a row cap and a deleted session look the same).
+  const query = useMonitorFeed({
+    hostId,
+    enabled,
+    settledGraceSeconds: MONITOR_SETTLED_GRACE_SECONDS,
+  });
   const feed = query.data ?? null;
   const now = useNow(1_000, nowMs);
 
@@ -232,14 +244,46 @@ export function HudPanel({
   const awaitingIds = (feed?.sessions ?? [])
     .filter((session) => (session.pendingElicitationsCount ?? 0) > 0)
     .map((session) => session.sessionId);
+  // The rows themselves, for the desktop notifications the shell raises: a
+  // tally says three sessions are active, never that THIS one just finished or
+  // just crossed its budget. Every uncertainty the feed declares travels with
+  // the row (`null` counts stay null, an unreadable budget stays flagged) so
+  // the shell can refuse to notify on it.
+  const asObserved = (session: MonitorSession) => ({
+    id: session.sessionId,
+    label: sessionLabel(session),
+    status: session.status,
+    pending: session.pendingElicitationsCount,
+    elicitationId: session.pendingElicitation?.id ?? null,
+    // The feed reports epoch SECONDS; the shell works in milliseconds.
+    updatedAtMs: session.updatedAt === null ? null : session.updatedAt * 1000,
+    costUsd: session.usage.costUsd,
+    maxCostUsd: session.usage.budget?.maxCostUsd ?? null,
+    budgetUnreadable: session.degraded.includes("budget_unreadable"),
+  });
+  // The active view plus the sessions that just settled: what the shell may
+  // OBSERVE, which is deliberately more than what this panel LISTS. The
+  // settled ones are the only way a completion is ever witnessed.
+  const sessions = [...(feed?.sessions ?? []), ...(feed?.settled ?? [])].map(asObserved);
   const report: HudFeedReport = {
     readable: feedReadable,
     exact: feedReadable && !feed?.countsPartial,
     stale,
+    truncated: feed?.truncated === true,
+    // The SERVER's clock. Ages (how long a session has been silent) are
+    // measured between two of its timestamps, never against this desktop's —
+    // a machine a quarter of an hour off would otherwise invent a stall.
+    generatedAtMs: feed?.generatedAt === null || feed === null ? null : feed.generatedAt * 1000,
     active: counts?.active ?? 0,
     awaiting: counts?.awaiting ?? 0,
     unresolved: (counts?.unknown ?? 0) + (counts?.omitted ?? 0),
     awaitingIds,
+    sessions,
+    // Whether the settled collection held EVERY session that finished. It
+    // does not stop the shell acting on the rows it did get — those are
+    // proven — but it does stop it reading a session's absence as departure,
+    // which is the one thing an incomplete collection makes ambiguous.
+    observationComplete: feedReadable && feed?.settledComplete === true,
   };
   // Serialized so an unchanged snapshot doesn't re-fire on every render tick
   // (the staleness clock re-renders once a second).
@@ -403,7 +447,7 @@ export function HudPanel({
             !feed.unreadable &&
             feed.counts !== null &&
             !feed.countsPartial &&
-            feed.sessions.length === 0 &&
+            (feed?.sessions ?? []).length === 0 &&
             !feed.truncated &&
             degradedSlugs.length === 0 && (
               <p data-testid="hud-empty" className="text-xs text-muted-foreground">

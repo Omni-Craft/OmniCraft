@@ -14,10 +14,37 @@
  * false (nothing could be read) or `exact` false (the counts are a floor) mean
  * the numbers are NOT an answer — the shell must not read them as idle.
  */
+export interface HudFeedSession {
+  id: string;
+  /** What to call it on screen; `null` when the feed named it nothing. */
+  label: string | null;
+  status: string | null;
+  /** `null` = the prompt index couldn't be read. NOT `0`. */
+  pending: number | null;
+  /** The parked prompt's id — the half of a permission event's identity. */
+  elicitationId: string | null;
+  /** Epoch **milliseconds** (the feed reports seconds; converted here). */
+  updatedAtMs: number | null;
+  costUsd: number | null;
+  /** The DECLARED limit, the only denominator a percentage may use. */
+  maxCostUsd: number | null;
+  /** The session has a budget whose limit could not be read — not a number. */
+  budgetUnreadable: boolean;
+}
+
 export interface HudFeedReport {
   readable: boolean;
   exact: boolean;
   stale: boolean;
+  /** The row list is a page, not the whole set — per-session facts are partial. */
+  truncated: boolean;
+  /**
+   * The SERVER's clock when it built this snapshot, in epoch milliseconds, or
+   * `null` when it didn't say. Row ages are measured between this and
+   * `updatedAtMs` — two readings of the same clock — so a desktop whose own
+   * clock is off cannot invent (or hide) a stalled session.
+   */
+  generatedAtMs: number | null;
   active: number;
   awaiting: number;
   /** Sessions the feed could not resolve or had to leave out. */
@@ -30,6 +57,26 @@ export interface HudFeedReport {
    * `readable && exact && !stale`; the shell checks that for itself.
    */
   awaitingIds: string[];
+  /**
+   * Whether the sessions below account for EVERY session in scope — the active
+   * view plus every one that settled inside the grace window. `false` means a
+   * session missing from the list may simply not have been carried, so its
+   * absence proves nothing (it never licenses ignoring a row that IS present;
+   * those are proven either way).
+   */
+  observationComplete: boolean;
+  /**
+   * The rows themselves, so the shell can notice per-session moments a tally
+   * cannot express: a prompt that just appeared, a run that just ended, spend
+   * crossing a declared budget, a session that stopped moving.
+   *
+   * Carries the active view AND the sessions that just settled — the latter
+   * are how a completion is witnessed at all, since the active view drops a
+   * session the moment it finishes. Only meaningful alongside
+   * `readable && exact && !stale && !truncated && unresolved === 0`; the shell
+   * checks that for itself.
+   */
+  sessions: HudFeedSession[];
 }
 
 interface HudShellApi {

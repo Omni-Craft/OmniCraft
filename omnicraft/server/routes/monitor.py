@@ -82,6 +82,18 @@ _MAX_ROWS = 200
 # the scan itself was cut.
 _SCAN_LIMIT = 1000
 
+# Settled rows carried per response, capped separately from ``_MAX_ROWS``
+# so a burst of completions can never displace an active row (nor be
+# displaced by one). What it cannot carry is reported in
+# ``settled_omitted`` rather than silently dropped.
+_MAX_SETTLED_ROWS = 50
+
+# Ceiling on the ``settled_grace_seconds`` window a caller may ask for.
+# The parameter exists so a poller can WITNESS a session settling; it is
+# not a way to page through history, and an unbounded window would drag
+# every idle session back into the ``only_active`` view.
+_MAX_SETTLED_GRACE_SECONDS = 3600
+
 # Ceiling on sessions pulled in by the attention rescue (below). Each one
 # costs a row read, so a pathological index can't turn a poll into a scan.
 _RESCUE_MAX = 50
@@ -890,13 +902,37 @@ def create_monitor_router(
         # is an answer, so they must not inflate the unresolved tally.
         return allowed, unresolved
 
+    def _settled_recently(updated_at: int | None, now: int, grace_seconds: int) -> bool:
+        """
+        Whether a settled session finished recently enough to still be carried.
+
+        A client that polls ``only_active`` sees a session that finishes
+        VANISH, and an absence is not a fact: a row can be missing because
+        the work ended, because the row cap dropped it, or because the
+        filter changed. Carrying settled rows for a short grace window is
+        what lets a poller witness the transition itself instead of
+        inferring one from a gap.
+
+        An unreadable ``updated_at`` is not proof of anything, so it does
+        not extend the window; a timestamp in the future is treated the
+        same as "now" rather than being trusted to push the row out.
+        """
+        if grace_seconds <= 0 or updated_at is None:
+            return False
+        return now - updated_at <= grace_seconds
+
     async def _build_feed(
         user_id: str | None,
         host_id: str | None,
         only_active: bool,
+        settled_grace_seconds: int,
         degradation: _Degradation,
     ) -> MonitorFeedResponse:
         """Assemble the feed; see the route docstring for the semantics."""
+        # One reading of the clock for the whole feed: ``generated_at`` is what
+        # a client measures row ages against, so the window that decides which
+        # settled rows are carried has to be measured from the same instant.
+        now = int(time.time())
         page = await asyncio.to_thread(
             conversation_store.list_conversations,
             limit=_SCAN_LIMIT,
@@ -921,7 +957,7 @@ def create_monitor_router(
         convs.extend(rescued)
         if not convs:
             return MonitorFeedResponse(
-                generated_at=int(time.time()),
+                generated_at=now,
                 host_id=host_id,
                 counts=MonitorCounts(omitted=unresolved_attention, partial=degradation.partial),
                 truncated=page.has_more or unresolved_attention > 0,
@@ -987,6 +1023,12 @@ def create_monitor_router(
         agent_specs = _warm_specs(unique_agent_ids)
         convs_by_id = {conv.id: conv for conv in convs}
         rows: list[MonitorSessionItem] = []
+        # Sessions that settled inside the grace window. Deliberately NOT in
+        # ``rows``: they exist so a poller can witness a session finishing,
+        # and letting them into the active view would rank them, count them
+        # and — worst of all — let the row cap drop the very transition they
+        # were carried to show.
+        settled_rows: list[MonitorSessionItem] = []
         for item in items:
             conv = convs_by_id[item.id]
             child_ids = child_ids_by_parent.get(item.id, [])
@@ -1021,9 +1063,13 @@ def create_monitor_router(
             if pending_count is None:
                 # The row says it can't tell; the tallies must say the same.
                 degradation.note_floor()
-            if only_active and status == "idle" and pending_count == 0 and not degraded:
+            settled = only_active and status == "idle" and pending_count == 0 and not degraded
+            if settled and not _settled_recently(item.updated_at, now, settled_grace_seconds):
                 continue
-            rows.append(
+            # A settled row is carried for OBSERVATION only, in its own
+            # collection: it is not part of the active view, so it must not
+            # be ranked with it, counted in it, or take up room in it.
+            (settled_rows if settled else rows).append(
                 MonitorSessionItem(
                     session_id=item.id,
                     agent_name=item.agent_name,
@@ -1061,12 +1107,21 @@ def create_monitor_router(
             omitted=capped + unresolved_attention,
             partial=degradation.partial,
         )
+        # Most recent first: with more settlements than the cota can carry,
+        # the ones a poller has not seen yet are the recent ones.
+        settled_rows.sort(key=lambda row: -(row.updated_at or 0))
         return MonitorFeedResponse(
-            generated_at=int(time.time()),
+            generated_at=now,
             host_id=host_id,
             sessions=rows[:_MAX_ROWS],
             counts=counts,
             truncated=page.has_more or counts.omitted > 0,
+            settled=settled_rows[:_MAX_SETTLED_ROWS],
+            # The settled collection states its OWN completeness. A consumer
+            # watching for completions has to know whether it saw all of them,
+            # and this must never be inferred from ``truncated``, which is
+            # about the active view.
+            settled_omitted=max(0, len(settled_rows) - _MAX_SETTLED_ROWS),
             degraded=list(degradation.slugs),
         )
 
@@ -1079,6 +1134,7 @@ def create_monitor_router(
         request: Request,
         host_id: str | None = Query(default=None),
         only_active: bool = Query(default=True),
+        settled_grace_seconds: int = Query(default=0, ge=0, le=_MAX_SETTLED_GRACE_SECONDS),
     ) -> MonitorFeedResponse:
         """
         Monitor feed of the caller's sessions, most in need of a human first.
@@ -1098,6 +1154,20 @@ def create_monitor_router(
             always kept, so an unresolved state is never mistaken for an
             idle one. ``False`` returns every non-archived session in
             the scan.
+        :param settled_grace_seconds: Widens ``only_active`` to also carry
+            sessions that settled within this many seconds, e.g. ``120``.
+            Ignored when ``only_active`` is ``False``. It exists for
+            pollers that must WITNESS a session finishing: without it a
+            finished session simply stops appearing, and a caller cannot
+            tell "it ended" from "the row cap dropped it" or "it was
+            deleted" — the same ambiguity that makes an absent row unsafe
+            to act on. Bounded (``0``–``3600``) and defaulted to ``0``, so
+            the plain view is unchanged and the window cannot be widened
+            into a history page. The rows come back in ``settled``, NOT
+            in ``sessions``: they are not part of the active view, so
+            they neither move ``counts`` nor take room from it, and
+            ``settled_omitted`` states whether that collection is
+            complete on its own terms.
         :returns: A :class:`MonitorFeedResponse`. Any failure inside the
             feed degrades into explicit markers on the payload rather
             than an error status, so the contract is ``200`` plus
@@ -1121,7 +1191,9 @@ def create_monitor_router(
             user_id = require_user(request, auth_provider)
             if host_id is not None:
                 await _validate_host(host_id, user_id)
-            return await _build_feed(user_id, host_id, only_active, degradation)
+            return await _build_feed(
+                user_id, host_id, only_active, settled_grace_seconds, degradation
+            )
         except OmniCraftError as exc:
             # Deliberate verdicts about the request itself — unauthorized,
             # forbidden, a bad or unverifiable host — are the caller's

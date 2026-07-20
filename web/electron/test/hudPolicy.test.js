@@ -49,6 +49,8 @@ function harness({
     notified: [],
     calls: [],
     writeFails: false,
+    /** Reports handed to the desktop-notification watcher, in order. */
+    observed: [],
   };
 
   const win = {
@@ -85,6 +87,16 @@ function harness({
     openWindow: () => {
       state.exists = true;
       state.calls.push("open");
+    },
+    notifier: {
+      observe: (report) => {
+        state.observed.push(report);
+        state.calls.push("observe");
+      },
+      reset: () => {
+        state.observed.push("reset");
+        state.calls.push("notifier:reset");
+      },
     },
   });
 
@@ -460,5 +472,42 @@ describe("hudPolicy — the toggle's choice is the settings, and nothing else", 
     state.settings.mode = "attention-only";
     policy.applyPolicy();
     assert.equal(state.visible, false, "the HUD outlived the setting that was showing it");
+  });
+});
+
+describe("hudPolicy — the desktop notifications ride on the feed report", () => {
+  it("hands every report to the watcher, exactly as it arrived", () => {
+    // Including the ones the shell itself will refuse to act on: the watcher
+    // has its own, stricter, rules about what an uncertain report proves, and
+    // it cannot apply them to a report it never sees.
+    const { state, policy } = harness();
+    state.arrive();
+
+    const first = waitingOn("conv_a");
+    const second = report({ readable: false });
+    policy.setFeedReport(first);
+    policy.setFeedReport(second);
+
+    assert.deepEqual(state.observed, [first, second]);
+  });
+
+  it("passes an absent report through as null rather than swallowing it", () => {
+    const { state, policy } = harness();
+    state.arrive();
+
+    policy.setFeedReport(undefined);
+    assert.deepEqual(state.observed, [null]);
+  });
+
+  it("forgets the baseline when the window goes away", () => {
+    // The next HUD seeds its own: a session that finished while nothing was
+    // watching is not news the moment the HUD comes back.
+    const { state, policy } = harness();
+    state.arrive();
+    policy.setFeedReport(report());
+
+    policy.shellClosing();
+    policy.windowClosed();
+    assert.equal(state.observed.at(-1), "reset");
   });
 });

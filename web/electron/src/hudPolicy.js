@@ -38,9 +38,21 @@ const { acknowledgeAttention, carryAcknowledged, decideHud } = require("./hudVis
  * @param {() => HudWindowHandle | null} deps.getWindow
  * @param {() => void} deps.openWindow Create the window; it reports back via
  *   `windowReady()` once it can be shown.
+ * @param {{observe: (report: unknown) => void, reset: () => void}} [deps.notifier]
+ *   Desktop notifications (src/hudNotifications.js). Wired here because the
+ *   report funnels through this state machine, and because the notification
+ *   baseline must live and die with the window: a HUD that just opened has no
+ *   business announcing what happened while it was closed.
  * @param {(message: string, error: unknown) => void} [deps.onError]
  */
-function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, onError }) {
+function createHudPolicy({
+  readSettings,
+  writeSettings,
+  getWindow,
+  openWindow,
+  notifier,
+  onError,
+}) {
   const reportError = onError ?? (() => {});
 
   /** What the window is showing: the pill, or the session list. */
@@ -65,6 +77,7 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
     autoExpanded = false;
     report = null;
     acknowledged = null;
+    if (notifier) notifier.reset();
   }
 
   /**
@@ -125,6 +138,10 @@ function createHudPolicy({ readSettings, writeSettings, getWindow, openWindow, o
      */
     setFeedReport(next) {
       report = next ?? null;
+      // Notify first, then move the window: the events are decided from the
+      // report alone, and a decision that throws must not cost the user the
+      // toast that report earned.
+      if (notifier) notifier.observe(report);
       apply();
     },
 

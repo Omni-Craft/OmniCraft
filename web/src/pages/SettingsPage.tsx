@@ -1182,8 +1182,8 @@ function HudNotificationsFields({
         <p data-testid="hud-notifications-scope" className="text-sm text-muted-foreground">
           Estes avisos saem do que o próprio HUD observa, então{" "}
           <strong className="font-medium">só funcionam com o HUD ligado</strong>. Escondido por um
-          modo de visibilidade ele continua observando e avisando; desligado, ninguém está olhando
-          o feed e nada é avisado.
+          modo de visibilidade ele continua observando e avisando; desligado, ninguém está olhando o
+          feed e nada é avisado.
         </p>
         {!hudEnabled && (
           <p data-testid="hud-notifications-hud-off" className="text-sm text-warning">
@@ -1220,9 +1220,7 @@ function HudNotificationsFields({
         <Select
           value={String(notifications.budgetThreshold)}
           disabled={busy}
-          onValueChange={(value) =>
-            apply({ notifications: { budgetThreshold: Number(value) } })
-          }
+          onValueChange={(value) => apply({ notifications: { budgetThreshold: Number(value) } })}
         >
           <SelectTrigger id={thresholdId} data-testid="hud-budget-threshold" className="w-40">
             <SelectValue />
@@ -1241,8 +1239,8 @@ function HudNotificationsFields({
         <span className="flex flex-col">
           <span className="text-sm font-medium">Som</span>
           <span className="text-sm text-muted-foreground">
-            Toca um som do sistema junto do aviso. É a mesma preferência de som do app inteiro (a
-            do menu Notificações), não uma segunda chave só para o HUD.
+            Toca um som do sistema junto do aviso. É a mesma preferência de som do app inteiro (a do
+            menu Notificações), não uma segunda chave só para o HUD.
           </span>
         </span>
         <Switch

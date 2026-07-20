@@ -257,7 +257,25 @@ describe("budget", () => {
     ]);
     assert.deepEqual(categories(fired), [[], ["budget"], []]);
     assert.match(fired[1][0].body, /80%/);
-    assert.match(fired[1][0].body, /US\$ 10\.00/);
+    assert.match(fired[1][0].body, /US\$\s10,00/);
+  });
+
+  it("spells the limit the way the HUD panel spells it", () => {
+    // The toast and the panel are on screen together, so "US$ 5.00" beside
+    // "US$ 5,00" reads as two different limits rather than one.
+    const { fired } = run([
+      report([session({ costUsd: 1, maxCostUsd: 5 })]),
+      report([session({ costUsd: 4.5, maxCostUsd: 5 })]),
+    ]);
+    // The panel's own formatter, written out here so this test fails if the
+    // toast ever drifts back to a platform default.
+    const panelUsd = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD" });
+    assert.ok(
+      fired[1][0].body.includes(panelUsd.format(5)),
+      `expected the panel's ${panelUsd.format(5)} in: ${fired[1][0].body}`,
+    );
+    // The trait that actually differed: a decimal comma, never a point.
+    assert.doesNotMatch(fired[1][0].body, /5\.00/);
   });
 
   it("says nothing without a declared limit, however much was spent", () => {

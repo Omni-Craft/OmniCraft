@@ -48,9 +48,7 @@ vi.mock("@/hooks/useConversations", () => ({
 import { SettingsPage } from "./SettingsPage";
 
 /** The notification preferences a never-configured install runs on. */
-function notifications(
-  overrides: Partial<HudNotificationSettings> = {},
-): HudNotificationSettings {
+function notifications(overrides: Partial<HudNotificationSettings> = {}): HudNotificationSettings {
   return {
     permission: true,
     budget: true,

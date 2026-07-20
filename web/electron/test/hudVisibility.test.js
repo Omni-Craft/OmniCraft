@@ -130,7 +130,12 @@ describe("readHudSettings — notification preferences", () => {
     const read = readHudSettings({
       hud: {
         enabled: true,
-        notifications: { budget: false, quietFrom: "22:00", quietTo: "07:00", budgetThreshold: 0.5 },
+        notifications: {
+          budget: false,
+          quietFrom: "22:00",
+          quietTo: "07:00",
+          budgetThreshold: 0.5,
+        },
       },
     });
     assert.deepEqual(
@@ -175,7 +180,9 @@ describe("readHudSettings — notification preferences", () => {
   });
 
   it("refuses a threshold that would fire on everything or on nothing", () => {
-    const hud = (budgetThreshold) => ({ hud: { enabled: true, notifications: { budgetThreshold } } });
+    const hud = (budgetThreshold) => ({
+      hud: { enabled: true, notifications: { budgetThreshold } },
+    });
     // 0 would warn about every session that declares a limit, the moment it
     // does; above 1 can never be reached. Neither may be read as a setting.
     assert.deepEqual(readHudSettings(hud(0)), unknown);

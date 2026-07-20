@@ -301,9 +301,14 @@ function percentText(ratio) {
   return `${Math.round(ratio * 100)}%`;
 }
 
-/** A dollar amount, plainly. The pure module owns no locale machinery. */
+// The HUD panel formats money with this exact formatter, and the toast sits
+// next to the panel on the same screen. Two spellings of the same limit read
+// as two different limits, so the locale is the panel's, not the platform's.
+const USD = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "USD" });
+
+/** A dollar amount, spelled the way the HUD spells it. */
 function usdText(value) {
-  return `US$ ${value.toFixed(2)}`;
+  return USD.format(value);
 }
 
 /** Whole minutes, for the "stopped N minutes ago" line. */

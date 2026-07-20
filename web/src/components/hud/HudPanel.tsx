@@ -564,7 +564,7 @@ function HudUsageGauge({
       )}
       {budgetUnreadable && (
         <span data-testid="hud-budget-unreadable" className="text-[11px] text-warning">
-          Esta sessão tem orçamento, mas o limite não pôde ser lido — sem barra.
+          O limite de gasto desta sessão não pôde ser apurado — sem barra.
         </span>
       )}
     </div>

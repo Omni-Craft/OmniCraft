@@ -100,7 +100,7 @@ export const FEED_DEGRADED_LABELS: Record<string, string> = {
   status_unreadable: "o estado desta sessão não pôde ser lido",
   cost_unreadable: "o custo não pôde ser lido",
   usage_unreadable: "parte da contagem de tokens não pôde ser lida",
-  budget_unreadable: "esta sessão tem orçamento, mas o limite não pôde ser lido",
+  budget_unreadable: "o limite de gasto desta sessão não pôde ser apurado",
   counts_unreadable: "as contagens do feed não puderam ser lidas",
   generated_at_unreadable: "a hora do feed não pôde ser lida",
   host_id_unreadable: "não dá para saber a que host estas contagens se referem",

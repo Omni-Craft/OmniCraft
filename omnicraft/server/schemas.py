@@ -2455,9 +2455,15 @@ class MonitorSessionBudget(BaseModel):
         checkpoints — there is then no denominator, so a surface
         must still not draw a bar.
     :param thresholds_usd: Soft warning checkpoints in USD, ascending,
-        e.g. ``[1.0, 2.5]``. Empty when none were declared.
+        e.g. ``[1.0, 2.5]``. Empty when none were declared. Always
+        strictly below ``max_cost_usd`` when there is one: a
+        checkpoint the effective cap makes unreachable is left out
+        rather than published as a warning that can never arrive.
     :param source: Where the limit was read from. ``"agent_spec"`` is
-        the agent bundle's ``guardrails.policies`` block. **This is
+        the agent bundle's ``guardrails.policies`` block, resolved
+        through the ``bundle_location`` on the agent's row so the same
+        agent yields the same limit on every replica and after every
+        restart. **This is
         the agent's declared cap, not every gate in force**: a
         session-scoped or server-default cost policy can set a
         tighter one, and reading those would cost a query per row,
@@ -2509,14 +2515,18 @@ class MonitorSessionUsage(BaseModel):
         carried here so a surface reads spend and its limit off one
         object. ``None`` when unrecorded or unreadable.
     :param budget: The agent's declared cost budget, or ``None``.
-        ``None`` means **no budget this feed can vouch for** — the
-        agent declared none, or its spec is not loaded in this
-        process. It does not prove none exists, so a surface must not
+        ``None`` means **no budget this feed can vouch for**. Read it
+        together with ``degraded``: ``None`` on a row without
+        ``budget_unreadable`` is the settled answer that the agent
+        declares no session cost cap, while ``None`` alongside
+        ``budget_unreadable`` means one may well be in force and this
+        server could not settle it — because a declaration was
+        ambiguous, or because the agent's spec could not be resolved
+        at all. Neither proves none exists, so a surface must not
         announce "no budget"; it simply has no denominator and must
-        show absolute numbers with no bar. A budget that *is*
-        declared but could not be settled leaves this ``None`` **and**
-        puts ``budget_unreadable`` on the row's ``degraded`` list —
-        never a value alongside that slug. One unsettled declaration
+        show absolute numbers with no bar. What it must never see is
+        the same agent's budget appearing and silently vanishing
+        between polls. One unsettled declaration
         discards the ones that did parse, because a limit is only
         worth publishing if it is provably the tightest gate; a
         surface may therefore divide by any budget it receives here

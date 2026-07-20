@@ -386,7 +386,16 @@ def _budget_from_spec(
     A label-gated policy (``condition``) is *not* read as absent: it
     may be in force right now and this feed has no labels to check it
     against, so it is reported as unsettled instead. Same for a limit
-    that isn't a usable number.
+    that isn't a usable number, and same for a spec that could not be
+    resolved at all — "we never read it" is unsettled, never "there is
+    none".
+
+    Checkpoints stay attached to the policy that declared them until
+    the effective cap is known, then they are normalised against it: a
+    threshold a looser policy declared under its own larger cap can sit
+    above the cap that actually fires, and publishing it would state a
+    checkpoint the session can never reach — one the client refuses
+    outright, taking the whole budget down with it.
 
     Unsettled is **all-or-nothing**: one declaration this function
     cannot settle discards the ones it could. A budget is only worth
@@ -395,8 +404,8 @@ def _budget_from_spec(
     it would print a comfortable percentage against a cap that may not
     be the one about to fire.
 
-    :param spec: A parsed ``AgentSpec``, or ``None`` when the spec is
-        not loaded in this process.
+    :param spec: A parsed ``AgentSpec``, or ``None`` when the agent's
+        bundle could not be resolved.
     :param sub_agent_name: The bundled sub-agent this session runs as,
         or ``None`` for the brain itself. A head has its own
         guardrails, so the brain's budget must not be reported for it.
@@ -407,7 +416,10 @@ def _budget_from_spec(
         none. The two are never both truthy.
     """
     if spec is None:
-        return None, False
+        # Not "this agent declares no budget" — this feed never read the
+        # spec that would say. Answering ``None`` quietly would let a
+        # declared cap blink out of existence.
+        return None, True
     if sub_agent_name is not None:
         heads = getattr(spec, "sub_agents", None) or []
         spec = next((s for s in heads if getattr(s, "name", None) == sub_agent_name), None)
@@ -419,7 +431,10 @@ def _budget_from_spec(
     policies = getattr(guardrails, "policies", None) or []
     uncertain = False
     maxima: list[float] = []
-    thresholds: set[float] = set()
+    # Kept per declaration, not merged: a checkpoint only means anything
+    # next to the cap it was declared under, and the effective cap is not
+    # known until every policy has been walked.
+    declared: list[tuple[float | None, set[float]]] = []
     for policy in policies:
         function = getattr(policy, "function", None)
         if function is None or getattr(function, "path", None) != _COST_BUDGET_PATH:
@@ -438,6 +453,7 @@ def _budget_from_spec(
         if not isinstance(raw_thresholds, list):
             uncertain = True
             raw_thresholds = []
+        checkpoints: set[float] = set()
         for raw_threshold in raw_thresholds:
             checkpoint = _positive_usd(raw_threshold)
             # The gate itself refuses a checkpoint outside ``(0, max)``, so a
@@ -446,7 +462,8 @@ def _budget_from_spec(
             if checkpoint is None or (limit is not None and checkpoint >= limit):
                 uncertain = True
             else:
-                thresholds.add(checkpoint)
+                checkpoints.add(checkpoint)
+        declared.append((limit, checkpoints))
     # Fail closed. A single unsettled declaration means the tightest gate is
     # not known — and the whole worth of this field is being the one
     # denominator a surface may divide by. Publishing the limits that DID
@@ -454,15 +471,17 @@ def _budget_from_spec(
     # binding one, which is the number this feed exists not to invent.
     if uncertain:
         return None, True
-    if not maxima and not thresholds:
-        return None, False
-    return (
-        MonitorSessionBudget(
-            max_cost_usd=min(maxima) if maxima else None,
-            thresholds_usd=sorted(thresholds),
-        ),
-        False,
+    cap = min(maxima) if maxima else None
+    # A checkpoint at or above the cap that actually fires cannot be
+    # reached, whichever policy declared it: the run stops first. Dropping
+    # it is not losing a warning, it is refusing to publish one that would
+    # never arrive — and that the client rejects the whole budget over.
+    thresholds = sorted(
+        {point for _, points in declared for point in points if cap is None or point < cap}
     )
+    if cap is None and not thresholds:
+        return None, False
+    return MonitorSessionBudget(max_cost_usd=cap, thresholds_usd=thresholds), False
 
 
 def _usage_for_row(
@@ -482,7 +501,9 @@ def _usage_for_row(
     :param session_usage: The conversation's ``session_usage`` blob.
     :param cost: The spend already read by :func:`_cost_usd`, reused so
         the row and its usage object cannot disagree.
-    :param spec: The agent's parsed spec, or ``None`` when unavailable.
+    :param spec: The agent's parsed spec, or ``None`` when it could not
+        be resolved — which degrades the row rather than reading as an
+        agent that declared no budget.
     :param sub_agent_name: The bundled sub-agent this session runs as.
     :returns: ``(usage, degraded)``.
     """
@@ -505,35 +526,52 @@ def _usage_for_row(
     return MonitorSessionUsage(cost_usd=cost, budget=budget, **counts), degraded
 
 
-def _warm_specs(agent_ids: list[str]) -> dict[str, Any]:
+def _resolve_specs(agent_ids: list[str], agent_store: Any) -> dict[str, Any]:
     """
-    Agent specs already parsed in this process, for the page's agents.
+    Agent specs for the page's agents, read from their stored bundles.
 
-    Warm tier only, on purpose: a cold agent means downloading and
-    extracting a bundle, and a three-second poll must never pay for
-    that. A miss leaves the row's budget ``None``, which the contract
-    defines as "no budget this feed can vouch for" rather than "no
-    budget exists" — so nothing is asserted that a cache miss cannot
-    back up.
+    Deliberately *not* the warm cache tier alone. ``bundle_location`` is
+    content-addressed and persisted on the agent row, so every replica
+    and every restart resolves the same spec for the same agent — the
+    budget a row published a minute ago is the budget it publishes now.
+    Reading whichever specs happened to be parsed in this process made a
+    declared cap vanish after a restart, with no degradation to say so.
+
+    The cost is still paid once: the loader's own tiers answer from
+    memory, then from the extracted directory on disk, and only a
+    genuinely cold agent fetches its bundle. Callers run this off the
+    event loop.
+
+    An agent missing from the returned map is **unknown**, never "no
+    budget" — the caller degrades those rows.
 
     :param agent_ids: Unique agent ids on the page.
-    :returns: ``{agent_id: AgentSpec}``, covering whatever was warm.
+    :param agent_store: Store holding each agent's ``bundle_location``.
+    :returns: ``{agent_id: AgentSpec}`` for the agents that resolved.
     """
     try:
         from omnicraft.runtime import get_agent_cache
 
         cache = get_agent_cache()
     except Exception:  # noqa: BLE001 — no runtime cache is "unknown", not an error
+        _logger.debug("Monitor feed has no agent cache to read specs from", exc_info=True)
         return {}
     specs: dict[str, Any] = {}
     for agent_id in agent_ids:
         try:
-            spec = cache.peek(agent_id)
-        except Exception:  # noqa: BLE001 — one bad entry must not cost the page
-            _logger.debug("Monitor feed spec peek failed for %s", agent_id, exc_info=True)
-            continue
-        if spec is not None:
-            specs[agent_id] = spec
+            agent = agent_store.get(agent_id)
+            if agent is None:
+                continue
+            # ``expand_env`` follows the agent's provenance, never the
+            # caller's convenience: expanding a tenant-supplied bundle
+            # against the server env would leak its secrets into the spec.
+            specs[agent_id] = cache.load(
+                agent.id,
+                agent.bundle_location,
+                expand_env=agent.session_id is None,
+            ).spec
+        except Exception:  # noqa: BLE001 — one bad agent must not cost the page
+            _logger.debug("Monitor feed spec load failed for %s", agent_id, exc_info=True)
     return specs
 
 
@@ -1019,8 +1057,9 @@ def create_monitor_router(
                 item.runner_online = None
                 item.host_online = None
 
-        # In-memory only, so this adds no query to the page.
-        agent_specs = _warm_specs(unique_agent_ids)
+        # One lookup per distinct agent, off the event loop; the loader's
+        # own tiers make every poll after the first a dict hit.
+        agent_specs = await asyncio.to_thread(_resolve_specs, unique_agent_ids, agent_store)
         convs_by_id = {conv.id: conv for conv in convs}
         rows: list[MonitorSessionItem] = []
         # Sessions that settled inside the grace window. Deliberately NOT in

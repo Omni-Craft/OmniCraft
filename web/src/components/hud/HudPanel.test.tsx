@@ -531,7 +531,7 @@ describe("parseMonitorFeed — a budget is taken whole or not at all", () => {
     expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
     // Silently vanishing would read as "this session has no budget".
     expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
-      "o limite não pôde ser lido",
+      "o limite de gasto desta sessão não pôde ser apurado",
     );
     expect(within(row).queryByTestId("hud-no-budget")).toBeNull();
   });
@@ -545,7 +545,7 @@ describe("parseMonitorFeed — a budget is taken whole or not at all", () => {
     expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
     expect(row).not.toHaveTextContent("20%");
     expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
-      "o limite não pôde ser lido",
+      "o limite de gasto desta sessão não pôde ser apurado",
     );
   });
 
@@ -561,7 +561,7 @@ describe("parseMonitorFeed — a budget is taken whole or not at all", () => {
     expect(within(row).queryByTestId("hud-budget-gauge")).toBeNull();
     expect(row).not.toHaveTextContent("20%");
     expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
-      "o limite não pôde ser lido",
+      "o limite de gasto desta sessão não pôde ser apurado",
     );
   });
 
@@ -596,7 +596,7 @@ describe("parseMonitorFeed — a budget is taken whole or not at all", () => {
     expect(row).not.toHaveTextContent("Infinity");
     expect(row).not.toHaveTextContent("NaN");
     expect(within(row).getByTestId("hud-session-degraded")).toHaveTextContent(
-      "o limite não pôde ser lido",
+      "o limite de gasto desta sessão não pôde ser apurado",
     );
   });
 });

@@ -50,6 +50,40 @@ def _clean_module_state() -> Any:
     pending_elicitations.reset_for_tests()
 
 
+@pytest.fixture(autouse=True)
+def declared_policies(monkeypatch: pytest.MonkeyPatch) -> list[FunctionPolicySpec]:
+    """Make ``ag_test``'s bundle resolvable, as it is on a real server.
+
+    The feed reads the spec through the agent row's ``bundle_location``,
+    so it resolves on every poll rather than only while some other code
+    path happens to have left it parsed in memory. Tests append to the
+    returned list — via :func:`_declare` — to give the agent policies.
+    """
+    policies: list[FunctionPolicySpec] = []
+
+    class _Cache:
+        def load(self, agent_id: str, bundle_location: str, *, expand_env: bool = False) -> Any:
+            if agent_id != "ag_test":
+                raise KeyError(agent_id)
+            # ``ag_test`` is a template agent, so the caller must expand.
+            assert expand_env is True
+            assert bundle_location == "ag_test/bundle"
+            return SimpleNamespace(
+                spec=SimpleNamespace(
+                    guardrails=GuardrailsSpec(policies=list(policies)),
+                    sub_agents=[],
+                )
+            )
+
+    monkeypatch.setattr("omnicraft.runtime.get_agent_cache", lambda: _Cache())
+    return policies
+
+
+def _declare(declared: list[FunctionPolicySpec], *policies: FunctionPolicySpec) -> None:
+    """Give ``ag_test`` the guardrail policies its spec declares."""
+    declared.extend(policies)
+
+
 def _live(ids: list[str]) -> dict[str, SessionLiveness]:
     return {sid: SessionLiveness(runner_online=True, host_online=True) for sid in ids}
 
@@ -861,21 +895,6 @@ def _cost_policy(
     )
 
 
-def _warm_agent(monkeypatch: pytest.MonkeyPatch, *policies: FunctionPolicySpec) -> None:
-    """Make ``ag_test``'s spec readable from the in-memory agent cache."""
-
-    class _Cache:
-        def peek(self, agent_id: str) -> Any:
-            if agent_id != "ag_test":
-                return None
-            return SimpleNamespace(
-                guardrails=GuardrailsSpec(policies=list(policies)),
-                sub_agents=[],
-            )
-
-    monkeypatch.setattr("omnicraft.runtime.get_agent_cache", lambda: _Cache())
-
-
 def _usage(db_uri: str, blob: dict[str, Any]) -> dict[str, Any]:
     """Seed one running session with *blob* and return its ``usage``."""
     session = _seed(db_uri, title="Priced")
@@ -966,10 +985,10 @@ def test_usage_carries_no_quota_shaped_field(db_uri: str) -> None:
 
 
 def test_budget_carries_no_quota_shaped_field_either(
-    db_uri: str, monkeypatch: pytest.MonkeyPatch
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
 ) -> None:
     """The nested object is where a "remaining"/"resets_at" would sneak in."""
-    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[1.0]))
+    _declare(declared_policies, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[1.0]))
 
     row = _usage(db_uri, {"total_cost_usd": 1.0})
 
@@ -980,20 +999,68 @@ def test_budget_carries_no_quota_shaped_field_either(
 # ── Budget: the only legitimate denominator ────────────────────────
 
 
-def test_no_budget_when_the_agent_spec_is_not_loaded(db_uri: str) -> None:
-    """A cold spec is "no budget we can vouch for" — and no bar."""
+def test_an_agent_declaring_no_cost_policy_settles_on_no_budget(db_uri: str) -> None:
+    """A spec that was read and declares nothing is a settled answer."""
     row = _usage(db_uri, {"total_cost_usd": 1.0})
 
     assert row["usage"]["budget"] is None
-    # Not knowing is not a failure to read something that was there.
+    # Nothing failed — the agent simply has no cost cap.
     assert row["degraded"] == []
 
 
-def test_budget_read_from_the_declared_cost_policy(
+def test_a_spec_that_cannot_be_resolved_is_an_explicit_unknown(
     db_uri: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """The budget must never blink out because a lookup came up empty.
+
+    Reading the spec off whatever happened to be warm in this process
+    made a declared cap disappear after a restart, on another replica,
+    or behind a cache eviction — silently, with the gauge going with
+    it. The limit now comes off the agent row's bundle, and a lookup
+    that still fails says so on ``degraded`` instead of passing for an
+    agent that declared no budget.
+    """
+
+    class _Cache:
+        def load(self, agent_id: str, bundle_location: str, *, expand_env: bool = False) -> Any:
+            raise KeyError(agent_id)
+
+    monkeypatch.setattr("omnicraft.runtime.get_agent_cache", lambda: _Cache())
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] is None
+    assert "budget_unreadable" in row["degraded"]
+
+
+def test_the_same_agent_yields_the_same_budget_on_every_poll(
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
+) -> None:
+    """Two polls, nothing changed: the denominator may not move."""
+    _declare(declared_policies, _cost_policy(max_cost_usd=5.0))
+    app = _app(db_uri)
+    session = _seed(db_uri, title="Priced")
+    sessions_module._session_status_cache[session] = "running"
+
+    first = _get(app)["sessions"][0]
+    second = _get(app)["sessions"][0]
+
+    assert (
+        first["usage"]["budget"]
+        == second["usage"]["budget"]
+        == {
+            "max_cost_usd": 5.0,
+            "thresholds_usd": [],
+            "source": "agent_spec",
+        }
+    )
+
+
+def test_budget_read_from_the_declared_cost_policy(
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
+) -> None:
     """The agent's own hard limit is the denominator a surface may divide by."""
-    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[2.5, 1.0]))
+    _declare(declared_policies, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[2.5, 1.0]))
 
     row = _usage(db_uri, {"total_cost_usd": 1.25})
 
@@ -1005,10 +1072,12 @@ def test_budget_read_from_the_declared_cost_policy(
     assert row["degraded"] == []
 
 
-def test_tightest_declared_budget_wins(db_uri: str, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tightest_declared_budget_wins(
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
+) -> None:
     """Two caps means the lower one fires first; that is the real limit."""
-    _warm_agent(
-        monkeypatch,
+    _declare(
+        declared_policies,
         _cost_policy("loose", max_cost_usd=20.0),
         _cost_policy("tight", max_cost_usd=3.0),
     )
@@ -1018,11 +1087,58 @@ def test_tightest_declared_budget_wins(db_uri: str, monkeypatch: pytest.MonkeyPa
     assert row["usage"]["budget"]["max_cost_usd"] == 3.0
 
 
+def test_checkpoints_are_normalised_against_the_cap_that_actually_fires(
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
+) -> None:
+    """A checkpoint is only coherent beside the cap the session will hit.
+
+    ``$15`` is a fine warning under the loose policy's own ``$20`` cap,
+    but the ``$3`` policy stops the session first, so that checkpoint can
+    never arrive. Publishing it would put a threshold above the
+    denominator — a budget the client rejects outright, taking the
+    perfectly good ``$1`` warning and the ``$3`` cap down with it.
+    """
+    _declare(
+        declared_policies,
+        _cost_policy("loose", max_cost_usd=20.0, ask_thresholds_usd=[15.0, 1.0]),
+        _cost_policy("tight", max_cost_usd=3.0, ask_thresholds_usd=[2.0]),
+    )
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] == {
+        "max_cost_usd": 3.0,
+        "thresholds_usd": [1.0, 2.0],
+        "source": "agent_spec",
+    }
+    # Nothing was unreadable — the declarations just needed reconciling.
+    assert row["degraded"] == []
+
+
+def test_a_checkpoint_at_the_effective_cap_is_dropped_not_published(
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
+) -> None:
+    """Equal to the cap is not below it, so the warning never precedes the stop."""
+    _declare(
+        declared_policies,
+        _cost_policy("loose", max_cost_usd=10.0, ask_thresholds_usd=[4.0]),
+        _cost_policy("tight", max_cost_usd=4.0),
+    )
+
+    row = _usage(db_uri, {"total_cost_usd": 1.0})
+
+    assert row["usage"]["budget"] == {
+        "max_cost_usd": 4.0,
+        "thresholds_usd": [],
+        "source": "agent_spec",
+    }
+
+
 def test_label_gated_budget_is_unsettled_rather_than_absent(
-    db_uri: str, monkeypatch: pytest.MonkeyPatch
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
 ) -> None:
     """A conditional cap may be in force; the feed has no labels to check it."""
-    _warm_agent(monkeypatch, _cost_policy(condition={"tier": "paid"}))
+    _declare(declared_policies, _cost_policy(condition={"tier": "paid"}))
 
     row = _usage(db_uri, {"total_cost_usd": 1.0})
 
@@ -1031,10 +1147,10 @@ def test_label_gated_budget_is_unsettled_rather_than_absent(
 
 
 def test_unusable_limit_is_refused_rather_than_used_as_a_denominator(
-    db_uri: str, monkeypatch: pytest.MonkeyPatch
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
 ) -> None:
     """Zero is not a small budget — it is a denominator that breaks every ratio."""
-    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=0))
+    _declare(declared_policies, _cost_policy(max_cost_usd=0))
 
     row = _usage(db_uri, {"total_cost_usd": 1.0})
 
@@ -1043,7 +1159,7 @@ def test_unusable_limit_is_refused_rather_than_used_as_a_denominator(
 
 
 def test_one_unsettled_declaration_discards_the_ones_that_parsed(
-    db_uri: str, monkeypatch: pytest.MonkeyPatch
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
 ) -> None:
     """A readable cap next to a conditional one is not provably the tightest.
 
@@ -1051,8 +1167,8 @@ def test_one_unsettled_declaration_discards_the_ones_that_parsed(
     could read would put a comfortable percentage on screen against a cap
     that is not the one about to fire — so neither is published.
     """
-    _warm_agent(
-        monkeypatch,
+    _declare(
+        declared_policies,
         _cost_policy("plain", max_cost_usd=10.0),
         _cost_policy("gated", max_cost_usd=3.0, condition={"tier": "free"}),
     )
@@ -1064,11 +1180,11 @@ def test_one_unsettled_declaration_discards_the_ones_that_parsed(
 
 
 def test_a_readable_cap_beside_a_malformed_one_is_still_refused(
-    db_uri: str, monkeypatch: pytest.MonkeyPatch
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
 ) -> None:
     """Same rule for a sibling whose limit is not a number at all."""
-    _warm_agent(
-        monkeypatch,
+    _declare(
+        declared_policies,
         _cost_policy("good", max_cost_usd=10.0),
         _cost_policy("broken", max_cost_usd="muito"),
     )
@@ -1080,10 +1196,10 @@ def test_a_readable_cap_beside_a_malformed_one_is_still_refused(
 
 
 def test_a_partly_unreadable_threshold_list_refuses_the_whole_budget(
-    db_uri: str, monkeypatch: pytest.MonkeyPatch
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
 ) -> None:
     """A budget is published whole or not at all — never "the parts we liked"."""
-    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=10.0, ask_thresholds_usd=[1.0, "dois"]))
+    _declare(declared_policies, _cost_policy(max_cost_usd=10.0, ask_thresholds_usd=[1.0, "dois"]))
 
     row = _usage(db_uri, {"total_cost_usd": 1.0})
 
@@ -1092,14 +1208,14 @@ def test_a_partly_unreadable_threshold_list_refuses_the_whole_budget(
 
 
 def test_threshold_above_the_cap_is_refused_like_the_gate_refuses_it(
-    db_uri: str, monkeypatch: pytest.MonkeyPatch
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
 ) -> None:
     """``cost_budget`` rejects a checkpoint outside ``(0, max)`` at build time.
 
     Reading one back as a valid budget would report a limit that could
     never have been enforced.
     """
-    _warm_agent(monkeypatch, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[10.0]))
+    _declare(declared_policies, _cost_policy(max_cost_usd=5.0, ask_thresholds_usd=[10.0]))
 
     row = _usage(db_uri, {"total_cost_usd": 1.0})
 
@@ -1108,15 +1224,15 @@ def test_threshold_above_the_cap_is_refused_like_the_gate_refuses_it(
 
 
 def test_a_budget_measuring_something_else_is_not_this_row_denominator(
-    db_uri: str, monkeypatch: pytest.MonkeyPatch
+    db_uri: str, declared_policies: list[FunctionPolicySpec]
 ) -> None:
     """The daily variant limits the OWNER's spend across sessions.
 
     Dividing this row's own cost by it would be a percentage of a
     quantity the row never reports.
     """
-    _warm_agent(
-        monkeypatch,
+    _declare(
+        declared_policies,
         _cost_policy(path="omnicraft.policies.builtins.cost.user_daily_cost_budget"),
     )
 

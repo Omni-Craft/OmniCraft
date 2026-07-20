@@ -86,7 +86,7 @@ etapa posterior).
 | Uso com teto (barra + "orçamento do agente") | ![uso com teto](docs/screenshots/uso-com-teto.png) |
 | Uso sem teto (texto, sem barra) | ![uso sem teto](docs/screenshots/uso-sem-teto.png) |
 | Tarefas (`3 de 7`) | ![tarefas](docs/screenshots/tarefas.png) |
-| **Board com as três colunas** | ![board](docs/screenshots/board.png) |
+| **Board com as três colunas** | _(recapturar: `--cenario 7 --widget board`)_ |
 | Board degradado (`≥`, desconhecido) | ![degradado](docs/screenshots/board-degradado.png) |
 | **Rail compacto** (ferramentas com erro) | ![rail](docs/screenshots/rail.png) |
 | Vazio | ![vazio](docs/screenshots/vazio.png) |

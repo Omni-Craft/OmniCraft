@@ -173,7 +173,7 @@ enum MockFeed {
             ]
             return SnapshotWidgets(sessoes: [
                 SessaoDetalhe(ref: SessaoRef(id: "s-feat", titulo: "feature de lembretes",
-                                             projeto: "fabrica-ios", agente: "fucho",
+                                             projeto: "app-mobile", agente: "fucho",
                                              estado: .emExecucao, haQuantoTempo: "há 12 min"),
                               tarefas: tarefas),
             ])
@@ -191,7 +191,7 @@ enum MockFeed {
                                              projeto: "devcraft-site", agente: "testador",
                                              estado: .emExecucao, haQuantoTempo: "há 9 min")),
                 SessaoDetalhe(ref: SessaoRef(id: "m3", titulo: "atualizar dependências",
-                                             projeto: "fabrica-ios", agente: "faxina",
+                                             projeto: "app-mobile", agente: "faxina",
                                              estado: .aguardandoVoce,
                                              motivoAtencao: "Instalar `swift-log` como dependência?",
                                              haQuantoTempo: "há 3 min")),
@@ -199,7 +199,7 @@ enum MockFeed {
                                              projeto: "OmniCraft", agente: "entregador",
                                              estado: .falhou, haQuantoTempo: "há 18 min")),
                 SessaoDetalhe(ref: SessaoRef(id: "m5", titulo: "gerar changelog da release",
-                                             projeto: "fabrica-ios", agente: "escriba",
+                                             projeto: "app-mobile", agente: "escriba",
                                              estado: .concluida, haQuantoTempo: "há 31 min")),
                 SessaoDetalhe(ref: SessaoRef(id: "m6", titulo: "auditoria de segredos",
                                              projeto: "OmniCraft", agente: "vigia",

@@ -24,6 +24,9 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { HudPanel } from "./HudPanel";
 import type { HudFeedReport } from "@/lib/hudBridge";
 import * as identity from "@/lib/identity";
+// hudNotifications.js is untyped Electron main-process code; this test exercises
+// its notification-detection logic directly, so the untyped import is intentional.
+// @ts-expect-error — no declaration file for the Electron .js module
 import { detectHudNotifications } from "../../../electron/src/hudNotifications.js";
 
 vi.mock("@/lib/identity", async (importActual) => ({
@@ -132,19 +135,20 @@ function asServerWouldAnswer(body: Record<string, unknown>, url: string) {
 async function reportsFor(bodies: Record<string, unknown>[]): Promise<HudFeedReport[]> {
   let index = 0;
   vi.mocked(identity.authenticatedFetch).mockImplementation(
-    async (url: string) =>
+    async (input: RequestInfo | URL) =>
       ({
         ok: true,
         status: 200,
         statusText: "OK",
-        json: async () => asServerWouldAnswer(bodies[Math.min(index++, bodies.length - 1)], url),
+        json: async () =>
+          asServerWouldAnswer(bodies[Math.min(index++, bodies.length - 1)], String(input)),
       }) as unknown as Response,
   );
   const reports: HudFeedReport[] = [];
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, refetchInterval: false, gcTime: 0 } },
   });
-  const view = render(
+  render(
     <QueryClientProvider client={client}>
       <TooltipProvider>
         <HudPanel

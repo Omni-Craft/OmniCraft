@@ -592,7 +592,7 @@ function parseBudget(value: unknown, faults: Faults): MonitorBudget | null {
  */
 function parseUsage(value: unknown, faults: Faults, rowCostUsd: number | null): MonitorUsage {
   /** Nothing known but the row's own spend — and, in particular, no budget. */
-  const nothingKnown = (source: string): MonitorUsage => ({
+  const nothingKnown = (source: typeof USAGE_SOURCE | "unknown"): MonitorUsage => ({
     source,
     inputTokens: null,
     outputTokens: null,

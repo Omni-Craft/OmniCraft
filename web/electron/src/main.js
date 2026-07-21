@@ -43,6 +43,7 @@ const { registerWorkspaceChromeHide } = require("./workspace-chrome");
 const { mergeHudSettings, readHudSettings } = require("./hudVisibility");
 const { createHudPolicy } = require("./hudPolicy");
 const { registerHudIpc } = require("./hudIpc");
+const { NativeIslandController } = require("./nativeIsland");
 const {
   createHudNotifier,
   isCategoryEnabled,
@@ -1710,6 +1711,21 @@ const hudPolicy = createHudPolicy({
   onError: (message, err) => console.warn(`[omnicraft] ${message}:`, err),
 });
 
+// The native island, kept alive for exactly as long as the shell is.
+// `app.getAppPath()` points at web/electron in a checkout and at the asar in a
+// packaged build; the controller knows how to look for the bundle from either.
+const nativeIsland = new NativeIslandController({
+  env: {
+    get resourcesPath() {
+      return process.resourcesPath;
+    },
+    get appPath() {
+      return app.getAppPath();
+    },
+  },
+  onWarn: (message) => console.warn(`[omnicraft] ${message}`),
+});
+
 /** Bring the HUD in line with the persisted settings and the last feed report. */
 function applyHudPolicy() {
   hudPolicy.applyPolicy();
@@ -2819,6 +2835,10 @@ if (!gotLock) {
     registerWebAuthn();
     registerIpc();
     buildMenu();
+    // The island rides the shell's lifetime: up with the app, down on quit.
+    // It draws above the menu bar, which no Electron window can do, so it is a
+    // separate process rather than another window.
+    nativeIsland.start();
     // Patch PATH for GUI-launched Electron on macOS/Linux:
     // A desktop launcher inherits a minimal system PATH that omits directories like
     // /opt/homebrew/bin and ~/.nvm/... where CLI tools (claude, codex, tmux) live.
@@ -2861,11 +2881,19 @@ if (!gotLock) {
   // quit until cleanup finishes, then re-issue it.
   let quitCleanupDone = false;
   let quitCleanupStarted = false;
+  // Belt and braces: `before-quit` defers itself while the server shuts down,
+  // and a quit that never reaches that callback (or reaches it twice) must
+  // still not leave the island drawing over the menu bar with no app behind it.
+  app.on("will-quit", () => nativeIsland.stop());
+
   app.on("before-quit", (event) => {
     // Quitting takes the HUD's window down with everything else. That is the
     // shell closing it, not the user dismissing the HUD — without this, every
     // Cmd-Q would persist the HUD as "off" and it would never come back.
     hudPolicy.shellClosing();
+    // Before the early return: a second Cmd-Q must not skip this, or the island
+    // outlives the app that started it and cannot be closed from anywhere.
+    nativeIsland.stop();
     if (quitCleanupDone) return;
     // A second quit (e.g. Cmd-Q again during the SIGKILL grace window) must not
     // re-enter shutdown() concurrently — just keep deferring until the first

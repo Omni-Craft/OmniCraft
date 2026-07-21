@@ -83,10 +83,34 @@ struct LossyArray<Element: Decodable>: Decodable {
 enum FeedError: Error {
     case invalidURL
     case badStatus(Int)
+
+    /// Texto curto para a UI — o motivo precisa caber ao lado do pedido.
+    var mensagem: String {
+        switch self {
+        case .invalidURL: "endereço do servidor inválido"
+        case .badStatus(404): "o pedido não existe mais"
+        case .badStatus(let code): "o servidor respondeu \(code)"
+        }
+    }
+}
+
+/// Decisão sobre um pedido, no formato que o `/resolve` espera (MCP ElicitResult).
+enum Decisao: String {
+    case aceitar = "accept"
+    case recusar = "decline"
+}
+
+/// Quem sabe conversar com o OmniCraft. Existe para o Store poder ser testado
+/// com um duplo, sem rede: o que importa checar é o que ele faz com a resposta.
+protocol OmniCraftAPI: Sendable {
+    func fetch(baseURL: String) async throws -> MonitorFeedDTO
+    func resolve(
+        baseURL: String, sessionId: String, elicitationId: String, decisao: Decisao
+    ) async throws
 }
 
 /// GET no feed do OmniCraft. Sem estado; um request por vez (quem garante é o Store).
-struct FeedClient {
+struct FeedClient: OmniCraftAPI {
     private let session: URLSession
 
     init() {
@@ -107,6 +131,39 @@ struct FeedClient {
         let decoder = JSONDecoder()
         decoder.keyDecodingStrategy = .convertFromSnakeCase
         return try decoder.decode(MonitorFeedDTO.self, from: data)
+    }
+
+    /// Resolve um pedido de aprovação no servidor.
+    ///
+    /// Sem cabeçalho de identidade de propósito: o servidor local não pede
+    /// autenticação, e a UI web também só identifica o chamador quando fala
+    /// com um servidor remoto.
+    ///
+    /// - Throws: ``FeedError`` quando a URL não monta ou o servidor recusa.
+    func resolve(
+        baseURL: String,
+        sessionId: String,
+        elicitationId: String,
+        decisao: Decisao
+    ) async throws {
+        guard
+            let url = URL(string: baseURL)?
+                .appending(path: "v1/sessions")
+                .appending(path: sessionId)
+                .appending(path: "elicitations")
+                .appending(path: elicitationId)
+                .appending(path: "resolve")
+        else { throw FeedError.invalidURL }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["action": decisao.rawValue])
+
+        let (_, response) = try await session.data(for: request)
+        if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
+            throw FeedError.badStatus(http.statusCode)
+        }
     }
 }
 
@@ -175,7 +232,10 @@ enum FeedMapper {
             requests.append(AttentionRequest(
                 id: elicitation.id ?? "\(id)-pedido-0",
                 title: "Aprovação necessária",
-                question: elicitation.summary ?? "Pedido pendente"))
+                question: elicitation.summary ?? "Pedido pendente",
+                // Sem id vindo do servidor não há o que resolver: o fallback
+                // acima existe só para a linha aparecer na fila.
+                isResolvable: elicitation.id != nil))
             // O feed traz só o primeiro pedido + a contagem: os demais entram como
             // placeholders honestos para a navegação ‹ 1 de N › existir.
             let total = max(dto.pendingElicitationsCount ?? 1, 1)
@@ -183,7 +243,8 @@ enum FeedMapper {
                 requests.append(AttentionRequest(
                     id: "\(id)-pedido-\(index)",
                     title: "Aprovação necessária",
-                    question: "Pedido pendente (detalhes ainda não carregados)"))
+                    question: "Pedido pendente (detalhes ainda não carregados)",
+                    isResolvable: false))
             }
         }
 

@@ -57,7 +57,8 @@ struct AttentionCardView: View {
     }
 
     private func requestBlock(_ request: AttentionRequest) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let enviando = store.pendingRequestIDs.contains(request.id)
+        return VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Image(systemName: "questionmark.circle.fill")
                     .font(.system(size: 11))
@@ -74,7 +75,7 @@ struct AttentionCardView: View {
             }
 
             HStack(spacing: 8) {
-                Button("✓ Aprovar") { store.approve(request, in: sessao) }
+                Button(enviando ? "enviando…" : "✓ Aprovar") { store.approve(request, in: sessao) }
                     .buttonStyle(AttentionButtonStyle(kind: .primary))
                     .accessibilityLabel("Aprovar: \(request.question)")
 
@@ -85,6 +86,21 @@ struct AttentionCardView: View {
                 Button("✕ Rejeitar") { store.reject(request, in: sessao) }
                     .buttonStyle(AttentionButtonStyle(kind: .secondary))
                     .accessibilityLabel("Rejeitar: \(request.question)")
+            }
+            .disabled(enviando)
+
+            // Uma decisão que não chegou ao servidor precisa dizer isso: o card
+            // continua na pilha e o motivo fica à vista.
+            if let falha = store.falhaPorPedido[request.id] {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 9))
+                    Text("Não foi enviado — \(falha)")
+                        .font(.system(size: 10))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .foregroundStyle(.orange)
+                .accessibilityLabel("A decisão não foi enviada: \(falha)")
             }
 
             if fila.count > 1 {

@@ -52,6 +52,12 @@ struct AttentionRequest: Identifiable, Equatable {
     let id: String
     var title: String      // ex.: "Aprovação necessária"
     var question: String   // ex.: "Permitir rodar `git push`…?"
+
+    /// O feed traz o id só do PRIMEIRO pedido; os demais entram como
+    /// placeholders para a navegação ‹ 1 de N › existir. Decidir um deles
+    /// mandaria ao servidor um id que não existe, então só o que tem id de
+    /// verdade pode ser aprovado ou rejeitado.
+    var isResolvable: Bool = true
 }
 
 // MARK: - Sessão

@@ -46,3 +46,14 @@ jobs:
       - name: Build ${{ matrix.package }}
         working-directory: native/macos/${{ matrix.package }}
         run: swift build
+
+      - name: Test ${{ matrix.package }}
+        working-directory: native/macos/${{ matrix.package }}
+        # Only the packages that have a Tests/ directory; `swift test` fails
+        # outright on a package with no test target.
+        run: |
+          if [ -d Tests ]; then
+            swift test
+          else
+            echo "sem alvo de teste — só build"
+          fi

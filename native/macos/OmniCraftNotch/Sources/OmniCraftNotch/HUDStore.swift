@@ -46,7 +46,10 @@ final class HUDStore {
     /// Expansão veio do hover (não de clique/atenção): sair com o mouse recolhe.
     private(set) var expandidoPorHover = false
 
-    var feedSource: FeedSource = .mock {
+    /// Ao vivo por padrão: a ilha existe para mostrar o que os agentes estão
+    /// fazendo agora. As fixtures continuam a um clique no painel de debug,
+    /// que é onde elas servem.
+    var feedSource: FeedSource = .live {
         didSet { feedSourceChanged() }
     }
 
@@ -63,7 +66,8 @@ final class HUDStore {
         }
     }
 
-    private(set) var snapshot: FeedSnapshot = MockFeed.snapshot(for: .tresAtivasUmaAguardando)
+    private(set) var snapshot: FeedSnapshot = FeedSnapshot(
+        counts: .unavailable, sessions: [], janelasLimite: [])
     private(set) var isDisconnected = false
     private(set) var lastGeneratedAt: Date?
 
@@ -71,8 +75,21 @@ final class HUDStore {
     /// e o auto-expandir só dispara para pedido NOVO (nunca reabre o que a pessoa fechou).
     private var seenRequestIDs: Set<String> = []
 
-    /// Decisões locais dos botões visuais (aprovado/rejeitado some da pilha).
+    /// Pedidos já decididos. No feed real só entram aqui depois que o servidor
+    /// confirma: sumir da pilha é o que diz "resolvido", então antecipar isso
+    /// seria mentir sobre uma aprovação que pode não ter acontecido.
     private var resolvedRequestIDs: Set<String> = []
+
+    /// Pedidos com decisão em voo (botões desabilitados enquanto isso).
+    private(set) var pendingRequestIDs: Set<String> = []
+
+    /// Se o pedido já saiu da pilha por decisão confirmada.
+    func pedidoFoiResolvido(_ id: String) -> Bool { resolvedRequestIDs.contains(id) }
+
+    /// Motivo da última falha por pedido — fica visível ao lado dele até a
+    /// pessoa tentar de novo. Uma decisão que não chegou ao servidor não pode
+    /// desaparecer em silêncio.
+    private(set) var falhaPorPedido: [String: String] = [:]
 
     /// Índice na FILA GLOBAL de pedidos (todas as sessões empilham juntas).
     var indicePedido: Int = 0
@@ -80,8 +97,17 @@ final class HUDStore {
     /// Registro visível do que os botões (só visuais) fizeram.
     private(set) var actionLog: [String] = []
 
-    private let client = FeedClient()
+    private let client: OmniCraftAPI
     private var pollTask: Task<Void, Never>?
+
+    /// - Parameter client: Quem fala com o OmniCraft; trocado nos testes.
+    ///
+    /// `didSet` não roda na inicialização, então a fonte escolhida precisa ser
+    /// aplicada aqui — sem isto a ilha abriria ao vivo e nunca buscaria nada.
+    init(client: OmniCraftAPI = FeedClient()) {
+        self.client = client
+        feedSourceChanged()
+    }
 
     // MARK: Derivados
 
@@ -168,21 +194,65 @@ final class HUDStore {
     }
 
     func approve(_ request: AttentionRequest, in session: AgentSession) {
-        log("✓ Aprovado: \(request.question) [\(session.title)]")
-        resolvedRequestIDs.insert(request.id)
-        clamparFila()
-    }
-
-    func approveAll(in session: AgentSession) {
-        log("✓ Aprovado tudo na sessão [\(session.title)]")
-        for request in session.requests { resolvedRequestIDs.insert(request.id) }
-        clamparFila()
+        decidir(request, in: session, decisao: .aceitar)
     }
 
     func reject(_ request: AttentionRequest, in session: AgentSession) {
-        log("✕ Rejeitado: \(request.question) [\(session.title)]")
-        resolvedRequestIDs.insert(request.id)
-        clamparFila()
+        decidir(request, in: session, decisao: .recusar)
+    }
+
+    func approveAll(in session: AgentSession) {
+        // Um POST por pedido: o servidor resolve um pedido de cada vez, e não
+        // há endpoint de lote. Só os que têm id de verdade.
+        for request in session.requests where request.isResolvable {
+            decidir(request, in: session, decisao: .aceitar)
+        }
+    }
+
+    /// Envia a decisão e só a dá por feita quando o servidor confirma.
+    private func decidir(_ request: AttentionRequest, in session: AgentSession, decisao: Decisao) {
+        let verbo = decisao == .aceitar ? "Aprovado" : "Rejeitado"
+        let simbolo = decisao == .aceitar ? "✓" : "✕"
+
+        guard request.isResolvable else {
+            // Placeholder da fila ‹ 1 de N ›: não existe id para resolver.
+            falhaPorPedido[request.id] = "abra a sessão no OmniCraft para decidir este"
+            return
+        }
+
+        guard feedSource == .live else {
+            // Cenários mock: a decisão é da fixture, não há servidor.
+            log("\(simbolo) \(verbo): \(request.question) [\(session.title)]")
+            resolvedRequestIDs.insert(request.id)
+            clamparFila()
+            return
+        }
+
+        falhaPorPedido[request.id] = nil
+        pendingRequestIDs.insert(request.id)
+        let base = baseURLString
+
+        Task { [weak self] in
+            do {
+                try await self?.client.resolve(
+                    baseURL: base,
+                    sessionId: session.id,
+                    elicitationId: request.id,
+                    decisao: decisao)
+                guard let self else { return }
+                pendingRequestIDs.remove(request.id)
+                resolvedRequestIDs.insert(request.id)
+                log("\(simbolo) \(verbo): \(request.question) [\(session.title)]")
+                clamparFila()
+                restartPolling(immediate: true)   // reflete o novo estado sem esperar o tick
+            } catch {
+                guard let self else { return }
+                pendingRequestIDs.remove(request.id)
+                let motivo = (error as? FeedError)?.mensagem ?? error.localizedDescription
+                falhaPorPedido[request.id] = motivo
+                log("⚠︎ Falhou ao \(decisao == .aceitar ? "aprovar" : "rejeitar"): \(motivo)")
+            }
+        }
     }
 
     // MARK: Utilidades locais (ações visuais: log; copiar usa o clipboard de verdade)

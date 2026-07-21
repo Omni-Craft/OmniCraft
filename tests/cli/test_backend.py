@@ -1239,6 +1239,94 @@ def test_host_stop_prunes_stale_dead_pid_record(
     assert "pid=4242" in result.output
 
 
+def test_prune_removes_a_record_no_command_would_visit(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A dead record for an unnamed target does not outlive its process.
+
+    Every targeted command prunes only the target it was asked about, so
+    this is the record that used to accumulate for ever: a daemon started
+    against a server URL, on a machine that has since only run local.
+    """
+    monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    dead_target = "https://server.example.com"
+    _write_daemon_registry_record(
+        tmp_path, pid=4242, target=dead_target, mode="server", server_url=dead_target
+    )
+    _write_daemon_registry_record(
+        tmp_path, pid=99, target="local", mode="local", server_url=None, started_at=200
+    )
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: pid == 99)
+
+    cli._prune_dead_daemon_records()
+
+    assert not cli._daemon_record_path(dead_target).exists()
+    assert cli._daemon_record_path("local").exists()
+
+
+def test_prune_keeps_a_record_reclaimed_by_a_live_daemon(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """Pruning never strands a daemon that claimed the target mid-sweep.
+
+    Deleting the record of a live process would leave it running with
+    nothing tracking it -- worse than the phantom the sweep removes.
+    """
+    monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    target = "https://server.example.com"
+    _write_daemon_registry_record(
+        tmp_path, pid=4242, target=target, mode="server", server_url=target
+    )
+
+    def _respawn_between_read_and_prune(pid: int) -> bool:
+        """Answer "dead", but let a live daemon claim the target first."""
+        _write_daemon_registry_record(
+            tmp_path,
+            pid=777,
+            target=target,
+            mode="server",
+            server_url=target,
+            started_at=900,
+        )
+        return False
+
+    monkeypatch.setattr(cli, "_pid_alive", _respawn_between_read_and_prune)
+
+    cli._prune_dead_daemon_records()
+
+    record = cli._read_daemon_record(cli._daemon_record_path(target))
+    assert record is not None and record.pid == 777
+
+
+def test_ensure_host_daemon_sweeps_phantoms_even_when_reusing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The sweep reaches the machine that only ever reuses its daemon.
+
+    Reuse is the steady state, so a sweep gated behind a fresh spawn would
+    never run on the very machine where the phantoms pile up.
+    """
+    monkeypatch.setattr(cli, "_HOST_PID_PATH", tmp_path / "host.pid")
+    dead_target = "https://server.example.com"
+    _write_daemon_registry_record(
+        tmp_path, pid=4242, target=dead_target, mode="server", server_url=dead_target
+    )
+    monkeypatch.setattr(cli, "_pid_alive", lambda pid: pid != 4242)
+    monkeypatch.setattr(
+        cli,
+        "_reuse_existing_daemon_record",
+        lambda target: cli._DaemonReuseDecision(reuse=True, config_changed=False),
+    )
+    monkeypatch.setattr(
+        cli,
+        "_spawn_host_daemon_process",
+        lambda **kwargs: pytest.fail("a reuse must not spawn"),
+    )
+
+    assert cli._ensure_host_daemon(None) is False
+    assert not cli._daemon_record_path(dead_target).exists()
+
+
 def test_host_stop_dead_pid_prunes_even_with_daemon_only(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

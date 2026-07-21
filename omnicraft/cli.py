@@ -1790,6 +1790,36 @@ def _legacy_daemon_record() -> _HostDaemonRecord | None:
     )
 
 
+def _prune_dead_daemon_records() -> None:
+    """
+    Delete registry records across every target whose process is gone.
+
+    The targeted paths only ever prune the target they were asked about, so
+    a record for a target nobody names again -- a daemon started against a
+    server URL, on a machine that has since only run local -- outlives its
+    process for ever and lingers as a phantom host. Starting a daemon is the
+    moment to sweep them: it is the one point that is about to make the
+    registry describe reality anyway.
+
+    :returns: None.
+    """
+    registry = _daemon_registry_dir()
+    if not registry.exists():
+        return
+    for path in sorted(registry.glob("*.json")):
+        record = _read_daemon_record(path)
+        if record is None or _pid_alive(record.pid):
+            continue
+        # Re-read before deleting: another process may have claimed this
+        # target since the read above, and dropping a live daemon's record
+        # would strand the process with nothing tracking it.
+        current = _read_daemon_record(path)
+        if current is None:
+            continue
+        if (current.pid, current.started_at) == (record.pid, record.started_at):
+            _delete_daemon_record(record)
+
+
 def _list_daemon_records(*, include_legacy: bool = True) -> list[_HostDaemonRecord]:
     """
     List daemon registry records.
@@ -2238,6 +2268,10 @@ def _ensure_host_daemon(server_url: str | None) -> bool:
         rather than continue this command mid-restart. ``False`` for a
         plain reuse, a transparent tunnel-health heal, or a first spawn.
     """
+    # Before the reuse check, not after: the steady state is a reuse, and a
+    # sweep that only ran on a fresh spawn would never reach the machine that
+    # keeps reusing the same daemon — the one accumulating the phantoms.
+    _prune_dead_daemon_records()
     target = _normalize_daemon_target(server_url)
     decision = _reuse_existing_daemon_record(target)
     if decision.reuse:

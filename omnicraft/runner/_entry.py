@@ -1258,8 +1258,8 @@ class _CompactErrorStreamHandler(logging.StreamHandler):  # type: ignore[type-ar
             pass
 
 
-def main() -> None:
-    """Console entry point for the runner tunnel process.
+def _configure_logging() -> None:
+    """Set up logging for the runner process.
 
     :returns: None.
     """
@@ -1270,6 +1270,20 @@ def main() -> None:
         datefmt="%Y-%m-%dT%H:%M:%S%z",
         handlers=[_CompactErrorStreamHandler(sys.stderr)],
     )
+    # httpx logs a line per request — roughly half of a runner log — and buys
+    # nothing at INFO, since the runner already reports what it did with each
+    # call. Only a caller who named the level wants that firehose, so an
+    # explicit OMNICRAFT_LOG_LEVEL keeps it.
+    if "OMNICRAFT_LOG_LEVEL" not in os.environ:
+        logging.getLogger("httpx").setLevel(logging.WARNING)
+
+
+def main() -> None:
+    """Console entry point for the runner tunnel process.
+
+    :returns: None.
+    """
+    _configure_logging()
     try:
         asyncio.run(_run_tunnel_from_env())
     except RuntimeError as exc:

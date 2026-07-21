@@ -10,10 +10,11 @@ from __future__ import annotations
 import io
 import logging
 import sys
+from collections.abc import Iterator
 
 import pytest
 
-from omnicraft.runner._entry import _CompactErrorStreamHandler
+from omnicraft.runner._entry import _CompactErrorStreamHandler, _configure_logging
 
 
 class _FullDisk(io.TextIOBase):
@@ -122,3 +123,47 @@ def test_silencing_the_logger_silences_the_diagnostic_too(
     )
 
     assert diagnostic.written == []
+
+
+@pytest.fixture
+def fresh_logging() -> Iterator[None]:
+    """Give the test the clean logging state a fresh process would have.
+
+    ``basicConfig`` is a no-op once the root logger has handlers, and under
+    pytest it always does — so without clearing them first the level under
+    test would never be applied at all.
+    """
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    httpx_level = logging.getLogger("httpx").level
+    root.handlers[:] = []
+    try:
+        yield
+    finally:
+        root.handlers[:] = handlers
+        root.setLevel(level)
+        logging.getLogger("httpx").setLevel(httpx_level)
+
+
+def test_httpx_chatter_is_off_by_default(
+    monkeypatch: pytest.MonkeyPatch, fresh_logging: None
+) -> None:
+    """A line per HTTP request is about half the runner's log, for nothing."""
+    monkeypatch.delenv("OMNICRAFT_LOG_LEVEL", raising=False)
+    logging.getLogger("httpx").setLevel(logging.NOTSET)
+
+    _configure_logging()
+
+    assert logging.getLogger("httpx").level == logging.WARNING
+
+
+def test_an_explicit_level_keeps_the_firehose(
+    monkeypatch: pytest.MonkeyPatch, fresh_logging: None
+) -> None:
+    """Someone who asked for DEBUG asked for the request log too."""
+    monkeypatch.setenv("OMNICRAFT_LOG_LEVEL", "DEBUG")
+    logging.getLogger("httpx").setLevel(logging.NOTSET)
+
+    _configure_logging()
+
+    assert logging.getLogger("httpx").level == logging.NOTSET

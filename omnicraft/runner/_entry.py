@@ -1232,6 +1232,32 @@ def _install_signal_handlers(
             loop.add_signal_handler(RUNNER_ADOPT_SIGNAL, adopted_event.set)
 
 
+class _CompactErrorStreamHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    """Stream handler that reports its own failures in a single write.
+
+    The stdlib writes the header, the traceback and the dropped message as
+    separate writes. When the stream is what is failing -- a full disk, which
+    is when these logs matter most -- only the small header gets through, and
+    the file is left with a bare ``--- Logging error ---`` naming neither the
+    message that was lost nor the reason. One write keeps them together, or
+    loses them together.
+    """
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        """Report a failed emit on one line.
+
+        :param record: The record whose emit failed.
+        :returns: None.
+        """
+        if not logging.raiseExceptions or sys.stderr is None:
+            return
+        try:
+            reason = sys.exc_info()[1]
+            sys.stderr.write(f"--- logging error ({reason!r}) dropped: {record.getMessage()}\n")
+        except Exception:  # noqa: BLE001 — a failing logger must never raise
+            pass
+
+
 def main() -> None:
     """Console entry point for the runner tunnel process.
 
@@ -1242,7 +1268,7 @@ def main() -> None:
         level=getattr(logging, log_level, logging.INFO),
         format="%(asctime)s %(levelname)s:%(name)s:%(message)s",
         datefmt="%Y-%m-%dT%H:%M:%S%z",
-        stream=sys.stderr,
+        handlers=[_CompactErrorStreamHandler(sys.stderr)],
     )
     try:
         asyncio.run(_run_tunnel_from_env())

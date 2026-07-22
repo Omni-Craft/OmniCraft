@@ -1001,9 +1001,11 @@ async function bootLocalStack(win, { cliPath, saved, savedOrigin }) {
   }
   if (!win || win.isDestroyed()) return;
   // The window's first load may have raced a cold server boot, failed with
-  // connection-refused, and fallen back to the setup page (unpinning the
-  // window). Now that the server is up, point it back.
-  if (windows.get(win)?.origin !== savedOrigin) {
+  // connection-refused, and fallen back to the setup page. Now that the server
+  // is up, point it back. Gate on the REAL current URL, not the pinned-origin
+  // bookkeeping, which lags the page and made this miss the reload on a cold
+  // boot — leaving the window on setup and the splash stuck over it.
+  if (originOf(win.webContents.getURL()) !== savedOrigin) {
     pinWindow(win, savedOrigin);
     const state = windows.get(win);
     if (state) state.serverUrl = saved;
@@ -1013,6 +1015,10 @@ async function bootLocalStack(win, { cliPath, saved, savedOrigin }) {
       return; // did-fail-load falls back to the setup page with the error
     }
   }
+  // The server page is up: take the splash down here, deterministically, rather
+  // than leave it to the did-finish-load listener winning a race with the load
+  // above. Safe to call when already dismissed.
+  dismissSplash();
   // Enroll for the SAVED loopback origin directly, as a trusted origin: this is
   // a main-process auto-start (not page-controllable) of the server the user
   // saved, so it needn't wait for the page to finish loading to offer "Always

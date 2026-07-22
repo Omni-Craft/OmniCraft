@@ -29,18 +29,24 @@
         border: 1px solid rgba(255, 255, 255, 0.06);
         -webkit-app-region: drag; /* let the user move the splash if it lingers */
       }
-      /* One 288x288 cell of the sheet, scaled down to fit the splash. The frame
-         and row are driven from JS via background-position. */
-      #fucho {
+      /* Two stacked sprite layers. States crossfade between them, so a switch
+         from one pose/direction to another dissolves instead of hard-cutting —
+         that hard cut is what made the states look glued on top of each other. */
+      .stage {
+        position: relative;
         width: 288px;
         height: 288px;
-        transform: scale(0.62);
-        transform-origin: center;
+      }
+      .layer {
+        position: absolute;
+        inset: 0;
         background-repeat: no-repeat;
         image-rendering: auto;
+        opacity: 0;
+        transition: opacity 420ms ease-in-out;
       }
       .caption {
-        margin-top: -34px; /* pull up under the scaled sprite */
+        margin-top: -30px; /* sit just under the sprite */
         font:
           500 13px/1.3 -apple-system,
           BlinkMacSystemFont,
@@ -71,60 +77,83 @@
   </head>
   <body>
     <div class="card">
-      <div id="fucho"></div>
+      <div class="stage">
+        <div id="l0" class="layer"></div>
+        <div id="l1" class="layer"></div>
+      </div>
       <div class="caption">Preparando o OmniCraft<span class="dots"></span></div>
     </div>
     <script>
       // Each cell is 288x288; a state is one row of a sheet, played left→right.
-      // The "trabalhando" sequence deliberately crosses both sheets (v1 has
-      // codando/nadar/frente/pensando/idle; v2 has nadar_dir/ataque), then
-      // rests on idle, looping until the shell closes the splash.
+      // Curated for a calm, continuous "working" loop that reads as one fish,
+      // not a reel of clips: `ataque` is dropped (it looks like a fight, not a
+      // fish getting your app ready), and the rest are ordered so the motion
+      // flows — think, code, swim off, swim, face forward, rest — then loops.
       const CELL = 288;
       const V1 = "fucho-sheet.webp";
       const V2 = "fucho-v2-sheet.webp";
-      const SEQUENCE = [
+      const STATES = [
         { sheet: V1, row: 7, frames: 7, ms: 150 }, // codando
         { sheet: V2, row: 1, frames: 8, ms: 200 }, // nadar_dir
         { sheet: V1, row: 2, frames: 8, ms: 120 }, // nadar
-        { sheet: V2, row: 3, frames: 8, ms: 150 }, // ataque
         { sheet: V1, row: 1, frames: 7, ms: 140 }, // frente
         { sheet: V1, row: 6, frames: 6, ms: 220 }, // pensando
-        { sheet: V1, row: 0, frames: 3, ms: 600, loop: true }, // idle (rest)
+        { sheet: V1, row: 0, frames: 3, ms: 600 }, // idle (breath before the loop restarts)
       ];
 
-      const el = document.getElementById("fucho");
-      let step = 0;
-      let frame = 0;
-      let timer = null;
+      const layers = [document.getElementById("l0"), document.getElementById("l1")];
+      const timers = [null, null];
+      let active = 0; // which layer is currently visible
+      let idx = 0;
 
-      function paint() {
-        const s = SEQUENCE[step];
-        el.style.backgroundImage = `url(${s.sheet})`;
-        el.style.backgroundPosition = `${-frame * CELL}px ${-s.row * CELL}px`;
-      }
-
-      function tick() {
-        const s = SEQUENCE[step];
+      // Step one layer through a state's frames, looping, at the state's pace.
+      function play(layer, state) {
+        let f = 0;
+        layer.style.backgroundImage = `url(${state.sheet})`;
+        const paint = () => {
+          layer.style.backgroundPosition = `${-f * CELL}px ${-state.row * CELL}px`;
+          f = (f + 1) % state.frames;
+        };
         paint();
-        frame += 1;
-        if (frame >= s.frames) {
-          frame = 0;
-          if (!s.loop && step < SEQUENCE.length - 1) step += 1; // advance state
-        }
-        // Re-arm at the current state's own pace (states differ in speed).
-        timer = setTimeout(tick, SEQUENCE[step].ms);
+        return setInterval(paint, state.ms);
       }
 
-      // Preload both sheets so the first swap between them doesn't flash blank.
+      // Dwell a little longer than one full cycle so each state reads as a real
+      // behavior, never a flash — but the crossfade already overlaps the ends.
+      function dwell(state) {
+        return Math.max(1500, Math.round(state.frames * state.ms * 1.25));
+      }
+
+      // Crossfade from the visible layer to the next state on the hidden one.
+      function advance() {
+        const next = (idx + 1) % STATES.length;
+        const nextState = STATES[next];
+        const incoming = 1 - active;
+        if (timers[incoming]) clearInterval(timers[incoming]);
+        timers[incoming] = play(layers[incoming], nextState);
+        layers[incoming].style.opacity = "1"; // fade in
+        layers[active].style.opacity = "0"; // fade out (both animate during it)
+        active = incoming;
+        idx = next;
+        setTimeout(advance, dwell(nextState));
+      }
+
+      function begin() {
+        timers[0] = play(layers[0], STATES[0]);
+        layers[0].style.opacity = "1";
+        setTimeout(advance, dwell(STATES[0]));
+      }
+
+      // Preload both sheets so the first cross-sheet fade doesn't flash blank.
       let pending = 2;
-      const start = () => {
+      const ready = () => {
         pending -= 1;
-        if (pending === 0) tick();
+        if (pending === 0) begin();
       };
       for (const src of [V1, V2]) {
         const img = new Image();
-        img.onload = start;
-        img.onerror = start; // never hang the splash on a missing asset
+        img.onload = ready;
+        img.onerror = ready; // never hang the splash on a missing asset
         img.src = src;
       }
     </script>

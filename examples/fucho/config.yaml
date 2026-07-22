@@ -375,6 +375,10 @@ tools:
     - name: browser_screenshot
     - name: browser_click
     - name: browser_type
+    # iOS Simulator control on the runner host: list/boot devices, build an
+    # Xcode scheme, install/launch a .app, screenshot, and tap/type (tap needs
+    # idb). Runs simctl/xcodebuild directly — the machine must have Xcode.
+    - name: ios_simulator
   # Coding sub-agents — see agents/<name>/. claude_code, codex, opencode,
   # cursor, and hermes are real CLI coding harnesses; pi is a headless
   # multi-model worker. Each implements, reviews (cross-vendor), and explores.

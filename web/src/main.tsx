@@ -4,6 +4,7 @@ import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
 import App from "./App.tsx";
 import { PWAUpdateBanner } from "./components/pwa/PWAUpdateBanner";
+import { RepoUpdateBanner } from "./components/update/RepoUpdateBanner";
 import { ThemeProvider } from "./components/theme/ThemeProvider";
 import { TooltipProvider } from "./components/ui/tooltip";
 import { ImageLightboxProvider } from "./components/ImageLightbox";
@@ -98,6 +99,7 @@ void _bootProbe.then((info) => {
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
             <PWAUpdateBanner />
+            <RepoUpdateBanner />
             <TooltipProvider>
               <ImageLightboxProvider>
                 <BrowserRouter>

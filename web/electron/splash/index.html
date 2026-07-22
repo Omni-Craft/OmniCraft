@@ -4,56 +4,38 @@
     <meta charset="utf-8" />
     <title>OmniCraft</title>
     <style>
-      /* The splash covers the black gap while the local server boots. It is a
-         frameless transparent window, so the rounded card is drawn here. */
       html,
       body {
         margin: 0;
         height: 100%;
-        background: transparent;
         overflow: hidden;
+        background: linear-gradient(180deg, #0a1a2e 0%, #0d2b45 100%);
         -webkit-user-select: none;
         user-select: none;
-        cursor: default;
       }
-      .card {
-        position: absolute;
-        inset: 0;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        gap: 14px;
-        background: #0b0b0c;
-        border-radius: 16px;
-        border: 1px solid rgba(255, 255, 255, 0.06);
-        -webkit-app-region: drag; /* let the user move the splash if it lingers */
-      }
-      /* Two stacked sprite layers. States crossfade between them, so a switch
-         from one pose/direction to another dissolves instead of hard-cutting —
-         that hard cut is what made the states look glued on top of each other. */
       .stage {
-        position: relative;
-        width: 288px;
-        height: 288px;
-      }
-      .layer {
-        position: absolute;
+        position: fixed;
         inset: 0;
-        background-repeat: no-repeat;
-        image-rendering: auto;
-        opacity: 0;
-        transition: opacity 420ms ease-in-out;
       }
       .caption {
-        margin-top: -30px; /* sit just under the sprite */
+        position: fixed;
+        top: 42px;
+        left: 0;
+        right: 0;
+        text-align: center;
+        /* Cool near-white to sit with the ocean background, not fight it. */
         font:
-          500 13px/1.3 -apple-system,
+          400 15px/1.4 -apple-system,
           BlinkMacSystemFont,
           "Segoe UI",
           sans-serif;
-        color: rgba(255, 255, 255, 0.72);
-        letter-spacing: 0.2px;
+        color: rgba(226, 240, 255, 0.6);
+        letter-spacing: 0.5px;
+      }
+      /* The product name carries a touch more weight and light. */
+      .caption b {
+        font-weight: 600;
+        color: rgba(226, 240, 255, 0.95);
       }
       .dots::after {
         content: "";
@@ -73,88 +55,265 @@
           content: "···";
         }
       }
+      /* Position layer: eased left/top so a character glides across the screen. */
+      .mover {
+        position: absolute;
+        transform: translate(-50%, -50%);
+        will-change: left, top;
+      }
+      /* Motion layer: the swim bob and the joy hop live here, above the two
+         crossfading sprite layers, so they apply to whichever is showing. */
+      .motion {
+        position: relative;
+        width: 288px;
+        height: 288px;
+      }
+      .motion.bob {
+        animation: bob 1.6s ease-in-out infinite;
+      }
+      @keyframes bob {
+        0%,
+        100% {
+          transform: translateY(-5px) rotate(-1.2deg);
+        }
+        50% {
+          transform: translateY(5px) rotate(1.2deg);
+        }
+      }
+      .motion.hop {
+        animation: hop 0.66s ease-in-out 2;
+      }
+      @keyframes hop {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        45% {
+          transform: translateY(-58px);
+        }
+      }
+      /* Two stacked sprite layers that dissolve into each other — no hard cut. */
+      .layer {
+        position: absolute;
+        inset: 0;
+        background-repeat: no-repeat;
+        image-rendering: auto;
+        opacity: 0;
+        transition: opacity 420ms ease-in-out;
+      }
     </style>
   </head>
   <body>
-    <div class="card">
-      <div class="stage">
-        <div id="l0" class="layer"></div>
-        <div id="l1" class="layer"></div>
-      </div>
-      <div class="caption">Preparando o OmniCraft<span class="dots"></span></div>
+    <div class="stage" id="stage">
+      <div class="caption">Mergulhando no <b>OmniCraft</b><span class="dots"></span></div>
     </div>
     <script>
-      // Each cell is 288x288; a state is one row of a sheet, played left→right.
-      // Curated for a calm, continuous "working" loop that reads as one fish,
-      // not a reel of clips: `ataque` is dropped (it looks like a fight, not a
-      // fish getting your app ready), and the rest are ordered so the motion
-      // flows — think, code, swim off, swim, face forward, rest — then loops.
       const CELL = 288;
-      const V1 = "fucho-sheet.webp";
-      const V2 = "fucho-v2-sheet.webp";
-      const STATES = [
-        { sheet: V1, row: 7, frames: 7, ms: 150 }, // codando
-        { sheet: V2, row: 1, frames: 8, ms: 200 }, // nadar_dir
-        { sheet: V1, row: 2, frames: 8, ms: 120 }, // nadar
-        { sheet: V1, row: 1, frames: 7, ms: 140 }, // frente
-        { sheet: V1, row: 6, frames: 6, ms: 220 }, // pensando
-        { sheet: V1, row: 0, frames: 3, ms: 600 }, // idle (breath before the loop restarts)
-      ];
+      const FADE = 420;
+      const stage = document.getElementById("stage");
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-      const layers = [document.getElementById("l0"), document.getElementById("l1")];
-      const timers = [null, null];
-      let active = 0; // which layer is currently visible
-      let idx = 0;
+      // Both sheets share this layout (rows/frames/pace are identical).
+      const S = {
+        idle: { row: 0, frames: 3, ms: 560 },
+        frente: { row: 1, frames: 7, ms: 150 },
+        nadar: { row: 2, frames: 8, ms: 130 },
+        acenar: { row: 3, frames: 2, ms: 360 },
+        expressoes: { row: 4, frames: 6, ms: 460 },
+        erro: { row: 5, frames: 8, ms: 190 },
+        pensando: { row: 6, frames: 6, ms: 240 },
+        codando: { row: 7, frames: 7, ms: 165 },
+        feliz: { row: 8, frames: 6, ms: 160 },
+      };
 
-      // Step one layer through a state's frames, looping, at the state's pace.
-      function play(layer, state) {
-        let f = 0;
-        layer.style.backgroundImage = `url(${state.sheet})`;
-        const paint = () => {
-          layer.style.backgroundPosition = `${-f * CELL}px ${-state.row * CELL}px`;
-          f = (f + 1) % state.frames;
+      // A character: its own position/motion/crossfade, driven independently so
+      // the fish and the star can share the stage on their own timelines.
+      function makeActor(img, scale, rightFlip, z) {
+        const mover = document.createElement("div");
+        mover.className = "mover";
+        mover.style.zIndex = z;
+        const motion = document.createElement("div");
+        motion.className = "motion";
+        const l0 = document.createElement("div");
+        l0.className = "layer";
+        const l1 = document.createElement("div");
+        l1.className = "layer";
+        motion.append(l0, l1);
+        mover.append(motion);
+        stage.append(mover);
+        const layers = [
+          { el: l0, timer: null },
+          { el: l1, timer: null },
+        ];
+        let active = 0;
+
+        function drive(layer, name, flip) {
+          const st = S[name];
+          let f = 0;
+          clearInterval(layer.timer);
+          layer.el.style.backgroundImage = `url(${img})`;
+          layer.el.style.transform = `scaleX(${flip}) scale(${scale})`;
+          const paint = () => {
+            layer.el.style.backgroundPosition = `${-f * CELL}px ${-st.row * CELL}px`;
+            f = (f + 1) % st.frames;
+          };
+          paint();
+          layer.timer = setInterval(paint, st.ms);
+        }
+        async function show(name, dir) {
+          const flip = dir === "left" ? -rightFlip : rightFlip;
+          const incoming = 1 - active;
+          drive(layers[incoming], name, flip);
+          layers[incoming].el.style.opacity = "1";
+          layers[active].el.style.opacity = "0";
+          const outgoing = active;
+          active = incoming;
+          setTimeout(() => clearInterval(layers[outgoing].timer), FADE + 60);
+          await sleep(FADE);
+        }
+        function placeAt(x, y) {
+          mover.style.transition = "none";
+          mover.style.left = x;
+          mover.style.top = y;
+          void mover.offsetWidth;
+        }
+        function seed(name, dir) {
+          const flip = dir === "left" ? -rightFlip : rightFlip;
+          drive(layers[active], name, flip);
+          layers[active].el.style.opacity = "1";
+        }
+        async function swimTo(x, y, ms, dir) {
+          await show("nadar", dir);
+          motion.classList.add("bob");
+          mover.style.transition = `left ${ms}ms ease-in-out, top ${ms}ms ease-in-out`;
+          mover.style.left = x;
+          mover.style.top = y;
+          await sleep(ms);
+          motion.classList.remove("bob");
+        }
+        return {
+          show,
+          swimTo,
+          placeAt,
+          seed,
+          hop: () => motion.classList.add("hop"),
+          unhop: () => motion.classList.remove("hop"),
         };
-        paint();
-        return setInterval(paint, state.ms);
       }
 
-      // Dwell a little longer than one full cycle so each state reads as a real
-      // behavior, never a flash — but the crossfade already overlaps the ends.
-      function dwell(state) {
-        return Math.max(1500, Math.round(state.frames * state.ms * 1.25));
+      // Natural nadar faces RIGHT on both sheets (rightFlip = 1). The fish is
+      // the lead; the star is smaller and z-behind.
+      const fish = makeActor("fucho-sheet.webp", 0.74, 1, 2);
+      const star = makeActor("estrela-sheet.webp", 0.52, 1, 1);
+
+      // A tiny signal bus: the fish announces the beat it's on, the star waits
+      // for the ones it cares about (heading to the desk, and the error). This
+      // is how the star coordinates WITHOUT the fish's timeline changing.
+      const listeners = new Set();
+      let phase = null;
+      function setPhase(p) {
+        phase = p;
+        for (const fn of [...listeners]) fn(p);
+      }
+      function waitFor(target) {
+        return new Promise((resolve) => {
+          if (phase === target) return resolve();
+          const fn = (p) => {
+            if (p === target) {
+              listeners.delete(fn);
+              resolve();
+            }
+          };
+          listeners.add(fn);
+        });
       }
 
-      // Crossfade from the visible layer to the next state on the hidden one.
-      function advance() {
-        const next = (idx + 1) % STATES.length;
-        const nextState = STATES[next];
-        const incoming = 1 - active;
-        if (timers[incoming]) clearInterval(timers[incoming]);
-        timers[incoming] = play(layers[incoming], nextState);
-        layers[incoming].style.opacity = "1"; // fade in
-        layers[active].style.opacity = "0"; // fade out (both animate during it)
-        active = incoming;
-        idx = next;
-        setTimeout(advance, dwell(nextState));
+      // The fish: unchanged story — enter, think, swim to the middle, code
+      // (with a hiccup), celebrate. It only announces two beats for the star.
+      async function fishRun() {
+        while (true) {
+          fish.placeAt("7%", "84%");
+          fish.seed("nadar", "right");
+          await sleep(120);
+          await fish.swimTo("90%", "84%", 3900, "right");
+          await fish.show("idle");
+          await sleep(700);
+          await fish.show("pensando");
+          await sleep(2000);
+          setPhase("toDesk"); // cue: the star starts its approach now
+          await fish.swimTo("50%", "52%", 3500, "left");
+          await fish.show("idle");
+          await sleep(700);
+          await fish.show("codando");
+          await sleep(2200);
+          setPhase("erro"); // cue: the fish falls — the star reacts
+          await fish.show("erro");
+          await sleep(1900);
+          await fish.show("pensando");
+          await sleep(1800);
+          await fish.show("codando");
+          await sleep(2200);
+          await fish.show("frente");
+          await sleep(1300);
+          await fish.show("idle");
+          await sleep(600);
+          await fish.show("acenar");
+          await sleep(1900);
+          await fish.show("feliz");
+          fish.hop();
+          await sleep(2400);
+          fish.unhop();
+          await fish.show("idle");
+          await sleep(700);
+          setPhase("reset");
+          await fish.swimTo("7%", "84%", 3700, "left");
+        }
       }
 
-      function begin() {
-        timers[0] = play(layers[0], STATES[0]);
-        layers[0].style.opacity = "1";
-        setTimeout(advance, dwell(STATES[0]));
+      // The star: waits off-screen, swims in from the top-right to reach the
+      // fish about when he starts coding, waves hello, reacts with "?" the
+      // moment he falls, waves goodbye and swims off the screen. Then waits for
+      // the next cycle.
+      async function starRun() {
+        star.placeAt("120%", "12%"); // parked off-screen
+        star.seed("idle", "left");
+        while (true) {
+          await waitFor("toDesk");
+          // Glide in from the right edge AT THE FISH'S HEIGHT — a level,
+          // horizontal swim reads as natural; a diagonal drop from the corner
+          // looked like sliding on a rail. Arrives roughly as he settles to
+          // code, and stops beside him (the spot that already worked).
+          star.placeAt("116%", "55%");
+          star.seed("nadar", "left");
+          await star.swimTo("69%", "55%", 4400, "left");
+          await star.show("acenar"); // wave hello
+          await sleep(1400);
+          await star.show("idle"); // watch him work
+          // React the instant the fish hits the error.
+          await waitFor("erro");
+          await star.show("pensando"); // the "?" reaction
+          await sleep(1900);
+          await star.show("acenar"); // wave goodbye
+          await sleep(1400);
+          await star.swimTo("116%", "55%", 3400, "right"); // glide back off, level
+          star.seed("idle", "left"); // park, hidden, until next cycle
+        }
       }
 
-      // Preload both sheets so the first cross-sheet fade doesn't flash blank.
+      // Preload both sheets so nothing flashes blank, then start both loops.
       let pending = 2;
       const ready = () => {
         pending -= 1;
-        if (pending === 0) begin();
+        if (pending === 0) {
+          fishRun();
+          starRun();
+        }
       };
-      for (const src of [V1, V2]) {
-        const img = new Image();
-        img.onload = ready;
-        img.onerror = ready; // never hang the splash on a missing asset
-        img.src = src;
+      for (const src of ["fucho-sheet.webp", "estrela-sheet.webp"]) {
+        const im = new Image();
+        im.onload = ready;
+        im.onerror = ready;
+        im.src = src;
       }
     </script>
   </body>

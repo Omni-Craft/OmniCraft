@@ -1078,12 +1078,27 @@ function openSplash(mainWin) {
   mainWin.once("closed", dismissSplash);
 }
 
-/** Close the boot splash if it is open. Safe to call repeatedly. */
+/**
+ * Close the boot splash if it is open, fading it out first. The splash paints
+ * an ocean-blue card and the app behind it is near-black, so a hard close would
+ * flash blue→black; fading the window's opacity dissolves the splash into the
+ * app instead. Safe to call repeatedly.
+ */
 function dismissSplash() {
   if (!splashWindow) return;
   const win = splashWindow;
   splashWindow = null;
-  if (!win.isDestroyed()) win.close();
+  if (win.isDestroyed()) return;
+  let opacity = 1;
+  const fade = setInterval(() => {
+    opacity -= 0.12;
+    if (opacity <= 0 || win.isDestroyed()) {
+      clearInterval(fade);
+      if (!win.isDestroyed()) win.close();
+    } else {
+      win.setOpacity(opacity);
+    }
+  }, 24);
 }
 
 /**

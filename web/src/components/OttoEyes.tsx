@@ -1,15 +1,7 @@
-import { OttoIcon } from "@/components/icons/OttoIcon";
+import { FuchoMascot } from "@/components/FuchoMascot";
 
-// The hero mascot. It previously animated Otto-the-starfish's eyes to follow the
-// cursor; the mascot is now the OmniCraft fish logo (raster art), so this is a
-// thin wrapper that renders it as a meaningful, labelled image.
+// The hero mascot on the new-chat landing. There's no session yet, so it rests
+// idle — the animated Fucho, breathing gently, rather than a static logo.
 export function OttoEyes({ className }: { className?: string }) {
-  return (
-    <OttoIcon
-      className={["otto-float", className].filter(Boolean).join(" ")}
-      role="img"
-      aria-label="OmniCraft"
-      aria-hidden={false}
-    />
-  );
+  return <FuchoMascot pose="idle" size={72} className={className} ariaLabel="OmniCraft" />;
 }

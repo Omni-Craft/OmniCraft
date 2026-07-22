@@ -58,7 +58,8 @@ import { CompactionMarker, RoutingDecisionCard } from "@/components/blocks/Statu
 import { SystemMessageView } from "@/components/blocks/SystemMessage";
 import { parseSystemMessage } from "@/lib/systemMessage";
 import { Button } from "@/components/ui/button";
-import { OttoIcon } from "@/components/icons/OttoIcon";
+import { FuchoMascot } from "@/components/FuchoMascot";
+import { useMascotState } from "@/components/useMascotState";
 import { cn } from "@/lib/utils";
 import { QueuedMessagesStrip } from "@/pages/QueuedMessagesStrip";
 import { validateAttachments } from "@/lib/attachments";
@@ -1683,7 +1684,7 @@ function MainAgentSurface({
                     <span className="otto-bubble left-[30%]" style={{ animationDelay: "0s" }} />
                     <span className="otto-bubble left-[52%]" style={{ animationDelay: "1.7s" }} />
                     <span className="otto-bubble left-[68%]" style={{ animationDelay: "3.1s" }} />
-                    <OttoIcon className="otto-swim h-14 w-auto" />
+                    <FuchoMascot pose="idle" size={56} ariaLabel="" />
                   </div>
                   <div className="space-y-1.5">
                     <h3 className="text-2xl font-medium tracking-[-0.02em]">O que vamos fazer?</h3>
@@ -1773,7 +1774,7 @@ function MainAgentSurface({
           className="pointer-events-none absolute right-3 bottom-2 z-10 hidden h-10 w-40 items-center justify-center overflow-hidden opacity-60 md:flex"
           aria-hidden="true"
         >
-          <OttoIcon className="otto-swim-sm h-7 w-auto" />
+          <ReactiveMascot size={28} />
         </div>
       </div>
       {/* Floating reply button — scoped to the conversation container. */}
@@ -1901,6 +1902,32 @@ function UserMessageNavConnected(props: React.ComponentProps<typeof UserMessageN
  *   composer's "Chatting with sub-agent …" tray rises in this same slot and
  *   the "Working…" tab would otherwise stack on top of it.
  */
+/**
+ * The mascot wired to the live turn: it reads the chat state itself and shows
+ * the matching pose (thinking, coding, responding, error, done). Decorative by
+ * default — the status text beside it carries the meaning for screen readers.
+ */
+function ReactiveMascot({
+  size,
+  className,
+  ariaLabel = "",
+}: {
+  size: number;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  const { pose, starPose } = useMascotState();
+  return (
+    <FuchoMascot
+      pose={pose}
+      starPose={starPose}
+      size={size}
+      className={className}
+      ariaLabel={ariaLabel}
+    />
+  );
+}
+
 function WorkingStatusPin({ show, suppress = false }: { show: boolean; suppress?: boolean }) {
   const { isAtBottom } = useStickToBottomContext();
   const bgCount = useChatStore((s) => s.backgroundTaskCount);
@@ -1940,7 +1967,7 @@ function WorkingStatusPin({ show, suppress = false }: { show: boolean; suppress?
               !visible && "sr-only",
             )}
           >
-            <OttoIcon className="otto-working h-4 w-auto shrink-0" />
+            <ReactiveMascot size={18} className="shrink-0" />
             <Shimmer className="text-xs font-mono" duration={1.5}>
               {workingIndicatorLabel(bgCount, tick)}
             </Shimmer>
@@ -2419,7 +2446,7 @@ function WorkingIndicator() {
     <Message from="assistant" data-testid="working-indicator" aria-hidden="true">
       <MessageContent>
         <div className="flex items-center gap-1.5 py-0.5">
-          <OttoIcon className="otto-working h-4 w-auto shrink-0" />
+          <ReactiveMascot size={18} className="shrink-0" />
           <Shimmer className="text-xs font-mono" duration={1.5}>
             {label}
           </Shimmer>

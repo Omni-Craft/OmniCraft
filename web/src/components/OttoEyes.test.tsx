@@ -1,20 +1,28 @@
 import { cleanup, render } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { OttoEyes } from "./OttoEyes";
 
-afterEach(cleanup);
+beforeEach(() => {
+  vi.stubGlobal(
+    "matchMedia",
+    vi
+      .fn()
+      .mockReturnValue({ matches: false, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+  );
+});
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 describe("OttoEyes", () => {
-  it("renders the mascot with image semantics", () => {
-    const { container } = render(<OttoEyes className="h-18" />);
-    const img = container.querySelector("img");
-    // The new-chat hero is a meaningful image, so the wrapper overrides
-    // OttoIcon's decorative default; losing it would silently hide the brand
-    // image from screen readers.
-    expect(img).toHaveAttribute("role", "img");
-    expect(img).toHaveAttribute("aria-label", "OmniCraft");
-    expect(img).toHaveAttribute("aria-hidden", "false");
-    expect(img).toHaveClass("h-18");
-    expect(img).toHaveAttribute("src");
+  it("renders the animated mascot with image semantics", () => {
+    const { container } = render(<OttoEyes className="shrink-0" />);
+    const root = container.firstElementChild as HTMLElement;
+    // The new-chat hero is a meaningful image; losing the label would silently
+    // hide the brand mascot from screen readers.
+    expect(root).toHaveAttribute("role", "img");
+    expect(root).toHaveAttribute("aria-label", "OmniCraft");
+    expect(root).toHaveClass("shrink-0");
   });
 });

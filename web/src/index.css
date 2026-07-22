@@ -1160,6 +1160,23 @@
   will-change: transform, opacity;
 }
 
+/* The reactive mascot's gentle life-bob, so it never sits stiff between poses
+ * (see FuchoMascot). The global reduced-motion gate below collapses it. */
+@keyframes fucho-breathe {
+  0%,
+  100% {
+    transform: translateY(-2.5px) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(2.5px) rotate(1deg);
+  }
+}
+
+.fucho-breathe {
+  animation: fucho-breathe 3s ease-in-out infinite;
+  will-change: transform;
+}
+
 @keyframes compaction-slide {
   0% {
     transform: translateX(-100%);

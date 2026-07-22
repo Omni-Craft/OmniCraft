@@ -1,4 +1,5 @@
 import SwiftUI
+import OmniCraftPets
 import Observation
 
 /// Estado central dos widgets. Só fixtures + timers de simulação — nada de rede.
@@ -27,6 +28,46 @@ final class WidgetStore {
 
     var projetoAtual: String {
         sessaoSelecionada?.ref.projeto ?? "global"
+    }
+
+    // Utilidades locais (widgets Servidores/Rotas; copiar usa o clipboard real)
+    let servidores = MockFeed.servidores
+    let rotas = MockFeed.rotas
+
+    /// Colunas do board com "mostrar todas" individual.
+    var colunasExpandidas: Set<String> = []
+
+    // MARK: Mascote (mesmo pet do notch, pacote OmniCraftPets)
+
+    /// Qual pet aparece no board.
+    var pet: Pet = .fucho
+
+    /// Velocidade da animação — o padrão desacelera o manifesto.
+    var ritmoPet: RitmoPet = .ameno
+
+    /// Traduz o estado das sessões para o que o bicho deve fazer.
+    /// Mesma prioridade do notch: o que exige você primeiro.
+    var estadoMascote: EstadoMascote {
+        let sessoes = snapshot.sessoes.map(\.ref)
+        if sessoes.contains(where: { $0.estado == .aguardandoVoce }) { return .atencao }
+        if sessoes.contains(where: { $0.estado == .falhou }) { return .erro }
+        if sessoes.contains(where: { $0.estado == .emExecucao }) { return .trabalhando }
+        if sessoes.contains(where: { $0.estado == .concluida }) { return .concluido }
+        return sessoes.isEmpty ? .oculto : .ocioso
+    }
+
+    func copiar(_ texto: String, rotulo: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(texto, forType: .string)
+        registrar("⧉ Copiado \(rotulo): \(texto)")
+    }
+
+    func acaoServidor(_ servidor: ServidorLocal, _ acao: String) {
+        registrar("⚙ Servidor \(servidor.nome): \(acao) (visual)")
+    }
+
+    func abrirRota(_ rota: RotaLocal) {
+        registrar("→ Rota: \(rota.rotulo) (visual)")
     }
 
     func registrar(_ acao: String) {

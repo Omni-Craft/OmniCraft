@@ -5,7 +5,7 @@ import Observation
 // MARK: - Tipos de widget
 
 enum TipoWidget: String, CaseIterable, Identifiable {
-    case transcript, ferramentas, subagentes, uso, tarefas, board
+    case transcript, ferramentas, subagentes, uso, tarefas, servidores, rotas, board
 
     var id: String { rawValue }
 
@@ -16,6 +16,8 @@ enum TipoWidget: String, CaseIterable, Identifiable {
         case .subagentes: "Subagentes"
         case .uso: "Uso"
         case .tarefas: "Tarefas"
+        case .servidores: "Servidores"
+        case .rotas: "Rotas"
         case .board: "Board"
         }
     }
@@ -27,6 +29,8 @@ enum TipoWidget: String, CaseIterable, Identifiable {
         case .subagentes: "point.3.filled.connected.trianglepath.dotted"
         case .uso: "gauge.with.needle"
         case .tarefas: "checklist"
+        case .servidores: "server.rack"
+        case .rotas: "folder"
         case .board: "square.grid.3x1.below.line.grid.1x2"
         }
     }
@@ -38,6 +42,8 @@ enum TipoWidget: String, CaseIterable, Identifiable {
         case .subagentes: NSSize(width: 360, height: 340)
         case .uso: NSSize(width: 320, height: 300)
         case .tarefas: NSSize(width: 320, height: 360)
+        case .servidores: NSSize(width: 400, height: 320)
+        case .rotas: NSSize(width: 340, height: 260)
         case .board: NSSize(width: 640, height: 420)
         }
     }
@@ -115,8 +121,15 @@ final class PainelWidget: NSObject, NSWindowDelegate {
     private func posicionar(indiceCascata: Int) {
         if let salvo = UserDefaults.standard.string(forKey: chaveFrame) {
             panel.setFrame(from: salvo)
-            fixarNaAreaVisivel()
-            return
+            // O frame salvo pode vir de um arranjo de monitores que não existe
+            // mais (ex.: display externo à esquerda, com x negativo). Se ele não
+            // toca NENHUMA tela atual, o widget nasceria invisível e sem jeito de
+            // recuperar — então descarta e cai na cascata.
+            if NSScreen.screens.contains(where: { $0.visibleFrame.intersects(panel.frame) }) {
+                fixarNaAreaVisivel()
+                return
+            }
+            UserDefaults.standard.removeObject(forKey: chaveFrame)
         }
         guard let tela = NSScreen.main else { return }
         let v = tela.visibleFrame
@@ -207,7 +220,11 @@ final class PainelWidget: NSObject, NSWindowDelegate {
     /// Arrastou até a borda? O widget não pode SAIR da área visível (vale para
     /// qualquer display, inclusive externo).
     private func fixarNaAreaVisivel() {
-        guard let v = panel.screen?.visibleFrame else { return }
+        // `panel.screen` é nil quando a janela está INTEIRAMENTE fora de
+        // qualquer tela — exatamente o caso que este resgate existe para
+        // corrigir (frame salvo com um monitor externo que não está mais
+        // ligado). Sem o fallback, o widget ficava invisível para sempre.
+        guard let v = (panel.screen ?? NSScreen.main)?.visibleFrame else { return }
         var f = panel.frame
         f.origin.x = min(max(f.origin.x, v.minX), v.maxX - f.width)
         f.origin.y = min(max(f.origin.y, v.minY), v.maxY - f.height)

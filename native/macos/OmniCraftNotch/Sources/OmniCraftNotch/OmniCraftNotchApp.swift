@@ -1,4 +1,5 @@
 import SwiftUI
+import OmniCraftPets
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -9,12 +10,74 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setvbuf(stdout, nil, _IONBF, 0)   // logs imediatos mesmo com stdout em arquivo
         // Acessório: sem ícone no Dock, sem janela principal (equivale a LSUIElement).
         NSApp.setActivationPolicy(.accessory)
+        if CommandLine.arguments.contains("--diagnostico-local") {
+            Task { await Self.rodarDiagnosticoLocal() }
+            return
+        }
+        if CommandLine.arguments.contains("--diagnostico-pets") {
+            Self.rodarDiagnosticoPets()
+            return
+        }
         applyLaunchArguments(to: Self.sharedStore)
         panelController = NotchPanelController(store: Self.sharedStore)
     }
 
+    /// `--diagnostico-pets`: confere que os atlas carregam e fatiam, e qual
+    /// animação cada estado do HUD vai tocar.
+    private static func rodarDiagnosticoPets() {
+        for pet in Pet.allCases {
+            let animacoes = PetSpritesheet.animacoes(de: pet)
+            guard !animacoes.isEmpty else {
+                print("\(pet.label): sem atlas → usa o mascote desenhado em código")
+                continue
+            }
+            let resumo = animacoes.keys.sorted()
+                .map { "\($0)(\(animacoes[$0]!.quadros.count))" }
+                .joined(separator: " ")
+            print("\(pet.label): \(animacoes.count) animações — \(resumo)")
+            let estados: [(String, EstadoMascote)] = [
+                ("atenção", .atencao), ("erro", .erro), ("trabalhando", .trabalhando),
+                ("concluído", .concluido), ("ocioso", .ocioso)
+            ]
+            for (rotulo, estado) in estados {
+                let escolhida = estado.animacoes.first { animacoes[$0] != nil } ?? "—"
+                let a = animacoes[escolhida]
+                print("   \(rotulo.padding(toLength: 12, withPad: " ", startingAt: 0)) → \(escolhida)"
+                      + (a.map { " (\($0.quadros.count) quadros, \($0.msPorQuadro) ms)" } ?? ""))
+            }
+        }
+        NSApp.terminate(nil)
+    }
+
+    /// `--diagnostico-local`: roda a detecção UMA vez, imprime o que achou e sai.
+    /// Serve para conferir no terminal o que a ilha veria, sem abrir janela.
+    private static func rodarDiagnosticoLocal() async {
+        let inicio = Date()
+        let lido = await LocalDetector().detectar()
+        let ms = Int(Date().timeIntervalSince(inicio) * 1000)
+
+        guard let lido else {
+            print("não deu para ler os processos desta máquina (ps/lsof falharam) — \(ms) ms")
+            NSApp.terminate(nil)
+            return
+        }
+        print("detecção local em \(ms) ms · \(lido.counts.pillText)")
+        if lido.sessions.isEmpty {
+            print("nenhuma sessão de agente ativa agora")
+        }
+        for s in lido.sessions {
+            let extras = [s.ferramentaAtual, s.subestado, s.atualizadoHa]
+                .compactMap { $0?.isEmpty == false ? $0 : nil }
+                .joined(separator: " · ")
+            print("• \(s.title) [\(s.state.label)] \(extras)")
+            print("  \(s.metadataLine)")
+        }
+        NSApp.terminate(nil)
+    }
+
     /// Debug por terminal: `--cenario 1..8` escolhe a fixture; `--colapsado` força o
-    /// pill; `--expandido` força a ilha; `--live` liga o feed real.
+    /// pill; `--expandido` força a ilha; `--live` liga o feed do servidor;
+    /// `--local` liga a detecção local (sem servidor).
     private func applyLaunchArguments(to store: HUDStore) {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--cenario"), args.indices.contains(i + 1),
@@ -23,6 +86,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if args.contains("--live") {
             store.feedSource = .live
+        }
+        if args.contains("--local") {
+            store.feedSource = .local
         }
         if args.contains("--colapsado") {
             store.collapseManually()
@@ -86,6 +152,10 @@ struct DebugMenuView: View {
             .pickerStyle(.segmented)
             .labelsHidden()
 
+            Text(store.feedSource.descricao)
+                .font(.system(size: 10.5))
+                .foregroundStyle(.secondary)
+
             if store.feedSource == .live {
                 TextField("Base URL", text: $store.baseURLString)
                     .textFieldStyle(.roundedBorder)
@@ -93,6 +163,8 @@ struct DebugMenuView: View {
                     .accessibilityLabel("Base URL do servidor OmniCraft")
 
                 connectionStatus
+            } else if store.feedSource == .local {
+                localStatus
             } else {
                 Picker("Cenário", selection: $store.scenario) {
                     ForEach(MockScenario.allCases) { scenario in
@@ -102,6 +174,18 @@ struct DebugMenuView: View {
             }
 
             Divider()
+
+            Picker("Pet", selection: $store.pet) {
+                ForEach(Pet.allCases) { pet in
+                    Text(pet.label).tag(pet)
+                }
+            }
+
+            Picker("Ritmo", selection: $store.ritmoPet) {
+                ForEach(RitmoPet.allCases) { ritmo in
+                    Text(ritmo.label).tag(ritmo)
+                }
+            }
 
             Picker("Visibilidade", selection: $store.visibility) {
                 ForEach(PillVisibility.allCases) { mode in
@@ -115,6 +199,10 @@ struct DebugMenuView: View {
                 }
             }
 
+            Toggle("Efeitos sonoros", isOn: $store.sonsAtivados)
+            Toggle("Horário silencioso", isOn: $store.horarioSilencioso)
+                .disabled(!store.sonsAtivados)
+
             Button(store.isExpanded ? "Colapsar ilha" : "Expandir ilha") {
                 store.toggleExpanded()
             }
@@ -127,6 +215,22 @@ struct DebugMenuView: View {
         }
         .padding(12)
         .frame(width: 280)
+    }
+
+    /// Local não tem "conexão": ou leu os processos da máquina, ou não leu.
+    private var localStatus: some View {
+        let ilegivel = store.snapshot.counts.isUnavailable
+        return HStack(spacing: 6) {
+            Image(systemName: ilegivel ? "exclamationmark.triangle.fill" : "desktopcomputer")
+                .foregroundStyle(ilegivel ? .orange : .green)
+                .font(.system(size: 10))
+            Text(ilegivel
+                 ? "não deu para ler os processos"
+                 : "lendo esta máquina" + (store.lastGeneratedAt.map { " · \(Formatters.hora($0))" } ?? ""))
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+        }
+        .accessibilityElement(children: .combine)
     }
 
     private var connectionStatus: some View {

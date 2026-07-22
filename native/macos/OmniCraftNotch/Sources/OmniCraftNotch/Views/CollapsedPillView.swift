@@ -1,4 +1,5 @@
 import SwiftUI
+import OmniCraftPets
 
 /// Estado colapsado: barra preta fundida à notch. O conteúdo vive nas LATERAIS
 /// do recorte da câmera (resumo à esquerda, chevron à direita).
@@ -17,6 +18,11 @@ struct CollapsedPillView: View {
         } label: {
             HStack(spacing: 0) {
                 HStack(spacing: 7) {
+                    if store.estadoMascote != .oculto {
+                        MascoteView(estado: store.estadoMascote, pet: store.pet,
+                                    altura: metrics.height + 6, ritmo: store.ritmoPet)
+                            .transition(.opacity)
+                    }
                     statusIcon
                     Text(store.snapshot.counts.pillText)
                         .font(.system(size: 12, weight: .medium))
@@ -42,6 +48,7 @@ struct CollapsedPillView: View {
         .brightness(isHovering ? 0.15 : 0)   // hover sem escalar: não quebra a fusão com a notch
         .onHover { isHovering = $0 }
         .animation(.easeOut(duration: 0.15), value: isHovering)
+        .animation(.easeOut(duration: 0.2), value: store.estadoMascote)
         .focusable()
         .accessibilityLabel(accessibilityText)
         .accessibilityHint("Expande a lista de sessões de agentes")
@@ -66,8 +73,12 @@ struct CollapsedPillView: View {
     }
 
     private var accessibilityText: String {
-        store.snapshot.counts.isUnavailable
+        let base = store.snapshot.counts.isUnavailable
             ? "OmniCraft: contagens indisponíveis"
             : "OmniCraft: \(store.snapshot.counts.pillText)"
+        // O mascote verde é informação nova: quem usa leitor de tela também recebe.
+        return store.estadoMascote == .concluido
+            ? base + ", concluído desde a última vez que você olhou"
+            : base
     }
 }

@@ -33,6 +33,40 @@ enum CenarioWidgets: String, CaseIterable, Identifiable {
 }
 
 enum MockFeed {
+    // Janelas de limite compartilhadas pelos cenários com dado de uso.
+    static let janelasPadrao: [JanelaLimite] = [
+        JanelaLimite(id: "5h", rotulo: "5 h", fracaoUsada: 0.52, reset: "reseta em 2 h 05"),
+        JanelaLimite(id: "7d", rotulo: "7 d", fracaoUsada: 0.18, reset: "renova qua 18:48"),
+    ]
+
+    // Servidores locais mockados (widget Servidores; ações visuais/log).
+    static let servidores: [ServidorLocal] = [
+        ServidorLocal(id: "srv1", nome: "API Vapor", host: "localhost:8080",
+                      framework: "Vapor", projeto: "app-mobile", uptime: "há 40 min",
+                      rodando: true),
+        ServidorLocal(id: "srv2", nome: "Site", host: "localhost:5173",
+                      framework: "Vite", projeto: "devcraft-site", uptime: "há 1 h 10",
+                      rodando: true),
+        ServidorLocal(id: "srv3", nome: "Docs", host: "localhost:4321",
+                      framework: "Astro", projeto: "devcraft-site", uptime: nil,
+                      rodando: false),
+        ServidorLocal(id: "srv4", nome: "Prisma Studio", host: "localhost:5555",
+                      framework: "prisma-studio", projeto: "notas-app", uptime: "há 1 h 40",
+                      rodando: true, principal: false),
+    ]
+
+    // Rotas do agente (widget Rotas, estilo painel Routes).
+    static let rotas: [RotaLocal] = [
+        RotaLocal(id: "rt1", rotulo: "Skills", icone: "sparkles", corNome: "laranja"),
+        RotaLocal(id: "rt2", rotulo: "Config", icone: "gearshape", corNome: "azul"),
+        RotaLocal(id: "rt3", rotulo: "Hooks", icone: "link", corNome: "laranja"),
+        RotaLocal(id: "rt4", rotulo: "Logs", icone: "doc.text", corNome: "cinza"),
+        RotaLocal(id: "rt5", rotulo: "MCP", icone: "puzzlepiece.extension", corNome: "azul"),
+        RotaLocal(id: "rt6", rotulo: "Sessões", icone: "tray.full", corNome: "verde"),
+        RotaLocal(id: "rt7", rotulo: "Raiz", icone: "house", corNome: "cinza"),
+        RotaLocal(id: "rt8", rotulo: "Plugins", icone: "powerplug", corNome: "azul"),
+    ]
+
     // MARK: sessão base reutilizada
 
     private static func refCI(_ estado: EstadoSessao = .emExecucao) -> SessaoRef {
@@ -148,7 +182,7 @@ enum MockFeed {
                                              projeto: "OmniCraft", agente: "fucho",
                                              estado: .emExecucao, haQuantoTempo: "há 1 min"),
                               uso: nil),
-            ])
+            ], janelasLimite: janelasPadrao)
 
         case .ferramentas:
             var ferramentas = ferramentasBase
@@ -182,14 +216,16 @@ enum MockFeed {
             return SnapshotWidgets(sessoes: [
                 SessaoDetalhe(ref: SessaoRef(id: "m1", titulo: "migrar módulo de auth",
                                              projeto: "OmniCraft", agente: "fucho",
-                                             estado: .emExecucao, haQuantoTempo: "há 4 min")),
+                                             estado: .emExecucao, haQuantoTempo: "há 4 min",
+                                             subestado: "executando ferramenta")),
                 // Esta é a sessão que MIGRA de coluna (o store alterna o estado dela).
                 SessaoDetalhe(ref: SessaoRef(id: "m-migra", titulo: "corrigir flake do CI",
                                              projeto: "OmniCraft", agente: "fucho",
                                              estado: .emExecucao, haQuantoTempo: "agora")),
                 SessaoDetalhe(ref: SessaoRef(id: "m2", titulo: "escrever testes do parser",
                                              projeto: "devcraft-site", agente: "testador",
-                                             estado: .emExecucao, haQuantoTempo: "há 9 min")),
+                                             estado: .emExecucao, haQuantoTempo: "há 9 min",
+                                             subestado: "compactando · 45 s")),
                 SessaoDetalhe(ref: SessaoRef(id: "m3", titulo: "atualizar dependências",
                                              projeto: "app-mobile", agente: "faxina",
                                              estado: .aguardandoVoce,
@@ -225,7 +261,11 @@ enum MockFeed {
                                                  haQuantoTempo: nil),
                                   uso: nil),
                 ],
-                contagensSaoPiso: true)
+                contagensSaoPiso: true,
+                janelasLimite: [
+                    JanelaLimite(id: "5h", rotulo: "5 h", fracaoUsada: 0.52, reset: "reseta em 2 h 05"),
+                    JanelaLimite(id: "7d", rotulo: "7 d", fracaoUsada: nil, reset: nil),
+                ])
 
         case .vazio:
             return SnapshotWidgets(sessoes: [])

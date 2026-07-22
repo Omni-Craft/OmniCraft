@@ -34,7 +34,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        package: [OmniCraftNotch, OmniCraftWidgets]
+        # OmniCraftPets is the shared dependency of the other two; building it
+        # on its own catches a break in the sprite/mascot code directly instead
+        # of only as a downstream failure.
+        package: [OmniCraftPets, OmniCraftNotch, OmniCraftWidgets]
 
     steps:
       - name: Check out repo

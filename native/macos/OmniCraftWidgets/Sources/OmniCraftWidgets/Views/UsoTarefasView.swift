@@ -19,6 +19,9 @@ struct UsoView: View {
     private func conteudo(_ uso: UsoSessao?) -> some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
+                if !store.snapshot.janelasLimite.isEmpty {
+                    janelasLimite(store.snapshot.janelasLimite)
+                }
                 gasto(uso)
                 if let uso, temAlgumToken(uso) {
                     detalhamentoTokens(uso)
@@ -26,6 +29,54 @@ struct UsoView: View {
             }
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// Janelas de rate-limit do provedor ("5 h · 52% · reseta em 2 h 05") —
+    /// denominador REAL, então a barra é legítima; ilegível vira —.
+    private func janelasLimite(_ janelas: [JanelaLimite]) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Janelas de limite")
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .tracking(1)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+            ForEach(janelas) { janela in
+                HStack(spacing: 8) {
+                    Text(janela.rotulo)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 26, alignment: .leading)
+                    if let fracao = janela.fracaoUsada {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(.quaternary)
+                                Capsule()
+                                    .fill(corBarra(fracao))
+                                    .frame(width: max(geo.size.width * fracao, 3))
+                            }
+                        }
+                        .frame(height: 3)
+                        Text("\(Int(fracao * 100))%")
+                            .font(.system(size: 9.5, weight: .bold, design: .monospaced))
+                            .foregroundStyle(corBarra(fracao))
+                            .frame(width: 30, alignment: .trailing)
+                    } else {
+                        Text("— janela ilegível")
+                            .font(.system(size: 9.5, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    Text(janela.reset ?? "—")
+                        .font(.system(size: 9.5, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize()
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(janela.fracaoUsada.map {
+                    "Janela de \(janela.rotulo): \(Int($0 * 100)) por cento usado. \(janela.reset ?? "")"
+                } ?? "Janela de \(janela.rotulo): ilegível")
+            }
         }
     }
 

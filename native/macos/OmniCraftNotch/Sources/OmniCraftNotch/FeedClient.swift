@@ -258,7 +258,17 @@ enum FeedMapper {
             requests: requests,
             ferramentaAtual: dto.currentTool,
             diffMais: dto.diffAdded,
-            diffMenos: dto.diffRemoved
+            diffMenos: dto.diffRemoved,
+            atualizadoHa: dto.updatedAt.map { idadeRelativa(desde: $0) }
         )
+    }
+
+    /// "agora" · "há 40 s" · "há 12 min" · "há 3 h" — calculada no momento do snapshot.
+    private static func idadeRelativa(desde epoch: Double) -> String {
+        let s = max(Int(Date().timeIntervalSince1970 - epoch), 0)
+        if s < 10 { return "agora" }
+        if s < 60 { return "há \(s) s" }
+        if s < 3600 { return "há \(s / 60) min" }
+        return "há \(s / 3600) h"
     }
 }

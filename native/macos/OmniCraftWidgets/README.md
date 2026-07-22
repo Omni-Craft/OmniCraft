@@ -7,8 +7,7 @@ aberta. **Só interface**: todos os dados vêm de fixtures (`MockFeed`) — nenh
 
 Mesma linguagem visual do notch: rótulos de estado idênticos (`em execução` ·
 `aguardando você` · `ocioso` · `falhou` + `concluída`/`desconhecido`), o mesmo âmbar
-de atenção e formatação pt-BR. A estética é de painel de instrumentos: pretos
-sólidos sempre escuros,
+de atenção e formatação pt-BR. Estética de painéis pretos sólidos sempre escuros,
 tipografia monoespaçada densa, headers com contagem à direita ("4 tools · 1 err"),
 chips de estado em caixa alta, glifo por ferramenta e rail em badge mínimo.
 
@@ -33,9 +32,11 @@ etapa posterior).
 | **Transcript** | Conversa da sessão (você/agente, horário), blocos de ferramenta colapsados (`▸ Bash: npm test`) expansíveis, streaming com cursor ▌, auto-scroll preso no fim que pausa ao rolar para cima (botão "voltar ao fim") |
 | **Ferramentas** | Chamadas em ordem: nome, alvo em 1 linha, duração, estado; falha mostra SÓ a primeira linha do erro; filtro todas/só erros |
 | **Subagentes** | Árvore de workers (aninhamento com indentação), mesmo vocabulário de estado; quem precisa de atenção sobe com ícone E cor |
-| **Uso** | Gasto + tokens (entrada/saída/cache). Barra SÓ com gasto E teto, rotulada "orçamento do agente"; sem teto → texto; sem dado → `—` |
+| **Uso** | Janelas de limite do provedor (`5 h · 52% · reseta em 2 h 05` — denominador real, barra legítima; ilegível → `—`) + gasto + tokens. Barra de gasto SÓ com teto, rotulada "orçamento do agente"; sem teto → texto; sem dado → `—` |
 | **Tarefas** | Lista do turno com `pendente/em andamento/concluída`, destaque na atual, contador `3 de 7` |
-| **Board** | Global: colunas **Ativas / Atenção / Concluídas** DERIVADAS do estado (sem arrastar à mão), com motivo no card de Atenção e migração animada |
+| **Board** | Global: colunas **Ativas / Atenção / Concluídas** DERIVADAS do estado (sem arrastar à mão), com motivo no card de Atenção, subestado vivo (`compactando · 45 s`), migração animada e coluna cheia colapsada em 4 + "mostrar todas as N" |
+| **Servidores** | Porta + framework + projeto + uptime, botões abrir/copiar/parar (copiar usa o clipboard real), grupo "outros ouvintes", parado marcado em texto |
+| **Rotas** | Grade de pastas/recursos do agente (Skills, Config, Hooks, Logs, MCP, Sessões, Raiz, Plugins) com tiles coloridos |
 
 ## Comportamentos
 
@@ -86,7 +87,9 @@ etapa posterior).
 | Uso com teto (barra + "orçamento do agente") | ![uso com teto](docs/screenshots/uso-com-teto.png) |
 | Uso sem teto (texto, sem barra) | ![uso sem teto](docs/screenshots/uso-sem-teto.png) |
 | Tarefas (`3 de 7`) | ![tarefas](docs/screenshots/tarefas.png) |
-| **Board com as três colunas** | _(recapturar: `--cenario 7 --widget board`)_ |
+| **Board com as três colunas** (subestados, migração) | _recaptura pendente_ |
+| **Servidores** (uptime, outros ouvintes) | _recaptura pendente_ |
+| **Rotas** | _recaptura pendente_ |
 | Board degradado (`≥`, desconhecido) | ![degradado](docs/screenshots/board-degradado.png) |
 | **Rail compacto** (ferramentas com erro) | ![rail](docs/screenshots/rail.png) |
 | Vazio | ![vazio](docs/screenshots/vazio.png) |

@@ -1,4 +1,5 @@
 import SwiftUI
+import OmniCraftPets
 
 // MARK: - Paleta (painéis pretos sólidos; mono denso)
 
@@ -108,9 +109,18 @@ struct WidgetChrome: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Image(systemName: tipo.icone)
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.secondary)
+            // O pet vive no Board — é o painel global, o equivalente da ilha.
+            // Nos demais widgets ele seria repetição (8 peixes na tela).
+            if tipo == .board, store.estadoMascote != .oculto {
+                MascoteView(estado: store.estadoMascote, pet: store.pet,
+                            altura: 38, ritmo: store.ritmoPet)
+                    .padding(.trailing, 2)
+                    .transition(.opacity)
+            } else {
+                Image(systemName: tipo.icone)
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
             Text(tipo.titulo.uppercased())
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .tracking(1)
@@ -141,7 +151,8 @@ struct WidgetChrome: View {
             .accessibilityLabel("Fechar o widget \(tipo.titulo)")
         }
         .padding(.horizontal, 10)
-        .padding(.vertical, 7)
+        // Header do board respira menos na vertical: quem dá a altura é o pet.
+        .padding(.vertical, tipo == .board && store.estadoMascote != .oculto ? 4 : 7)
     }
 
     /// Contagem à direita do header, como "134 tools" na referência.
@@ -163,6 +174,11 @@ struct WidgetChrome: View {
         case .tarefas:
             guard let t = sessao?.tarefas, !t.isEmpty else { return "—" }
             return "\(t.filter { $0.estado == .concluida }.count)/\(t.count)"
+        case .servidores:
+            let rodando = store.servidores.filter(\.rodando).count
+            return "\(rodando) rodando"
+        case .rotas:
+            return "\(store.rotas.count) rotas"
         case .board:
             let ativas = store.snapshot.sessoes.filter {
                 ColunaBoard.coluna(para: $0.ref.estado) == .ativas
@@ -179,6 +195,8 @@ struct WidgetChrome: View {
         case .subagentes: SubagentesView()
         case .uso: UsoView()
         case .tarefas: TarefasView()
+        case .servidores: ServidoresView()
+        case .rotas: RotasView()
         case .board: BoardView()
         }
     }
@@ -246,6 +264,10 @@ struct RailView: View {
         case .tarefas:
             guard let t = sessao?.tarefas, !t.isEmpty else { return "—" }
             return "\(t.filter { $0.estado == .concluida }.count)/\(t.count)"
+        case .servidores:
+            return "\(store.servidores.filter(\.rodando).count)"
+        case .rotas:
+            return "\(store.rotas.count)"
         case .board:
             let atencao = store.snapshot.sessoes.filter {
                 ColunaBoard.coluna(para: $0.ref.estado) == .atencao

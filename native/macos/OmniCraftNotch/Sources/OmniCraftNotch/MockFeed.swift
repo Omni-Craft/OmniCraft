@@ -11,6 +11,7 @@ enum MockScenario: String, CaseIterable, Identifiable {
     case uso
     case falha
     case multiplosPedidos
+    case questionario
 
     var id: String { rawValue }
 
@@ -24,6 +25,7 @@ enum MockScenario: String, CaseIterable, Identifiable {
         case .uso: "6 · Uso (com e sem teto)"
         case .falha: "7 · Falha"
         case .multiplosPedidos: "8 · Múltiplos pedidos"
+        case .questionario: "9 · Questionário estruturado"
         }
     }
 }
@@ -34,8 +36,18 @@ enum MockFeed {
 
     // Utilidades locais mockadas (painel "tudo a um clique"; ações só logam).
     static let servidores: [ServidorLocal] = [
-        ServidorLocal(id: "srv1", nome: "vapor api", url: "http://127.0.0.1:8080", rodando: true),
-        ServidorLocal(id: "srv2", nome: "site (vite)", url: "http://127.0.0.1:5173", rodando: false),
+        ServidorLocal(id: "srv1", nome: "API Vapor", host: "localhost:8080",
+                      framework: "Vapor", projeto: "app-mobile", uptime: "há 40 min",
+                      rodando: true),
+        ServidorLocal(id: "srv2", nome: "Site", host: "localhost:5173",
+                      framework: "Vite", projeto: "devcraft-site", uptime: "há 1 h 10",
+                      rodando: true),
+        ServidorLocal(id: "srv3", nome: "Docs", host: "localhost:4321",
+                      framework: "Astro", projeto: "devcraft-site", uptime: nil,
+                      rodando: false),
+        ServidorLocal(id: "srv4", nome: "Prisma Studio", host: "localhost:5555",
+                      framework: "prisma-studio", projeto: "notas-app", uptime: "há 1 h 40",
+                      rodando: true, principal: false),
     ]
 
     static let comandos: [ComandoSalvo] = [
@@ -44,10 +56,15 @@ enum MockFeed {
         ComandoSalvo(id: "cmd3", rotulo: "release", comando: "swift build -c release"),
     ]
 
+    // Rotas: pastas/recursos do agente.
     static let atalhos: [AtalhoLocal] = [
-        AtalhoLocal(id: "at1", rotulo: "config do agente", icone: "gearshape"),
-        AtalhoLocal(id: "at2", rotulo: "skills", icone: "sparkles"),
-        AtalhoLocal(id: "at3", rotulo: "logs", icone: "doc.text.magnifyingglass"),
+        AtalhoLocal(id: "rt1", rotulo: "Skills", icone: "sparkles", corNome: "laranja"),
+        AtalhoLocal(id: "rt2", rotulo: "Config", icone: "gearshape", corNome: "azul"),
+        AtalhoLocal(id: "rt3", rotulo: "Hooks", icone: "link", corNome: "laranja"),
+        AtalhoLocal(id: "rt4", rotulo: "Logs", icone: "doc.text", corNome: "cinza"),
+        AtalhoLocal(id: "rt5", rotulo: "MCP", icone: "puzzlepiece.extension", corNome: "azul"),
+        AtalhoLocal(id: "rt6", rotulo: "Sessões", icone: "tray.full", corNome: "verde"),
+        AtalhoLocal(id: "rt7", rotulo: "Raiz", icone: "house", corNome: "cinza"),
     ]
 
     static func snapshot(for scenario: MockScenario) -> FeedSnapshot {
@@ -61,19 +78,22 @@ enum MockFeed {
                         runnerOnline: true, host: "macbook",
                         requests: [AttentionRequest(
                             id: ids[8], title: "Aprovação necessária",
-                            question: "Permitir rodar `git push` no repositório?")],
-                        diffMais: 12, diffMenos: 5),
+                            question: "Permitir rodar `git push` no repositório?",
+                            detalhe: "$ git push origin fix/flake-ci\n→ 3 commits · auth.spec.ts +12 −5")],
+                        diffMais: 12, diffMenos: 5, atualizadoHa: "agora"),
                     AgentSession(id: ids[1], title: "migrar módulo de auth", state: .emExecucao,
                                  runnerOnline: true, host: "macbook",
                                  usage: Usage(spentUSD: 0.42),
                                  ferramentaAtual: "Bash · npm test",
-                                 diffMais: 58, diffMenos: 3),
+                                 diffMais: 58, diffMenos: 3, atualizadoHa: "há 40 s"),
                     AgentSession(id: ids[2], title: "escrever testes do parser", state: .emExecucao,
                                  runnerOnline: true, host: "mac-mini",
                                  usage: Usage(spentUSD: 1.10),
-                                 ferramentaAtual: "Edit · parser.spec.ts"),
+                                 ferramentaAtual: "Edit · parser.spec.ts",
+                                 subestado: "compactando · 45 s", atualizadoHa: "há 2 min"),
                     AgentSession(id: ids[3], title: "refatorar camada de rede", state: .emExecucao,
-                                 runnerOnline: true, host: "macbook"),
+                                 runnerOnline: true, host: "macbook",
+                                 subestado: "pensando", atualizadoHa: "há 5 s"),
                 ],
                 janelasLimite: [
                     JanelaLimite(id: "5h", rotulo: "5 h", fracaoUsada: 0.52, reset: "reseta em 2 h 05"),
@@ -170,6 +190,50 @@ enum MockFeed {
                     AgentSession(id: ids[2], title: "otimizar queries", state: .emExecucao,
                                  runnerOnline: true, host: "mac-mini",
                                  ferramentaAtual: "Bash · explain analyze"),
+                ])
+
+        case .questionario:
+            FeedSnapshot(
+                counts: .exact(active: 1, waiting: 1),
+                sessions: [
+                    AgentSession(
+                        id: ids[0], title: "configurar matriz de build", state: .aguardandoVoce,
+                        runnerOnline: true, host: "macbook",
+                        requests: [AttentionRequest(
+                            id: ids[8], title: "Pergunta pendente",
+                            question: "Quais alvos devo cobrir na matriz de build?",
+                            pendenteHa: "há 15 min",
+                            questionario: Questionario(perguntas: [
+                                PerguntaForm(
+                                    id: "p1", secao: "Plataformas",
+                                    titulo: "Quais plataformas incluir?",
+                                    instrucao: "Selecione todas que se aplicam",
+                                    multipla: true,
+                                    opcoes: [
+                                        OpcaoForm(id: "p1a", rotulo: "iOS",
+                                                  descricao: "iPhone e iPad, simulador e device."),
+                                        OpcaoForm(id: "p1b", rotulo: "macOS",
+                                                  descricao: "App nativo Apple silicon."),
+                                        OpcaoForm(id: "p1c", rotulo: "watchOS",
+                                                  descricao: "Complicações e app do relógio."),
+                                        OpcaoForm(id: "p1d", rotulo: "Outra…"),
+                                    ]),
+                                PerguntaForm(
+                                    id: "p2", secao: "Histórico",
+                                    titulo: "Até onde voltar nas releases?",
+                                    instrucao: nil,
+                                    multipla: false,
+                                    opcoes: [
+                                        OpcaoForm(id: "p2a", rotulo: "Últimas 4",
+                                                  descricao: "Cobre o ciclo atual, mais rápido."),
+                                        OpcaoForm(id: "p2b", rotulo: "Últimas 12",
+                                                  descricao: "Cobertura completa da documentação."),
+                                        OpcaoForm(id: "p2c", rotulo: "Outra…"),
+                                    ]),
+                            ]))]),
+                    AgentSession(id: ids[1], title: "gerar changelog", state: .emExecucao,
+                                 runnerOnline: true, host: "macbook",
+                                 ferramentaAtual: "Bash · git log"),
                 ])
         }
     }

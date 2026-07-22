@@ -1,4 +1,5 @@
 import SwiftUI
+import OmniCraftPets
 
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {

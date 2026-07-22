@@ -1,9 +1,10 @@
 # OmniCraft Notch — camada visual do HUD
 
 Front-end nativo (Swift + SwiftUI, macOS 14+) do HUD que ocupa a área da notch do
-MacBook e mostra agentes de IA rodando. Duas fontes de dados, alternáveis no menu
-de debug: **fixtures mockadas** (`MockFeed`, o modo de desenvolvimento) e o **feed
-real** do servidor local do OmniCraft (`GET /v1/monitor/sessions`).
+MacBook e mostra agentes de IA rodando. Três fontes de dados, alternáveis no menu
+de debug: **Mock** (fixtures do `MockFeed`, o modo de desenvolvimento), **Servidor**
+(feed real do OmniCraft, `GET /v1/monitor/sessions`) e **Local** (lê esta máquina,
+sem servidor nenhum).
 
 ## Rodar
 
@@ -27,6 +28,8 @@ Argumentos úteis para depurar/capturar estados:
 .build/debug/OmniCraftNotch --live                   # liga direto no feed real
 .build/debug/OmniCraftNotch --live -OmniCraftFeedBaseURL "http://127.0.0.1:7777"
                                                      # base URL só desta execução (não persiste)
+.build/debug/OmniCraftNotch --local                  # liga direto na detecção local
+.build/debug/OmniCraftNotch --diagnostico-local      # roda a detecção 1× no terminal e sai
 ```
 
 ## Feed real
@@ -51,6 +54,34 @@ Argumentos úteis para depurar/capturar estados:
   alimenta o ‹ 1 de N › (o feed só traz o primeiro pedido; os demais aparecem como
   "detalhes ainda não carregados" — honestos, nunca inventados).
 
+## Fonte local (sem servidor)
+
+Descobre as sessões lendo a própria máquina — sem servidor, sem hooks, sem conta.
+Duas rotas complementares, e o que cada uma **pode** afirmar é diferente:
+
+| Rota | Como acha | Vivacidade |
+|---|---|---|
+| **Processo** | `ps` acha `claude`/`codex` **preso a um TTY** (headless fica de fora) e `lsof` mapeia o processo para o transcript aberto ou para o cwd | Fato: o processo existe → `runner: online` |
+| **Transcript** | varre `~/.claude/projects/*/*.jsonl` e `~/.codex/sessions/**/*.jsonl` escritos há pouco | Inferida da escrita → `runner: —` |
+
+A segunda rota existe porque **o Claude Code de desktop (`Claude.app`) não é um
+processo por sessão nem mantém o `.jsonl` aberto** — só a rota do processo
+enxergaria zero sessão em quem usa o app em vez do CLI no terminal.
+
+- **Trabalhando vs. ocioso**: escrita no transcript nos últimos **30 s** =
+  `em execução`; mais antigo = `ocioso`. Como a escrita é intermitente, uma sessão
+  pode parecer em execução por até ~30 s depois do fim real do turno — é o preço
+  de não depender de hooks.
+- **Janela**: a rota do processo mantém sessões por até 6 h (o processo prova que
+  estão vivas); a rota do transcript corta em 30 min (inferência velha vira ruído).
+- **Título**: o `customTitle` da sessão; sem ele, o nome da pasta do projeto.
+- **Metadados**: agente + modelo (`Claude Code · opus-4-8`) e `N subagentes` quando
+  há transcript de subagente escrito na janela de atividade.
+- **O que esta fonte NÃO sabe** (e por isso não inventa): custo, teto de orçamento e
+  pedidos de aprovação não são observáveis daqui → viram `—` e nenhum card âmbar.
+  Quem tem esses dados é o feed do servidor. `ps`/`lsof` sem resposta viram
+  "contagens indisponíveis", nunca a lista anterior como se fosse o agora.
+
 ## Os três estados
 
 | Estado | O que é |
@@ -64,7 +95,7 @@ fade; com **Reduce Motion** ligado vira fade puro (`easeOut 0.2s`). Auto-expande
 para atenção **nova** — colapsar manualmente marca as atuais como vistas e o HUD não
 reabre sozinho para elas.
 
-## Refinamentos de interação
+## Melhorias de interação
 
 - **Hover expande** (280 ms de intenção); sair do mouse recolhe **só** o que o hover
   abriu (nunca fecha o que veio de clique ou atenção nova, e não marca pedidos como
@@ -85,6 +116,36 @@ reabre sozinho para elas.
 - **Utilidades a um clique** na base da ilha: servers locais (abrir/parar visuais,
   copiar URL de verdade), comandos salvos (copiar para o clipboard) e atalhos —
   ações destrutivas/externas só logam nesta etapa.
+
+## Melhorias inspiradas no VibeIsland
+
+- **Pedido com detalhe**: o card de atenção mostra o comando/diff pedido num bloco
+  mono ANTES de aprovar (`$ git push … · +12 −5`), com link visual "terminal"
+  (campo tolerante `detalhe` no pedido; o feed real ainda não o envia).
+- **Subestados vivos** por sessão: `pensando` · `compactando · 45 s` — mostrados na
+  linha de atividade quando conhecidos.
+- **Idade por sessão**: `há 40 s` no fim dos metadados (mapeada de `updated_at`
+  no feed real).
+- **Sons por evento**: toque discreto (som do sistema) quando chega atenção NOVA —
+  uma vez por pedido; toggles "Efeitos sonoros" e "Horário silencioso" no debug.
+- **"Mostrar todas as N sessões"**: lista longa colapsa em 5 com botão para abrir
+  (e rolagem acima de 8) — nenhuma sessão some do dado.
+- **Âncora na tela da notch**: a ilha vive SEMPRE na tela built-in (com notch), não
+  na tela com foco — com monitor externo o HUD não "muda" de display junto com o
+  teclado (`NSScreen.telaDaNotch`).
+
+## Questionários, rotas e servidores (100% pt-BR)
+
+- **Questionário estruturado** (cenário 9): pedido com `questionario` renderiza
+  formulário inline — "● PERGUNTA PENDENTE" + "há 15 min" + "responder no terminal",
+  seções, múltipla escolha (caixas) e escolha única (círculos) com descrição por
+  opção, progresso "N de M respondidas" e **Enviar** (desabilitado até responder
+  tudo; ação só loga o resumo). Campo tolerante no contrato do feed.
+- **Rotas**: grade de pastas/recursos do agente (Skills, Config, Hooks, Logs, MCP,
+  Sessões, Raiz) com ícones coloridos — clique só loga nesta etapa.
+- **Servidores ricos**: `localhost:8080 · Vapor`, projeto, uptime, botões
+  abrir/copiar/parar (copiar usa o clipboard de verdade) e grupo "outros ouvintes";
+  servidor parado marcado com texto, não só cor.
 
 ## Cenários do menu de debug
 
@@ -117,6 +178,9 @@ reabre sozinho para elas.
 | Falha (cenário 7) | ![falha](docs/screenshots/falha.png) |
 | Fila global de pedidos ‹ 1 de 3 › (cenário 8) | ![múltiplos](docs/screenshots/multiplos-pedidos.png) |
 | Utilidades (comandos com copiar) | ![utilidades](docs/screenshots/utilidades.png) |
+| Questionário estruturado (cenário 9) | _recaptura pendente_ |
+| Servidores ricos (uptime, outros ouvintes) | _recaptura pendente_ |
+| Rotas do agente | _recaptura pendente_ |
 | **Feed real** — pill | ![feed real pill](docs/screenshots/feed-real-pill.png) |
 | **Feed real** — ilha (sessões reais, degraded visível, rolagem) | ![feed real ilha](docs/screenshots/feed-real-expandido.png) |
 | **Feed real** — desconectado (pill) | ![desconectado pill](docs/screenshots/feed-desconectado-pill.png) |
@@ -131,7 +195,8 @@ Sources/OmniCraftNotch/
 ├── Models.swift              # SessionState, Usage, CountsSummary, formatação pt-BR
 ├── MockFeed.swift            # as 8 fixtures (IDs estáveis, sem rede)
 ├── FeedClient.swift          # DTOs tolerantes + GET + FeedMapper (as 4 regras)
-├── HUDStore.swift            # @Observable: fonte mock/live, polling, backoff, atenções vistas
+├── LocalDetector.swift       # fonte local: ps + lsof + transcripts (sem servidor)
+├── HUDStore.swift            # @Observable: fonte mock/servidor/local, polling, backoff, atenções vistas
 └── Views/
     ├── NotchHUDView.swift    # raiz: pill ↔ ilha com mola, Reduce Motion, medição
     ├── CollapsedPillView.swift

@@ -52,12 +52,36 @@ struct AttentionRequest: Identifiable, Equatable {
     let id: String
     var title: String      // ex.: "Aprovação necessária"
     var question: String   // ex.: "Permitir rodar `git push`…?"
+    var detalhe: String?   // bloco do comando/diff pedido — visível ANTES de aprovar
+    var pendenteHa: String?      // "há 15 min" — há quanto tempo espera
+    var questionario: Questionario?  // presente = pergunta ESTRUTURADA, não aprovação
 
     /// O feed traz o id só do PRIMEIRO pedido; os demais entram como
     /// placeholders para a navegação ‹ 1 de N › existir. Decidir um deles
     /// mandaria ao servidor um id que não existe, então só o que tem id de
     /// verdade pode ser aprovado ou rejeitado.
     var isResolvable: Bool = true
+}
+
+// MARK: - Questionário estruturado (pergunta com opções)
+
+struct Questionario: Equatable {
+    var perguntas: [PerguntaForm]
+}
+
+struct PerguntaForm: Identifiable, Equatable {
+    let id: String
+    var secao: String          // "PLATAFORMAS" — rótulo da seção
+    var titulo: String         // "Quais plataformas incluir no build?"
+    var instrucao: String?     // "Selecione todas que se aplicam"
+    var multipla: Bool         // true = caixas de seleção; false = escolha única
+    var opcoes: [OpcaoForm]
+}
+
+struct OpcaoForm: Identifiable, Equatable {
+    let id: String
+    var rotulo: String         // "iOS"
+    var descricao: String?     // "iPhone e iPad, simulador e device."
 }
 
 // MARK: - Sessão
@@ -73,6 +97,8 @@ struct AgentSession: Identifiable, Equatable {
     var ferramentaAtual: String?   // "Bash · npm test" — o que roda AGORA
     var diffMais: Int?             // +N do diff da sessão; nil = desconhecido
     var diffMenos: Int?
+    var subestado: String?         // "pensando" · "compactando · 45 s" — detalhe vivo
+    var atualizadoHa: String?      // "há 2 min" — idade da última atualização
 
     var needsAttention: Bool { state == .aguardandoVoce && !requests.isEmpty }
 
@@ -152,9 +178,15 @@ struct FeedSnapshot: Equatable {
 
 struct ServidorLocal: Identifiable, Equatable {
     let id: String
-    var nome: String
-    var url: String
+    var nome: String           // "api" — nome amigável
+    var host: String           // "localhost:8080"
+    var framework: String?     // "Vapor" · "Vite" — nil = desconhecido
+    var projeto: String?       // "app-mobile"
+    var uptime: String?        // "há 40 min" — nil = desconhecido
     var rodando: Bool
+    var principal: Bool = true // false = vai para o grupo "outros ouvintes"
+
+    var url: String { "http://\(host)" }
 }
 
 struct ComandoSalvo: Identifiable, Equatable {
@@ -163,10 +195,12 @@ struct ComandoSalvo: Identifiable, Equatable {
     var comando: String
 }
 
+/// Rota: pasta/recurso do agente a um clique (Skills, Config, Logs…).
 struct AtalhoLocal: Identifiable, Equatable {
     let id: String
     var rotulo: String
     var icone: String
+    var corNome: String = "cinza"  // "laranja" · "azul" · "verde" · "cinza"
 }
 
 // MARK: - Modo de visibilidade do pill

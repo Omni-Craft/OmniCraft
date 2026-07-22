@@ -15,13 +15,13 @@ struct SessionRowView: View {
                 stateBadge
             }
 
-            Text(session.metadataLine)
+            Text(session.metadataLine + (session.atualizadoHa.map { " · \($0)" } ?? ""))
                 .font(.system(size: 10.5))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
 
-            // O que roda AGORA + tamanho do diff (só quando conhecidos — nunca 0).
-            if session.ferramentaAtual != nil || session.diffTexto != nil {
+            // O que roda AGORA (ferramenta ou subestado) + diff (nunca 0 inventado).
+            if session.ferramentaAtual != nil || session.diffTexto != nil || session.subestado != nil {
                 HStack(spacing: 6) {
                     if let ferramenta = session.ferramentaAtual {
                         HStack(spacing: 4) {
@@ -30,6 +30,14 @@ struct SessionRowView: View {
                             Text(ferramenta)
                                 .lineLimit(1)
                                 .truncationMode(.middle)
+                        }
+                    }
+                    if let subestado = session.subestado {
+                        HStack(spacing: 4) {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 8))
+                            Text(subestado)
+                                .lineLimit(1)
                         }
                     }
                     if let diff = session.diffTexto {

@@ -50,6 +50,7 @@ struct SessaoRef: Identifiable, Equatable {
     var estado: EstadoSessao
     var motivoAtencao: String?    // preenchido quando está na coluna Atenção
     var haQuantoTempo: String?    // "há 2 min" — string pronta; nil = desconhecido
+    var subestado: String?        // "pensando" · "compactando · 45 s" — detalhe vivo
 }
 
 /// Coluna do board — SEMPRE derivada do estado, nunca escolhida à mão.
@@ -220,6 +221,39 @@ struct SnapshotWidgets: Equatable {
     var sessoes: [SessaoDetalhe] = []
     /// Regra 3: contagem que é piso mostra ≥, nunca número exato.
     var contagensSaoPiso: Bool = false
+    /// Janelas de rate-limit do provedor — denominador REAL, barra legítima.
+    var janelasLimite: [JanelaLimite] = []
+}
+
+// MARK: - Janela de limite do provedor ("5 h · 52% · reseta em 2 h 05")
+
+struct JanelaLimite: Identifiable, Equatable {
+    let id: String
+    var rotulo: String        // "5 h" · "7 d"
+    var fracaoUsada: Double?  // nil = ilegível → — (nunca barra inventada)
+    var reset: String?        // "reseta em 2 h 05"
+}
+
+// MARK: - Servidores locais e rotas (widgets utilitários; ações visuais/log)
+
+struct ServidorLocal: Identifiable, Equatable {
+    let id: String
+    var nome: String
+    var host: String           // "localhost:8080"
+    var framework: String?
+    var projeto: String?
+    var uptime: String?        // "há 40 min" — nil = desconhecido
+    var rodando: Bool
+    var principal: Bool = true // false = grupo "outros ouvintes"
+
+    var url: String { "http://\(host)" }
+}
+
+struct RotaLocal: Identifiable, Equatable {
+    let id: String
+    var rotulo: String
+    var icone: String
+    var corNome: String = "cinza"  // "laranja" · "azul" · "verde" · "cinza"
 }
 
 // MARK: - Formatação (pt-BR; regra 4: ausente é —, nunca 0)

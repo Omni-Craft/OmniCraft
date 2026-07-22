@@ -22,6 +22,15 @@ mkdir -p "$APP/Contents/MacOS"
 
 cp "$BIN" "$APP/Contents/MacOS/OmniCraftNotch"
 
+# Resource bundles of dependencies (the mascot sprites live in
+# OmniCraftPets_OmniCraftPets.bundle). SwiftPM leaves them beside the binary
+# and Bundle.module looks for them beside the executable, so they have to ride
+# along — copying only the binary ships an island with no pet.
+BIN_DIR="$(dirname "$BIN")"
+for bundle in "$BIN_DIR"/*.bundle; do
+  [ -e "$bundle" ] && cp -R "$bundle" "$APP/Contents/MacOS/"
+done
+
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">

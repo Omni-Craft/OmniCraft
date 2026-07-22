@@ -1,0 +1,55 @@
+{
+  "image": "estrela-sheet.webp",
+  "cell": {
+    "w": 288,
+    "h": 288
+  },
+  "anchor": "bottom-center",
+  "animations": {
+    "idle": {
+      "row": 0,
+      "frames": 3,
+      "ms_per_frame": 600
+    },
+    "frente": {
+      "row": 1,
+      "frames": 8,
+      "ms_per_frame": 140
+    },
+    "nadar": {
+      "row": 2,
+      "frames": 8,
+      "ms_per_frame": 120
+    },
+    "acenar": {
+      "row": 3,
+      "frames": 2,
+      "ms_per_frame": 350
+    },
+    "expressoes": {
+      "row": 4,
+      "frames": 6,
+      "ms_per_frame": 500
+    },
+    "erro": {
+      "row": 5,
+      "frames": 8,
+      "ms_per_frame": 180
+    },
+    "pensando": {
+      "row": 6,
+      "frames": 6,
+      "ms_per_frame": 220
+    },
+    "codando": {
+      "row": 7,
+      "frames": 7,
+      "ms_per_frame": 150
+    },
+    "feliz": {
+      "row": 8,
+      "frames": 6,
+      "ms_per_frame": 150
+    }
+  }
+}

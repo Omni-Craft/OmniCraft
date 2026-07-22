@@ -1,18 +1,34 @@
 import SwiftUI
 import Observation
+import OmniCraftPets
 
-/// Fonte dos dados do HUD: fixtures (desenvolvimento) ou o feed real.
+/// Fonte dos dados do HUD: fixtures (desenvolvimento), o feed do servidor ou a
+/// detecção local (lê a própria máquina, sem servidor).
 enum FeedSource: String, CaseIterable, Identifiable {
     case mock
     case live
+    case local
 
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .mock: "Cenários mock"
-        case .live: "Feed real"
+        case .mock: "Mock"
+        case .live: "Servidor"
+        case .local: "Local"
         }
     }
+
+    /// Descrição longa (menu de debug) — o segmentado só cabe rótulo curto.
+    var descricao: String {
+        switch self {
+        case .mock: "Cenários mock"
+        case .live: "Feed do servidor OmniCraft"
+        case .local: "Detecção local (sem servidor)"
+        }
+    }
+
+    /// Fontes que buscam dados periodicamente.
+    var fazPolling: Bool { self != .mock }
 }
 
 /// Onde a ilha aparece: fundida à notch (padrão) ou só no popover da barra de
@@ -62,7 +78,7 @@ final class HUDStore {
             // (domínio de argumentos) vazaria para o domínio persistente do app.
             guard baseURLString != oldValue else { return }
             UserDefaults.standard.set(baseURLString, forKey: Self.baseURLDefaultsKey)
-            if feedSource == .live { restartPolling(immediate: true) }
+            if feedSource.fazPolling { restartPolling(immediate: true) }
         }
     }
 
@@ -94,10 +110,21 @@ final class HUDStore {
     /// Índice na FILA GLOBAL de pedidos (todas as sessões empilham juntas).
     var indicePedido: Int = 0
 
+    /// Lista longa: mostra 5 e oferece "Mostrar todas as N sessões".
+    var mostrarTodasSessoes = false
+
+    /// Sons por evento (atenção nova) + horário silencioso — como o VibeIsland.
+    var sonsAtivados = true
+    var horarioSilencioso = false
+
+    /// Pedidos que já tocaram som (um aviso por pedido, nunca metralhadora).
+    private var notifiedRequestIDs: Set<String> = []
+
     /// Registro visível do que os botões (só visuais) fizeram.
     private(set) var actionLog: [String] = []
 
     private let client: OmniCraftAPI
+    private let detector = LocalDetector()
     private var pollTask: Task<Void, Never>?
 
     /// - Parameter client: Quem fala com o OmniCraft; trocado nos testes.
@@ -139,6 +166,38 @@ final class HUDStore {
 
     var hasAttention: Bool { visibleSessions.contains(where: \.needsAttention) }
 
+    // MARK: Mascote
+
+    /// Sessões que estavam em execução na leitura anterior.
+    private var executandoAntes: Set<String> = []
+
+    /// Terminaram e você ainda não olhou — o verde do mascote.
+    private(set) var concluidasNaoVistas: Set<String> = []
+
+    /// Qual pet aparece na notch (Fucho é o mascote do OmniCraft).
+    var pet: Pet = .fucho
+
+    /// Velocidade da animação do pet — o padrão desacelera o manifesto.
+    var ritmoPet: RitmoPet = .ameno
+
+    /// Prioridade: o que exige você primeiro, depois o que está acontecendo.
+    var estadoMascote: EstadoMascote {
+        if hasAttention { return .atencao }
+        if visibleSessions.contains(where: { $0.state == .falhou }) { return .erro }
+        if visibleSessions.contains(where: { $0.state == .emExecucao }) { return .trabalhando }
+        if !concluidasNaoVistas.isEmpty { return .concluido }
+        return visibleSessions.isEmpty ? .oculto : .ocioso
+    }
+
+    /// Chamado a cada leitura: o que saiu de "em execução" virou conclusão pendente.
+    private func atualizarMascote() {
+        let agora = Set(snapshot.sessions.filter { $0.state == .emExecucao }.map(\.id))
+        concluidasNaoVistas.formUnion(executandoAntes.subtracting(agora))
+        // Se voltou a rodar, deixa de ser "concluída".
+        concluidasNaoVistas.subtract(agora)
+        executandoAntes = agora
+    }
+
     /// Fila global: pedidos de TODAS as sessões, na ordem das sessões visíveis.
     var pedidosPendentes: [(sessao: AgentSession, pedido: AttentionRequest)] {
         visibleSessions.flatMap { sessao in
@@ -170,8 +229,9 @@ final class HUDStore {
     func expand(porHover: Bool = false) {
         expandidoPorHover = porHover && !isExpanded
         isExpanded = true
+        concluidasNaoVistas.removeAll()   // olhou = ficou sabendo
         // Expandiu = está olhando: busca já e acelera o ritmo (3 s).
-        if feedSource == .live { restartPolling(immediate: true) }
+        if feedSource.fazPolling { restartPolling(immediate: true) }
     }
 
     /// Sair com o mouse recolhe SÓ o que o hover abriu — clique e atenção nova
@@ -180,7 +240,7 @@ final class HUDStore {
         guard expandidoPorHover else { return }
         expandidoPorHover = false
         isExpanded = false
-        if feedSource == .live { restartPolling(immediate: false) }
+        if feedSource.fazPolling { restartPolling(immediate: false) }
     }
 
     func collapseManually() {
@@ -190,7 +250,7 @@ final class HUDStore {
         }
         isExpanded = false
         expandidoPorHover = false
-        if feedSource == .live { restartPolling(immediate: false) }  // desacelera (10 s)
+        if feedSource.fazPolling { restartPolling(immediate: false) }  // desacelera (10 s)
     }
 
     func approve(_ request: AttentionRequest, in session: AgentSession) {
@@ -281,20 +341,23 @@ final class HUDStore {
         pollTask?.cancel()
         pollTask = nil
         resolvedRequestIDs = []
+        respostasQuestionario = [:]
         indicePedido = 0
         switch feedSource {
         case .mock:
             isDisconnected = false
             lastGeneratedAt = nil
             applyScenario()
-        case .live:
+        case .live, .local:
             restartPolling(immediate: true)
         }
     }
 
     private func applyScenario() {
         snapshot = MockFeed.snapshot(for: scenario)
+        atualizarMascote()
         resolvedRequestIDs = []
+        respostasQuestionario = [:]
         indicePedido = 0
         autoExpandIfNewAttention()
     }
@@ -314,16 +377,32 @@ final class HUDStore {
         if !immediate {
             try? await Task.sleep(for: .seconds(normalInterval))
         }
-        while !Task.isCancelled && feedSource == .live {
-            do {
-                let dto = try await client.fetch(baseURL: baseURLString)
+        while !Task.isCancelled && feedSource.fazPolling {
+            switch feedSource {
+            case .live:
+                do {
+                    let dto = try await client.fetch(baseURL: baseURLString)
+                    guard !Task.isCancelled else { return }
+                    consecutiveFailures = 0
+                    applyLive(dto)
+                } catch {
+                    guard !Task.isCancelled else { return }
+                    consecutiveFailures += 1
+                    markDisconnected()
+                }
+            case .local:
+                // Roda fora da main thread (ps/lsof são processos externos).
+                let lido = await detector.detectar()
                 guard !Task.isCancelled else { return }
-                consecutiveFailures = 0
-                applyLive(dto)
-            } catch {
-                guard !Task.isCancelled else { return }
-                consecutiveFailures += 1
-                markDisconnected()
+                if let lido {
+                    consecutiveFailures = 0
+                    applyLocal(lido)
+                } else {
+                    consecutiveFailures += 1
+                    markLocalIlegivel()
+                }
+            case .mock:
+                return
             }
             // Backoff em falha: 1 → 2 → 5 → 15 s (teto); saudável: 3 s aberto, 10 s fechado.
             let backoff: [Double] = [1, 2, 5, 15]
@@ -340,6 +419,7 @@ final class HUDStore {
         isDisconnected = false
         lastGeneratedAt = dto.generatedAt.map { Date(timeIntervalSince1970: $0) }
         snapshot = FeedMapper.snapshot(from: dto)
+        atualizarMascote()
         autoExpandIfNewAttention()
     }
 
@@ -349,14 +429,80 @@ final class HUDStore {
         snapshot = FeedSnapshot(counts: .disconnected, sessions: [])
     }
 
+    /// Detecção local: o "agora" é lido da própria máquina, então não existe
+    /// desconectado — ou lemos os processos, ou as contagens são indisponíveis.
+    private func applyLocal(_ lido: FeedSnapshot) {
+        isDisconnected = false
+        lastGeneratedAt = Date()   // acabou de ser lido daqui
+        snapshot = lido
+        atualizarMascote()
+        autoExpandIfNewAttention()
+    }
+
+    /// `ps`/`lsof` não responderam: incerteza honesta, nunca a lista velha.
+    private func markLocalIlegivel() {
+        isDisconnected = false
+        snapshot = FeedSnapshot(counts: .unavailable, sessions: [])
+    }
+
     // MARK: Internos
 
-    /// Auto-expande só quando há pedido que a pessoa ainda não viu.
+    /// Auto-expande só quando há pedido que a pessoa ainda não viu,
+    /// com um toque sonoro (uma vez por pedido; mudo no horário silencioso).
     private func autoExpandIfNewAttention() {
         let pending = visibleSessions.flatMap(\.requests).map(\.id)
+        let novos = pending.filter { !seenRequestIDs.contains($0) && !notifiedRequestIDs.contains($0) }
         if pending.contains(where: { !seenRequestIDs.contains($0) }) {
             isExpanded = true
         }
+        guard !novos.isEmpty else { return }
+        notifiedRequestIDs.formUnion(novos)
+        if sonsAtivados && !horarioSilencioso {
+            NSSound(named: "Glass")?.play()
+        }
+    }
+
+    /// Botão visual "Ir para o terminal" do card de atenção.
+    func irParaTerminal(_ session: AgentSession) {
+        log("→ Ir para o terminal [\(session.title)] (visual)")
+    }
+
+    // MARK: Questionário estruturado (respostas locais; Enviar só loga)
+
+    /// perguntaID → opções marcadas nesta sessão de UI.
+    var respostasQuestionario: [String: Set<String>] = [:]
+
+    func alternarOpcao(_ opcao: OpcaoForm, em pergunta: PerguntaForm) {
+        var marcadas = respostasQuestionario[pergunta.id] ?? []
+        if pergunta.multipla {
+            if marcadas.contains(opcao.id) { marcadas.remove(opcao.id) }
+            else { marcadas.insert(opcao.id) }
+        } else {
+            marcadas = [opcao.id]   // escolha única substitui
+        }
+        respostasQuestionario[pergunta.id] = marcadas
+    }
+
+    func marcada(_ opcao: OpcaoForm, em pergunta: PerguntaForm) -> Bool {
+        respostasQuestionario[pergunta.id]?.contains(opcao.id) ?? false
+    }
+
+    func respondidas(_ questionario: Questionario) -> Int {
+        questionario.perguntas.filter { !(respostasQuestionario[$0.id] ?? []).isEmpty }.count
+    }
+
+    func enviarQuestionario(_ request: AttentionRequest, in session: AgentSession) {
+        guard let questionario = request.questionario else { return }
+        let resumo = questionario.perguntas.map { pergunta in
+            let escolhas = pergunta.opcoes
+                .filter { marcada($0, em: pergunta) }
+                .map(\.rotulo)
+                .joined(separator: ", ")
+            return "\(pergunta.titulo) → \(escolhas)"
+        }.joined(separator: " · ")
+        log("📝 Questionário enviado [\(session.title)]: \(resumo)")
+        resolvedRequestIDs.insert(request.id)
+        clamparFila()
     }
 
     private func clamparFila() {

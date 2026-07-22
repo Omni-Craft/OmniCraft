@@ -1,4 +1,5 @@
 import SwiftUI
+import OmniCraftPets
 
 /// A "ilha": fila global de atenção no topo, janelas de limite, lista de sessões
 /// e utilidades locais a um clique.
@@ -36,11 +37,21 @@ struct ExpandedIslandView: View {
 
     private var header: some View {
         HStack(spacing: 0) {
+            // O pet segue aqui: abrir a ilha (clique ou hover) não pode fazer
+            // o mascote sumir — é o mesmo bicho, só mudou de moldura.
+            if store.estadoMascote != .oculto {
+                MascoteView(estado: store.estadoMascote, pet: store.pet,
+                            altura: 40, ritmo: store.ritmoPet)
+                    .padding(.leading, 2)
+                    .padding(.trailing, 8)
+                    .transition(.opacity)
+            }
+
             Text(store.snapshot.counts.pillText)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(store.snapshot.counts.isUnavailable ? .secondary : .primary)
                 .lineLimit(1)
-                .padding(.leading, 6)
+                .padding(.leading, store.estadoMascote == .oculto ? 6 : 0)
 
             Spacer(minLength: metrics.hasNotch ? metrics.width + 20 : 24)
 
@@ -151,21 +162,52 @@ struct ExpandedIslandView: View {
         return store.visibleSessions.filter { $0.id != idNoCard }
     }
 
+    /// Lista longa colapsa em 5 + "Mostrar todas as N sessões" (lição do VibeIsland);
+    /// aberta, rola dentro da altura máxima — nenhuma sessão some do dado.
     @ViewBuilder
     private var sessionList: some View {
-        if sessoesEmLista.count <= 8 {
-            sessionRows
-        } else {
-            ScrollView(showsIndicators: false) {
-                sessionRows
+        let todas = sessoesEmLista
+        if todas.count <= 5 || store.mostrarTodasSessoes {
+            if todas.count <= 8 {
+                sessionRows(todas)
+            } else {
+                ScrollView(showsIndicators: false) {
+                    sessionRows(todas)
+                }
+                .frame(height: maxListHeight)
             }
-            .frame(height: maxListHeight)
+            if todas.count > 5 {
+                botaoMostrar("Mostrar menos", contrair: true)
+            }
+        } else {
+            sessionRows(Array(todas.prefix(5)))
+            botaoMostrar("Mostrar todas as \(todas.count) sessões", contrair: false)
         }
     }
 
-    private var sessionRows: some View {
+    private func botaoMostrar(_ rotulo: String, contrair: Bool) -> some View {
+        Button {
+            store.mostrarTodasSessoes = !contrair
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: contrair ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                Text(rotulo)
+                    .font(.system(size: 10.5, weight: .medium))
+            }
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .focusable()
+        .accessibilityLabel(rotulo)
+    }
+
+    private func sessionRows(_ sessoes: [AgentSession]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            ForEach(sessoesEmLista) { session in
+            ForEach(sessoes) { session in
                 SessionRowView(session: session)
             }
         }
@@ -191,9 +233,9 @@ struct ExpandedIslandView: View {
         var id: String { rawValue }
         var rotulo: String {
             switch self {
-            case .servidores: "servers"
+            case .servidores: "servidores"
             case .comandos: "comandos"
-            case .atalhos: "atalhos"
+            case .atalhos: "rotas"
             }
         }
         var icone: String {
@@ -249,34 +291,83 @@ struct ExpandedIslandView: View {
         .accessibilityLabel("\(utilidade.rotulo)\(aberta ? ", aberto" : "")")
     }
 
+    /// Lista rica de servers: porta + framework + projeto +
+    /// uptime, com abrir/copiar/parar; "outros ouvintes" agrupados.
     private var listaServidores: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            ForEach(store.servidores) { servidor in
-                HStack(spacing: 8) {
-                    // Estado do servidor: ícone + texto, nunca só a cor do ponto.
-                    Image(systemName: servidor.rodando ? "circle.fill" : "circle")
-                        .font(.system(size: 7))
-                        .foregroundStyle(servidor.rodando ? .green : .secondary)
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("\(servidor.nome) · \(servidor.rodando ? "rodando" : "parado")")
-                            .font(.system(size: 11, weight: .medium))
-                        Text(servidor.url)
-                            .font(.system(size: 9.5, design: .monospaced))
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 8)
-                    botaoMini("abrir") { store.acaoServidor(servidor, "abrir") }
-                    botaoMini("copiar") { store.copiar(servidor.url, rotulo: servidor.nome) }
-                    if servidor.rodando {
-                        botaoMini("parar") { store.acaoServidor(servidor, "parar") }
-                    }
-                }
-                .accessibilityElement(children: .combine)
-                .accessibilityLabel(
-                    "Servidor \(servidor.nome), \(servidor.rodando ? "rodando" : "parado"), \(servidor.url)")
+        let principais = store.servidores.filter(\.principal)
+        let outros = store.servidores.filter { !$0.principal }
+        return VStack(alignment: .leading, spacing: 8) {
+            ForEach(principais) { linhaServidor($0) }
+            if !outros.isEmpty {
+                Text("outros ouvintes")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .textCase(.uppercase)
+                ForEach(outros) { linhaServidor($0) }
             }
         }
         .padding(.horizontal, 4)
+    }
+
+    private func linhaServidor(_ servidor: ServidorLocal) -> some View {
+        HStack(alignment: .center, spacing: 8) {
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(servidor.host)
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                    if let framework = servidor.framework {
+                        Text("· \(framework)")
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(servidor.rodando ? .secondary : Color.red.opacity(0.8))
+                    }
+                    if !servidor.rodando {
+                        Text("parado")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.red)
+                    }
+                }
+                HStack(spacing: 4) {
+                    Image(systemName: "folder")
+                        .font(.system(size: 8))
+                    Text(servidor.projeto ?? "—")
+                        .font(.system(size: 10, design: .monospaced))
+                }
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 8)
+            Text(servidor.uptime ?? "—")
+                .font(.system(size: 9.5).monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .fixedSize()
+            botaoIcone("arrow.up.right.square", "Abrir \(servidor.host) no navegador") {
+                store.acaoServidor(servidor, "abrir")
+            }
+            botaoIcone("doc.on.doc", "Copiar a URL de \(servidor.nome)") {
+                store.copiar(servidor.url, rotulo: servidor.nome)
+            }
+            if servidor.rodando {
+                botaoIcone("stop.circle", "Parar o servidor \(servidor.nome)", cor: .red) {
+                    store.acaoServidor(servidor, "parar")
+                }
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(
+            "Servidor \(servidor.nome) em \(servidor.host), \(servidor.rodando ? "rodando \(servidor.uptime ?? "")" : "parado"), projeto \(servidor.projeto ?? "desconhecido")")
+    }
+
+    private func botaoIcone(_ simbolo: String, _ rotulo: String, cor: Color = .secondary,
+                            acao: @escaping () -> Void) -> some View {
+        Button(action: acao) {
+            Image(systemName: simbolo)
+                .font(.system(size: 11))
+                .foregroundStyle(cor)
+                .padding(4)
+                .contentShape(Circle())
+        }
+        .buttonStyle(HoverCircleButtonStyle())
+        .focusable()
+        .accessibilityLabel(rotulo)
     }
 
     private var listaComandos: some View {
@@ -301,30 +392,47 @@ struct ExpandedIslandView: View {
         .padding(.horizontal, 4)
     }
 
+    /// Grade de rotas: pastas/recursos do agente.
     private var listaAtalhos: some View {
-        HStack(spacing: 6) {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 4),
+                  spacing: 10) {
             ForEach(store.atalhos) { atalho in
                 Button {
                     store.abrirAtalho(atalho)
                 } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: atalho.icone)
-                            .font(.system(size: 9))
+                    VStack(spacing: 4) {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .fill(corRota(atalho.corNome).opacity(0.22))
+                                .frame(width: 34, height: 28)
+                            Image(systemName: atalho.icone)
+                                .font(.system(size: 12))
+                                .foregroundStyle(corRota(atalho.corNome))
+                        }
                         Text(atalho.rotulo)
-                            .font(.system(size: 10))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Capsule().fill(.white.opacity(0.06)))
-                    .contentShape(Capsule())
+                    .frame(maxWidth: .infinity)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(.secondary)
                 .focusable()
                 .accessibilityLabel("Abrir \(atalho.rotulo)")
             }
         }
         .padding(.horizontal, 4)
+        .padding(.top, 2)
+    }
+
+    private func corRota(_ nome: String) -> Color {
+        switch nome {
+        case "laranja": .orange
+        case "azul": .blue
+        case "verde": .green
+        default: .secondary
+        }
     }
 
     private func botaoMini(_ rotulo: String, acao: @escaping () -> Void) -> some View {

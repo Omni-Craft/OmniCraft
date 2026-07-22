@@ -51,7 +51,7 @@ final class NotchPanelController {
     /// Reposiciona colado no topo da tela, centralizado — a ilha FUNDE com a notch
     /// (o preto do HUD encosta no preto do hardware, sem fresta).
     private func anchor(to size: CGSize) {
-        guard let screen = NSScreen.main, size.width > 0, size.height > 0 else { return }
+        guard let screen = NSScreen.telaDaNotch, size.width > 0, size.height > 0 else { return }
         let frame = screen.frame
         let origin = NSPoint(
             x: frame.midX - size.width / 2,
@@ -61,14 +61,22 @@ final class NotchPanelController {
     }
 }
 
-/// Geometria da notch da tela principal (com fallback para Mac sem notch).
+extension NSScreen {
+    /// A tela onde a ilha vive: SEMPRE a que tem notch (a built-in), não a que
+    /// está com foco — senão o HUD "muda" de monitor junto com o teclado.
+    static var telaDaNotch: NSScreen? {
+        screens.first(where: { $0.safeAreaInsets.top > 0 }) ?? screens.first ?? main
+    }
+}
+
+/// Geometria da notch da tela built-in (com fallback para Mac sem notch).
 struct NotchMetrics {
     let width: CGFloat    // largura do recorte da câmera
     let height: CGFloat   // altura da notch (ou da barra de menus)
     let hasNotch: Bool
 
     static func current() -> NotchMetrics {
-        guard let screen = NSScreen.main else {
+        guard let screen = NSScreen.telaDaNotch else {
             return NotchMetrics(width: 196, height: 32, hasNotch: false)
         }
         let inset = screen.safeAreaInsets.top

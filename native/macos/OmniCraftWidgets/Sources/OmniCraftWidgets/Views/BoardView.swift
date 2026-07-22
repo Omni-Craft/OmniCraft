@@ -56,9 +56,30 @@ struct BoardView: View {
 
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 8) {
-                    ForEach(refs) { ref in
+                    // Coluna cheia colapsa em 4 + "mostrar todas" (lição do VibeIsland).
+                    let expandida = store.colunasExpandidas.contains(coluna.rawValue)
+                    let visiveis = expandida ? refs : Array(refs.prefix(4))
+                    ForEach(visiveis) { ref in
                         cartao(ref)
                             .matchedGeometryEffect(id: ref.id, in: ns)
+                    }
+                    if refs.count > 4 {
+                        Button {
+                            if expandida { store.colunasExpandidas.remove(coluna.rawValue) }
+                            else { store.colunasExpandidas.insert(coluna.rawValue) }
+                        } label: {
+                            Text(expandida ? "mostrar menos" : "mostrar todas as \(refs.count)")
+                                .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 4)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .focusable()
+                        .accessibilityLabel(expandida
+                            ? "Mostrar menos sessões da coluna \(coluna.titulo)"
+                            : "Mostrar todas as \(refs.count) sessões da coluna \(coluna.titulo)")
                     }
                     if refs.isEmpty {
                         Text("vazio")
@@ -91,6 +112,17 @@ struct BoardView: View {
                         .font(.system(size: 9, design: .monospaced))
                         .foregroundStyle(.tertiary)
                 }
+            }
+            if let subestado = ref.subestado {
+                HStack(spacing: 4) {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 8))
+                    Text(subestado)
+                        .lineLimit(1)
+                }
+                .font(.system(size: 9.5, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .accessibilityLabel("Agora: \(subestado)")
             }
             if let motivo = ref.motivoAtencao {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {

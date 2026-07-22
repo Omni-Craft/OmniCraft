@@ -1,0 +1,64 @@
+{
+  "image": "polly-sheet.webp",
+  "cell": {
+    "w": 288,
+    "h": 288
+  },
+  "anchor": "bottom-center",
+  "animations": {
+    "idle": {
+      "row": 0,
+      "frames": 8,
+      "ms_per_frame": 280,
+      "loop": true
+    },
+    "tremendo": {
+      "row": 1,
+      "frames": 8,
+      "ms_per_frame": 160,
+      "loop": true
+    },
+    "nadar": {
+      "row": 2,
+      "frames": 8,
+      "ms_per_frame": 200,
+      "loop": true
+    },
+    "emotes_a": {
+      "row": 3,
+      "frames": 8,
+      "ms_per_frame": 450,
+      "loop": false
+    },
+    "emotes_b": {
+      "row": 4,
+      "frames": 8,
+      "ms_per_frame": 450,
+      "loop": false
+    },
+    "erro": {
+      "row": 5,
+      "frames": 8,
+      "ms_per_frame": 300,
+      "loop": false
+    },
+    "pensando": {
+      "row": 6,
+      "frames": 8,
+      "ms_per_frame": 240,
+      "loop": false
+    },
+    "codando": {
+      "row": 7,
+      "frames": 8,
+      "ms_per_frame": 200,
+      "loop": true
+    },
+    "feliz": {
+      "row": 8,
+      "frames": 8,
+      "ms_per_frame": 300,
+      "loop": false
+    }
+  }
+}

@@ -200,18 +200,63 @@ async def _screenshot(device: str | None, workspace: Path | None) -> str:
     return f"Erro ao capturar a tela: {_tail(res.stderr or res.stdout)}"
 
 
+def _idb_missing(action: str) -> str | None:
+    """Actionable hint when idb isn't installed, else ``None``."""
+    if shutil.which("idb") is not None:
+        return None
+    return (
+        f"Erro: '{action}' precisa do idb (fb-idb), que injeta toques no "
+        "simulador — o simctl não faz isso. Instale com "
+        "`brew install idb-companion && pipx install fb-idb`."
+    )
+
+
 async def _idb(ui_args: list[str], device: str | None, action: str, ok_msg: str) -> str:
-    if shutil.which("idb") is None:
-        return (
-            f"Erro: '{action}' precisa do idb (fb-idb), que injeta toques no "
-            "simulador — o simctl não faz isso. Instale com "
-            "`brew install idb-companion && pipx install fb-idb`."
-        )
+    hint = _idb_missing(action)
+    if hint:
+        return hint
     target = _target(device, action)
     res = await _shell(["idb", "ui", *ui_args, "--udid", target])
     if res.ok:
         return ok_msg
     return f"Erro ({action}) via idb: {_tail(res.stderr or res.stdout)}"
+
+
+async def _idb_point_scale(target: str) -> tuple[float, float]:
+    """Points-per-pixel ratio for a device, from idb's own screen dimensions.
+
+    The pane and the agent reason in screenshot PIXELS (a 3x device shoots at
+    1206×2622), but ``idb ui tap`` works in POINTS (402×874). Convert with the
+    ratio idb itself reports so a click on the image lands where intended.
+    Falls back to 1.0 (no scaling) when idb can't describe the target.
+    """
+    res = await _shell(["idb", "describe", "--json", "--udid", target])
+    if not res.ok:
+        return (1.0, 1.0)
+    try:
+        dims = json.loads(res.stdout).get("screen_dimensions") or {}
+        w, h = dims.get("width"), dims.get("height")
+        wp, hp = dims.get("width_points"), dims.get("height_points")
+        if w and h and wp and hp:
+            return (wp / w, hp / h)
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        pass
+    return (1.0, 1.0)
+
+
+async def _idb_gesture(kind: str, coords: list[int], device: str | None, ok_msg: str) -> str:
+    """Run an idb tap/swipe, scaling the pixel coords into idb's point space."""
+    hint = _idb_missing(kind)
+    if hint:
+        return hint
+    target = _target(device, kind)
+    sx, sy = await _idb_point_scale(target)
+    # Even indices are X, odd are Y — scale each by its axis ratio.
+    scaled = [str(round(c * (sx if i % 2 == 0 else sy))) for i, c in enumerate(coords)]
+    res = await _shell(["idb", "ui", kind, *scaled, "--udid", target])
+    if res.ok:
+        return ok_msg
+    return f"Erro ({kind}) via idb: {_tail(res.stderr or res.stdout)}"
 
 
 async def _build(args: dict[str, Any]) -> str:
@@ -284,16 +329,14 @@ async def run_action(action: str, args: dict[str, Any], *, workspace: Path | Non
             x, y = int(args["x"]), int(args["y"])
         except (KeyError, TypeError, ValueError):
             return "Erro: 'tap' precisa de 'x' e 'y' inteiros."
-        return await _idb(["tap", str(x), str(y)], device, action, f"Toque em ({x}, {y}).")
+        return await _idb_gesture("tap", [x, y], device, f"Toque em ({x}, {y}).")
     if action == "swipe":
         try:
             x1, y1 = int(args["x1"]), int(args["y1"])
             x2, y2 = int(args["x2"]), int(args["y2"])
         except (KeyError, TypeError, ValueError):
             return "Erro: 'swipe' precisa de 'x1','y1','x2','y2' inteiros."
-        return await _idb(
-            ["swipe", str(x1), str(y1), str(x2), str(y2)], device, action, "Swipe executado."
-        )
+        return await _idb_gesture("swipe", [x1, y1, x2, y2], device, "Swipe executado.")
     if action == "type":
         text = str(args.get("text") or "")
         if not text:

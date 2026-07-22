@@ -155,10 +155,39 @@ def test_tap_needs_coords(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_tap_with_idb_builds_command(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
     monkeypatch.setattr(ios.shutil, "which", lambda _name: "/usr/local/bin/idb")
+    # describe returns nothing → scale falls back to 1.0, coords unchanged.
     monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ios.ShellResult(0, "", "")))
     out = asyncio.run(ios.run_action("tap", {"x": 12, "y": 34, "device": "U9"}, workspace=None))
     assert "Toque" in out
-    assert calls == [["idb", "ui", "tap", "12", "34", "--udid", "U9"]]
+    assert ["idb", "describe", "--json", "--udid", "U9"] in calls
+    assert ["idb", "ui", "tap", "12", "34", "--udid", "U9"] in calls
+
+
+def test_tap_scales_pixels_to_points(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A 3x device (1206px → 402pt) taps at a third of the pixel coords."""
+    calls: list[list[str]] = []
+    describe = json.dumps(
+        {
+            "screen_dimensions": {
+                "width": 1206,
+                "height": 2622,
+                "width_points": 402,
+                "height_points": 874,
+            }
+        }
+    )
+
+    async def fake(argv: list[str], *, timeout: float = 60.0) -> ios.ShellResult:
+        calls.append(argv)
+        if argv[:2] == ["idb", "describe"]:
+            return ios.ShellResult(0, describe, "")
+        return ios.ShellResult(0, "", "")
+
+    monkeypatch.setattr(ios.shutil, "which", lambda _name: "/usr/local/bin/idb")
+    monkeypatch.setattr(ios, "_shell", fake)
+    asyncio.run(ios.run_action("tap", {"x": 600, "y": 1200, "device": "U9"}, workspace=None))
+    # 600 / 3 = 200, 1200 / 3 = 400.
+    assert ["idb", "ui", "tap", "200", "400", "--udid", "U9"] in calls
 
 
 # --- simctl command wiring (stubbed shell) ----------------------------------

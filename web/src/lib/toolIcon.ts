@@ -19,6 +19,7 @@ import {
   Monitor,
   Plug,
   Send,
+  Smartphone,
   Terminal,
   Timer,
   Wrench,
@@ -49,6 +50,7 @@ export function iconForTool(name: string, nativeToolType?: string): LucideIcon {
   if (name === "sys_timer_set") return Timer;
   if (name === "sys_timer_cancel") return Ban;
   if (name === "web_search" || name === "web_fetch") return Globe;
+  if (name === "ios_simulator") return Smartphone;
   return Wrench;
 }
 

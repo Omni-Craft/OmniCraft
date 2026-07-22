@@ -288,6 +288,11 @@ _EMBEDDED_BROWSER_TOOLS = frozenset(
     }
 )
 
+# iOS Simulator tool: runner-local — the runner shells out to xcrun simctl /
+# xcodebuild directly on the host with Xcode (no server bridge, unlike the
+# browser tools). Screenshots are saved into the session workspace.
+_IOS_SIMULATOR_TOOLS = frozenset({"ios_simulator"})
+
 # Priority 5f.2: sys_list_models — runner-local because provider resolution
 # reads the runner host's config/credentials, same as the spawn paths.
 _LIST_MODELS_TOOLS = frozenset({"sys_list_models"})
@@ -370,6 +375,7 @@ _NATIVE_RELAY_BUILTIN_TOOLS = (
     | _HINDSIGHT_TOOLS
     | _LOCAL_MEMORY_TOOLS
     | _EMBEDDED_BROWSER_TOOLS
+    | _IOS_SIMULATOR_TOOLS
 )
 
 
@@ -503,6 +509,7 @@ _ALL_LOCAL_TOOLS = (
     | _HINDSIGHT_TOOLS
     | _LOCAL_MEMORY_TOOLS
     | _EMBEDDED_BROWSER_TOOLS
+    | _IOS_SIMULATOR_TOOLS
     | _TIMER_TOOLS
     | _TASK_LIFECYCLE_TOOLS
     | _SKILL_TOOLS
@@ -2928,6 +2935,30 @@ async def _execute_embedded_browser_tool(
     return "ok"
 
 
+async def _execute_ios_simulator_tool(
+    args: dict[str, Any],
+    *,
+    runner_workspace: Path | None,
+) -> str:
+    """Run an ``ios_simulator`` action on the runner host (simctl/xcodebuild/idb).
+
+    Unlike the browser tools, there is no server bridge: the simulator lives on
+    the machine with Xcode (this runner), so the action shells out directly.
+    Screenshots are saved under the session workspace and only the path is
+    returned.
+
+    :param args: Parsed LLM arguments, e.g. ``{"action": "screenshot"}``.
+    :param runner_workspace: Session workspace — screenshot save location.
+    :returns: A compact string result for the model.
+    """
+    from omnicraft.runner import ios_simulator
+
+    action = str(args.get("action") or "").strip()
+    if not action:
+        return "Erro: ios_simulator precisa de 'action'."
+    return await ios_simulator.run_action(action, args, workspace=runner_workspace)
+
+
 def _has_subagent(
     sub_agent_name: str,
     agent_spec: Any | None,
@@ -4768,6 +4799,11 @@ async def execute_tool(
                 tool_name=tool_name,
                 server_client=server_client,
                 conversation_id=conversation_id,
+                runner_workspace=runner_workspace,
+            )
+        elif tool_name in _IOS_SIMULATOR_TOOLS:
+            output = await _execute_ios_simulator_tool(
+                args,
                 runner_workspace=runner_workspace,
             )
         elif tool_name in _TIMER_TOOLS:

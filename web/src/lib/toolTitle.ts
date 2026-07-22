@@ -39,6 +39,21 @@ const FORMATTERS: Record<string, ArgFormatter> = {
   sys_os_write: (args) => withPath("Escrever", args.path),
   sys_os_edit: (args) => withPath("Editar", args.path),
 
+  // iOS Simulator — lead with the action; append the most relevant
+  // argument (device / bundle / scheme / url) as the body.
+  ios_simulator: (args) => {
+    const action = asString(args.action);
+    if (action === null) return verbOnly("Simulador iOS");
+    const detail =
+      asString(args.device) ??
+      asString(args.bundle_id) ??
+      asString(args.scheme) ??
+      asString(args.app_path) ??
+      asString(args.url) ??
+      "";
+    return { verb: `Simulador iOS: ${action}`, body: detail };
+  },
+
   // Sub-agent session tools — single-quote the `<tool> - <session>`
   // pair so it reads as one identity.
   sys_session_send: (args) => {

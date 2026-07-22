@@ -169,6 +169,13 @@ def _create_memory_recall(config: dict[str, str]) -> Tool:
     return MemoryRecallTool()
 
 
+def _create_ios_simulator(config: dict[str, str]) -> Tool:
+    """Lazy factory for IosSimulatorTool (runner-local, no config)."""
+    from omnicraft.tools.builtins.ios_simulator import IosSimulatorTool
+
+    return IosSimulatorTool()
+
+
 def _create_download_file(config: dict[str, str]) -> Tool:
     """
     Lazy factory for DownloadFileTool.
@@ -286,6 +293,9 @@ _BUILTIN_REGISTRY: dict[str, _BuiltinFactory | None] = {
     "browser_screenshot": _create_browser_tool("BrowserScreenshotTool"),
     "browser_click": _create_browser_tool("BrowserClickTool"),
     "browser_type": _create_browser_tool("BrowserTypeTool"),
+    # iOS Simulator control — runner-local dispatch (simctl/xcodebuild/idb on
+    # the runner host). This entry provides the name + schema.
+    "ios_simulator": _create_ios_simulator,
     # Hindsight long-term memory (optional ``memory`` extra). Each factory
     # probes for ``hindsight-client`` and fails with an install hint if absent.
     "hindsight_retain": _create_hindsight_retain,

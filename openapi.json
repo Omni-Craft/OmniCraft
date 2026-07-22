@@ -6945,6 +6945,27 @@
   },
   "openapi": "3.2.0",
   "paths": {
+    "/api/update-status": {
+      "get": {
+        "description": "Report whether the checkout moved ahead of the running server.\n\nThe web UI polls this to offer a restart when new code has been\npulled or committed under an editable install. Reads git off the\nrequest thread so a slow filesystem cannot block the event loop.\nUnauthed like `/api/version` \u2014 it exposes only commit shas of the\ncode already running on this machine.\n\n**Returns:** `{\"running_commit\", \"current_commit\", \"update_available\"}`; commits are `None` and `update_available` is `False` when the install is not a git checkout.",
+        "operationId": "update_status_api_update_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Update Status Api Update Status Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Update Status"
+      }
+    },
     "/api/version": {
       "get": {
         "description": "Return the installed omnicraft package version.\n\nUsed by the web UI to include version info in bug reports.\n\n**Returns:** `{\"version\": \"<semver string>\"}`, e.g. `{\"version\": \"0.1.0\"}`.",

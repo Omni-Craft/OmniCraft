@@ -44,6 +44,7 @@ const { mergeHudSettings, readHudSettings } = require("./hudVisibility");
 const { createHudPolicy } = require("./hudPolicy");
 const { registerHudIpc } = require("./hudIpc");
 const { NativeIslandController } = require("./nativeIsland");
+const { hostEnrollmentDecision } = require("./hostEnrollment");
 const {
   createHudNotifier,
   isCategoryEnabled,
@@ -978,18 +979,15 @@ async function autoStartLocalStack(win) {
       return; // did-fail-load falls back to the setup page with the error
     }
   }
-  // Wait until the visible page IS the pinned server before asking for host
-  // enrollment — confirmHostEnrollment only honors a persisted grant (and
-  // only offers "Always Allow") on the pinned server's own page.
-  const deadline = Date.now() + 20000;
-  while (Date.now() < deadline) {
-    if (win.isDestroyed()) return;
-    if (originOf(win.webContents.getURL()) === savedOrigin && !win.webContents.isLoading()) break;
-    await new Promise((r) => setTimeout(r, 250));
-  }
+  // Enroll for the SAVED loopback origin directly, as a trusted origin: this is
+  // a main-process auto-start (not page-controllable) of the server the user
+  // saved, so it needn't wait for the page to finish loading to offer "Always
+  // Allow". Waiting was the old approach and it broke on a cold boot — the
+  // server was still coming up past the deadline, the page stayed unloaded, and
+  // the user got an un-rememberable "Allow Once" on every launch.
   if (win.isDestroyed()) return;
   try {
-    if (!(await confirmHostEnrollment(win))) return;
+    if (!(await confirmHostEnrollment(win, { trustedOrigin: savedOrigin }))) return;
     await serverManager.ensureHostConnected(cliPath, saved);
   } catch {
     // Host connect failures surface through the host menu's status; launch
@@ -1820,28 +1818,36 @@ async function confirmExternalProtocol(win, url, scheme) {
  * Mirrors {@link confirmExternalProtocol}: the prompt offers Don't Allow / Allow
  * Once / Always Allow, and "Always Allow" persists the grant per server origin
  * in settings.json under `allowed_hosting_origins`. That remember-me button is
- * offered only while the window's top-level page is actually on its pinned
- * origin (a foreign page reached via redirect can be allowed once, never
- * remembered). An already-approved origin connects with NO dialog — so a trusted
- * server is asked exactly once and the steady-state UX is unchanged.
+ * offered only when the request is trustworthy — while the window's top-level
+ * page is actually on its pinned origin, OR the caller passed a `trustedOrigin`
+ * (the main-process auto-start of a user-saved loopback server, which is not
+ * page-controllable). An already-approved origin connects with NO dialog — so a
+ * trusted server is asked exactly once and the steady-state UX is unchanged.
+ *
+ * The `trustedOrigin` path is what fixes the cold-boot nag: on a cold launch
+ * the server is still coming up when the prompt fires, so the window's page is
+ * unloaded and the pinned-page proof fails — without a trusted origin the user
+ * would get "Allow Once" only, unable to remember, every single launch.
  *
  * @param {BrowserWindow | null | undefined} win The window requesting hosting.
+ * @param {{trustedOrigin?: string | null}} [opts] `trustedOrigin` grants the
+ *   remember option without page proof; only the loopback auto-start uses it.
  * @returns {Promise<boolean>} True when hosting is authorized.
  */
-async function confirmHostEnrollment(win) {
+async function confirmHostEnrollment(win, { trustedOrigin = null } = {}) {
   if (!win) return false;
-  const pinned = pinnedOrigin(win);
-  if (!pinned) return false;
-  // Only honor (and offer to persist) the grant while the visible top-level
-  // page is the pinned server itself — never a foreign page that reached a
-  // pinned window via redirect.
-  const onPinnedServer = originOf(win.webContents.getURL()) === pinned;
-  const approved = loadSettings().allowed_hosting_origins ?? [];
-  if (onPinnedServer && Array.isArray(approved) && approved.includes(pinned)) return true;
+  const { origin, canRemember, alreadyApproved } = hostEnrollmentDecision({
+    pinnedOrigin: pinnedOrigin(win),
+    currentUrl: win.webContents.getURL(),
+    trustedOrigin,
+    approvedOrigins: loadSettings().allowed_hosting_origins,
+  });
+  if (!origin) return false;
+  if (alreadyApproved) return true;
 
-  let host = pinned;
+  let host = origin;
   try {
-    host = new URL(pinned).host;
+    host = new URL(origin).host;
   } catch {
     // Keep the full origin string if it somehow doesn't parse.
   }
@@ -1851,12 +1857,11 @@ async function confirmHostEnrollment(win) {
   // generic Electron tile without this.
   const icon = nativeImage.createFromPath(ICON_PNG);
   // macOS/iOS-style permission buttons: deny, allow this once, or allow and
-  // remember. "Always Allow" persists the grant, so it's offered only while the
-  // visible top-level page is the pinned server itself — a foreign page reached
-  // via redirect can be allowed once, but never remembered.
+  // remember. "Always Allow" persists the grant, so it's offered only when the
+  // request is trustworthy (see the decision above).
   const ALLOW_ONCE = 1;
   const ALWAYS_ALLOW = 2;
-  const buttons = onPinnedServer
+  const buttons = canRemember
     ? ["Don't Allow", "Allow Once", "Always Allow"]
     : ["Don't Allow", "Allow Once"];
   const { response } = await dialog.showMessageBox(win, {
@@ -1865,7 +1870,7 @@ async function confirmHostEnrollment(win) {
     title: "OmniCraft",
     message: `Allow ${host} to manage OmniCraft on this machine?`,
     detail:
-      `${pinned} wants to connect this machine as a runner. While connected, it ` +
+      `${origin} wants to connect this machine as a runner. While connected, it ` +
       `can execute agent code and commands here on its behalf.\n\n` +
       `Only allow servers you trust.`,
     buttons,
@@ -1874,13 +1879,13 @@ async function confirmHostEnrollment(win) {
     noLink: true,
   });
   if (response !== ALLOW_ONCE && response !== ALWAYS_ALLOW) return false;
-  // response === ALWAYS_ALLOW implies the 3-button (onPinnedServer) variant.
+  // response === ALWAYS_ALLOW implies the 3-button (canRemember) variant.
   if (response === ALWAYS_ALLOW) {
     const settings = loadSettings();
     const list = Array.isArray(settings.allowed_hosting_origins)
       ? settings.allowed_hosting_origins
       : [];
-    if (!list.includes(pinned)) list.push(pinned);
+    if (!list.includes(origin)) list.push(origin);
     settings.allowed_hosting_origins = list;
     saveSettings(settings);
   }

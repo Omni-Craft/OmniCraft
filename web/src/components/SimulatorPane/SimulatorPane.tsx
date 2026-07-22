@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, Loader2, Pause, Play, RotateCw, Smartphone, X } from "lucide-react";
 
-import { getOmniCraftHostConfig, hostFetch } from "@/lib/host";
+import { hostFetch } from "@/lib/host";
+import { isElectronShell } from "@/lib/nativeBridge";
 import { useChatStore } from "@/store/chatStore";
 import { cn } from "@/lib/utils";
 
@@ -34,6 +35,9 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
   const [health, setHealth] = useState<Health>("connecting");
   const [streaming, setStreaming] = useState(true);
   const [device, setDevice] = useState<BootedDevice | null>(null);
+  // Frame aspect ratio — seeded to the iPhone Pro screen and refined from the
+  // first real frame so an iPad (or any device) isn't squeezed into a phone.
+  const [aspect, setAspect] = useState("1206 / 2622");
   const imgRef = useRef<HTMLImageElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
   const inFlight = useRef(false);
@@ -135,8 +139,15 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
     [base, pullFrame],
   );
 
-  // Standalone (non-desktop) builds can't reach a runner Mac's simulator.
-  const desktop = Boolean(getOmniCraftHostConfig().fetcher);
+  const handleImgLoad = useCallback(() => {
+    const img = imgRef.current;
+    if (img?.naturalWidth && img.naturalHeight) {
+      setAspect(`${img.naturalWidth} / ${img.naturalHeight}`);
+    }
+  }, []);
+
+  // The tab only mounts in the desktop shell, but guard for correctness.
+  const desktop = isElectronShell();
 
   return (
     <div className={cn("flex h-full flex-col bg-background", className)}>
@@ -158,26 +169,48 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
         ) : null}
       </header>
 
-      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-muted/40 p-3">
-        <img
-          ref={imgRef}
-          alt="Tela do simulador iOS"
-          onClick={handleTap}
-          className={cn(
-            "max-h-full max-w-full rounded-[1.75rem] object-contain shadow-lg",
-            health === "live" ? "cursor-pointer opacity-100" : "opacity-0",
-          )}
-        />
-        {health !== "live" ? (
-          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 text-center text-sm text-muted-foreground">
-            {health === "connecting" ? (
-              <Loader2 className="size-5 animate-spin" />
-            ) : (
-              <Smartphone className="size-8 opacity-40" />
-            )}
-            <p className="max-w-[16rem] px-4">{statusMessage(health, desktop)}</p>
+      <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-muted/40 p-4">
+        {/* A phone-shaped chassis around the screen, so the live view reads as a
+            real device rather than a floating rectangle. */}
+        <div className="relative mx-auto h-full max-w-full" style={{ aspectRatio: aspect }}>
+          <div
+            className="relative h-full w-full bg-gradient-to-b from-neutral-700 via-neutral-900 to-black p-[3.2%] shadow-2xl ring-1 ring-black/60"
+            style={{ borderRadius: "17% / 8%" }}
+          >
+            <div
+              className="relative h-full w-full overflow-hidden bg-black"
+              style={{ borderRadius: "14% / 6.6%" }}
+            >
+              <img
+                ref={imgRef}
+                alt="Tela do simulador iOS"
+                onClick={handleTap}
+                onLoad={handleImgLoad}
+                className={cn(
+                  "h-full w-full object-cover transition-opacity duration-200",
+                  health === "live" ? "cursor-pointer opacity-100" : "opacity-0",
+                )}
+              />
+              {/* Dynamic Island */}
+              <div className="pointer-events-none absolute left-1/2 top-[1.4%] h-[3.4%] w-[30%] -translate-x-1/2 rounded-full bg-black" />
+              {health !== "live" ? (
+                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-xs text-neutral-400">
+                  {health === "connecting" ? (
+                    <Loader2 className="size-5 animate-spin" />
+                  ) : (
+                    <Smartphone className="size-7 opacity-40" />
+                  )}
+                  <p>{statusMessage(health, desktop)}</p>
+                </div>
+              ) : null}
+            </div>
           </div>
-        ) : null}
+          {/* Side buttons — action/mute + volume on the left, power on the right. */}
+          <span className="absolute -left-[3px] top-[16%] h-[5%] w-[3px] rounded-l bg-neutral-700" />
+          <span className="absolute -left-[3px] top-[27%] h-[9%] w-[3px] rounded-l bg-neutral-700" />
+          <span className="absolute -left-[3px] top-[39%] h-[9%] w-[3px] rounded-l bg-neutral-700" />
+          <span className="absolute -right-[3px] top-[32%] h-[12%] w-[3px] rounded-r bg-neutral-700" />
+        </div>
       </div>
 
       <footer className="flex items-center justify-center gap-1 border-t border-border px-3 py-2">

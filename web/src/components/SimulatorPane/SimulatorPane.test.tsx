@@ -4,11 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SimulatorPane } from "./SimulatorPane";
 
 const hostState = { fetcher: null as null | ((path: string) => Promise<Response>) };
+const shellState = { electron: true };
 
 vi.mock("@/lib/host", () => ({
-  getOmniCraftHostConfig: () => hostState,
   hostFetch: (path: string) =>
     hostState.fetcher ? hostState.fetcher(path) : Promise.reject(new Error("no fetcher")),
+}));
+
+vi.mock("@/lib/nativeBridge", () => ({
+  isElectronShell: () => shellState.electron,
 }));
 
 vi.mock("@/store/chatStore", () => ({
@@ -17,6 +21,7 @@ vi.mock("@/store/chatStore", () => ({
 
 beforeEach(() => {
   hostState.fetcher = null;
+  shellState.electron = true;
 });
 afterEach(() => {
   cleanup();
@@ -24,7 +29,8 @@ afterEach(() => {
 });
 
 describe("SimulatorPane", () => {
-  it("shows a desktop-only hint when there is no host fetcher", async () => {
+  it("shows a desktop-only hint outside the Electron shell", async () => {
+    shellState.electron = false;
     render(<SimulatorPane conversationId="conv_1" />);
     expect(await screen.findByText(/máquina com Xcode/i)).toBeInTheDocument();
   });

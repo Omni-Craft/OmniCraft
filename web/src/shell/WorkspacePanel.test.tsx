@@ -46,6 +46,7 @@ function renderWorkspace(
     selectedFilePath?: string | null;
     openFiles?: string[];
     showBrowserTab?: boolean;
+    showSimulatorTab?: boolean;
   } = {},
 ) {
   const openFileViewer = vi.fn();
@@ -60,6 +61,7 @@ function renderWorkspace(
       onRightRailTabChange={onRightRailTabChange}
       showFilesPanel
       showBrowserTab={overrides.showBrowserTab ?? false}
+      showSimulatorTab={overrides.showSimulatorTab ?? false}
       changedCount={0}
       showShellsTab={false}
       terminalsLength={0}

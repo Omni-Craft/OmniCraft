@@ -478,6 +478,9 @@ export function AppShell() {
         // WebContentsView lives. A plain web build has no embedded browser, so
         // the tab is hidden entirely (isElectronShell() is constant per load).
         browser: isElectronShell(),
+        // Simulator tab: desktop shell only — the pane previews a simulator
+        // running on the runner's Mac (unreachable from a plain web build).
+        simulator: isElectronShell(),
         // Agents tab is unconditional: the panel always lists at least
         // the main agent (its "main" row), so there's never a dead end.
         subagents: true,
@@ -550,9 +553,9 @@ export function AppShell() {
   // convergent even when several tabs vanish at once.
   useEffect(() => {
     if (railTabsAvailable[rightRailTab]) return;
-    const next = (["files", "subagents", "terminals", "todos", "browser"] as const).find(
-      (t) => railTabsAvailable[t],
-    );
+    const next = (
+      ["files", "subagents", "terminals", "todos", "browser", "simulator"] as const
+    ).find((t) => railTabsAvailable[t]);
     if (next) setRightRailTab(next);
   }, [railTabsAvailable, rightRailTab]);
 
@@ -1352,6 +1355,7 @@ export function AppShell() {
                       onRightRailTabChange={handleRightRailTabChange}
                       showFilesPanel={showFilesPanel}
                       showBrowserTab={railTabsAvailable.browser}
+                      showSimulatorTab={railTabsAvailable.simulator}
                       changedCount={changedCount}
                       showShellsTab={railTabsAvailable.terminals}
                       terminalsLength={railTerminals.length}

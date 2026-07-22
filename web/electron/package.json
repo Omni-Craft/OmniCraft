@@ -47,7 +47,8 @@
       "src/**/*",
       "setup/**/*",
       "find/**/*",
-      "icons/**/*"
+      "icons/**/*",
+      "splash/**/*"
     ],
     "extraResources": [
       {

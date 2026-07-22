@@ -45,6 +45,7 @@ const { createHudPolicy } = require("./hudPolicy");
 const { registerHudIpc } = require("./hudIpc");
 const { NativeIslandController } = require("./nativeIsland");
 const { hostEnrollmentDecision } = require("./hostEnrollment");
+const { shouldDismissSplash } = require("./splash");
 const {
   createHudNotifier,
   isCategoryEnabled,
@@ -63,6 +64,9 @@ const SETUP_PAGE = path.join(__dirname, "..", "setup", "index.html");
 
 /** The setup page's file:// URL, for verifying IPC sender frames. */
 const SETUP_PAGE_URL = pathToFileURL(SETUP_PAGE);
+
+/** The splash shown while the local server boots (covers the cold-start gap). */
+const SPLASH_PAGE = path.join(__dirname, "..", "splash", "index.html");
 
 /** Absolute path to the bundled find-in-page bar page. */
 const FIND_PAGE = path.join(__dirname, "..", "find", "index.html");
@@ -956,9 +960,39 @@ function cascadeIfCovering(win) {
 async function autoStartLocalStack(win) {
   const saved = loadSettings().server_url;
   const cliPath = resolvedCliPath();
-  if (!cliPath || typeof saved !== "string" || !omnicraftCli.isLoopbackServer(saved)) return;
+  if (!cliPath || typeof saved !== "string" || !omnicraftCli.isLoopbackServer(saved)) {
+    // Nothing to boot (remote server, or no CLI) — the setup page IS the
+    // destination, so let it show instead of holding the splash for 45s.
+    dismissSplash();
+    return;
+  }
   const savedOrigin = originOf(saved);
-  if (!savedOrigin) return;
+  if (!savedOrigin) {
+    dismissSplash();
+    return;
+  }
+  // From here a local server is genuinely booting: keep the splash up (and keep
+  // a transient setup-page fallback from dismissing it) until the server page
+  // loads. `finally` clears the flag on every exit, including the failures
+  // below, so a server that never comes up still reveals its setup-page error.
+  autostartInProgress = true;
+  try {
+    await bootLocalStack(win, { cliPath, saved, savedOrigin });
+  } finally {
+    autostartInProgress = false;
+  }
+}
+
+/**
+ * Boot the local server and connect this machine as its host. Split out of
+ * {@link autoStartLocalStack} so the splash-lifetime flag can wrap it in a
+ * single try/finally regardless of how many ways the boot can bail.
+ *
+ * @param {BrowserWindow} win The startup window.
+ * @param {{cliPath: string, saved: string, savedOrigin: string}} ctx
+ * @returns {Promise<void>}
+ */
+async function bootLocalStack(win, { cliPath, saved, savedOrigin }) {
   try {
     const res = await serverManager.startLocalServer(cliPath);
     if (!res || res.ok === false) return;
@@ -994,6 +1028,83 @@ async function autoStartLocalStack(win) {
     // must never crash over them.
   }
   broadcastHostStatus();
+}
+
+// The boot splash: a frameless, transparent window that sits over the main
+// window while the local server cold-starts, showing the Fucho animation
+// instead of a black rectangle. It is torn down the moment the main window
+// finishes loading a real page (see wireSplashDismissal).
+let splashWindow = null;
+// True while autoStartLocalStack is booting/re-pointing the local server, so a
+// transient setup-page fallback does not dismiss the splash early.
+let autostartInProgress = false;
+
+/**
+ * Open the boot splash over a main window, matching its bounds so the reveal is
+ * seamless.
+ *
+ * @param {BrowserWindow} mainWin The window the splash covers.
+ * @returns {void}
+ */
+function openSplash(mainWin) {
+  if (splashWindow) return;
+  const bounds = mainWin.getBounds();
+  splashWindow = new BrowserWindow({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    focusable: false, // never steals focus / keystrokes from the booting app
+    show: false,
+    skipTaskbar: true,
+    alwaysOnTop: true,
+    backgroundColor: "#00000000",
+    // No preload, no node: the splash is a static local animation.
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  splashWindow.once("ready-to-show", () => splashWindow?.show());
+  void splashWindow.loadFile(SPLASH_PAGE);
+  // If the main window is closed before it ever loads, don't leave the splash.
+  mainWin.once("closed", dismissSplash);
+}
+
+/** Close the boot splash if it is open. Safe to call repeatedly. */
+function dismissSplash() {
+  if (!splashWindow) return;
+  const win = splashWindow;
+  splashWindow = null;
+  if (!win.isDestroyed()) win.close();
+}
+
+/**
+ * Tear the splash down once the main window shows a real page, with a timeout
+ * so a server that never comes up can't strand it on screen forever.
+ *
+ * @param {BrowserWindow} mainWin The window whose loads gate the splash.
+ * @returns {void}
+ */
+function wireSplashDismissal(mainWin) {
+  const onLoad = () => {
+    if (mainWin.isDestroyed()) return;
+    const decided = shouldDismissSplash({
+      loadedUrl: mainWin.webContents.getURL(),
+      pinnedOrigin: pinnedOrigin(mainWin),
+      autostartInProgress,
+      setupPageUrl: SETUP_PAGE_URL.href,
+    });
+    if (decided) dismissSplash();
+  };
+  mainWin.webContents.on("did-finish-load", onLoad);
+  // The first load is kicked off in createWindow, before this wiring — on a
+  // warm server it can finish before the listener attaches, so evaluate the
+  // current state once too rather than wait 45s for a page already shown.
+  if (!mainWin.webContents.isLoading()) onLoad();
+  // Backstop: reveal whatever is there after 45s rather than hide forever.
+  setTimeout(dismissSplash, 45000);
 }
 
 function createWindow(targetUrl, opts = {}) {
@@ -2861,6 +2972,10 @@ if (!gotLock) {
     // setup page / Local CLI settings pre-fill the resolved path immediately.
     resolvedCliPath();
     const startupWindow = createWindow();
+    // Cover the cold-start black screen with the Fucho boot animation until the
+    // main window shows a real page.
+    openSplash(startupWindow);
+    wireSplashDismissal(startupWindow);
     // Saved LOCAL server → boot the whole stack (server + host) so opening
     // the app is enough for the harnesses to work; no manual terminals.
     void autoStartLocalStack(startupWindow);

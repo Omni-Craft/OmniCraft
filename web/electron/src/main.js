@@ -1044,6 +1044,15 @@ let splashWindow = null;
 // True while autoStartLocalStack is booting/re-pointing the local server, so a
 // transient setup-page fallback does not dismiss the splash early.
 let autostartInProgress = false;
+// When the splash opened, and whether its close is already deferred. The boot
+// scene is a full loop the user wants to watch, so the splash stays up for at
+// least one loop even when the app is ready sooner — the reveal happens at
+// max(scene loop, app ready).
+let splashOpenedAt = 0;
+let splashCloseScheduled = false;
+// One full loop of the boot scene (measured beat by beat in splash/index.html);
+// the fish is swimming back off screen at the end, a natural point to reveal.
+const MIN_SPLASH_MS = 36000;
 
 /**
  * Open the boot splash over a main window, matching its bounds so the reveal is
@@ -1072,19 +1081,40 @@ function openSplash(mainWin) {
     // No preload, no node: the splash is a static local animation.
     webPreferences: { contextIsolation: true, nodeIntegration: false },
   });
+  splashOpenedAt = Date.now();
+  splashCloseScheduled = false;
   splashWindow.once("ready-to-show", () => splashWindow?.show());
   void splashWindow.loadFile(SPLASH_PAGE);
   // If the main window is closed before it ever loads, don't leave the splash.
-  mainWin.once("closed", dismissSplash);
+  mainWin.once("closed", closeSplashNow);
 }
 
 /**
- * Close the boot splash if it is open, fading it out first. The splash paints
- * an ocean-blue card and the app behind it is near-black, so a hard close would
- * flash blue→black; fading the window's opacity dissolves the splash into the
- * app instead. Safe to call repeatedly.
+ * Ask to take the splash down. The app may be ready, but the boot scene runs
+ * for one full loop the user wants to see, so a request that arrives early is
+ * deferred until the loop finishes; a request at or past that just closes.
+ * Safe to call repeatedly.
  */
 function dismissSplash() {
+  if (!splashWindow) return;
+  const remaining = MIN_SPLASH_MS - (Date.now() - splashOpenedAt);
+  if (remaining > 0) {
+    if (!splashCloseScheduled) {
+      splashCloseScheduled = true;
+      setTimeout(closeSplashNow, remaining);
+    }
+    return;
+  }
+  closeSplashNow();
+}
+
+/**
+ * Close the splash now, fading it out first. The splash paints an ocean-blue
+ * card and the app behind it is near-black, so a hard close would flash
+ * blue→black; fading the window's opacity dissolves the splash into the app
+ * instead. Safe to call repeatedly.
+ */
+function closeSplashNow() {
   if (!splashWindow) return;
   const win = splashWindow;
   splashWindow = null;
@@ -1122,10 +1152,11 @@ function wireSplashDismissal(mainWin) {
   mainWin.webContents.on("did-finish-load", onLoad);
   // The first load is kicked off in createWindow, before this wiring — on a
   // warm server it can finish before the listener attaches, so evaluate the
-  // current state once too rather than wait 45s for a page already shown.
+  // current state once too rather than wait for a page already shown.
   if (!mainWin.webContents.isLoading()) onLoad();
-  // Backstop: reveal whatever is there after 45s rather than hide forever.
-  setTimeout(dismissSplash, 45000);
+  // Backstop: reveal whatever is there rather than hide forever. Above the
+  // minimum scene time so a genuinely slow cold boot isn't cut short.
+  setTimeout(dismissSplash, 60000);
 }
 
 function createWindow(targetUrl, opts = {}) {

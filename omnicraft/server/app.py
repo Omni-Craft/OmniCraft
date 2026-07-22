@@ -1996,6 +1996,26 @@ def create_app(
         """
         return {"version": _server_version()}
 
+    @app.get("/api/update-status")
+    async def update_status() -> dict[str, object]:
+        """
+        Report whether the checkout moved ahead of the running server.
+
+        The web UI polls this to offer a restart when new code has been
+        pulled or committed under an editable install. Reads git off the
+        request thread so a slow filesystem cannot block the event loop.
+        Unauthed like ``/api/version`` — it exposes only commit shas of the
+        code already running on this machine.
+
+        :returns: ``{"running_commit", "current_commit",
+            "update_available"}``; commits are ``None`` and
+            ``update_available`` is ``False`` when the install is not a git
+            checkout.
+        """
+        from omnicraft.server.version_watch import update_status as _status
+
+        return (await asyncio.to_thread(_status)).as_dict()
+
     @app.get("/v1/info")
     async def info() -> dict[str, bool | str | None]:
         """Runtime capabilities probe for the SPA + CLI.

@@ -1356,6 +1356,7 @@ export function AppShell() {
                       showFilesPanel={showFilesPanel}
                       showBrowserTab={railTabsAvailable.browser}
                       showSimulatorTab={railTabsAvailable.simulator}
+                      onClose={() => setRightPanelOpen(false)}
                       changedCount={changedCount}
                       showShellsTab={railTabsAvailable.terminals}
                       terminalsLength={railTerminals.length}

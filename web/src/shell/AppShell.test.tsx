@@ -12,7 +12,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { writeSessionWorkspaceState } from "@/lib/sessionWorkspaceState";
 
-vi.mock("@/hooks/useConversations", () => ({
+vi.mock("@/hooks/useConversations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useConversations")>()),
   useConversations: vi.fn(),
 }));
 
@@ -437,6 +438,33 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+// The workspace rail dropped its horizontal tab strip — panels now live in the
+// icon rail's ⋮ menu, opened here via the ⊞ "Painéis" button (a plain click
+// that flips the controlled open state; the ⋮ trigger uses pointer events jsdom
+// won't dispatch on click). These reach a panel the way tests used to reach a tab.
+function openWorkspaceMenu() {
+  // While the menu is open Radix hides the rest of the page (aria-hidden focus
+  // guard), so the ⊞ trigger is unreachable. If a menu is already open, reuse
+  // it — its controlled state survives rerenders, so its content is current.
+  const open = screen.queryByRole("menu");
+  if (open) return within(open);
+  fireEvent.click(screen.getByRole("button", { name: "Painéis" }));
+  return within(screen.getByRole("menu"));
+}
+function railPanel(name: RegExp) {
+  return openWorkspaceMenu().getByRole("menuitem", { name });
+}
+function queryRailPanel(name: RegExp) {
+  return openWorkspaceMenu().queryByRole("menuitem", { name });
+}
+function switchRailPanel(name: RegExp) {
+  fireEvent.click(openWorkspaceMenu().getByRole("menuitem", { name }));
+}
+/** The header shows the active panel's name — the new "which tab is selected". */
+function activePanelTitle(): string {
+  return screen.getByTestId("workspace-panel-title").textContent ?? "";
+}
+
 describe("AppShell header", () => {
   it("renders the sidebar toggle on all pages", () => {
     mockConversations([]);
@@ -794,11 +822,11 @@ describe("Right-rail terminals card", () => {
     // Default tab is Files — inline section is unmounted.
     expect(screen.queryByTestId("inline-terminals-section")).toBeNull();
     // Tab button is present (regex tolerates the inline count badge "1").
-    const terminalsTab = screen.getByRole("tab", { name: /Terminais/i });
+    const terminalsTab = railPanel(/Terminais/i);
     expect(terminalsTab).toBeInTheDocument();
 
     // Radix Tabs activates on mousedown, not click.
-    fireEvent.mouseDown(terminalsTab);
+    fireEvent.click(terminalsTab);
     expect(screen.getByTestId("inline-terminals-section")).toBeInTheDocument();
   });
 
@@ -821,9 +849,9 @@ describe("Right-rail terminals card", () => {
 
     renderShell("/c/conv_abc");
 
-    expect(screen.queryByRole("tab", { name: /Terminais/i })).toBeNull();
+    expect(queryRailPanel(/Terminais/i)).toBeNull();
     // The rail still works — Files is the default and remains selected.
-    expect(screen.getByRole("tab", { name: /Arquivos/i })).toHaveAttribute("aria-selected", "true");
+    expect(activePanelTitle()).toBe("Arquivos");
   });
 
   it("reveals the Terminals tab when a terminal attaches after mount", () => {
@@ -863,7 +891,7 @@ describe("Right-rail terminals card", () => {
     const { rerender } = render(makeTree());
 
     // No terminal yet → tab hidden.
-    expect(screen.queryByRole("tab", { name: /Terminais/i })).toBeNull();
+    expect(queryRailPanel(/Terminais/i)).toBeNull();
 
     // A terminal lands.
     useTerminalsMock.mockReturnValue({
@@ -874,8 +902,8 @@ describe("Right-rail terminals card", () => {
     rerender(makeTree());
 
     // Tab now present (additive — the user wasn't yanked off any tab).
-    expect(screen.getByRole("tab", { name: /Terminais/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Arquivos/i })).toHaveAttribute("aria-selected", "true");
+    expect(railPanel(/Terminais/i)).toBeInTheDocument();
+    expect(activePanelTitle()).toBe("Arquivos");
   });
 
   it("opening a file in a terminal-first session keeps the view in Terminal", () => {
@@ -909,7 +937,7 @@ describe("Right-rail terminals card", () => {
     expect(screen.getByTestId("view-probe")).toHaveAttribute("data-view", "terminal");
 
     // Surface the rail's Files panel (Agents is the default tab now).
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /^Arquivos$/i }));
+    switchRailPanel(/^Arquivos$/i);
     // Click a file — the file-viewer mock fires onFileSelect via this button.
     fireEvent.click(screen.getByRole("button", { name: /files: select README\.md/i }));
 
@@ -943,7 +971,7 @@ describe("Chat-mode terminal panel layout", () => {
 
     // Switch the rail to the Terminals tab so the inline section mounts.
     // Radix Tabs activates on mousedown, not click.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Terminais/i }));
+    switchRailPanel(/Terminais/i);
     fireEvent.click(screen.getByRole("button", { name: /rail: open terminal/i }));
 
     // After click: open, fluid, chat hidden.
@@ -987,10 +1015,10 @@ describe("Subagents tab", () => {
 
     renderShell("/c/conv_abc");
 
-    const tab = screen.getByRole("tab", { name: /Agentes\s*1/i });
+    const tab = railPanel(/Agentes\s*1/i);
     expect(within(tab).getByText("1")).toBeInTheDocument();
     // Files is the default tab, whose content slot mounts FilesPanel.
-    expect(screen.getByRole("tab", { name: /Arquivos/i })).toHaveAttribute("aria-selected", "true");
+    expect(activePanelTitle()).toBe("Arquivos");
     expect(screen.getByTestId("files-panel")).toBeInTheDocument();
   });
 
@@ -1005,9 +1033,9 @@ describe("Subagents tab", () => {
     renderShell("/c/conv_abc");
 
     // Agents is no longer the default tab — click to open it.
-    const subagentsTab = screen.getByRole("tab", { name: /Agentes/i });
+    const subagentsTab = railPanel(/Agentes/i);
     expect(subagentsTab).toBeInTheDocument();
-    fireEvent.mouseDown(subagentsTab);
+    fireEvent.click(subagentsTab);
     expect(screen.getByTestId("subagents-panel")).toHaveAttribute(
       "data-conversation-id",
       "conv_abc",
@@ -1034,11 +1062,11 @@ describe("Subagents tab", () => {
     renderShell("/c/conv_native");
 
     // No Terminals tab — terminal renders inline in main.
-    expect(screen.queryByRole("tab", { name: /Terminais/i })).toBeNull();
+    expect(queryRailPanel(/Terminais/i)).toBeNull();
     // Subagents tab is present.
-    const subagentsTab = screen.getByRole("tab", { name: /Agentes/i });
+    const subagentsTab = railPanel(/Agentes/i);
     expect(subagentsTab).toBeInTheDocument();
-    fireEvent.mouseDown(subagentsTab);
+    fireEvent.click(subagentsTab);
     expect(screen.getByTestId("subagents-panel")).toHaveAttribute(
       "data-conversation-id",
       "conv_native",
@@ -1084,7 +1112,7 @@ describe("Subagents tab", () => {
     // ("1/3" — two children + the main agent) with the active green
     // (success) tint, so activity is visible without opening the
     // panel. "1/2" means the main agent was dropped from the total.
-    const tab = screen.getByRole("tab", { name: /Agentes\s*1\/3/i });
+    const tab = railPanel(/Agentes\s*1\/3/i);
     expect(tab).toBeInTheDocument();
     expect(within(tab).getByText("1/3").className).toContain("text-success");
   });
@@ -1127,7 +1155,7 @@ describe("Subagents tab", () => {
     // No busy child → plain total "3" (two children + the main agent)
     // in the muted style (no success tint), so a settled fan-out
     // doesn't draw the eye.
-    const tab = screen.getByRole("tab", { name: /Agentes\s*3/i });
+    const tab = railPanel(/Agentes\s*3/i);
     const badge = within(tab).getByText("3");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("text-success");
@@ -1175,7 +1203,7 @@ describe("Subagents tab", () => {
     );
     const { rerender } = render(makeTree());
 
-    let badge = within(screen.getByRole("tab", { name: /Terminais/i })).getByText("1");
+    let badge = within(railPanel(/Terminais/i)).getByText("1");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
 
@@ -1190,14 +1218,14 @@ describe("Subagents tab", () => {
     });
     rerender(makeTree());
 
-    badge = within(screen.getByRole("tab", { name: /Terminais/i })).getByText("2");
+    badge = within(railPanel(/Terminais/i)).getByText("2");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
     expect(badge.className).not.toContain("text-white");
 
     // Opening the Terminals tab keeps the count in the same neutral style.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Terminais/i }));
-    badge = within(screen.getByRole("tab", { name: /Terminais/i })).getByText("2");
+    switchRailPanel(/Terminais/i);
+    badge = within(railPanel(/Terminais/i)).getByText("2");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
   });
@@ -1253,7 +1281,7 @@ describe("Subagents tab", () => {
     });
     rerender(makeTree());
 
-    const badge = within(screen.getByRole("tab", { name: /Terminais/i })).getByText("2");
+    const badge = within(railPanel(/Terminais/i)).getByText("2");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
     expect(badge.className).not.toContain("text-white");
@@ -1300,7 +1328,7 @@ describe("Subagents tab", () => {
     // Switch to the Terminals tab first. Confirm it actually activated (the
     // inline section only mounts when the tab is selected) — otherwise the
     // "no alert" assertion below could pass for the wrong reason.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Terminais/i }));
+    switchRailPanel(/Terminais/i);
     expect(screen.getByTestId("inline-terminals-section")).toBeInTheDocument();
 
     // Now a terminal spawns while it's the active tab.
@@ -1314,7 +1342,7 @@ describe("Subagents tab", () => {
     });
     rerender(makeTree());
 
-    const badge = within(screen.getByRole("tab", { name: /Terminais/i })).getByText("2");
+    const badge = within(railPanel(/Terminais/i)).getByText("2");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
   });
@@ -1370,7 +1398,7 @@ describe("Subagents tab", () => {
     const { rerender } = render(makeTree());
 
     // 2 = one child + the main agent.
-    let badge = within(screen.getByRole("tab", { name: /Agentes/i })).getByText("2");
+    let badge = within(railPanel(/Agentes/i)).getByText("2");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
 
@@ -1403,14 +1431,14 @@ describe("Subagents tab", () => {
     });
     rerender(makeTree());
 
-    badge = within(screen.getByRole("tab", { name: /Agentes/i })).getByText("3");
+    badge = within(railPanel(/Agentes/i)).getByText("3");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
     expect(badge.className).not.toContain("text-white");
 
     // Opening the Agents tab keeps the idle count in the same neutral style.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Agentes/i }));
-    badge = within(screen.getByRole("tab", { name: /Agentes/i })).getByText("3");
+    switchRailPanel(/Agentes/i);
+    badge = within(railPanel(/Agentes/i)).getByText("3");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
   });
@@ -1479,7 +1507,7 @@ describe("Subagents tab", () => {
     rerender(makeTree());
 
     // 3 = two streamed-in children + the main agent.
-    const badge = within(screen.getByRole("tab", { name: /Agentes/i })).getByText("3");
+    const badge = within(railPanel(/Agentes/i)).getByText("3");
     expect(badge.className).toContain("text-muted-foreground");
     expect(badge.className).not.toContain("bg-destructive");
     expect(badge.className).not.toContain("text-white");
@@ -1542,9 +1570,9 @@ describe("Subagents tab", () => {
 
     renderShell("/c/conv_child");
 
-    expect(screen.getByRole("tab", { name: /Agentes/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Arquivos/i })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Terminais/i })).toBeInTheDocument();
+    expect(railPanel(/Agentes/i)).toBeInTheDocument();
+    expect(railPanel(/Arquivos/i)).toBeInTheDocument();
+    expect(railPanel(/Terminais/i)).toBeInTheDocument();
   });
 });
 
@@ -1599,11 +1627,13 @@ describe("Right workspace card visibility", () => {
     renderShell("/c/conv_abc");
 
     expect(screen.getByRole("complementary", { name: "Workspace" })).toBeInTheDocument();
-    expect(screen.queryByRole("tab", { name: /Arquivos/i })).toBeNull();
-    expect(screen.queryByRole("tab", { name: /Terminais/i })).toBeNull();
     // The tab-fallback effect lands on Agents (the only available tab).
-    expect(screen.getByRole("tab", { name: /Agentes/i })).toHaveAttribute("aria-selected", "true");
+    expect(activePanelTitle()).toBe("Agentes");
+    // Assert the collapse toggle before opening the menu — Radix hides the rest
+    // of the page while the menu is open.
     expect(screen.getByRole("button", { name: "Recolher painel direito" })).toBeInTheDocument();
+    expect(queryRailPanel(/Arquivos/i)).toBeNull();
+    expect(queryRailPanel(/Terminais/i)).toBeNull();
   });
 
   it("keeps the card and collapse toggle when terminals are the only rail content", () => {
@@ -1626,8 +1656,9 @@ describe("Right workspace card visibility", () => {
     renderShell("/c/conv_abc");
 
     expect(screen.getByRole("complementary", { name: "Workspace" })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Terminais/i })).toBeInTheDocument();
+    // Assert the collapse toggle before opening the menu (which hides it).
     expect(screen.getByRole("button", { name: "Recolher painel direito" })).toBeInTheDocument();
+    expect(railPanel(/Terminais/i)).toBeInTheDocument();
   });
 
   it("starts open for a fresh session (no stored open-state)", () => {
@@ -1682,11 +1713,8 @@ describe("Right workspace card visibility", () => {
 
     renderShell("/c/conv_tabmem");
 
-    expect(screen.getByRole("tab", { name: /Agentes/i })).toHaveAttribute("aria-selected", "true");
-    expect(screen.getByRole("tab", { name: /Arquivos/i })).toHaveAttribute(
-      "aria-selected",
-      "false",
-    );
+    expect(activePanelTitle()).toBe("Agentes");
+    expect(railPanel(/Arquivos/i)).toHaveAttribute("data-active", "false");
   });
 
   it("restores the open file tabs per session (independent of the ?file= param)", () => {
@@ -1743,7 +1771,7 @@ describe("Embedded REPL terminal rail inventory", () => {
 
     // The phantom rail entry is the reported bug: a tab here means the
     // REPL terminal leaked back into the inventory.
-    expect(screen.queryByRole("tab", { name: /Terminais/i })).toBeNull();
+    expect(queryRailPanel(/Terminais/i)).toBeNull();
     // The pill still sees the REPL terminal — false here would grey out
     // the Terminal pill and make the embedded REPL unreachable.
     expect(screen.getByTestId("view-probe")).toHaveAttribute("data-terminals-available", "true");
@@ -1776,7 +1804,7 @@ describe("Embedded REPL terminal rail inventory", () => {
 
     renderShell("/c/conv_sdk");
 
-    const tab = screen.getByRole("tab", { name: /Terminais/i });
+    const tab = railPanel(/Terminais/i);
     // The badge renders the inventory count next to the tab title.
     expect(tab).toHaveTextContent(/Terminais\s*1/);
   });
@@ -1810,15 +1838,15 @@ describe("Embedded REPL terminal rail inventory", () => {
 
     renderShell("/c/conv_sdk");
 
-    const tab = screen.getByRole("tab", { name: /Terminais/i });
+    const tab = railPanel(/Terminais/i);
     expect(tab).not.toHaveTextContent(/0/);
     // Display order: Shells sits to the RIGHT of Agents in the strip.
-    const agentsTab = screen.getByRole("tab", { name: /Agentes/i });
+    const agentsTab = railPanel(/Agentes/i);
     expect(agentsTab.compareDocumentPosition(tab) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     // Selecting the tab mounts the shells section (whose empty state
     // carries the new-shell affordance), not a fall-through to the
     // Files panel — the content branch must share the trigger's gate.
-    fireEvent.mouseDown(tab);
+    fireEvent.click(tab);
     expect(screen.getByTestId("inline-terminals-section")).toBeInTheDocument();
   });
 });
@@ -2321,13 +2349,13 @@ describe("Right-rail tab switching — file viewer close", () => {
     expect(screen.getByTestId("file-viewer-inline")).toHaveAttribute("data-path", "README.md");
 
     // Switch to Terminals — file viewer must close, terminals section appears.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /Terminais/i }));
+    switchRailPanel(/Terminais/i);
     // Failure: the tab-change handler did not close the viewer when leaving Files.
     expect(screen.queryByTestId("file-viewer-inline")).toBeNull();
     expect(screen.getByTestId("inline-terminals-section")).toBeInTheDocument();
 
     // Go back to Files — the panel shows, NOT the previously open file.
-    fireEvent.mouseDown(screen.getByRole("tab", { name: /^Arquivos$/i }));
+    switchRailPanel(/^Arquivos$/i);
     expect(screen.queryByTestId("file-viewer-inline")).toBeNull();
     expect(screen.getByTestId("files-panel")).toBeInTheDocument();
   });

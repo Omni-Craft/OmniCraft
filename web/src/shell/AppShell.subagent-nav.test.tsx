@@ -27,7 +27,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 
 // Match the AppShell.test.tsx mocks except DO NOT mock SubagentsPanel —
 // we want the real one so its <Link> renders.
-vi.mock("@/hooks/useConversations", () => ({
+vi.mock("@/hooks/useConversations", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useConversations")>()),
   useConversations: vi.fn(),
   useStopSession: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
 }));
@@ -138,6 +139,27 @@ beforeEach(() => {
   } as never);
 });
 
+// Panels moved from a tab strip to the icon rail's menu (opened via the ⊞
+// "Painéis" button). These reach a panel the way tests used to reach a tab.
+function openWorkspaceMenu() {
+  // While the menu is open Radix hides the rest of the page, so the ⊞ trigger
+  // is unreachable. Reuse an already-open menu (its controlled state survives
+  // rerenders, so its content is current).
+  const open = screen.queryByRole("menu");
+  if (open) return within(open);
+  fireEvent.click(screen.getByRole("button", { name: "Painéis" }));
+  return within(screen.getByRole("menu"));
+}
+function railPanel(name: RegExp) {
+  return openWorkspaceMenu().getByRole("menuitem", { name });
+}
+function switchRailPanel(name: RegExp) {
+  fireEvent.click(openWorkspaceMenu().getByRole("menuitem", { name }));
+}
+function activePanelTitle(): string {
+  return screen.getByTestId("workspace-panel-title").textContent ?? "";
+}
+
 describe("click sub-agent in rail (real SubagentsPanel)", () => {
   it("keeps the right-rail tab on Subagents (does NOT shift to Files)", async () => {
     // Setup: parent has one child sub-agent. User starts on parent
@@ -239,21 +261,11 @@ describe("click sub-agent in rail (real SubagentsPanel)", () => {
       </QueryClientProvider>,
     );
 
-    // Switch to Agents tab. Radix tabs activate on the full
-    // pointerdown→mousedown→mouseup→click sequence in jsdom; missing
-    // any one of these leaves the tab in its prior state.
-    const agentsTab = screen
-      .getAllByRole("tablist")
-      .map((tablist) => within(tablist).queryByRole("tab", { name: /Agentes/i }))
-      .find((tab): tab is HTMLElement => tab !== null);
-    if (!agentsTab) throw new Error("Agents tab was not rendered");
-    fireEvent.pointerDown(agentsTab, { button: 0 });
-    fireEvent.mouseDown(agentsTab, { button: 0 });
-    fireEvent.mouseUp(agentsTab, { button: 0 });
-    fireEvent.click(agentsTab);
+    // Switch to the Agents panel via the rail menu.
+    switchRailPanel(/Agentes/i);
 
-    // Sanity: the Agents tab must actually be selected before we click in.
-    expect(agentsTab).toHaveAttribute("aria-selected", "true");
+    // Sanity: the Agents panel must actually be active before we click in.
+    expect(activePanelTitle()).toBe("Agentes");
 
     // SubagentsPanel renders now that the tab is selected.
     const childRows = screen.getAllByTestId("subagent-row");
@@ -264,10 +276,9 @@ describe("click sub-agent in rail (real SubagentsPanel)", () => {
     expect(childRows[0]).toHaveAttribute("href", "/c/conv_child");
     fireEvent.click(childRows[0]);
 
-    // After navigation: the same rail Agents tab we clicked must STILL be
-    // mounted and selected, not just any matching tab elsewhere in the shell.
-    expect(agentsTab.isConnected).toBe(true);
-    expect(agentsTab).toHaveAttribute("aria-selected", "true");
+    // After navigation the panel must STILL be Agents — it must not snap back
+    // to Files.
+    expect(activePanelTitle()).toBe("Agentes");
   });
 
   it("shows the Agents tab with count 1 while a childless session's initial fetch is loading", () => {
@@ -316,10 +327,9 @@ describe("click sub-agent in rail (real SubagentsPanel)", () => {
       </QueryClientProvider>,
     );
 
-    // The tab is present with the main-agent-only count; Files stays
-    // the default selection.
-    const agentsTab = screen.getByRole("tab", { name: /Agentes\s*1/i });
-    expect(agentsTab).toHaveAttribute("aria-selected", "false");
-    expect(screen.getByRole("tab", { name: /Arquivos/i })).toHaveAttribute("aria-selected", "true");
+    // The Agentes panel is offered with the main-agent-only count; Files
+    // stays the active panel (the header title proves Agentes isn't active).
+    expect(railPanel(/Agentes\s*1/i)).toBeInTheDocument();
+    expect(activePanelTitle()).toBe("Arquivos");
   });
 });

@@ -1,14 +1,13 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ChangedSort } from "./FlatFileList";
 import type { RightRailTab } from "./railTabs";
 import { WorkspacePanel } from "./WorkspacePanel";
 
 // The rail's content children are exercised by their own suites; stub them so
-// these tests focus on WorkspacePanel's own logic (the open-file tab strip and
-// the content branch that swaps FileViewer ↔ FilesPanel). Each stub renders a
-// testid (plus, for FileViewer, the path it was asked to show) so we can prove
-// which child mounted without dragging in Monaco / hook stacks.
+// these tests focus on WorkspacePanel's own logic (the open-file tab strip, the
+// content branch, and the icon-rail menu).
 vi.mock("./FileViewer", () => ({
   FileViewer: ({ path }: { path: string }) => <div data-testid="file-viewer-stub">{path}</div>,
 }));
@@ -36,9 +35,8 @@ afterEach(() => {
 });
 
 /**
- * Render WorkspacePanel with a complete prop set, overridable per test. Returns
- * the spied callbacks the tests assert against (openFileViewer / onCloseFile /
- * onRightRailTabChange) alongside the render result.
+ * Render WorkspacePanel with a complete prop set, overridable per test. The
+ * component now uses React Query (rename/archive), so a client is provided.
  */
 function renderWorkspace(
   overrides: {
@@ -47,78 +45,136 @@ function renderWorkspace(
     openFiles?: string[];
     showBrowserTab?: boolean;
     showSimulatorTab?: boolean;
+    showShellsTab?: boolean;
   } = {},
 ) {
   const openFileViewer = vi.fn();
   const onCloseFile = vi.fn();
   const onRightRailTabChange = vi.fn();
+  const onClose = vi.fn();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
-    <WorkspacePanel
-      conversationId="conv_ws"
-      width={360}
-      handleProps={{ tabIndex: 0 }}
-      rightRailTab={overrides.rightRailTab ?? "files"}
-      onRightRailTabChange={onRightRailTabChange}
-      showFilesPanel
-      showBrowserTab={overrides.showBrowserTab ?? false}
-      showSimulatorTab={overrides.showSimulatorTab ?? false}
-      changedCount={0}
-      showShellsTab={false}
-      terminalsLength={0}
-      subagentsWorking={0}
-      agentCount={1}
-      isClaudeNative={false}
-      todosCompleted={0}
-      todosTotal={0}
-      rootSessionId={null}
-      selectedFilePath={overrides.selectedFilePath ?? null}
-      openFiles={overrides.openFiles ?? []}
-      openFileViewer={openFileViewer}
-      onCloseFile={onCloseFile}
-      onShowScopeView={vi.fn()}
-      onCommentsOpenChange={vi.fn()}
-      openTerminalsPanel={vi.fn()}
-      permissionLevel={null}
-      filesPanelSort={"recent" as ChangedSort}
-      onSortChange={vi.fn()}
-      filesPanelFlatView={false}
-      onFlatViewChange={vi.fn()}
-      filesPanelShowHidden={false}
-      onShowHiddenChange={vi.fn()}
-    />,
+    <QueryClientProvider client={client}>
+      <WorkspacePanel
+        conversationId="conv_ws"
+        width={360}
+        handleProps={{ tabIndex: 0 }}
+        rightRailTab={overrides.rightRailTab ?? "files"}
+        onRightRailTabChange={onRightRailTabChange}
+        onClose={onClose}
+        showFilesPanel
+        showBrowserTab={overrides.showBrowserTab ?? false}
+        showSimulatorTab={overrides.showSimulatorTab ?? false}
+        changedCount={0}
+        showShellsTab={overrides.showShellsTab ?? false}
+        terminalsLength={0}
+        subagentsWorking={0}
+        agentCount={1}
+        isClaudeNative={false}
+        todosCompleted={0}
+        todosTotal={0}
+        rootSessionId={null}
+        selectedFilePath={overrides.selectedFilePath ?? null}
+        openFiles={overrides.openFiles ?? []}
+        openFileViewer={openFileViewer}
+        onCloseFile={onCloseFile}
+        onShowScopeView={vi.fn()}
+        onCommentsOpenChange={vi.fn()}
+        openTerminalsPanel={vi.fn()}
+        permissionLevel={null}
+        filesPanelSort={"recent" as ChangedSort}
+        onSortChange={vi.fn()}
+        filesPanelFlatView={false}
+        onFlatViewChange={vi.fn()}
+        filesPanelShowHidden={false}
+        onShowHiddenChange={vi.fn()}
+      />
+    </QueryClientProvider>,
   );
-  return { openFileViewer, onCloseFile, onRightRailTabChange };
+  return { openFileViewer, onCloseFile, onRightRailTabChange, onClose };
 }
 
-describe("WorkspacePanel open-file tabs", () => {
-  it("renders a tab per open file labeled by basename, next to the fixed Files tab", () => {
-    renderWorkspace({ openFiles: ["src/App.tsx", "docs/README.md"] });
+/**
+ * Open the rail menu and return its content element. Uses the ⊞ "Painéis"
+ * button, which flips the controlled ``open`` state via a plain onClick — the
+ * Radix ⋮ trigger relies on pointer events jsdom doesn't dispatch on click.
+ */
+function openRailMenu(): HTMLElement {
+  fireEvent.click(screen.getByRole("button", { name: "Painéis" }));
+  return screen.getByRole("menu");
+}
 
-    // The fixed Files tab and one file tab per open file (by basename, not the
-    // full path). A failure means the strip didn't iterate openFiles or used
-    // the full path instead of the basename.
-    expect(screen.getByRole("tab", { name: /arquivos/i })).toBeInTheDocument();
+describe("WorkspacePanel header", () => {
+  it("titles the panel with the active panel's name", () => {
+    renderWorkspace({ rightRailTab: "files", selectedFilePath: null });
+    expect(screen.getByText("Arquivos")).toBeInTheDocument();
+  });
+
+  it("titles the panel with the open file's basename when one is active", () => {
+    renderWorkspace({ openFiles: ["docs/README.md"], selectedFilePath: "docs/README.md" });
+    // The title is the basename, not the full path.
+    expect(screen.getAllByText("README.md").length).toBeGreaterThan(0);
+  });
+
+  it("closes the panel via the header ✕", () => {
+    const { onClose } = renderWorkspace();
+    fireEvent.click(screen.getByRole("button", { name: "Fechar painel" }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("WorkspacePanel icon-rail menu", () => {
+  it("lists the available panels and marks the active one", () => {
+    renderWorkspace();
+    const menu = within(openRailMenu());
+    expect(menu.getByRole("menuitem", { name: /arquivos/i })).toBeInTheDocument();
+    expect(menu.getByRole("menuitem", { name: /agentes/i })).toBeInTheDocument();
+  });
+
+  it("switches panel when a menu item is chosen", () => {
+    const { onRightRailTabChange } = renderWorkspace();
+    const menu = within(openRailMenu());
+    fireEvent.click(menu.getByRole("menuitem", { name: /agentes/i }));
+    expect(onRightRailTabChange).toHaveBeenCalledWith("subagents");
+  });
+
+  it("lists the Navegador panel only when the browser tab is available", () => {
+    renderWorkspace({ showBrowserTab: true });
+    expect(
+      within(openRailMenu()).getByRole("menuitem", { name: /navegador/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("omits the Navegador panel when the browser tab is not available", () => {
+    renderWorkspace({ showBrowserTab: false });
+    expect(within(openRailMenu()).queryByRole("menuitem", { name: /navegador/i })).toBeNull();
+  });
+
+  it("offers the session actions", () => {
+    renderWorkspace();
+    const menu = within(openRailMenu());
+    expect(menu.getByRole("menuitem", { name: /renomear/i })).toBeInTheDocument();
+    expect(menu.getByRole("menuitem", { name: /arquivar/i })).toBeInTheDocument();
+  });
+});
+
+describe("WorkspacePanel open-file tabs", () => {
+  it("renders a tab per open file labeled by basename", () => {
+    renderWorkspace({ openFiles: ["src/App.tsx", "docs/README.md"] });
     expect(screen.getByText("App.tsx")).toBeInTheDocument();
     expect(screen.getByText("README.md")).toBeInTheDocument();
   });
 
   it("renders no file tabs when none are open", () => {
     renderWorkspace({ openFiles: [] });
-
-    // No open files → no per-tab close buttons. A failure means the strip
-    // rendered for an empty list.
-    expect(screen.queryByRole("button", { name: /^Fechar / })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Fechar [^p]/ })).toBeNull();
   });
 
-  it("marks the active file tab and leaves the Files tab inactive", () => {
+  it("marks the active file tab", () => {
     renderWorkspace({
       openFiles: ["src/App.tsx", "docs/README.md"],
       selectedFilePath: "docs/README.md",
     });
-
-    // The active file's tab carries aria-current; the other does not. Located
-    // via the uniquely-labeled close button since the basename text also
-    // appears in the FileViewer stub.
     const readmeTab = screen
       .getByRole("button", { name: "Fechar README.md" })
       .closest("[role='button']");
@@ -127,33 +183,11 @@ describe("WorkspacePanel open-file tabs", () => {
       .closest("[role='button']");
     expect(readmeTab).toHaveAttribute("aria-current", "true");
     expect(appTab).toHaveAttribute("aria-current", "false");
-
-    // With a file active the radix value is a sentinel, so the fixed Files tab
-    // must read inactive — otherwise both "Files" and the file tab would look
-    // selected at once (the bug the sentinel prevents).
-    expect(screen.getByRole("tab", { name: /arquivos/i })).toHaveAttribute(
-      "data-state",
-      "inactive",
-    );
-  });
-
-  it("shows the Files tab as active when no file is selected", () => {
-    renderWorkspace({ rightRailTab: "files", selectedFilePath: null });
-
-    // No file selected on the Files tab → the fixed Files trigger is the active
-    // selection. A failure means the sentinel leaked into the no-file case.
-    expect(screen.getByRole("tab", { name: /arquivos/i })).toHaveAttribute("data-state", "active");
   });
 
   it("activates a file via openFileViewer when its tab body is clicked", () => {
-    const { openFileViewer } = renderWorkspace({
-      openFiles: ["src/App.tsx", "docs/README.md"],
-    });
-
+    const { openFileViewer } = renderWorkspace({ openFiles: ["src/App.tsx", "docs/README.md"] });
     fireEvent.click(screen.getByText("README.md"));
-
-    // Clicking the tab body opens that file. A failure means the row's onClick
-    // isn't wired to openFileViewer with the tab's full path.
     expect(openFileViewer).toHaveBeenCalledWith("docs/README.md");
   });
 
@@ -161,11 +195,7 @@ describe("WorkspacePanel open-file tabs", () => {
     const { openFileViewer, onCloseFile } = renderWorkspace({
       openFiles: ["src/App.tsx", "docs/README.md"],
     });
-
     fireEvent.click(screen.getByRole("button", { name: "Fechar App.tsx" }));
-
-    // The x closes exactly that file and must not also activate it
-    // (stopPropagation), or closing would race with a selection.
     expect(onCloseFile).toHaveBeenCalledWith("src/App.tsx");
     expect(openFileViewer).not.toHaveBeenCalled();
   });
@@ -173,43 +203,20 @@ describe("WorkspacePanel open-file tabs", () => {
 
 describe("WorkspacePanel content area", () => {
   it("renders the FileViewer for the active path (not the scope panel)", () => {
-    renderWorkspace({
-      openFiles: ["src/App.tsx"],
-      selectedFilePath: "src/App.tsx",
-    });
-
-    // A selected file shows its viewer in the content slot; the scope panel
-    // must not also mount. The stub echoes the path it received.
+    renderWorkspace({ openFiles: ["src/App.tsx"], selectedFilePath: "src/App.tsx" });
     expect(screen.getByTestId("file-viewer-stub")).toHaveTextContent("src/App.tsx");
     expect(screen.queryByTestId("files-panel-stub")).toBeNull();
   });
 
   it("renders the FilesPanel scope view when no file is active on the Files tab", () => {
     renderWorkspace({ rightRailTab: "files", selectedFilePath: null });
-
-    // No active file → the scope view (Changed/All list/tree) owns the content
-    // slot and the viewer is unmounted.
     expect(screen.getByTestId("files-panel-stub")).toBeInTheDocument();
     expect(screen.queryByTestId("file-viewer-stub")).toBeNull();
-  });
-});
-
-describe("WorkspacePanel browser tab", () => {
-  it("renders the Browser tab only when showBrowserTab is set", () => {
-    renderWorkspace({ showBrowserTab: true });
-    expect(screen.getByRole("tab", { name: /navegador/i })).toBeInTheDocument();
-  });
-
-  it("omits the Browser tab when showBrowserTab is false", () => {
-    renderWorkspace({ showBrowserTab: false });
-    expect(screen.queryByRole("tab", { name: /navegador/i })).toBeNull();
   });
 
   it("mounts the browser pane when the browser tab is selected", () => {
     renderWorkspace({ showBrowserTab: true, rightRailTab: "browser" });
-    // The content slot swaps to the embedded browser pane (stubbed here).
     expect(screen.getByTestId("browser-pane-stub")).toBeInTheDocument();
-    // And the file scope views are not mounted in that branch.
     expect(screen.queryByTestId("files-panel-stub")).toBeNull();
   });
 });

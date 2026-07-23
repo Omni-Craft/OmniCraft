@@ -1,15 +1,30 @@
 import {
+  ArchiveIcon,
   BotIcon,
+  CheckIcon,
+  EllipsisVerticalIcon,
   FileIcon,
   GlobeIcon,
+  LayoutGridIcon,
   ListTodoIcon,
+  PencilIcon,
   SmartphoneIcon,
+  SunMoonIcon,
   TerminalIcon,
   XIcon,
 } from "lucide-react";
-import { useCallback, useEffect, useRef } from "react";
+import { useTheme } from "next-themes";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { useArchiveConversation, useRenameConversation } from "@/hooks/useConversations";
 import { BrowserPane } from "@/components/BrowserPane/BrowserPane";
 import { SimulatorPane } from "@/components/SimulatorPane/SimulatorPane";
 import { FilesPanel } from "./FilesPanel";
@@ -150,6 +165,8 @@ interface WorkspacePanelProps {
    * file + its comments + URL) so they can't drift from the tab state.
    */
   onRightRailTabChange: (next: RightRailTab) => void;
+  /** Collapse the panel (the header's ✕). AppShell owns ``rightPanelOpen``. */
+  onClose?: () => void;
   /** Whether the Files tab is available (agent spec exposes an os_env). */
   showFilesPanel: boolean;
   /** Whether the Browser tab is available — Electron shell only (hidden in a
@@ -241,6 +258,7 @@ export function WorkspacePanel({
   inert,
   rightRailTab,
   onRightRailTabChange,
+  onClose,
   showFilesPanel,
   showBrowserTab,
   showSimulatorTab,
@@ -274,6 +292,85 @@ export function WorkspacePanel({
   const handleCloseTab = useCallback(() => {
     if (selectedFilePath !== null) onCloseFile(selectedFilePath);
   }, [onCloseFile, selectedFilePath]);
+
+  const { resolvedTheme, setTheme } = useTheme();
+  const rename = useRenameConversation();
+  const archive = useArchiveConversation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // The panels available for this session, in display order. Both the header
+  // title and the ⋮ menu read from this one list, so they can't drift.
+  const panels = (
+    [
+      showFilesPanel && {
+        id: "files" as const,
+        label: "Arquivos",
+        Icon: FileIcon,
+        badge: changedCount > 0 ? String(changedCount) : null,
+      },
+      {
+        id: "subagents" as const,
+        label: "Agentes",
+        Icon: BotIcon,
+        badge: subagentsWorking > 0 ? `${subagentsWorking}/${agentCount}` : String(agentCount),
+        // Green only while a child is actually working — otherwise the count
+        // is a neutral total, matching the old tab-strip badge.
+        badgeTint: subagentsWorking > 0 ? "bg-success/15 text-success" : null,
+      },
+      showShellsTab && {
+        id: "terminals" as const,
+        label: "Terminais",
+        Icon: TerminalIcon,
+        badge: terminalsLength > 0 ? String(terminalsLength) : null,
+      },
+      isClaudeNative &&
+        todosTotal > 0 && {
+          id: "todos" as const,
+          label: "Tarefas",
+          Icon: ListTodoIcon,
+          badge: `${todosCompleted}/${todosTotal}`,
+        },
+      showBrowserTab && {
+        id: "browser" as const,
+        label: "Navegador",
+        Icon: GlobeIcon,
+        badge: null,
+      },
+      showSimulatorTab && {
+        id: "simulator" as const,
+        label: "Simulador de iOS",
+        Icon: SmartphoneIcon,
+        badge: null,
+      },
+    ] as const
+  ).filter(Boolean) as {
+    id: RightRailTab;
+    label: string;
+    Icon: typeof FileIcon;
+    badge: string | null;
+    badgeTint?: string | null;
+  }[];
+
+  const activePanel = panels.find((p) => p.id === rightRailTab) ?? panels[0];
+  // When a file is open its name is the title; otherwise the active panel's.
+  const headerTitle =
+    selectedFilePath !== null
+      ? (selectedFilePath.split("/").pop() ?? "Arquivo")
+      : (activePanel?.label ?? "Painel");
+
+  const doRename = () => {
+    const next = window.prompt("Novo nome da sessão:");
+    if (next && next.trim()) rename.mutate({ id: conversationId, title: next.trim() });
+  };
+  const doArchive = () => {
+    if (window.confirm("Arquivar esta sessão? Ela sai da lista, mas o histórico fica.")) {
+      archive.mutate({ id: conversationId, archived: true });
+    }
+  };
+
+  const railBtn =
+    "flex size-9 items-center justify-center rounded-[10px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground";
+
   return (
     <aside
       aria-label="Workspace"
@@ -290,7 +387,7 @@ export function WorkspacePanel({
       // ``@container/rail`` makes the rail a named container-query context so
       // the tab strip can switch scroll behavior on the rail's own width
       // (see the strip below) without a JS width listener.
-      className="@container/rail relative z-40 hidden md:flex md:shrink-0 md:flex-col md:overflow-hidden md:mt-14 md:mr-2 md:mb-2 md:rounded-xl md:border md:border-border md:bg-card md:shadow-lg md:min-h-0"
+      className="@container/rail relative z-40 hidden md:flex md:shrink-0 md:flex-row md:overflow-hidden md:mt-14 md:mr-2 md:mb-2 md:rounded-xl md:border md:border-border md:bg-card md:shadow-lg md:min-h-0"
       style={{ width }}
     >
       {/* Left-edge horizontal resize handle. */}
@@ -298,146 +395,39 @@ export function WorkspacePanel({
         {...handleProps}
         className="absolute inset-y-0 left-0 z-10 w-1 cursor-col-resize hover:bg-primary/30 active:bg-primary/50 transition-colors"
       />
-      {/* Tab strip, in display order Files · Agents · Shells · Tasks.
-          Files and Agents are always present (the Agents panel lists at
-          least the main agent). Shells shows whenever AppShell's gate
-          allows it (the agent declares shell access, or a shell already
-          exists) — the empty state carries the "+ New shell"
-          affordance, so an empty tab is an entry point, not a dead end.
-          The Agents tab keys off ``rootSessionId``, so inside a child
-          it lists the siblings + a "main" link back to the parent. */}
-      {/* Tab strip scroll behavior is rail-width-driven (container query):
-          - ≥500px: the static tabs stay put and ONLY the file tabs scroll —
-            so the outer row is overflow-x-hidden and the file-tabs region owns
-            the scroller (see below).
-          - <500px: there isn't room to keep the static tabs anchored, so the
-            WHOLE row scrolls — the outer row is the scroller (base
-            overflow-x-auto) and the file region just overflows into it.
-          overflow-y stays hidden so overflow-x:auto can't spawn a vertical
-          scrollbar that eats horizontal space. */}
-      <div className="shrink-0 flex items-center overflow-x-auto overflow-y-hidden border-b border-border px-2 py-1.5 [scrollbar-width:thin] @min-[500px]/rail:overflow-x-hidden [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
-        <Tabs
-          // Static group — never compresses (shrink-0) so it stays anchored on
-          // the left in the ≥500px case and contributes its full width to the
-          // outer scroller in the <500px case.
-          className="shrink-0"
-          // When a file tab is active no fixed trigger should highlight, so feed
-          // the radix group a sentinel that matches none of them. The active
-          // file tab carries its own highlight (see FileTabsStrip).
-          value={selectedFilePath !== null ? "__file__" : rightRailTab}
-          onValueChange={(v) => onRightRailTabChange(v as RightRailTab)}
-        >
-          <TabsList variant="pill">
-            {showFilesPanel && (
-              <TabsTrigger
-                value="files"
-                className="h-[32px] gap-[6px] rounded-[8px] px-[12px] text-[13px] leading-5"
-              >
-                <FileIcon className="size-4" />
-                Arquivos
-                {changedCount > 0 && (
-                  <span className={cn(TAB_BADGE_BASE, "ml-0.5 bg-muted text-muted-foreground")}>
-                    {changedCount}
-                  </span>
-                )}
-              </TabsTrigger>
-            )}
-            <TabsTrigger
-              value="subagents"
-              className="h-[32px] gap-[6px] rounded-[8px] px-[12px] text-[13px] leading-5"
+      {/* Panel card — title header, the open-file tabs when any, then the
+          content. The tab strip that used to switch panels here moved to the
+          icon rail on the right; the active panel's name is the title now. */}
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden bg-card">
+        <header className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
+          <span
+            data-testid="workspace-panel-title"
+            className="min-w-0 flex-1 truncate text-[13.5px] font-semibold"
+          >
+            {headerTitle}
+          </span>
+          {onClose && (
+            <button
+              type="button"
+              aria-label="Fechar painel"
+              onClick={onClose}
+              className="text-muted-foreground transition-colors hover:text-foreground"
             >
-              <BotIcon className="size-4" />
-              Agentes
-              <span
-                className={cn(
-                  TAB_BADGE_BASE,
-                  "ml-0.5",
-                  subagentsWorking > 0
-                    ? "bg-success/15 text-success"
-                    : "bg-muted text-muted-foreground",
-                )}
-              >
-                {subagentsWorking > 0 ? `${subagentsWorking}/${agentCount}` : agentCount}
-              </span>
-            </TabsTrigger>
-            {showShellsTab && (
-              <TabsTrigger
-                value="terminals"
-                className="h-[32px] gap-[6px] rounded-[8px] px-[12px] text-[13px] leading-5"
-              >
-                <TerminalIcon className="size-4" />
-                Terminais
-                {/* No badge before the first shell — a "0" next to a
-                    default-visible tab reads as an error state. */}
-                {terminalsLength > 0 && (
-                  <span className={cn(TAB_BADGE_BASE, "ml-0.5 bg-muted text-muted-foreground")}>
-                    {terminalsLength}
-                  </span>
-                )}
-              </TabsTrigger>
-            )}
-            {isClaudeNative && todosTotal > 0 && (
-              <TabsTrigger
-                value="todos"
-                className="h-[32px] gap-[6px] rounded-[8px] px-[12px] text-[13px] leading-5"
-              >
-                <ListTodoIcon className="size-4" />
-                Tarefas
-                <span className={cn(TAB_BADGE_BASE, "ml-0.5 bg-muted text-muted-foreground")}>
-                  {todosCompleted}/{todosTotal}
-                </span>
-              </TabsTrigger>
-            )}
-            {showBrowserTab && (
-              <TabsTrigger
-                value="browser"
-                className="h-[32px] gap-[6px] rounded-[8px] px-[12px] text-[13px] leading-5"
-              >
-                <GlobeIcon className="size-4" />
-                Navegador
-              </TabsTrigger>
-            )}
-            {showSimulatorTab && (
-              <TabsTrigger
-                value="simulator"
-                className="h-[32px] gap-[6px] rounded-[8px] px-[12px] text-[13px] leading-5"
-              >
-                <SmartphoneIcon className="size-4" />
-                Simulador
-              </TabsTrigger>
-            )}
-          </TabsList>
-        </Tabs>
+              <XIcon className="size-4" />
+            </button>
+          )}
+        </header>
         {openFiles.length > 0 && (
-          <>
-            {/* 1px divider separating the static tabs from the file tabs.
-                Only meaningful in the ≥500px case where the static tabs are
-                anchored; in the <500px whole-strip-scroll case there's no fixed
-                boundary, so hide it. */}
-            <div
-              aria-hidden
-              className="mx-[4px] hidden h-[14px] w-px shrink-0 self-center bg-border-strong @min-[500px]/rail:block"
+          <div className="flex shrink-0 items-center overflow-x-auto overflow-y-hidden border-b border-border px-2 py-1.5 [scrollbar-width:thin] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:h-1">
+            <FileTabsStrip
+              openFiles={openFiles}
+              activeFilePath={selectedFilePath}
+              onFileSelect={openFileViewer}
+              onCloseFile={onCloseFile}
             />
-            {/* File-tabs region. ≥500px (rail container query): the ONLY
-                horizontal scroller (flex-1 + overflow-x-auto), so the static
-                tabs stay anchored. <500px: shrink-0 with NO overflow set — it
-                keeps its natural width and the whole row overflows into the
-                outer scroller, so the strip scrolls as one. (overflow-y-hidden
-                must stay scoped to the ≥500px case: setting it while overflow-x
-                is `visible` would force overflow-x to `auto`, turning this into
-                its own scroller and defeating the <500px whole-strip scroll.) */}
-            <div className="flex shrink-0 items-center [scrollbar-width:thin] @min-[500px]/rail:min-w-0 @min-[500px]/rail:flex-1 @min-[500px]/rail:overflow-x-auto @min-[500px]/rail:overflow-y-hidden [&::-webkit-scrollbar]:h-1 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border [&::-webkit-scrollbar-track]:bg-transparent">
-              <FileTabsStrip
-                openFiles={openFiles}
-                activeFilePath={selectedFilePath}
-                onFileSelect={openFileViewer}
-                onCloseFile={onCloseFile}
-              />
-            </div>
-          </>
+          </div>
         )}
-      </div>
-      {/* Tab content — single slot. Files holds FileViewer when a
+        {/* Tab content — single slot. Files holds FileViewer when a
           file is open, FilesPanel otherwise; Shells holds the
           list-only inline section (clicking a row opens the shell in
           the main view — no in-rail xterm); Subagents lists the
@@ -445,46 +435,130 @@ export function WorkspacePanel({
           The Shells branch is unreachable when its tab is hidden —
           native wrappers, claude-native sub-agents, or no shell
           attached. */}
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        {selectedFilePath !== null ? (
-          <FileViewer
-            frameless
-            open
-            conversationId={conversationId}
-            path={selectedFilePath}
-            onClose={onShowScopeView}
-            onCloseTab={handleCloseTab}
-            onNavigateTo={openFileViewer}
-            permissionLevel={permissionLevel}
-            onCommentsOpenChange={onCommentsOpenChange}
-            sort={filesPanelSort}
-          />
-        ) : rightRailTab === "browser" && showBrowserTab ? (
-          // Embedded browser (Electron only) — BrowserPane self-gates and
-          // measures this rail slot to position the native view over it.
-          <BrowserPane conversationId={conversationId} className="min-h-0 flex-1" />
-        ) : rightRailTab === "simulator" && showSimulatorTab ? (
-          <SimulatorPane conversationId={conversationId} className="min-h-0 flex-1" />
-        ) : rightRailTab === "subagents" && rootSessionId ? (
-          <SubagentsPanel conversationId={conversationId} rootSessionId={rootSessionId} />
-        ) : rightRailTab === "todos" && isClaudeNative ? (
-          <TodoPanel frameless />
-        ) : rightRailTab === "terminals" && showShellsTab ? (
-          <InlineTerminalsSection conversationId={conversationId} onExpand={openTerminalsPanel} />
-        ) : (
-          showFilesPanel && (
-            <FilesPanel
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {selectedFilePath !== null ? (
+            <FileViewer
               frameless
-              onFileSelect={openFileViewer}
-              flatView={filesPanelFlatView}
-              onFlatViewChange={onFlatViewChange}
-              showHidden={filesPanelShowHidden}
-              onShowHiddenChange={onShowHiddenChange}
+              open
+              conversationId={conversationId}
+              path={selectedFilePath}
+              onClose={onShowScopeView}
+              onCloseTab={handleCloseTab}
+              onNavigateTo={openFileViewer}
+              permissionLevel={permissionLevel}
+              onCommentsOpenChange={onCommentsOpenChange}
               sort={filesPanelSort}
-              onSortChange={onSortChange}
             />
-          )
+          ) : rightRailTab === "browser" && showBrowserTab ? (
+            // Embedded browser (Electron only) — BrowserPane self-gates and
+            // measures this rail slot to position the native view over it.
+            <BrowserPane conversationId={conversationId} className="min-h-0 flex-1" />
+          ) : rightRailTab === "simulator" && showSimulatorTab ? (
+            <SimulatorPane conversationId={conversationId} className="min-h-0 flex-1" />
+          ) : rightRailTab === "subagents" && rootSessionId ? (
+            <SubagentsPanel conversationId={conversationId} rootSessionId={rootSessionId} />
+          ) : rightRailTab === "todos" && isClaudeNative ? (
+            <TodoPanel frameless />
+          ) : rightRailTab === "terminals" && showShellsTab ? (
+            <InlineTerminalsSection conversationId={conversationId} onExpand={openTerminalsPanel} />
+          ) : (
+            showFilesPanel && (
+              <FilesPanel
+                frameless
+                onFileSelect={openFileViewer}
+                flatView={filesPanelFlatView}
+                onFlatViewChange={onFlatViewChange}
+                showHidden={filesPanelShowHidden}
+                onShowHiddenChange={onShowHiddenChange}
+                sort={filesPanelSort}
+                onSortChange={onSortChange}
+              />
+            )
+          )}
+        </div>
+      </div>
+      {/* Icon rail — the panel menu (⋮), plus terminal and theme shortcuts.
+          Panel switching and session actions live in the menu; the rail keeps
+          only the always-useful shortcuts as fixed icons. */}
+      <div className="flex w-[52px] shrink-0 flex-col items-center gap-1.5 border-l border-border bg-background/50 py-3">
+        {showShellsTab && (
+          <button
+            type="button"
+            aria-label="Terminais"
+            title="Terminais"
+            onClick={() => onRightRailTabChange("terminals")}
+            className={railBtn}
+          >
+            <TerminalIcon className="size-[18px]" />
+          </button>
         )}
+        <button
+          type="button"
+          aria-label="Painéis"
+          title="Painéis"
+          onClick={() => setMenuOpen(true)}
+          className={railBtn}
+        >
+          <LayoutGridIcon className="size-[18px]" />
+        </button>
+        <button
+          type="button"
+          aria-label="Alternar tema"
+          title="Tema"
+          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+          className={railBtn}
+        >
+          <SunMoonIcon className="size-[18px]" />
+        </button>
+        <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              aria-label="Menu do painel"
+              className={cn(railBtn, "relative", menuOpen && "bg-primary/15 text-foreground")}
+            >
+              <EllipsisVerticalIcon className="size-[18px]" />
+              <span className="absolute right-1.5 top-1.5 size-1.5 rounded-full bg-primary" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" side="left" className="w-60">
+            <DropdownMenuLabel>Painel</DropdownMenuLabel>
+            {panels.map((p) => {
+              const on = selectedFilePath === null && p.id === rightRailTab;
+              return (
+                <DropdownMenuItem
+                  key={p.id}
+                  data-active={on ? "true" : "false"}
+                  onSelect={() => onRightRailTabChange(p.id)}
+                >
+                  <p.Icon className="size-4" />
+                  <span className="flex-1">{p.label}</span>
+                  {p.badge && (
+                    <span
+                      className={cn(
+                        TAB_BADGE_BASE,
+                        p.badgeTint ?? "bg-muted text-muted-foreground",
+                      )}
+                    >
+                      {p.badge}
+                    </span>
+                  )}
+                  {on && <CheckIcon className="size-3.5 text-primary" />}
+                </DropdownMenuItem>
+              );
+            })}
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Sessão</DropdownMenuLabel>
+            <DropdownMenuItem onSelect={doRename}>
+              <PencilIcon className="size-4" />
+              Renomear
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={doArchive}>
+              <ArchiveIcon className="size-4" />
+              Arquivar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </aside>
   );

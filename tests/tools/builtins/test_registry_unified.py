@@ -134,6 +134,9 @@ def test_builtin_names_size_matches_registry() -> None:
                 # iOS Simulator tool (runner-local; shells out to
                 # simctl/xcodebuild/idb on the runner host).
                 "ios_simulator",
+                # Computer control (runner-local; screencapture/cliclick on the
+                # runner host, gated behind per-action approval).
+                "computer",
                 # Hindsight long-term memory tools (optional `hindsight`
                 # extra; factories probe for hindsight-client).
                 "hindsight_retain",

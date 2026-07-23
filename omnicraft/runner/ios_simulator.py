@@ -21,6 +21,9 @@ import time
 from pathlib import Path
 from typing import Any
 
+from omnicraft.runner.host_shell import shell_out as _shell
+from omnicraft.runner.host_shell import tail as _tail
+
 # A device reference the caller passes: a UDID, a device name ("iPhone 17 Pro"),
 # or the sentinel "booted". Matched against this to tell a UDID from a name.
 _UDID_RE = re.compile(r"^[0-9A-Fa-f]{8}-(?:[0-9A-Fa-f]{4}-){3}[0-9A-Fa-f]{12}$")
@@ -46,59 +49,6 @@ _BOOTED_DEFAULT_ACTIONS = frozenset(
 # are quick simctl calls.
 _SIMCTL_TIMEOUT_S = 60.0
 _BUILD_TIMEOUT_S = 1200.0
-
-
-class ShellResult:
-    """Outcome of one shell-out: return code plus captured streams."""
-
-    __slots__ = ("returncode", "stderr", "stdout")
-
-    def __init__(self, returncode: int, stdout: str, stderr: str) -> None:
-        self.returncode = returncode
-        self.stdout = stdout
-        self.stderr = stderr
-
-    @property
-    def ok(self) -> bool:
-        return self.returncode == 0
-
-
-async def _shell(argv: list[str], *, timeout: float = _SIMCTL_TIMEOUT_S) -> ShellResult:
-    """Run a command, capturing stdout/stderr. Overridable in tests.
-
-    :param argv: Full argument vector, e.g. ``["xcrun", "simctl", "list"]``.
-    :param timeout: Seconds before the child is killed and reported as timed out.
-    :returns: A :class:`ShellResult`.
-    """
-    import asyncio
-
-    try:
-        proc = await asyncio.create_subprocess_exec(
-            *argv,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except FileNotFoundError:
-        return ShellResult(127, "", f"command not found: {argv[0]}")
-    try:
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=timeout)
-    except (TimeoutError, asyncio.TimeoutError):
-        proc.kill()
-        await proc.wait()
-        return ShellResult(124, "", f"timed out after {timeout:.0f}s: {' '.join(argv)}")
-    return ShellResult(
-        proc.returncode or 0,
-        (out or b"").decode("utf-8", "replace"),
-        (err or b"").decode("utf-8", "replace"),
-    )
-
-
-def _tail(text: str, limit: int = 4000) -> str:
-    """Trim long command output to its last ``limit`` chars for the model."""
-    text = text.strip()
-    if len(text) <= limit:
-        return text
-    return "… (início truncado)\n" + text[-limit:]
 
 
 def _destination(device: str | None) -> str:

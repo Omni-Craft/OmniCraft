@@ -176,6 +176,13 @@ def _create_ios_simulator(config: dict[str, str]) -> Tool:
     return IosSimulatorTool()
 
 
+def _create_computer(config: dict[str, str]) -> Tool:
+    """Lazy factory for ComputerTool (runner-local, no config)."""
+    from omnicraft.tools.builtins.computer import ComputerTool
+
+    return ComputerTool()
+
+
 def _create_download_file(config: dict[str, str]) -> Tool:
     """
     Lazy factory for DownloadFileTool.
@@ -296,6 +303,10 @@ _BUILTIN_REGISTRY: dict[str, _BuiltinFactory | None] = {
     # iOS Simulator control — runner-local dispatch (simctl/xcodebuild/idb on
     # the runner host). This entry provides the name + schema.
     "ios_simulator": _create_ios_simulator,
+    # Computer control — runner-local dispatch (screencapture/cliclick on the
+    # runner host). Highest blast radius in the tree: opt-in per spec, and the
+    # shipped policy gates every call behind per-action approval.
+    "computer": _create_computer,
     # Hindsight long-term memory (optional ``memory`` extra). Each factory
     # probes for ``hindsight-client`` and fails with an install hint if absent.
     "hindsight_retain": _create_hindsight_retain,

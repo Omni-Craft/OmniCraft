@@ -293,6 +293,11 @@ _EMBEDDED_BROWSER_TOOLS = frozenset(
 # browser tools). Screenshots are saved into the session workspace.
 _IOS_SIMULATOR_TOOLS = frozenset({"ios_simulator"})
 
+# Computer-control tool: runner-local — the runner drives the host's screen and
+# input directly (screencapture / cliclick). Highest blast radius of the local
+# tools; the shipped policy gates every call behind per-action approval.
+_COMPUTER_TOOLS = frozenset({"computer"})
+
 # Priority 5f.2: sys_list_models — runner-local because provider resolution
 # reads the runner host's config/credentials, same as the spawn paths.
 _LIST_MODELS_TOOLS = frozenset({"sys_list_models"})
@@ -376,6 +381,7 @@ _NATIVE_RELAY_BUILTIN_TOOLS = (
     | _LOCAL_MEMORY_TOOLS
     | _EMBEDDED_BROWSER_TOOLS
     | _IOS_SIMULATOR_TOOLS
+    | _COMPUTER_TOOLS
 )
 
 
@@ -510,6 +516,7 @@ _ALL_LOCAL_TOOLS = (
     | _LOCAL_MEMORY_TOOLS
     | _EMBEDDED_BROWSER_TOOLS
     | _IOS_SIMULATOR_TOOLS
+    | _COMPUTER_TOOLS
     | _TIMER_TOOLS
     | _TASK_LIFECYCLE_TOOLS
     | _SKILL_TOOLS
@@ -2959,6 +2966,29 @@ async def _execute_ios_simulator_tool(
     return await ios_simulator.run_action(action, args, workspace=runner_workspace)
 
 
+async def _execute_computer_tool(
+    args: dict[str, Any],
+    *,
+    runner_workspace: Path | None,
+) -> str:
+    """Run a ``computer`` action on the runner host (screencapture/cliclick).
+
+    Screenshots are saved under the session workspace and only the path comes
+    back. Reaching this function means the policy engine already collected the
+    user's approval for this call.
+
+    :param args: Parsed LLM arguments, e.g. ``{"action": "click", "x": 4, "y": 9}``.
+    :param runner_workspace: Session workspace — screenshot save location.
+    :returns: A compact string result for the model.
+    """
+    from omnicraft.runner import computer_control
+
+    action = str(args.get("action") or "").strip()
+    if not action:
+        return "Erro: computer precisa de 'action'."
+    return await computer_control.run_action(action, args, workspace=runner_workspace)
+
+
 def _has_subagent(
     sub_agent_name: str,
     agent_spec: Any | None,
@@ -4803,6 +4833,11 @@ async def execute_tool(
             )
         elif tool_name in _IOS_SIMULATOR_TOOLS:
             output = await _execute_ios_simulator_tool(
+                args,
+                runner_workspace=runner_workspace,
+            )
+        elif tool_name in _COMPUTER_TOOLS:
+            output = await _execute_computer_tool(
                 args,
                 runner_workspace=runner_workspace,
             )

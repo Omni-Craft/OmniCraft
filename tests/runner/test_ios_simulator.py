@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from omnicraft.runner import ios_simulator as ios
+from omnicraft.runner.host_shell import ShellResult
 from omnicraft.runner.tool_dispatch import (
     _ALL_LOCAL_TOOLS,
     _IOS_SIMULATOR_TOOLS,
@@ -26,10 +27,10 @@ from omnicraft.tools.base import ToolContext
 from omnicraft.tools.builtins import INSTANTIABLE_BUILTINS, get_builtin_tool
 
 
-def _fake_shell(recorder: list[list[str]], result: ios.ShellResult):
+def _fake_shell(recorder: list[list[str]], result: ShellResult):
     """An ``_shell`` stub that records argv and returns a fixed result."""
 
-    async def run(argv: list[str], *, timeout: float = 60.0) -> ios.ShellResult:
+    async def run(argv: list[str], *, timeout: float = 60.0) -> ShellResult:
         recorder.append(argv)
         return result
 
@@ -156,7 +157,7 @@ def test_tap_with_idb_builds_command(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
     monkeypatch.setattr(ios.shutil, "which", lambda _name: "/usr/local/bin/idb")
     # describe returns nothing → scale falls back to 1.0, coords unchanged.
-    monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ios.ShellResult(0, "", "")))
+    monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ShellResult(0, "", "")))
     out = asyncio.run(ios.run_action("tap", {"x": 12, "y": 34, "device": "U9"}, workspace=None))
     assert "Toque" in out
     assert ["idb", "describe", "--json", "--udid", "U9"] in calls
@@ -177,11 +178,11 @@ def test_tap_scales_pixels_to_points(monkeypatch: pytest.MonkeyPatch) -> None:
         }
     )
 
-    async def fake(argv: list[str], *, timeout: float = 60.0) -> ios.ShellResult:
+    async def fake(argv: list[str], *, timeout: float = 60.0) -> ShellResult:
         calls.append(argv)
         if argv[:2] == ["idb", "describe"]:
-            return ios.ShellResult(0, describe, "")
-        return ios.ShellResult(0, "", "")
+            return ShellResult(0, describe, "")
+        return ShellResult(0, "", "")
 
     monkeypatch.setattr(ios.shutil, "which", lambda _name: "/usr/local/bin/idb")
     monkeypatch.setattr(ios, "_shell", fake)
@@ -200,14 +201,14 @@ def test_list_formats_json(monkeypatch: pytest.MonkeyPatch) -> None:
             "devices": {"r": [{"name": "iPhone 17 Pro", "udid": "U1", "state": "Shutdown"}]},
         }
     )
-    monkeypatch.setattr(ios, "_shell", _fake_shell([], ios.ShellResult(0, payload, "")))
+    monkeypatch.setattr(ios, "_shell", _fake_shell([], ShellResult(0, payload, "")))
     out = asyncio.run(ios.run_action("list", {}, workspace=None))
     assert "iOS 18.4" in out and "iPhone 17 Pro" in out
 
 
 def test_launch_targets_booted_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
-    monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ios.ShellResult(0, "", "")))
+    monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ShellResult(0, "", "")))
     out = asyncio.run(ios.run_action("launch", {"bundle_id": "com.acme.field"}, workspace=None))
     assert "com.acme.field" in out
     assert calls == [["xcrun", "simctl", "launch", "booted", "com.acme.field"]]
@@ -215,16 +216,16 @@ def test_launch_targets_booted_by_default(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_appearance_command(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
-    monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ios.ShellResult(0, "", "")))
+    monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ShellResult(0, "", "")))
     asyncio.run(ios.run_action("appearance", {"mode": "dark", "device": "U1"}, workspace=None))
     assert calls == [["xcrun", "simctl", "ui", "U1", "appearance", "dark"]]
 
 
 def test_screenshot_saved_to_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
-    async def fake(argv: list[str], *, timeout: float = 60.0) -> ios.ShellResult:
+    async def fake(argv: list[str], *, timeout: float = 60.0) -> ShellResult:
         # argv[-1] is the screenshot output path; write a placeholder PNG there.
         Path(argv[-1]).write_bytes(b"\x89PNG fake")
-        return ios.ShellResult(0, "", "")
+        return ShellResult(0, "", "")
 
     monkeypatch.setattr(ios, "_shell", fake)
     out = asyncio.run(ios.run_action("screenshot", {}, workspace=tmp_path))
@@ -235,7 +236,7 @@ def test_screenshot_saved_to_workspace(monkeypatch: pytest.MonkeyPatch, tmp_path
 
 def test_boot_opens_simulator_app(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
-    monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ios.ShellResult(0, "", "")))
+    monkeypatch.setattr(ios, "_shell", _fake_shell(calls, ShellResult(0, "", "")))
     out = asyncio.run(ios.run_action("boot", {"device": "iPhone 17 Pro"}, workspace=None))
     assert "iniciado" in out
     assert ["xcrun", "simctl", "boot", "iPhone 17 Pro"] in calls

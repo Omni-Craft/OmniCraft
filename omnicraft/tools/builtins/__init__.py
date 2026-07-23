@@ -183,6 +183,13 @@ def _create_computer(config: dict[str, str]) -> Tool:
     return ComputerTool()
 
 
+def _create_project_knowledge(config: dict[str, str]) -> Tool:
+    """Lazy factory for ProjectKnowledgeTool (runner-local, no config)."""
+    from omnicraft.tools.builtins.project_knowledge import ProjectKnowledgeTool
+
+    return ProjectKnowledgeTool()
+
+
 def _create_download_file(config: dict[str, str]) -> Tool:
     """
     Lazy factory for DownloadFileTool.
@@ -307,6 +314,9 @@ _BUILTIN_REGISTRY: dict[str, _BuiltinFactory | None] = {
     # runner host). Highest blast radius in the tree: opt-in per spec, and the
     # shipped policy gates every call behind per-action approval.
     "computer": _create_computer,
+    # Project knowledge base — searches the documents uploaded to the project
+    # this session is filed under. Runner-local, like the memory tools.
+    "project_knowledge": _create_project_knowledge,
     # Hindsight long-term memory (optional ``memory`` extra). Each factory
     # probes for ``hindsight-client`` and fails with an install hint if absent.
     "hindsight_retain": _create_hindsight_retain,

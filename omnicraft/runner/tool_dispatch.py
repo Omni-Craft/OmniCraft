@@ -274,6 +274,10 @@ _HINDSIGHT_TOOLS = frozenset({"hindsight_retain", "hindsight_recall", "hindsight
 # (falling back to the global store when there is no workspace).
 _LOCAL_MEMORY_TOOLS = frozenset({"memory_remember", "memory_recall"})
 
+# Project knowledge base: runner-local like the memory tools — the tool resolves
+# the session's project from its label and reads the shared database directly.
+_PROJECT_KNOWLEDGE_TOOLS = frozenset({"project_knowledge"})
+
 # Embedded-browser tools: runner-local — the runner POSTs the action to the
 # server's browser bridge, and the desktop app's relay drives the actual
 # WebContentsView (web/src/hooks/useBrowserAgentRelay.ts). No renderer open
@@ -379,6 +383,7 @@ _NATIVE_RELAY_BUILTIN_TOOLS = (
     # native harnesses have no built-in long-term memory of their own.
     | _HINDSIGHT_TOOLS
     | _LOCAL_MEMORY_TOOLS
+    | _PROJECT_KNOWLEDGE_TOOLS
     | _EMBEDDED_BROWSER_TOOLS
     | _IOS_SIMULATOR_TOOLS
     | _COMPUTER_TOOLS
@@ -514,6 +519,7 @@ _ALL_LOCAL_TOOLS = (
     | _WEB_SEARCH_TOOLS
     | _HINDSIGHT_TOOLS
     | _LOCAL_MEMORY_TOOLS
+    | _PROJECT_KNOWLEDGE_TOOLS
     | _EMBEDDED_BROWSER_TOOLS
     | _IOS_SIMULATOR_TOOLS
     | _COMPUTER_TOOLS
@@ -2875,6 +2881,43 @@ async def _execute_local_memory_tool(
     return await asyncio.to_thread(tool.invoke, json.dumps(args), ctx)
 
 
+async def _execute_project_knowledge_tool(
+    args: dict[str, Any],
+    *,
+    conversation_id: str | None = None,
+    task_id: str | None = None,
+    agent_id: str | None = None,
+    runner_workspace: Path | None = None,
+) -> str:
+    """
+    Dispatch a ``project_knowledge`` call.
+
+    The tool resolves the session's project from its ``omni_project`` label and
+    reads the shared database, so all this has to thread through is the
+    conversation id — without it there is no project, and the tool says so.
+
+    :param args: Parsed LLM arguments (``query``, optional ``limit``).
+    :param conversation_id: Session id — how the project gets resolved.
+    :param task_id: Calling task id, threaded into the context.
+    :param agent_id: Calling agent id, threaded into the context.
+    :param runner_workspace: Session workspace, threaded for consistency.
+    :returns: The tool's string result.
+    """
+    from omnicraft.tools.base import ToolContext
+    from omnicraft.tools.builtins import get_builtin_tool
+
+    tool = get_builtin_tool("project_knowledge", {})
+    if tool is None:
+        return "A ferramenta project_knowledge não está disponível."
+    ctx = ToolContext(
+        task_id=task_id or "project_knowledge",
+        agent_id=agent_id or "project_knowledge",
+        workspace=runner_workspace,
+        conversation_id=conversation_id,
+    )
+    return await asyncio.to_thread(tool.invoke, json.dumps(args), ctx)
+
+
 async def _execute_embedded_browser_tool(
     args: dict[str, Any],
     *,
@@ -4818,6 +4861,14 @@ async def execute_tool(
             output = await _execute_local_memory_tool(
                 args,
                 tool_name=tool_name,
+                conversation_id=conversation_id,
+                task_id=task_id,
+                agent_id=agent_id,
+                runner_workspace=runner_workspace,
+            )
+        elif tool_name in _PROJECT_KNOWLEDGE_TOOLS:
+            output = await _execute_project_knowledge_tool(
+                args,
                 conversation_id=conversation_id,
                 task_id=task_id,
                 agent_id=agent_id,

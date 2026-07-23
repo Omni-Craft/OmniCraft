@@ -137,6 +137,9 @@ def test_builtin_names_size_matches_registry() -> None:
                 # Computer control (runner-local; screencapture/cliclick on the
                 # runner host, gated behind per-action approval).
                 "computer",
+                # Project knowledge base (runner-local; searches the documents
+                # of the project the session is filed under).
+                "project_knowledge",
                 # Hindsight long-term memory tools (optional `hindsight`
                 # extra; factories probe for hindsight-client).
                 "hindsight_retain",

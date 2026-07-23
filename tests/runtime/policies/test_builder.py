@@ -87,9 +87,10 @@ name: no-guardrails
         conversation_store=conversation_store,
     )
     # No user-declared guardrails, but the hardcoded
-    # ask_on_add_policy guard is always present.
-    assert len(engine.policies) == 1
+    # ask_on_add_policy / ask_on_computer_use guards are always present.
+    assert len(engine.policies) == 2
     assert engine.policies[0].spec.name == "__ask_on_add_policy"
+    assert engine.policies[1].spec.name == "__ask_on_computer_use"
     assert engine.label_defs == {}
     assert engine.labels == {}
 
@@ -118,8 +119,9 @@ guardrails: {}
         conversation_store=conversation_store,
     )
     # The only policy is the hardcoded ask_on_add_policy guard.
-    assert len(engine.policies) == 1
+    assert len(engine.policies) == 2
     assert engine.policies[0].spec.name == "__ask_on_add_policy"
+    assert engine.policies[1].spec.name == "__ask_on_computer_use"
     assert engine.label_defs == {}
     assert engine.labels == {}
 
@@ -168,7 +170,7 @@ guardrails:
     names = [p.spec.name for p in engine.policies]
     # Declared policies in YAML order, plus the hardcoded
     # ask_on_add_policy guard appended by the builder.
-    assert names == ["alpha", "bravo", "charlie", "__ask_on_add_policy"]
+    assert names == ["alpha", "bravo", "charlie", "__ask_on_add_policy", "__ask_on_computer_use"]
 
 
 def test_build_resolves_model_override_then_spec(
@@ -428,7 +430,7 @@ def test_build_from_programmatic_spec(
     )
     assert engine.ask_timeout == 45
     assert engine.policies[0].spec.name == "taint_web"
-    assert engine.policies[-1].spec.name == "__ask_on_add_policy"
+    assert engine.policies[-2].spec.name == "__ask_on_add_policy"
     assert engine.labels == {"integrity": "1"}
 
 
@@ -465,7 +467,7 @@ def test_default_policies_appended_after_agent_policies(
         default_policies=[admin_policy],
     )
     names = [p.spec.name for p in engine.policies]
-    assert names == ["agent_policy", "admin_policy", "__ask_on_add_policy"]
+    assert names == ["agent_policy", "admin_policy", "__ask_on_add_policy", "__ask_on_computer_use"]
 
 
 def test_default_policies_alone_builds_live_engine(
@@ -490,7 +492,7 @@ def test_default_policies_alone_builds_live_engine(
         default_policies=[admin_policy],
     )
     assert engine.policies[0].spec.name == "admin_audit"
-    assert engine.policies[-1].spec.name == "__ask_on_add_policy"
+    assert engine.policies[-2].spec.name == "__ask_on_add_policy"
 
 
 def test_empty_default_policies_preserves_existing_behaviour(
@@ -514,10 +516,10 @@ def test_empty_default_policies_preserves_existing_behaviour(
         conversation_store=conversation_store,
         default_policies=[],
     )
-    # Only the hardcoded ask_on_add_policy guard.
-    assert len(engine_none.policies) == 1
+    # Only the hardcoded guards (add-policy + computer).
+    assert len(engine_none.policies) == 2
     assert engine_none.policies[0].spec.name == "__ask_on_add_policy"
-    assert len(engine_empty.policies) == 1
+    assert len(engine_empty.policies) == 2
     assert engine_empty.policies[0].spec.name == "__ask_on_add_policy"
 
 

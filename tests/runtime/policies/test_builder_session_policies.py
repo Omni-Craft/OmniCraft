@@ -282,7 +282,7 @@ def test_build_engine_includes_session_policies(db_uri: str) -> None:
 
     assert isinstance(engine.policies[0], FunctionPolicy)
     assert engine.policies[0].spec.name == "test_policy"
-    assert engine.policies[-1].spec.name == "__ask_on_add_policy"
+    assert engine.policies[-2].spec.name == "__ask_on_add_policy"
 
 
 def test_build_engine_no_store_returns_noop(db_uri: str) -> None:
@@ -299,9 +299,10 @@ def test_build_engine_no_store_returns_noop(db_uri: str) -> None:
         policy_store=None,
     )
 
-    # No user-declared policies, but ask_on_add_policy is always present.
-    assert len(engine.policies) == 1
+    # No user-declared policies, but the hardcoded guards are always present.
+    assert len(engine.policies) == 2
     assert engine.policies[0].spec.name == "__ask_on_add_policy"
+    assert engine.policies[1].spec.name == "__ask_on_computer_use"
 
 
 def test_build_engine_ordering_session_agent_admin(db_uri: str) -> None:
@@ -359,6 +360,7 @@ def test_build_engine_ordering_session_agent_admin(db_uri: str) -> None:
         "agent_policy",
         "admin_policy",
         "__ask_on_add_policy",
+        "__ask_on_computer_use",
     ]
 
 
@@ -709,4 +711,5 @@ def test_build_engine_ordering_session_agent_db_default_admin(db_uri: str) -> No
         "db_default_policy",
         "yaml_admin_policy",
         "__ask_on_add_policy",
+        "__ask_on_computer_use",
     ]

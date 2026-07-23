@@ -73,6 +73,19 @@ _ASK_ON_ADD_POLICY_SPEC = FunctionPolicySpec(
     ),
 )
 
+# Hardcoded policy that always ASKs before the ``computer`` tool acts on the
+# host's screen/pointer/keyboard. Injected unconditionally for the same reason
+# as the one above: the highest-blast-radius tool must not be reachable without
+# the human seeing, and approving, each individual action.
+_ASK_ON_COMPUTER_SPEC = FunctionPolicySpec(
+    name="__ask_on_computer_use",
+    on=None,
+    function=FunctionRef(
+        path="omnicraft.policies.builtins.safety.ask_on_computer_use",
+        arguments=None,
+    ),
+)
+
 # Bounded cache of ``conversation_id -> session owner``. The owner
 # (``LEVEL_OWNER`` grantee) is immutable for a session's lifetime, so
 # caching it avoids a ``session_permissions`` lookup on every
@@ -336,6 +349,8 @@ def build_policy_engine(
     # no other guardrails are declared (the noop-engine path below
     # is no longer reachable since all_policy_specs is never empty).
     all_policy_specs.append(_ASK_ON_ADD_POLICY_SPEC)
+    # Same posture for the computer tool: every action parks for approval.
+    all_policy_specs.append(_ASK_ON_COMPUTER_SPEC)
 
     label_defs = (guardrails.labels or {}) if guardrails else {}
     initial_labels = _seed_and_load_labels(

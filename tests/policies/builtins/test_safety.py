@@ -608,3 +608,79 @@ def test_block_skills_native_skill_tool_with_args() -> None:
     policy = block_skills(blocked=["deploy"])
     result = policy(tc("Skill", {"skill": "deploy", "args": "--force"}))
     assert result["result"] == "DENY"
+
+
+# ── ask_on_computer_use ────────────────────────────────────────────────────
+
+
+def test_ask_on_computer_use_asks_on_every_action() -> None:
+    """Every computer action parks for approval, whatever it is."""
+    from omnicraft.policies.builtins.safety import ask_on_computer_use
+
+    for action in ("screenshot", "click", "drag", "type", "key", "open_url"):
+        result = ask_on_computer_use(
+            {"type": "tool_call", "data": {"name": "computer", "arguments": {"action": action}}}
+        )
+        assert result["result"] == "ASK", action
+
+
+def test_ask_on_computer_use_reason_describes_the_action() -> None:
+    """The approval card must say what will happen, not just the tool name."""
+    from omnicraft.policies.builtins.safety import ask_on_computer_use
+
+    result = ask_on_computer_use(
+        {
+            "type": "tool_call",
+            "data": {"name": "computer", "arguments": {"action": "click", "x": 820, "y": 410}},
+        }
+    )
+    assert "clicar em (820, 410)" in result["reason"]
+
+    typed = ask_on_computer_use(
+        {
+            "type": "tool_call",
+            "data": {"name": "computer", "arguments": {"action": "type", "text": "senha"}},
+        }
+    )
+    assert "digitar" in typed["reason"] and "senha" in typed["reason"]
+
+
+def test_ask_on_computer_use_truncates_long_text() -> None:
+    """A long paste is previewed, not dumped into the approval card."""
+    from omnicraft.policies.builtins.safety import ask_on_computer_use
+
+    result = ask_on_computer_use(
+        {
+            "type": "tool_call",
+            "data": {"name": "computer", "arguments": {"action": "type", "text": "x" * 200}},
+        }
+    )
+    assert "…" in result["reason"]
+    assert len(result["reason"]) < 160
+
+
+def test_ask_on_computer_use_allows_other_tools() -> None:
+    """Non-computer tool calls pass through."""
+    from omnicraft.policies.builtins.safety import ask_on_computer_use
+
+    result = ask_on_computer_use(
+        {"type": "tool_call", "data": {"name": "web_search", "arguments": {}}}
+    )
+    assert result["result"] == "ALLOW"
+
+
+def test_ask_on_computer_use_ignores_non_tool_events() -> None:
+    from omnicraft.policies.builtins.safety import ask_on_computer_use
+
+    assert ask_on_computer_use({"type": "request", "data": {}})["result"] == "ALLOW"
+
+
+def test_computer_guard_is_injected_unconditionally() -> None:
+    """The gate ships in the builder, so no spec can enable the tool without it."""
+    from omnicraft.runtime.policies.builder import _ASK_ON_COMPUTER_SPEC
+
+    assert _ASK_ON_COMPUTER_SPEC.name == "__ask_on_computer_use"
+    assert (
+        _ASK_ON_COMPUTER_SPEC.function.path
+        == "omnicraft.policies.builtins.safety.ask_on_computer_use"
+    )

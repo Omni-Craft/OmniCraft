@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 from typing import Any
 
 from fastapi import APIRouter, Request
@@ -117,6 +118,35 @@ def create_doctor_router(
                 ),
             )
         )
+
+        # 4a. Readiness of the `computer` tool. Only meaningful on macOS: it
+        # drives the screen with `screencapture` and the pointer/keyboard with
+        # `cliclick`. The TCC permissions can't be read without prompting for
+        # them, so the check reports what the tool needs and who has to hold it
+        # — the prompt lands on the RUNNER's process, not on the server.
+        if sys.platform == "darwin":
+            has_cliclick = shutil.which("cliclick") is not None
+            checks.append(
+                _check(
+                    "computer_control",
+                    "Controle do computador",
+                    has_cliclick,
+                    (
+                        "cliclick disponível"
+                        if has_cliclick
+                        else "cliclick ausente — só screenshot funcionaria"
+                    ),
+                    (
+                        "Conceda Gravação de Tela e Acessibilidade ao processo do runner "
+                        "em Ajustes → Privacidade e Segurança. O macOS pede na primeira "
+                        "vez que a ferramenta agir."
+                        if has_cliclick
+                        else "Instale com 'brew install cliclick' e depois conceda Gravação "
+                        "de Tela e Acessibilidade ao processo do runner em Ajustes → "
+                        "Privacidade e Segurança."
+                    ),
+                )
+            )
 
         # 4b. PATH discrepancy: a CLI the server finds but the HOST daemon
         # reported as binary-missing means the tool is installed in the

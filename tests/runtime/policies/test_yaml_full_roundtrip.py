@@ -343,9 +343,9 @@ guardrails:
           prompt: "check"
 """,
     )
-    # All three policies built, plus the auto-injected __ask_on_add_policy.
+    # All three policies built, plus the auto-injected guards.
     names = [p.spec.name for p in engine.policies]
-    assert names == ["label_taint", "function_rate", "prompt_check", "__ask_on_add_policy"]
+    assert names == ["label_taint", "function_rate", "prompt_check", "__ask_on_add_policy", "__ask_on_computer_use"]
 
     from omnicraft.spec.types import FunctionPolicySpec
 

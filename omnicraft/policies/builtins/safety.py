@@ -218,6 +218,75 @@ def ask_on_add_policy(event: PolicyEvent) -> PolicyResponse:
     }
 
 
+# ── Computer control approval ──────────────────────────────────────────────
+
+
+def _describe_computer_action(args: dict[str, Any]) -> str:
+    """Phrase one ``computer`` action the way a human would read it.
+
+    The approval card (the notch island, or the web prompt) shows this, so it
+    has to say what is about to happen to the machine — "clicar em (820, 410)"
+    is reviewable, "computer(...)" is not.
+
+    :param args: The tool call's arguments.
+    :returns: A short Portuguese phrase describing the action.
+    """
+    action = str(args.get("action") or "?")
+    if action == "screenshot":
+        return "capturar a tela"
+    pointer = {
+        "click": "clicar",
+        "double_click": "dar um duplo clique",
+        "right_click": "clicar com o botão direito",
+        "move": "mover o ponteiro",
+    }
+    if action in pointer:
+        return f"{pointer[action]} em ({args.get('x')}, {args.get('y')})"
+    if action == "drag":
+        return (
+            f"arrastar de ({args.get('x')}, {args.get('y')}) "
+            f"para ({args.get('to_x')}, {args.get('to_y')})"
+        )
+    if action == "type":
+        text = str(args.get("text") or "")
+        shown = text if len(text) <= 40 else text[:40] + "…"
+        return f"digitar {shown!r}"
+    if action == "key":
+        return f"pressionar {str(args.get('keys') or '')!r}"
+    if action == "open_app":
+        return f"abrir o app {str(args.get('app') or '')!r}"
+    if action == "open_url":
+        return f"abrir {str(args.get('url') or '')!r}"
+    return f"executar '{action}'"
+
+
+def ask_on_computer_use(event: PolicyEvent) -> PolicyResponse:
+    """ASK for user approval before every ``computer`` action.
+
+    The ``computer`` tool drives the host's real screen, pointer and keyboard —
+    it can click anything the signed-in user can click, in any app. This
+    callable is injected unconditionally by the builder, so no spec can enable
+    the tool and skip the gate: every single action parks for approval and the
+    human sees exactly what it intends to do first.
+
+    :param event: Policy event dict.
+    :returns: ASK when the ``computer`` tool is being called, ALLOW otherwise.
+    """
+    if event.get("type") != "tool_call":
+        return _ALLOW
+    data = event.get("data")
+    if not isinstance(data, dict):
+        return _ALLOW
+    if data.get("name") != "computer":
+        return _ALLOW
+    raw = data.get("arguments")
+    args = raw if isinstance(raw, dict) else {}
+    return {
+        "result": "ASK",
+        "reason": f"O agente quer {_describe_computer_action(args)} no seu computador. Aprovar?",
+    }
+
+
 # ── Skill blocking ──────────────────────────────────────────────────────────
 
 # OmniCraft runner tools that load skills in non-native (SDK) harnesses.
@@ -582,6 +651,16 @@ POLICY_REGISTRY: list[dict[str, Any]] = [
         "do Codex, ferramentas nativas do opencode (bash, edit, read, grep, glob) e "
         "ferramentas do Hermes Agent (terminal, execute_code, read_file, write_file, "
         "search_files)",
+        "params_schema": None,
+    },
+    {
+        "handler": "omnicraft.policies.builtins.safety.ask_on_computer_use",
+        "kind": "callable",
+        "name": "Exigir aprovação para controlar o computador",
+        "description": "Pede aprovação do usuário antes de CADA ação da ferramenta "
+        "computer (capturar a tela, clicar, arrastar, digitar, atalho de teclado, "
+        "abrir app ou URL). É injetada automaticamente em toda sessão — a ferramenta "
+        "nunca roda sem aprovação, mesmo que nenhuma guardrail seja declarada.",
         "params_schema": None,
     },
     {

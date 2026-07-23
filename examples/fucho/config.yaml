@@ -379,6 +379,12 @@ tools:
     # Xcode scheme, install/launch a .app, screenshot, and tap/type (tap needs
     # idb). Runs simctl/xcodebuild directly — the machine must have Xcode.
     - name: ios_simulator
+    # Computer control on the runner host: see the screen, click, type, open
+    # apps. Highest blast radius in the tree — it reaches every app the
+    # signed-in user can. Safe to enable only because the policy builder gates
+    # EVERY action behind approval (see docs/COMPUTER_CONTROL.md); needs
+    # cliclick plus the Screen Recording and Accessibility permissions.
+    - name: computer
   # Coding sub-agents — see agents/<name>/. claude_code, codex, opencode,
   # cursor, and hermes are real CLI coding harnesses; pi is a headless
   # multi-model worker. Each implements, reviews (cross-vendor), and explores.

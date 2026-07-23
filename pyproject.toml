@@ -287,8 +287,13 @@ include = ["omnicraft*"]
 "omnicraft.resources.examples" = ["*.yaml", "*.sh", "lilo/**/*", "fucho/**/*"]
 "omnicraft.resources.pi_native" = ["*.js"]
 # include UI assets in build, plus the static API-only landing page served
-# at "/" when no web UI bundle is present
-"omnicraft.server" = ["static/web-ui/**/*", "static/api_only_landing.html"]
+# at "/" when no web UI bundle is present, and the curated MCP catalog served
+# by GET /v1/mcp-catalog
+"omnicraft.server" = [
+    "static/web-ui/**/*",
+    "static/api_only_landing.html",
+    "data/*.json",
+]
 
 [tool.pytest.ini_options]
 # auto mode: async tests without @pytest.mark.asyncio() are auto-

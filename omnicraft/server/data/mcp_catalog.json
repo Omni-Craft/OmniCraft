@@ -1,0 +1,314 @@
+{
+  "version": 1,
+  "connectors": [
+    {
+      "id": "filesystem",
+      "title": "Filesystem",
+      "emoji": "📁",
+      "category": "arquivos",
+      "description": "Leitura e escrita numa pasta específica do disco.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/caminho/da/pasta"],
+      "env_required": [],
+      "setup_note": "Troque /caminho/da/pasta pela pasta que quer expor ao agente.",
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+    },
+    {
+      "id": "memory",
+      "title": "Memory",
+      "emoji": "🧠",
+      "category": "memória",
+      "description": "Memória em grafo de conhecimento — entidades, relações e busca.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"],
+      "env_required": [],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/memory"
+    },
+    {
+      "id": "sequential-thinking",
+      "title": "Sequential Thinking",
+      "emoji": "🤔",
+      "category": "raciocínio",
+      "description": "Raciocínio estruturado passo a passo para problemas complexos.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "env_required": [],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sequentialthinking"
+    },
+    {
+      "id": "fetch",
+      "title": "Fetch",
+      "emoji": "🌐",
+      "category": "web",
+      "description": "Busca páginas web e converte para markdown.",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-fetch"],
+      "env_required": [],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+    },
+    {
+      "id": "git",
+      "title": "Git",
+      "emoji": "🌿",
+      "category": "dev",
+      "description": "Ler, buscar e manipular repositórios Git locais.",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-git", "--repository", "/caminho/do/repo"],
+      "env_required": [],
+      "setup_note": "Troque /caminho/do/repo pelo repositório que quer expor.",
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/git"
+    },
+    {
+      "id": "time",
+      "title": "Time",
+      "emoji": "🕐",
+      "category": "utilitário",
+      "description": "Hora atual e conversão entre fusos horários.",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-time"],
+      "env_required": [],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/time"
+    },
+    {
+      "id": "playwright",
+      "title": "Playwright",
+      "emoji": "🎬",
+      "category": "web",
+      "description": "Automação de navegador — navegar, clicar, preencher e extrair.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "env_required": [],
+      "docs_url": "https://github.com/microsoft/playwright-mcp"
+    },
+    {
+      "id": "puppeteer",
+      "title": "Puppeteer",
+      "emoji": "🎭",
+      "category": "web",
+      "description": "Automação de navegador via Puppeteer, com screenshots.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-puppeteer"],
+      "env_required": [],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/puppeteer"
+    },
+    {
+      "id": "github",
+      "title": "GitHub",
+      "emoji": "🐙",
+      "category": "dev",
+      "description": "Issues, pull requests, busca de código e repositórios.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env_required": [
+        {
+          "name": "GITHUB_PERSONAL_ACCESS_TOKEN",
+          "label": "Token pessoal do GitHub",
+          "help": "Crie em github.com/settings/tokens com escopo repo."
+        }
+      ],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/github"
+    },
+    {
+      "id": "gitlab",
+      "title": "GitLab",
+      "emoji": "🦊",
+      "category": "dev",
+      "description": "Projetos, issues e merge requests do GitLab.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gitlab"],
+      "env_required": [
+        {
+          "name": "GITLAB_PERSONAL_ACCESS_TOKEN",
+          "label": "Token pessoal do GitLab",
+          "help": "Crie em Preferences → Access Tokens com escopo api."
+        }
+      ],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gitlab"
+    },
+    {
+      "id": "sentry",
+      "title": "Sentry",
+      "emoji": "🚨",
+      "category": "dev",
+      "description": "Consulta issues e stack traces do Sentry.",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-sentry"],
+      "env_required": [
+        {
+          "name": "SENTRY_AUTH_TOKEN",
+          "label": "Token de autenticação do Sentry",
+          "help": "Crie em Settings → Auth Tokens."
+        }
+      ],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sentry"
+    },
+    {
+      "id": "context7",
+      "title": "Context7",
+      "emoji": "📚",
+      "category": "dev",
+      "description": "Documentação atualizada de bibliotecas, sob demanda.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "env_required": [],
+      "docs_url": "https://github.com/upstash/context7"
+    },
+    {
+      "id": "postgres",
+      "title": "PostgreSQL",
+      "emoji": "🐘",
+      "category": "dados",
+      "description": "Consultas somente-leitura e inspeção de esquema.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://localhost/meubanco"
+      ],
+      "env_required": [],
+      "setup_note": "Troque a URL de conexão pela do seu banco.",
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/postgres"
+    },
+    {
+      "id": "sqlite",
+      "title": "SQLite",
+      "emoji": "🗃️",
+      "category": "dados",
+      "description": "Consulta e inspeciona um arquivo SQLite.",
+      "transport": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-sqlite", "--db-path", "/caminho/do/banco.db"],
+      "env_required": [],
+      "setup_note": "Troque o caminho pelo arquivo .db que quer expor.",
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/sqlite"
+    },
+    {
+      "id": "redis",
+      "title": "Redis",
+      "emoji": "🔴",
+      "category": "dados",
+      "description": "Leitura e escrita de chaves no Redis.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-redis", "redis://localhost:6379"],
+      "env_required": [],
+      "setup_note": "Troque a URL pela do seu Redis.",
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/redis"
+    },
+    {
+      "id": "brave-search",
+      "title": "Brave Search",
+      "emoji": "🔎",
+      "category": "web",
+      "description": "Busca na web pela API do Brave.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-brave-search"],
+      "env_required": [
+        {
+          "name": "BRAVE_API_KEY",
+          "label": "Chave da API do Brave",
+          "help": "Crie em brave.com/search/api."
+        }
+      ],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/brave-search"
+    },
+    {
+      "id": "firecrawl",
+      "title": "Firecrawl",
+      "emoji": "🔥",
+      "category": "web",
+      "description": "Crawl e scraping de sites inteiros em markdown.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "firecrawl-mcp"],
+      "env_required": [
+        {
+          "name": "FIRECRAWL_API_KEY",
+          "label": "Chave da API do Firecrawl",
+          "help": "Crie em firecrawl.dev."
+        }
+      ],
+      "docs_url": "https://github.com/firecrawl/firecrawl-mcp-server"
+    },
+    {
+      "id": "slack",
+      "title": "Slack",
+      "emoji": "💬",
+      "category": "produtividade",
+      "description": "Lê canais, histórico e envia mensagens no Slack.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-slack"],
+      "env_required": [
+        {
+          "name": "SLACK_BOT_TOKEN",
+          "label": "Token do bot (xoxb-…)",
+          "help": "Crie um app em api.slack.com/apps e instale no workspace."
+        },
+        {
+          "name": "SLACK_TEAM_ID",
+          "label": "ID do workspace (T…)",
+          "help": "Aparece na URL do Slack web."
+        }
+      ],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/slack"
+    },
+    {
+      "id": "notion",
+      "title": "Notion",
+      "emoji": "📝",
+      "category": "produtividade",
+      "description": "Lê e escreve páginas e bancos de dados do Notion.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@notionhq/notion-mcp-server"],
+      "env_required": [
+        {
+          "name": "NOTION_TOKEN",
+          "label": "Token de integração do Notion",
+          "help": "Crie em notion.so/my-integrations e compartilhe as páginas com ela."
+        }
+      ],
+      "docs_url": "https://github.com/makenotion/notion-mcp-server"
+    },
+    {
+      "id": "gdrive",
+      "title": "Google Drive",
+      "emoji": "📄",
+      "category": "produtividade",
+      "description": "Busca e leitura de arquivos do Google Drive.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-gdrive"],
+      "env_required": [],
+      "setup_note": "Exige credenciais OAuth do Google Cloud — siga a documentação antes de conectar.",
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/gdrive"
+    },
+    {
+      "id": "everything",
+      "title": "Everything (demo)",
+      "emoji": "🧪",
+      "category": "dev",
+      "description": "Servidor de referência com todos os recursos do MCP — útil para testar.",
+      "transport": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-everything"],
+      "env_required": [],
+      "docs_url": "https://github.com/modelcontextprotocol/servers/tree/main/src/everything"
+    }
+  ]
+}

@@ -69,6 +69,7 @@ from omnicraft.server.routes.gallery import create_gallery_router
 from omnicraft.server.routes.harnesses import create_harnesses_router
 from omnicraft.server.routes.integrations import create_integrations_router
 from omnicraft.server.routes.ios_simulator import create_ios_simulator_router
+from omnicraft.server.routes.mcp_catalog import create_mcp_catalog_router
 from omnicraft.server.routes.monitor import create_monitor_router
 from omnicraft.server.routes.observability import create_observability_router
 from omnicraft.server.routes.policy_registry import create_policy_registry_router
@@ -2250,6 +2251,11 @@ def create_app(
         create_ios_simulator_router(auth_provider=auth_provider),
         prefix="/v1",
         tags=["ios_simulator"],
+    )
+    app.include_router(
+        create_mcp_catalog_router(auth_provider=auth_provider),
+        prefix="/v1",
+        tags=["mcp_catalog"],
     )
     app.include_router(
         create_agent_mcp_servers_router(

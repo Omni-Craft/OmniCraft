@@ -7,6 +7,7 @@
 // stay in sync without shared state.
 
 import {
+  BlocksIcon,
   ChartColumnIcon,
   ClipboardCheckIcon,
   ClockIcon,
@@ -26,12 +27,20 @@ import { Link, useLocation } from "@/lib/routing";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/chatStore";
 
-export type CraftworkSectionId = "home" | "gallery" | "scheduled" | "mcps" | "evals" | "costs";
+export type CraftworkSectionId =
+  | "home"
+  | "gallery"
+  | "scheduled"
+  | "connectors"
+  | "mcps"
+  | "evals"
+  | "costs";
 
 const SECTION_IDS: readonly CraftworkSectionId[] = [
   "home",
   "gallery",
   "scheduled",
+  "connectors",
   "mcps",
   "evals",
   "costs",
@@ -181,6 +190,7 @@ const NAV: NavItem[] = [
   { id: "home", label: "Visão geral", icon: HomeIcon },
   { id: "gallery", label: "Galeria de agentes", icon: LayoutGridIcon },
   { id: "scheduled", label: "Agentes agendados", icon: ClockIcon },
+  { id: "connectors", label: "Conectores", icon: BlocksIcon },
   { id: "mcps", label: "Servidores MCP", icon: PlugIcon },
   { id: "evals", label: "Avaliações", icon: ClipboardCheckIcon },
   { id: "costs", label: "Custos", icon: ChartColumnIcon },

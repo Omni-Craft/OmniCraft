@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { authenticatedFetch } from "@/lib/identity";
-import { cn } from "@/lib/utils";
+import { Link } from "@/lib/routing";
 
 interface McpServer {
   name: string;
@@ -35,76 +35,6 @@ const EMPTY_FORM: FormState = {
   command: "",
   args: "",
 };
-
-// Curated starters — servers that work without secrets (env isn't editable via
-// the API by design). One click prefills the form.
-const CATALOG: { emoji: string; title: string; desc: string; form: FormState }[] = [
-  {
-    emoji: "🧠",
-    title: "Memory (grafo)",
-    desc: "Memória em grafo de conhecimento — entidades, relações e busca.",
-    form: {
-      name: "memory-graph",
-      transport: "stdio",
-      description: "Memória em grafo de conhecimento",
-      url: "",
-      command: "npx",
-      args: "-y @modelcontextprotocol/server-memory",
-    },
-  },
-  {
-    emoji: "🌐",
-    title: "Fetch (web)",
-    desc: "Busca páginas web e converte para markdown.",
-    form: {
-      name: "fetch",
-      transport: "stdio",
-      description: "Busca conteúdo de páginas web",
-      url: "",
-      command: "npx",
-      args: "-y @modelcontextprotocol/server-fetch",
-    },
-  },
-  {
-    emoji: "📁",
-    title: "Filesystem",
-    desc: "Acesso de leitura/escrita a uma pasta específica.",
-    form: {
-      name: "filesystem",
-      transport: "stdio",
-      description: "Acesso a arquivos de uma pasta",
-      url: "",
-      command: "npx",
-      args: "-y @modelcontextprotocol/server-filesystem /caminho/da/pasta",
-    },
-  },
-  {
-    emoji: "🎭",
-    title: "Playwright",
-    desc: "Automação de navegador — navegar, clicar, extrair.",
-    form: {
-      name: "playwright",
-      transport: "stdio",
-      description: "Automação de navegador",
-      url: "",
-      command: "npx",
-      args: "-y @playwright/mcp@latest",
-    },
-  },
-  {
-    emoji: "🤔",
-    title: "Sequential Thinking",
-    desc: "Raciocínio estruturado passo a passo para problemas complexos.",
-    form: {
-      name: "sequential-thinking",
-      transport: "stdio",
-      description: "Raciocínio estruturado",
-      url: "",
-      command: "npx",
-      args: "-y @modelcontextprotocol/server-sequential-thinking",
-    },
-  },
-];
 
 function splitArgs(raw: string): string[] {
   return raw
@@ -279,7 +209,7 @@ export function McpPage() {
           <p className="text-sm opacity-50">Carregando…</p>
         ) : servers.length === 0 ? (
           <p className="text-sm opacity-40">
-            Nenhum servidor MCP neste agente — adicione um abaixo ou use o catálogo.
+            Nenhum servidor MCP neste agente — adicione um abaixo ou instale pelo diretório.
           </p>
         ) : (
           servers.map((s) => (
@@ -428,33 +358,15 @@ export function McpPage() {
         </div>
       </section>
 
-      {/* Catalog */}
-      <section className="flex flex-col gap-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide opacity-50">
-          Catálogo — um clique preenche o formulário
-        </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {CATALOG.map((c) => (
-            <button
-              key={c.title}
-              type="button"
-              onClick={() => {
-                setForm(c.form);
-                setEditing(null);
-                setError(null);
-              }}
-              className={cn(
-                "flex flex-col gap-1.5 rounded-xl border border-border bg-card/40 p-3 text-left",
-                "transition hover:border-foreground/30 hover:bg-card/60",
-              )}
-            >
-              <span className="text-xl">{c.emoji}</span>
-              <span className="text-sm font-semibold">{c.title}</span>
-              <span className="text-xs opacity-60">{c.desc}</span>
-            </button>
-          ))}
-        </div>
-      </section>
+      {/* Discovery lives in the connector directory now — this page stays for
+          manual and advanced setup (custom servers, editing, testing). */}
+      <p className="text-sm opacity-60">
+        Procurando um conector pronto?{" "}
+        <Link to="/craftwork/connectors" className="underline underline-offset-2">
+          Veja o diretório
+        </Link>{" "}
+        — instala num clique e já pede a credencial quando o conector precisa.
+      </p>
     </div>
   );
 }

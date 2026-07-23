@@ -22,6 +22,22 @@ Session policies evaluate first and can short-circuit (DENY) before spec or admi
 
 ![Policy trust model](images/policy-trust-model.png)
 
+## Always-on guards
+
+Two policies are injected into every engine by the builder, no matter what any
+session, spec, or admin declares. They cannot be disabled or overridden, because
+the actions they gate must never happen without a human seeing them first.
+
+| Guard | Gates | Why it is not configurable |
+|-------|-------|----------------------------|
+| `__ask_on_add_policy` | `sys_add_policy` | An agent able to install policies could install one that allows everything. |
+| `__ask_on_computer_use` | every `computer` action | The tool drives the real screen, pointer and keyboard — it can click anything the signed-in user can click. |
+
+They are appended last, so a DENY from a declared policy still short-circuits
+before they run. If you get an approval prompt on a session that declares no
+guardrails at all, this is why — the injection lives in
+`omnicraft/runtime/policies/builder.py`.
+
 ---
 
 ## For server admins
@@ -182,6 +198,18 @@ approve_file_ops:
   type: function
   handler: omnicraft.policies.builtins.safety.ask_on_os_tools
 ```
+
+#### `ask_on_computer_use`
+
+Requires user approval before every `computer` action (screenshot, click, drag,
+type, key, open app/URL). No parameters (direct callable).
+
+You do **not** declare this one — the builder injects it into every engine (see
+[Always-on guards](#always-on-guards)). It is listed here because it shows up in
+the policy registry and in approval prompts. The prompt names the action, not
+the call: *"O agente quer clicar em (820, 410) no seu computador. Aprovar?"*
+
+See [COMPUTER_CONTROL.md](COMPUTER_CONTROL.md) for the tool itself.
 
 #### `block_skills`
 

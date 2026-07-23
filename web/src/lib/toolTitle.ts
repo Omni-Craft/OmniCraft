@@ -39,6 +39,24 @@ const FORMATTERS: Record<string, ArgFormatter> = {
   sys_os_write: (args) => withPath("Escrever", args.path),
   sys_os_edit: (args) => withPath("Editar", args.path),
 
+  // Computer control — say what it did to the machine, not the call shape.
+  computer: (args) => {
+    const action = asString(args.action);
+    if (action === null) return verbOnly("Computador");
+    const at = (x: unknown, y: unknown): string | null =>
+      typeof x === "number" && typeof y === "number" ? `(${x}, ${y})` : null;
+    const detail =
+      action === "drag"
+        ? `${at(args.x, args.y) ?? ""} → ${at(args.to_x, args.to_y) ?? ""}`
+        : (at(args.x, args.y) ??
+          asString(args.text) ??
+          asString(args.keys) ??
+          asString(args.app) ??
+          asString(args.url) ??
+          "");
+    return { verb: `Computador: ${action}`, body: detail };
+  },
+
   // iOS Simulator — lead with the action; append the most relevant
   // argument (device / bundle / scheme / url) as the body.
   ios_simulator: (args) => {

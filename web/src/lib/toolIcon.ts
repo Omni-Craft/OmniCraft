@@ -51,6 +51,7 @@ export function iconForTool(name: string, nativeToolType?: string): LucideIcon {
   if (name === "sys_timer_cancel") return Ban;
   if (name === "web_search" || name === "web_fetch") return Globe;
   if (name === "ios_simulator") return Smartphone;
+  if (name === "computer") return Monitor;
   return Wrench;
 }
 

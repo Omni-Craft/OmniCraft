@@ -57,12 +57,19 @@ On a 2x Retina display those differ by a factor of two — a capture is 3420px
 wide where the screen is 1710pt. Passing pixel coordinates straight through
 would click at double the intended position.
 
-The tool measures both once per process (`osascript` for the desktop bounds in
-points, the capture's own dimensions for pixels) and scales every coordinate. So
-you pass what you read off the screenshot and it lands where you meant.
+The tool measures the ratio once per process by capturing a small rect whose
+size is given in **points** (`screencapture -R 0,0,100,100`) and reading back how
+many **pixels** came out. The ratio is that display's scale factor, exactly. You
+pass what you read off the screenshot and it lands where you meant.
 
-If either measurement is unavailable the scale falls back to 1.0, which assumes
-the caller already speaks points.
+> Do not derive this from the desktop's total bounds. Those span every attached
+> screen while a capture covers only the main one, so with a second monitor the
+> ratio mixes two different things — on a 1920px main display next to a Retina
+> laptop it came out as 1.77x horizontally, enough to throw every click most of
+> a screen off target.
+
+If the probe fails the scale falls back to 1.0, which assumes the caller already
+speaks points.
 
 ## What approval looks like
 
@@ -80,11 +87,13 @@ Approve / Reject, and in the web approval prompt.
 - **macOS only.** There is no Linux or Windows path.
 - **No native scroll.** `cliclick` does not expose a scroll verb; use `key` with
   `page-down` / `page-up` / `arrow-*` on the focused element.
-- **Main display only.** Capture and the point/pixel measurement both assume the
-  primary display; a multi-monitor setup is not handled.
-- **Not verified end to end.** The screenshot path and the Retina scaling were
-  checked on a real machine; the click/type path has not been exercised live,
-  because it needs `cliclick` installed plus both TCC permissions granted.
+- **Main display only.** `screencapture` grabs the primary display, and the
+  scale is measured against that same display, so the two agree — but a window
+  on a second monitor is neither visible nor clickable.
+- **Click/type not verified end to end.** The screenshot path and the scale
+  measurement were checked on a real machine, including a two-monitor setup; the
+  actual pointer and keyboard injection has not been exercised live, because it
+  needs the Accessibility permission granted to the runner's process.
 
 ## Where the code lives
 

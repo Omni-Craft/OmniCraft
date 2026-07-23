@@ -54,9 +54,12 @@ _MODIFIERS = frozenset({"cmd", "ctrl", "alt", "shift", "fn"})
 # cliclick verbs for the plain pointer actions, keyed by tool action.
 _POINTER_VERBS = {"click": "c", "double_click": "dc", "right_click": "rc", "move": "m"}
 
-# Screen points per screenshot pixel, resolved once per process. ``None`` until
-# the first capture (or an explicit probe) establishes it.
+# Screen points per screenshot pixel, resolved once per process by a probe.
 _scale: tuple[float, float] | None = None
+
+# Side of the square probed to measure the scale, in points. Small enough that
+# the capture is a corner of the desktop rather than the user's screen.
+_PROBE_POINTS = 100
 
 
 def _cliclick_missing(action: str) -> str | None:
@@ -71,22 +74,6 @@ def _cliclick_missing(action: str) -> str | None:
     )
 
 
-async def _display_points() -> tuple[int, int] | None:
-    """Desktop size in points, via the Finder's desktop window bounds."""
-    res = await _shell(
-        ["osascript", "-e", 'tell application "Finder" to get bounds of window of desktop']
-    )
-    if not res.ok:
-        return None
-    parts = [p.strip() for p in res.stdout.strip().split(",")]
-    if len(parts) != 4:
-        return None
-    try:
-        return int(parts[2]), int(parts[3])
-    except ValueError:
-        return None
-
-
 def _pixels_of(path: Path) -> tuple[int, int] | None:
     """Pixel dimensions of a PNG, or ``None`` when it can't be read."""
     try:
@@ -98,30 +85,35 @@ def _pixels_of(path: Path) -> tuple[int, int] | None:
         return None
 
 
-def _remember_scale(points: tuple[int, int] | None, pixels: tuple[int, int] | None) -> None:
-    """Cache the points-per-pixel ratio when both measurements are usable."""
-    global _scale
-    if not points or not pixels or not pixels[0] or not pixels[1]:
-        return
-    _scale = (points[0] / pixels[0], points[1] / pixels[1])
-
-
 async def _ensure_scale() -> tuple[float, float]:
-    """Points-per-pixel for the display, probing with a throwaway capture once.
+    """Points-per-pixel for the display the screenshots come from.
 
-    Falls back to 1.0 (assume the model already speaks points) when either
-    measurement is unavailable, so a click still lands somewhere sane instead of
-    failing outright.
+    Measured by capturing a small rect whose size is given in POINTS
+    (``screencapture -R``) and reading back how many PIXELS came out: the ratio
+    is that display's scale factor, exactly.
+
+    Deriving it from the desktop's total bounds instead is wrong the moment a
+    second monitor is attached — the bounds span every screen while the capture
+    covers only the main one, so the ratio mixes two different things. On a
+    1920px main display next to a Retina laptop that produced a 1.77x horizontal
+    scale, which would have thrown every click most of a screen off target.
+
+    Falls back to 1.0 when the probe fails, so a click still lands somewhere
+    sane instead of the action failing outright.
     """
+    global _scale
     if _scale is not None:
         return _scale
-    points = await _display_points()
     with tempfile.TemporaryDirectory() as tmp:
         probe = Path(tmp) / "probe.png"
-        res = await _shell(["screencapture", "-x", str(probe)])
+        rect = f"0,0,{_PROBE_POINTS},{_PROBE_POINTS}"
+        res = await _shell(["screencapture", "-x", "-R", rect, str(probe)])
         pixels = _pixels_of(probe) if res.ok and probe.exists() else None
-    _remember_scale(points, pixels)
-    return _scale if _scale is not None else (1.0, 1.0)
+    if pixels and pixels[0] and pixels[1]:
+        _scale = (_PROBE_POINTS / pixels[0], _PROBE_POINTS / pixels[1])
+    else:
+        _scale = (1.0, 1.0)
+    return _scale
 
 
 async def _screenshot(workspace: Path | None) -> str:
@@ -137,8 +129,6 @@ async def _screenshot(workspace: Path | None) -> str:
             "Ajustes → Privacidade e Segurança → Gravação de Tela."
         )
     pixels = _pixels_of(out_path)
-    if _scale is None:
-        _remember_scale(await _display_points(), pixels)
     size = f" ({pixels[0]}x{pixels[1]}px)" if pixels else ""
     return f"Screenshot salvo: {out_path}{size} — leia o arquivo para ver a tela."
 

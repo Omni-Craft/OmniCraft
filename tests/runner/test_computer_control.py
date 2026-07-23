@@ -211,3 +211,56 @@ def test_screenshot_failure_mentions_permission(
 def test_execute_wrapper_requires_action(tmp_path: Path) -> None:
     out = asyncio.run(_execute_computer_tool({}, runner_workspace=tmp_path))
     assert "action" in out
+
+
+# --- scale probe ------------------------------------------------------------
+
+
+def _probe_writing(size: tuple[int, int], calls: list[list[str]]):
+    """A shell stub whose probe capture comes back at ``size`` pixels."""
+
+    async def fake(argv: list[str], *, timeout: float = 60.0) -> ShellResult:
+        calls.append(argv)
+        if argv[0] == "screencapture":
+            from PIL import Image
+
+            Image.new("RGB", size).save(argv[-1])
+        return ShellResult(0, "", "")
+
+    return fake
+
+
+def test_scale_probe_measures_points_against_pixels(monkeypatch: pytest.MonkeyPatch) -> None:
+    """100 points coming back as 200 pixels is a 2x display → 0.5 points/pixel."""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(cc, "_scale", None)
+    monkeypatch.setattr(cc, "_shell", _probe_writing((200, 200), calls))
+    assert asyncio.run(cc._ensure_scale()) == (0.5, 0.5)
+    # The rect is given in POINTS — that is what makes the ratio meaningful.
+    probe = next(c for c in calls if c[0] == "screencapture")
+    assert "-R" in probe
+    assert f"0,0,{cc._PROBE_POINTS},{cc._PROBE_POINTS}" in probe
+
+
+def test_scale_probe_on_a_non_retina_display(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cc, "_scale", None)
+    monkeypatch.setattr(cc, "_shell", _probe_writing((100, 100), []))
+    assert asyncio.run(cc._ensure_scale()) == (1.0, 1.0)
+
+
+def test_scale_probe_never_measures_the_whole_desktop(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: with a second monitor the desktop bounds span both screens
+    while a capture covers only the main one, so the scale must not come from a
+    full-screen capture."""
+    calls: list[list[str]] = []
+    monkeypatch.setattr(cc, "_scale", None)
+    monkeypatch.setattr(cc, "_shell", _probe_writing((100, 100), calls))
+    asyncio.run(cc._ensure_scale())
+    assert all("osascript" not in c[0] for c in calls)
+    assert all("-R" in c for c in calls if c[0] == "screencapture")
+
+
+def test_scale_falls_back_when_the_probe_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cc, "_scale", None)
+    monkeypatch.setattr(cc, "_shell", _fake_shell([], ShellResult(1, "", "denied")))
+    assert asyncio.run(cc._ensure_scale()) == (1.0, 1.0)

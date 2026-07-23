@@ -3144,6 +3144,12 @@ function ProjectFolderMenu({ projectName }: { projectName: string }) {
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="min-w-40 [&_[role=menuitem]]:text-xs">
+          <DropdownMenuItem asChild data-testid="open-project">
+            <Link to={`/projects/${encodeURIComponent(projectName)}`}>
+              <FolderOpenIcon className="size-3.5" />
+              Abrir projeto
+            </Link>
+          </DropdownMenuItem>
           <DropdownMenuItem
             data-testid="delete-project"
             variant="destructive"

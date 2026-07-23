@@ -39,6 +39,15 @@ const FORMATTERS: Record<string, ArgFormatter> = {
   sys_os_write: (args) => withPath("Escrever", args.path),
   sys_os_edit: (args) => withPath("Editar", args.path),
 
+  // Project knowledge — the query is the whole story; the project comes from
+  // the session, so there is nothing else worth showing.
+  project_knowledge: (args) => {
+    const query = asString(args.query);
+    return query === null
+      ? verbOnly("Consultar base do projeto")
+      : { verb: "Base do projeto:", body: query };
+  },
+
   // Computer control — say what it did to the machine, not the call shape.
   computer: (args) => {
     const action = asString(args.action);

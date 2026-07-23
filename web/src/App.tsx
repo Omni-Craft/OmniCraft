@@ -22,6 +22,9 @@ const ApprovePage = lazy(() =>
   import("@/pages/ApprovePage").then((m) => ({ default: m.ApprovePage })),
 );
 const InboxPage = lazy(() => import("@/pages/InboxPage").then((m) => ({ default: m.InboxPage })));
+const ProjectPage = lazy(() =>
+  import("@/pages/ProjectPage").then((m) => ({ default: m.ProjectPage })),
+);
 const ArenaPage = lazy(() => import("@/pages/ArenaPage").then((m) => ({ default: m.ArenaPage })));
 const GithubPage = lazy(() =>
   import("@/pages/GithubPage").then((m) => ({ default: m.GithubPage })),
@@ -132,6 +135,8 @@ function App({ basename }: AppProps = {}) {
           <Route path={prefix || "/"} element={<ChatPage />} />
           <Route path={`${prefix}/c/:conversationId`} element={<ChatPage />} />
           <Route path={`${prefix}/inbox`} element={<InboxPage />} />
+          {/* A project's own page: its knowledge base plus its sessions. */}
+          <Route path={`${prefix}/projects/:name`} element={<ProjectPage />} />
           <Route path={`${prefix}/arena`} element={<ArenaPage />} />
           <Route path={`${prefix}/arena/:arenaId`} element={<ArenaPage />} />
           <Route path={`${prefix}/github`} element={<GithubPage />} />

@@ -18,6 +18,7 @@ import {
   type LucideIcon,
   Monitor,
   Plug,
+  Library,
   Send,
   Smartphone,
   Terminal,
@@ -52,6 +53,7 @@ export function iconForTool(name: string, nativeToolType?: string): LucideIcon {
   if (name === "web_search" || name === "web_fetch") return Globe;
   if (name === "ios_simulator") return Smartphone;
   if (name === "computer") return Monitor;
+  if (name === "project_knowledge") return Library;
   return Wrench;
 }
 

@@ -89,9 +89,17 @@ class UpsertMCPServerRequest(BaseModel):
     """
     Request body for creating or updating a session agent MCP server.
 
-    Secret-bearing fields (``headers`` and ``env``) are intentionally
-    not accepted by the UI route. Existing secrets are preserved when a
-    server is edited without changing transport.
+    ``env`` and ``headers`` are **write-only**: accepted here so the
+    connector directory can install servers that need a credential
+    (GitHub, Slack, Notion…), written into the agent bundle, and never
+    echoed back — :class:`MCPServerSummary` has no field for them, so no
+    read path can return them.
+
+    Prefer a ``${VAR}`` reference over a literal secret: the spec parser
+    expands those at run time, which keeps the raw value out of the
+    bundle. Omitting either field on an edit preserves whatever the
+    bundle already holds, so the UI can update a server without knowing
+    its secrets.
     """
 
     name: str = Field(min_length=1, max_length=128, pattern=_MCP_SERVER_NAME_RE)
@@ -100,6 +108,21 @@ class UpsertMCPServerRequest(BaseModel):
     url: str | None = None
     command: str | None = None
     args: list[str] = Field(default_factory=list, max_length=64)
+    env: dict[str, str] | None = None
+    headers: dict[str, str] | None = None
+
+    @field_validator("env", "headers")
+    @classmethod
+    def _bound_secret_maps(cls, value: dict[str, str] | None) -> dict[str, str] | None:
+        """Keep the secret maps small and their keys sane."""
+        if value is None:
+            return None
+        if len(value) > 32:
+            raise ValueError("at most 32 entries allowed")
+        for key in value:
+            if not key or len(key) > 128:
+                raise ValueError("keys must be 1-128 characters")
+        return value
 
     @field_validator("name")
     @classmethod
@@ -127,11 +150,15 @@ class UpsertMCPServerRequest(BaseModel):
                 raise ValueError("command is not allowed when transport is 'http'")
             if self.args:
                 raise ValueError("args are not allowed when transport is 'http'")
+            if self.env:
+                raise ValueError("env is not allowed when transport is 'http'")
         if self.transport == "stdio":
             if not self.command:
                 raise ValueError("command is required when transport is 'stdio'")
             if self.url:
                 raise ValueError("url is not allowed when transport is 'stdio'")
+            if self.headers:
+                raise ValueError("headers are not allowed when transport is 'stdio'")
         return self
 
 

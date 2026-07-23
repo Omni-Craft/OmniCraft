@@ -426,14 +426,7 @@ def _body_to_file_yaml(
     """Serialize a request body as ``tools/mcp/<name>.yaml``."""
     result: dict[str, Any] = {"name": body.name, "transport": body.transport}
     _copy_description(result, body)
-    if body.transport == "http":
-        result["url"] = body.url
-        _preserve_keys(result, existing, ("headers", "auth", "timeout", "retry"))
-    else:
-        result["command"] = body.command
-        if body.args:
-            result["args"] = body.args
-        _preserve_keys(result, existing, ("env", "timeout", "retry"))
+    _apply_transport_fields(result, body, existing)
     return result
 
 
@@ -444,15 +437,38 @@ def _body_to_inline_yaml(
     """Serialize a request body as an inline ``tools`` MCP block."""
     result: dict[str, Any] = {"type": "mcp"}
     _copy_description(result, body)
+    _apply_transport_fields(result, body, existing)
+    return result
+
+
+def _apply_transport_fields(
+    result: dict[str, Any],
+    body: UpsertMCPServerRequest,
+    existing: dict[str, Any],
+) -> None:
+    """Write the transport-specific keys, including the write-only secrets.
+
+    A supplied ``env`` / ``headers`` replaces what the bundle held; omitting it
+    keeps the existing value, so the UI can edit a server it is not allowed to
+    read the secrets of. Advanced keys the API never exposes (``auth``,
+    ``timeout``, ``retry``) are always carried over.
+    """
     if body.transport == "http":
         result["url"] = body.url
-        _preserve_keys(result, existing, ("headers", "auth", "timeout", "retry"))
+        if body.headers:
+            result["headers"] = dict(body.headers)
+        else:
+            _preserve_keys(result, existing, ("headers",))
+        _preserve_keys(result, existing, ("auth", "timeout", "retry"))
     else:
         result["command"] = body.command
         if body.args:
             result["args"] = body.args
-        _preserve_keys(result, existing, ("env", "timeout", "retry"))
-    return result
+        if body.env:
+            result["env"] = dict(body.env)
+        else:
+            _preserve_keys(result, existing, ("env",))
+        _preserve_keys(result, existing, ("timeout", "retry"))
 
 
 def _copy_description(result: dict[str, Any], body: UpsertMCPServerRequest) -> None:

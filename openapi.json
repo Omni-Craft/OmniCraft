@@ -6722,7 +6722,7 @@
         "type": "object"
       },
       "UpsertMCPServerRequest": {
-        "description": "Request body for creating or updating a session agent MCP server.\n\nSecret-bearing fields (`headers` and `env`) are intentionally\nnot accepted by the UI route. Existing secrets are preserved when a\nserver is edited without changing transport.",
+        "description": "Request body for creating or updating a session agent MCP server.\n\n`env` and `headers` are **write-only**: accepted here so the\nconnector directory can install servers that need a credential\n(GitHub, Slack, Notion\u2026), written into the agent bundle, and never\nechoed back \u2014 `MCPServerSummary` has no field for them, so no\nread path can return them.\n\nPrefer a `${VAR}` reference over a literal secret: the spec parser\nexpands those at run time, which keeps the raw value out of the\nbundle. Omitting either field on an edit preserves whatever the\nbundle already holds, so the UI can update a server without knowing\nits secrets.",
         "properties": {
           "args": {
             "items": {
@@ -6754,6 +6754,34 @@
               }
             ],
             "title": "Description"
+          },
+          "env": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Env"
+          },
+          "headers": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Headers"
           },
           "name": {
             "maxLength": 128,

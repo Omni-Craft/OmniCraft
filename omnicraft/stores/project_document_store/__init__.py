@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 
-from omnicraft.entities import ProjectDocument
+from omnicraft.entities import KnowledgeHit, ProjectDocument
 
 
 class ProjectDocumentStore(ABC):
@@ -90,5 +90,40 @@ class ProjectDocumentStore(ABC):
 
         :param project: Project name.
         :returns: The ids that were deleted, so the caller can drop their bytes.
+        """
+        ...
+
+    @abstractmethod
+    def add_chunks(self, document_id: str, project: str, chunks: list[str]) -> int:
+        """
+        Store a document's retrievable text, replacing anything indexed before.
+
+        :param document_id: The document the chunks belong to.
+        :param project: Project name, denormalised so search filters without a join.
+        :param chunks: Ordered chunks from ``chunk_text``.
+        :returns: How many chunks were stored.
+        """
+        ...
+
+    @abstractmethod
+    def search(self, project: str, query: str, limit: int = 5) -> list[KnowledgeHit]:
+        """
+        Find the passages of a project's base that best match a query.
+
+        :param project: Project name to search within — never crosses projects.
+        :param query: Free-text query.
+        :param limit: Maximum passages to return.
+        :returns: Hits ordered by score, best first. Empty when the query has
+            no usable tokens or nothing matched.
+        """
+        ...
+
+    @abstractmethod
+    def delete_chunks(self, document_id: str) -> int:
+        """
+        Drop a document's indexed text.
+
+        :param document_id: The document whose chunks to remove.
+        :returns: How many chunks were deleted.
         """
         ...

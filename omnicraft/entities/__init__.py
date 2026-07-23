@@ -27,7 +27,7 @@ from omnicraft.entities.file import StoredFile
 from omnicraft.entities.pagination import PagedList
 from omnicraft.entities.permission import ResolvedAccess, SessionPermission
 from omnicraft.entities.policy import Policy
-from omnicraft.entities.project_document import ProjectDocument
+from omnicraft.entities.project_document import KnowledgeHit, ProjectDocument
 from omnicraft.entities.session_resources import (
     DEFAULT_ENVIRONMENT_ID,
     SessionResourceView,
@@ -51,6 +51,7 @@ __all__ = [
     "FunctionCallData",
     "FunctionCallOutputData",
     "ItemData",
+    "KnowledgeHit",
     "LoadedAgent",
     "MessageData",
     "NativeToolData",

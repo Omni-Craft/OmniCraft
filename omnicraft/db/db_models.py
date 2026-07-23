@@ -187,6 +187,39 @@ class SqlProjectDocument(Base):
     text_chars: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
 
+class SqlProjectKnowledgeChunk(Base):
+    """
+    SQLAlchemy model for the ``project_knowledge_chunks`` table.
+
+    A document's extracted text, split into retrievable pieces. Search matches
+    against ``text`` and ranks by how many query tokens a chunk hits — the same
+    approach the local-memory tool uses, which keeps this portable across
+    SQLite and PostgreSQL instead of depending on FTS5.
+
+    :param id: Unique chunk identifier.
+    :param document_id: Owning document, for cascade deletes and citation.
+    :param project: Denormalised project name so search filters without a join.
+    :param chunk_index: Position within the document, for stable ordering.
+    :param text: The chunk's text.
+    """
+
+    __tablename__ = "project_knowledge_chunks"
+
+    # Tenant partition key: Databricks workspace id owning this row (0 = default). Part of the PK.
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        nullable=False,
+        server_default="0",
+        default=current_workspace_id,
+    )
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    document_id: Mapped[str] = mapped_column(String(64), index=True)
+    project: Mapped[str] = mapped_column(String(256), index=True)
+    chunk_index: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+
+
 class SqlFile(Base):
     """
     SQLAlchemy model for the ``files`` table.

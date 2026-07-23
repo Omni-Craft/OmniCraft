@@ -5,16 +5,25 @@ from __future__ import annotations
 import uuid
 
 from sqlalchemy import delete as sa_delete
-from sqlalchemy import desc, select
+from sqlalchemy import desc, or_, select
 
-from omnicraft.db.db_models import SqlProjectDocument, current_workspace_id
+from omnicraft.db.db_models import (
+    SqlProjectDocument,
+    SqlProjectKnowledgeChunk,
+    current_workspace_id,
+)
 from omnicraft.db.utils import (
     get_or_create_engine,
     make_managed_session_maker,
     now_epoch,
 )
-from omnicraft.entities import ProjectDocument
+from omnicraft.entities import KnowledgeHit, ProjectDocument
+from omnicraft.runtime.project_knowledge import query_tokens, score_chunk
 from omnicraft.stores.project_document_store import ProjectDocumentStore
+
+#: How many candidate chunks a LIKE pass may pull back before scoring. Bounds
+#: the work on a large base; the scorer then picks the best few.
+_CANDIDATE_LIMIT = 500
 
 
 def generate_project_document_id() -> str:
@@ -137,4 +146,82 @@ class SqlAlchemyProjectDocumentStore(ProjectDocumentStore):
                         SqlProjectDocument.project == project,
                     )
                 )
+                session.execute(
+                    sa_delete(SqlProjectKnowledgeChunk).where(
+                        SqlProjectKnowledgeChunk.workspace_id == current_workspace_id(),
+                        SqlProjectKnowledgeChunk.project == project,
+                    )
+                )
             return list(ids)
+
+    def add_chunks(self, document_id: str, project: str, chunks: list[str]) -> int:
+        """Store a document's chunks. See :meth:`ProjectDocumentStore.add_chunks`."""
+        with self._session() as session:
+            # Re-indexing replaces: a document is never half-old, half-new.
+            session.execute(
+                sa_delete(SqlProjectKnowledgeChunk).where(
+                    SqlProjectKnowledgeChunk.workspace_id == current_workspace_id(),
+                    SqlProjectKnowledgeChunk.document_id == document_id,
+                )
+            )
+            for index, text in enumerate(chunks):
+                session.add(
+                    SqlProjectKnowledgeChunk(
+                        id=f"pchk_{uuid.uuid4().hex}",
+                        document_id=document_id,
+                        project=project,
+                        chunk_index=index,
+                        text=text,
+                    )
+                )
+            return len(chunks)
+
+    def search(self, project: str, query: str, limit: int = 5) -> list[KnowledgeHit]:
+        """Search a project's base. See :meth:`ProjectDocumentStore.search`."""
+        tokens = query_tokens(query)
+        if not tokens:
+            return []
+        with self._session() as session:
+            rows = (
+                session.execute(
+                    select(SqlProjectKnowledgeChunk, SqlProjectDocument.filename)
+                    .join(
+                        SqlProjectDocument,
+                        (SqlProjectDocument.id == SqlProjectKnowledgeChunk.document_id)
+                        & (
+                            SqlProjectDocument.workspace_id
+                            == SqlProjectKnowledgeChunk.workspace_id
+                        ),
+                    )
+                    .where(
+                        SqlProjectKnowledgeChunk.workspace_id == current_workspace_id(),
+                        SqlProjectKnowledgeChunk.project == project,
+                        or_(*[SqlProjectKnowledgeChunk.text.ilike(f"%{t}%") for t in tokens]),
+                    )
+                    .limit(_CANDIDATE_LIMIT)
+                ).all()
+                # Candidates come back unranked; scoring below picks the best.
+            )
+            hits = [
+                KnowledgeHit(
+                    document_id=chunk.document_id,
+                    filename=filename,
+                    chunk_index=chunk.chunk_index,
+                    text=chunk.text,
+                    score=score_chunk(chunk.text, tokens),
+                )
+                for chunk, filename in rows
+            ]
+        hits.sort(key=lambda h: (-h.score, h.document_id, h.chunk_index))
+        return [h for h in hits if h.score > 0][:limit]
+
+    def delete_chunks(self, document_id: str) -> int:
+        """Drop a document's chunks. See :meth:`ProjectDocumentStore.delete_chunks`."""
+        with self._session() as session:
+            result = session.execute(
+                sa_delete(SqlProjectKnowledgeChunk).where(
+                    SqlProjectKnowledgeChunk.workspace_id == current_workspace_id(),
+                    SqlProjectKnowledgeChunk.document_id == document_id,
+                )
+            )
+            return int(result.rowcount or 0)

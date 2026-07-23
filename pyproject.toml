@@ -45,6 +45,10 @@ dependencies = [
     # prompts (omnicraft/runtime/content_resolver.py) — a raw multi-MB
     # screenshot otherwise costs millions of tokens.
     "pillow>=10,<13",
+    # Extract text from PDFs uploaded to a project's knowledge base so they are
+    # searchable by content, not just downloadable
+    # (omnicraft/runtime/project_knowledge.py).
+    "pypdf>=4,<7",
     # Web Push (VAPID) delivery for closed-app approval notifications.
     "pywebpush>=1.14,<3",
     "ftfy>=6.0",

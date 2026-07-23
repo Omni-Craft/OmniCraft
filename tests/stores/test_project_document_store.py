@@ -89,3 +89,75 @@ def test_delete_all_for_project_returns_ids(store: SqlAlchemyProjectDocumentStor
 
 def test_delete_all_for_empty_project(store: SqlAlchemyProjectDocumentStore) -> None:
     assert store.delete_all_for_project("Inexistente") == []
+
+
+# --- chunks and search ------------------------------------------------------
+
+
+def test_add_chunks_and_search(store: SqlAlchemyProjectDocumentStore) -> None:
+    doc = store.create(project="Acme", filename="contrato.pdf", bytes=10)
+    store.add_chunks(
+        doc.id,
+        "Acme",
+        ["Cláusula de rescisão antecipada.", "Prazo de pagamento em 30 dias."],
+    )
+
+    hits = store.search("Acme", "rescisão")
+    assert len(hits) == 1
+    assert hits[0].document_id == doc.id
+    assert hits[0].filename == "contrato.pdf"
+    assert "rescisão" in hits[0].text.lower()
+
+
+def test_search_ranks_by_token_hits(store: SqlAlchemyProjectDocumentStore) -> None:
+    doc = store.create(project="Acme", filename="a.md", bytes=1)
+    store.add_chunks(
+        doc.id,
+        "Acme",
+        ["fala de rescisão apenas", "rescisão antecipada com aviso prévio"],
+    )
+    hits = store.search("Acme", "rescisão antecipada")
+    assert hits[0].score == 2
+    assert "antecipada" in hits[0].text
+
+
+def test_search_never_crosses_projects(store: SqlAlchemyProjectDocumentStore) -> None:
+    alheio = store.create(project="Outro", filename="segredo.md", bytes=1)
+    store.add_chunks(alheio.id, "Outro", ["informação confidencial do outro projeto"])
+    assert store.search("Acme", "confidencial") == []
+    assert len(store.search("Outro", "confidencial")) == 1
+
+
+def test_search_with_no_usable_tokens(store: SqlAlchemyProjectDocumentStore) -> None:
+    doc = store.create(project="Acme", filename="a.md", bytes=1)
+    store.add_chunks(doc.id, "Acme", ["qualquer coisa"])
+    assert store.search("Acme", "a de o") == []
+
+
+def test_search_respects_the_limit(store: SqlAlchemyProjectDocumentStore) -> None:
+    doc = store.create(project="Acme", filename="a.md", bytes=1)
+    store.add_chunks(doc.id, "Acme", [f"contrato numero {i}" for i in range(10)])
+    assert len(store.search("Acme", "contrato", limit=3)) == 3
+
+
+def test_reindexing_replaces_previous_chunks(store: SqlAlchemyProjectDocumentStore) -> None:
+    doc = store.create(project="Acme", filename="a.md", bytes=1)
+    store.add_chunks(doc.id, "Acme", ["versão antiga do texto"])
+    store.add_chunks(doc.id, "Acme", ["versão nova do texto"])
+    hits = store.search("Acme", "versão")
+    assert len(hits) == 1
+    assert "nova" in hits[0].text
+
+
+def test_delete_chunks(store: SqlAlchemyProjectDocumentStore) -> None:
+    doc = store.create(project="Acme", filename="a.md", bytes=1)
+    store.add_chunks(doc.id, "Acme", ["alguma coisa indexada"])
+    assert store.delete_chunks(doc.id) == 1
+    assert store.search("Acme", "indexada") == []
+
+
+def test_delete_all_for_project_drops_chunks_too(store: SqlAlchemyProjectDocumentStore) -> None:
+    doc = store.create(project="Acme", filename="a.md", bytes=1)
+    store.add_chunks(doc.id, "Acme", ["texto que deve sumir"])
+    store.delete_all_for_project("Acme")
+    assert store.search("Acme", "sumir") == []

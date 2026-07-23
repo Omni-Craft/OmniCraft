@@ -36,3 +36,25 @@ class ProjectDocument:
     bytes: int
     content_type: str | None = None
     text_chars: int = 0
+
+
+@dataclass
+class KnowledgeHit:
+    """
+    One passage matched by a knowledge-base search.
+
+    Carries the source document so an answer can cite where it came from —
+    a quote with no provenance is worse than no quote.
+
+    :param document_id: The document this passage belongs to.
+    :param filename: That document's filename, for citation.
+    :param chunk_index: Position of the passage within the document.
+    :param text: The passage itself.
+    :param score: How many distinct query tokens the passage hit.
+    """
+
+    document_id: str
+    filename: str
+    chunk_index: int
+    text: str
+    score: int

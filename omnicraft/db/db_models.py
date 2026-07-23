@@ -150,6 +150,43 @@ class SqlAgent(Base):
     )
 
 
+class SqlProjectDocument(Base):
+    """
+    SQLAlchemy model for the ``project_documents`` table.
+
+    One row per document in a project's knowledge base. Projects are implicit
+    (a conversation label), so rows key off the project NAME. Binary content is
+    managed separately by :class:`ArtifactStore`, under the document id.
+
+    :param id: Unique document identifier, e.g. ``"pdoc_a1b2c3d4..."``.
+    :param project: Project name, matching the ``omni_project`` label value.
+    :param created_at: Unix epoch seconds when the document was uploaded.
+    :param filename: Original filename, max 512 characters.
+    :param bytes: Size of the content in bytes.
+    :param content_type: MIME type, e.g. ``"application/pdf"``.
+    :param text_chars: Characters of text extracted for search; ``0`` when the
+        document carries no extractable text.
+    """
+
+    __tablename__ = "project_documents"
+
+    # Tenant partition key: Databricks workspace id owning this row (0 = default). Part of the PK.
+    workspace_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        nullable=False,
+        server_default="0",
+        default=current_workspace_id,
+    )
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    project: Mapped[str] = mapped_column(String(256), index=True)
+    created_at: Mapped[int] = mapped_column(Integer)
+    filename: Mapped[str] = mapped_column(String(512))
+    bytes: Mapped[int] = mapped_column(Integer)
+    content_type: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    text_chars: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+
 class SqlFile(Base):
     """
     SQLAlchemy model for the ``files`` table.

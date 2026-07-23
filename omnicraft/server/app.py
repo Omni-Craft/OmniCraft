@@ -74,6 +74,7 @@ from omnicraft.server.routes.monitor import create_monitor_router
 from omnicraft.server.routes.observability import create_observability_router
 from omnicraft.server.routes.policy_registry import create_policy_registry_router
 from omnicraft.server.routes.policy_simulate import create_policy_simulate_router
+from omnicraft.server.routes.project_knowledge import create_project_knowledge_router
 from omnicraft.server.routes.push_routes import create_push_router
 from omnicraft.server.routes.runner_tunnel import create_runner_tunnel_router
 from omnicraft.server.routes.scheduled_agents import create_scheduled_agents_router
@@ -97,6 +98,9 @@ from omnicraft.stores.conversation_store import SessionConnectivity
 from omnicraft.stores.host_store import HostStore
 from omnicraft.stores.permission_store import PermissionStore
 from omnicraft.stores.policy_store import PolicyStore
+from omnicraft.stores.project_document_store.sqlalchemy_store import (
+    SqlAlchemyProjectDocumentStore,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -2256,6 +2260,18 @@ def create_app(
         create_mcp_catalog_router(auth_provider=auth_provider),
         prefix="/v1",
         tags=["mcp_catalog"],
+    )
+    # The knowledge base lives in the same database as file metadata, so the
+    # store is derived from that location rather than threaded through every
+    # create_app caller.
+    app.include_router(
+        create_project_knowledge_router(
+            SqlAlchemyProjectDocumentStore(file_store.storage_location),
+            artifact_store,
+            auth_provider=auth_provider,
+        ),
+        prefix="/v1",
+        tags=["project_knowledge"],
     )
     app.include_router(
         create_agent_mcp_servers_router(

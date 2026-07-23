@@ -5,7 +5,6 @@ import {
   EllipsisVerticalIcon,
   FileIcon,
   GlobeIcon,
-  LayoutGridIcon,
   ListTodoIcon,
   PencilIcon,
   SmartphoneIcon,
@@ -492,15 +491,6 @@ export function WorkspacePanel({
             <TerminalIcon className="size-[18px]" />
           </button>
         )}
-        <button
-          type="button"
-          aria-label="Painéis"
-          title="Painéis"
-          onClick={() => setMenuOpen(true)}
-          className={railBtn}
-        >
-          <LayoutGridIcon className="size-[18px]" />
-        </button>
         <button
           type="button"
           aria-label="Alternar tema"

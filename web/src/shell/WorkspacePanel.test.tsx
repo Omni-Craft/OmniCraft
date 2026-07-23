@@ -95,12 +95,14 @@ function renderWorkspace(
 }
 
 /**
- * Open the rail menu and return its content element. Uses the ⊞ "Painéis"
- * button, which flips the controlled ``open`` state via a plain onClick — the
- * Radix ⋮ trigger relies on pointer events jsdom doesn't dispatch on click.
+ * Open the rail menu and return its content element. The ⋮ trigger controls
+ * the menu's ``open`` state; jsdom doesn't dispatch the pointer events Radix
+ * opens on, so drive the sequence explicitly.
  */
 function openRailMenu(): HTMLElement {
-  fireEvent.click(screen.getByRole("button", { name: "Painéis" }));
+  const trigger = screen.getByRole("button", { name: "Menu do painel" });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  fireEvent.click(trigger);
   return screen.getByRole("menu");
 }
 

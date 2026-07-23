@@ -439,16 +439,18 @@ beforeEach(() => {
 afterEach(cleanup);
 
 // The workspace rail dropped its horizontal tab strip — panels now live in the
-// icon rail's ⋮ menu, opened here via the ⊞ "Painéis" button (a plain click
-// that flips the controlled open state; the ⋮ trigger uses pointer events jsdom
-// won't dispatch on click). These reach a panel the way tests used to reach a tab.
+// icon rail's ⋮ menu. jsdom won't dispatch the pointer events Radix opens on,
+// so drive the sequence explicitly. These reach a panel the way tests used to
+// reach a tab.
 function openWorkspaceMenu() {
   // While the menu is open Radix hides the rest of the page (aria-hidden focus
-  // guard), so the ⊞ trigger is unreachable. If a menu is already open, reuse
+  // guard), so the ⋮ trigger is unreachable. If a menu is already open, reuse
   // it — its controlled state survives rerenders, so its content is current.
   const open = screen.queryByRole("menu");
   if (open) return within(open);
-  fireEvent.click(screen.getByRole("button", { name: "Painéis" }));
+  const trigger = screen.getByRole("button", { name: "Menu do painel" });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  fireEvent.click(trigger);
   return within(screen.getByRole("menu"));
 }
 function railPanel(name: RegExp) {

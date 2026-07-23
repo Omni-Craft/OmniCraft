@@ -139,15 +139,17 @@ beforeEach(() => {
   } as never);
 });
 
-// Panels moved from a tab strip to the icon rail's menu (opened via the ⊞
-// "Painéis" button). These reach a panel the way tests used to reach a tab.
+// Panels moved from a tab strip to the icon rail's ⋮ menu. These reach a panel
+// the way tests used to reach a tab.
 function openWorkspaceMenu() {
-  // While the menu is open Radix hides the rest of the page, so the ⊞ trigger
+  // While the menu is open Radix hides the rest of the page, so the ⋮ trigger
   // is unreachable. Reuse an already-open menu (its controlled state survives
   // rerenders, so its content is current).
   const open = screen.queryByRole("menu");
   if (open) return within(open);
-  fireEvent.click(screen.getByRole("button", { name: "Painéis" }));
+  const trigger = screen.getByRole("button", { name: "Menu do painel" });
+  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false });
+  fireEvent.click(trigger);
   return within(screen.getByRole("menu"));
 }
 function railPanel(name: RegExp) {

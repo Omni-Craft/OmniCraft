@@ -467,7 +467,12 @@ def test_default_policies_appended_after_agent_policies(
         default_policies=[admin_policy],
     )
     names = [p.spec.name for p in engine.policies]
-    assert names == ["agent_policy", "admin_policy", "__ask_on_add_policy", "__ask_on_computer_use"]
+    assert names == [
+        "agent_policy",
+        "admin_policy",
+        "__ask_on_add_policy",
+        "__ask_on_computer_use",
+    ]
 
 
 def test_default_policies_alone_builds_live_engine(

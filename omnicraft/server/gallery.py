@@ -35,6 +35,25 @@ def examples_dir() -> Path:
     return pkg / "resources" / "examples"
 
 
+def _category(cfg: dict[str, Any], name: str, subagent_names: list[str], skills: list[str]) -> str:
+    """Classify an agent for the gallery's filter tabs.
+
+    An explicit ``category`` in config.yaml always wins; otherwise it's derived:
+    a ``fabrica-*`` bundle is a factory, an agent with no sub-agents and no
+    skills is a plain conversation agent, and anything that coordinates
+    sub-agents is an orchestrator.
+    """
+    explicit = cfg.get("category")
+    if isinstance(explicit, str) and explicit.strip():
+        return explicit.strip()
+    low = name.lower()
+    if low.startswith(("fabrica", "fábrica")):
+        return "fábrica"
+    if not subagent_names and not skills:
+        return "conversa"
+    return "orquestrador"
+
+
 def _subagent_names(entry: Path, tools: Any) -> list[str]:
     """Sub-agent names: inline ``tools`` of type ``agent`` plus ``agents/<name>/`` dirs."""
     names: list[str] = []
@@ -52,8 +71,8 @@ def list_gallery_agents(agent_store: Any) -> list[dict[str, Any]]:
     """List installable example agents with light metadata (read from config.yaml).
 
     :param agent_store: Used to flag which examples are already installed.
-    :returns: One dict per example: id (dir name), name, description, harness,
-        subagents, skills, installed.
+    :returns: One dict per example: id (dir name), name, description, category,
+        harness, subagents, skills, installed.
     """
     root = examples_dir()
     if not root.is_dir():
@@ -95,6 +114,7 @@ def list_gallery_agents(agent_store: Any) -> list[dict[str, Any]]:
                 "id": entry.name,
                 "name": name,
                 "description": (cfg.get("description") or "").strip(),
+                "category": _category(cfg, name, subagent_names, skills),
                 "harness": harness,
                 "subagents": len(subagent_names),
                 "subagent_names": subagent_names,

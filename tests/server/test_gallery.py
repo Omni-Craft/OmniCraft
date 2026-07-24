@@ -55,6 +55,30 @@ def test_list_gallery_agents_includes_examples() -> None:
     assert "description" in lilo and isinstance(lilo["skills"], list)
 
 
+def test_list_gallery_agents_assigns_category() -> None:
+    store = _FakeAgentStore()
+    items = {i["name"]: i for i in gallery.list_gallery_agents(store)}
+    # Every item carries a non-empty category for the filter tabs.
+    assert all(isinstance(i["category"], str) and i["category"] for i in items.values())
+    # A ``fabrica-*`` bundle is a factory; a no-subagent/no-skill agent is a
+    # plain conversation agent; a coordinator with sub-agents orchestrates.
+    if "fabrica-completa" in items:
+        assert items["fabrica-completa"]["category"] == "fábrica"
+    if "chat" in items:
+        assert items["chat"]["category"] == "conversa"
+    if "fucho" in items:
+        assert items["fucho"]["category"] == "orquestrador"
+
+
+def test_category_helper_prefers_explicit_config() -> None:
+    # An explicit category in config.yaml always wins over the heuristic.
+    assert gallery._category({"category": "fábrica"}, "atlas", ["surveyor"], []) == "fábrica"
+    # Otherwise it derives: fabrica-* → fábrica, bare → conversa, else orquestrador.
+    assert gallery._category({}, "fabrica-x", [], []) == "fábrica"
+    assert gallery._category({}, "chat", [], []) == "conversa"
+    assert gallery._category({}, "atlas", ["surveyor"], ["risk-map"]) == "orquestrador"
+
+
 def test_install_is_idempotent_by_name() -> None:
     store, artifacts, cache = _FakeAgentStore(), _FakeArtifactStore(), _FakeAgentCache()
     first = gallery.install_gallery_agent("lilo", store, artifacts, cache)

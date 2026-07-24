@@ -1,7 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import {
+  CalendarDaysIcon,
+  CalendarRangeIcon,
+  CheckIcon,
+  ClockIcon,
+  SunIcon,
+  WebhookIcon,
+} from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+
 import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { authenticatedFetch } from "@/lib/identity";
+import { cn } from "@/lib/utils";
 import { useNavigate } from "@/lib/routing";
 
 interface HistoryEntry {
@@ -46,16 +57,16 @@ const UNITS: { label: string; seconds: number }[] = [
 ];
 
 // One-click schedule templates (Cowork-style starting points).
-const TEMPLATES: { emoji: string; name: string; prompt: string; cron: string }[] = [
+const TEMPLATES: { icon: LucideIcon; name: string; prompt: string; cron: string }[] = [
   {
-    emoji: "☕",
+    icon: SunIcon,
     name: "Resumo diário",
     prompt:
       "Me dê um resumo das mudanças de ontem neste repositório (commits, PRs, pendências) e o que merece atenção hoje.",
     cron: "0 9 * * 1-5",
   },
   {
-    emoji: "📋",
+    icon: CalendarRangeIcon,
     name: "Revisão semanal",
     prompt:
       "Revise a semana neste repositório: o que foi entregue, PRs abertos, pendências e riscos. Termine com sugestões de prioridades para a próxima semana.",
@@ -68,6 +79,12 @@ const CRON_PRESETS: { label: string; cron: string }[] = [
   { label: "Dias úteis 9h", cron: "0 9 * * 1-5" },
   { label: "Toda segunda 9h", cron: "0 9 * * 1" },
   { label: "A cada hora", cron: "0 * * * *" },
+];
+
+const SCHEDULE_TABS: { mode: Mode; label: string; icon: LucideIcon }[] = [
+  { mode: "interval", label: "Intervalo", icon: ClockIcon },
+  { mode: "cron", label: "Horário (cron)", icon: CalendarDaysIcon },
+  { mode: "webhook", label: "Só webhook", icon: WebhookIcon },
 ];
 
 const BROWSER_TZ =
@@ -84,6 +101,15 @@ function humanInterval(seconds: number | null): string {
 function fmtTime(ts: number | null | undefined): string {
   if (!ts) return "—";
   return new Date(ts * 1000).toLocaleString("pt-BR");
+}
+
+// A live "próximo disparo" hint for interval mode: now + every·unit.
+function nextIntervalPreview(every: number, unitSeconds: number): string {
+  const next = new Date(Date.now() + Math.max(1, every) * unitSeconds * 1000);
+  const hh = String(next.getHours()).padStart(2, "0");
+  const mm = String(next.getMinutes()).padStart(2, "0");
+  const sameDay = next.toDateString() === new Date().toDateString();
+  return `${sameDay ? "hoje" : "amanhã"} às ${hh}:${mm}`;
 }
 
 function statusColor(status: string): string {
@@ -128,6 +154,11 @@ const EMPTY_FORM: FormState = {
   tz: BROWSER_TZ,
   no_overlap: true,
 };
+
+const fieldCls =
+  "w-full rounded-lg border border-border bg-background/40 px-3 py-2 text-sm outline-none transition-colors focus:border-ring";
+const labelCls = "text-xs font-semibold text-foreground";
+const hintCls = "font-normal text-muted-foreground";
 
 export function ScheduledAgentsPage() {
   const navigate = useNavigate();
@@ -356,9 +387,8 @@ export function ScheduledAgentsPage() {
   const webhookUrl = (token: string) => `${window.location.origin}/v1/webhooks/${token}`;
   const copy = (text: string) => void navigator.clipboard?.writeText(text);
 
-  const inputCls =
-    "w-full rounded-lg border border-border bg-card/40 px-3 py-2 text-sm outline-none focus:border-ring";
-  const chip = "rounded bg-muted px-1.5 py-0.5 text-[11px] opacity-70";
+  const chip =
+    "rounded-md border border-border/60 bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground";
 
   const agentOptions = useMemo(
     () => (agents.length ? agents : form.agent_name ? [form.agent_name] : []),
@@ -372,21 +402,23 @@ export function ScheduledAgentsPage() {
         ? `🕒 a cada ${humanInterval(j.interval_seconds)}`
         : "🔗 webhook";
 
+  const applyTemplate = (t: (typeof TEMPLATES)[number]) =>
+    setForm((f) => ({ ...f, name: t.name, prompt: t.prompt, mode: "cron", cron: t.cron }));
+
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Agentes agendados</h1>
-        <p className="text-sm opacity-60">
-          Dispare um agente por intervalo, num horário (cron) ou por um webhook. O corpo do webhook
-          é interpolado no prompt via <code className="opacity-80">{"{{campo}}"}</code>. Cada
-          disparo abre uma sessão real que você pode acompanhar.
+        <p className="max-w-[66ch] text-sm text-muted-foreground">
+          Dispare um agente por intervalo, num horário (cron) ou por um webhook. Cada disparo abre
+          uma sessão real que você pode acompanhar.
         </p>
       </header>
 
       {/* Create / edit form */}
       <section
         ref={formRef}
-        className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4"
+        className="flex flex-col rounded-xl border border-border bg-card p-6"
         onKeyDown={(e) => {
           // The IME guard is a no-op on the normal Cmd/Ctrl+Enter path (an IME
           // confirm Enter carries no modifier) — it just closes the case.
@@ -394,49 +426,44 @@ export function ScheduledAgentsPage() {
             void submit();
         }}
       >
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold opacity-80">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-[15px] font-semibold">
             {editingId ? "Editar agendamento" : "Novo agendamento"}
           </h2>
           {/* Templates — one-click starting points (Cowork-style). */}
           {!editingId && (
-            <div className="flex gap-1.5">
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="text-xs text-muted-foreground">Começar de um modelo:</span>
               {TEMPLATES.map((t) => (
                 <button
                   key={t.name}
                   type="button"
-                  onClick={() =>
-                    setForm((f) => ({
-                      ...f,
-                      name: t.name,
-                      prompt: t.prompt,
-                      mode: "cron",
-                      cron: t.cron,
-                    }))
-                  }
-                  className="rounded-lg border border-border px-2.5 py-1 text-xs transition hover:border-foreground/30"
+                  onClick={() => applyTemplate(t)}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-semibold transition-colors hover:border-foreground/30 hover:bg-muted"
                   data-testid={`schedule-template-${t.name}`}
                 >
-                  {t.emoji} {t.name}
+                  <t.icon className="size-3.5" style={{ color: "var(--brand-accent)" }} />
+                  {t.name}
                 </button>
               ))}
             </div>
           )}
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-xs opacity-70">
-            Nome
+
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelCls}>Nome</span>
             <input
-              className={inputCls}
+              className={fieldCls}
               value={form.name}
               placeholder="Ex.: Resumo diário"
               onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs opacity-70">
-            Agente
+          <label className="flex flex-col gap-1.5">
+            <span className={labelCls}>Agente</span>
             <select
-              className={inputCls}
+              className={fieldCls}
               value={form.agent_name}
               onChange={(e) => setForm({ ...form, agent_name: e.target.value })}
             >
@@ -448,33 +475,46 @@ export function ScheduledAgentsPage() {
             </select>
           </label>
         </div>
-        <label className="flex flex-col gap-1 text-xs opacity-70">
-          Prompt (primeira mensagem) — use {"{{campo}}"} para dados do webhook
+
+        <label className="mt-4 flex flex-col gap-1.5">
+          <span className={labelCls}>
+            Prompt{" "}
+            <span className={hintCls}>
+              · primeira mensagem · use{" "}
+              <code className="rounded bg-[color-mix(in_srgb,var(--brand-accent)_16%,transparent)] px-1 py-0.5 font-mono text-[11px] text-[color-mix(in_srgb,var(--brand-accent)_85%,var(--foreground))]">
+                {"{{campo}}"}
+              </code>{" "}
+              para dados do webhook
+            </span>
+          </span>
           <textarea
-            className={`${inputCls} min-h-[72px] resize-y`}
+            className={cn(fieldCls, "min-h-[92px] resize-y leading-relaxed")}
             value={form.prompt}
             placeholder="O que o agente deve fazer? Ex.: Triagem da issue {{issue.title}}"
             onChange={(e) => setForm({ ...form, prompt: e.target.value })}
           />
         </label>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-xs opacity-70">
-            Workspace (caminho absoluto no host)
+
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <label className="flex flex-col gap-1.5">
+            <span className={labelCls}>
+              Workspace <span className={hintCls}>· caminho absoluto no host</span>
+            </span>
             <input
-              className={inputCls}
+              className={fieldCls}
               value={form.workspace}
               placeholder="/Users/voce/projeto"
               onChange={(e) => setForm({ ...form, workspace: e.target.value })}
             />
           </label>
-          <label className="flex flex-col gap-1 text-xs opacity-70">
-            Host
+          <label className="flex flex-col gap-1.5">
+            <span className={labelCls}>Host</span>
             <select
-              className={inputCls}
+              className={fieldCls}
               value={form.host_id}
               onChange={(e) => setForm({ ...form, host_id: e.target.value })}
             >
-              <option value="">Automático (primeiro online)</option>
+              <option value="">● Automático (primeiro online)</option>
               {hosts.map((h) => (
                 <option key={h.host_id} value={h.host_id}>
                   {h.name}
@@ -485,44 +525,39 @@ export function ScheduledAgentsPage() {
         </div>
 
         {/* Schedule */}
-        <div className="flex flex-col gap-2">
-          <div className="flex flex-col gap-1 text-xs opacity-70">
-            Agendamento
-            <div className="flex flex-wrap gap-2">
-              {(
-                [
-                  ["interval", "🕒 Intervalo"],
-                  ["cron", "📅 Horário (cron)"],
-                  ["webhook", "🔗 Só webhook"],
-                ] as const
-              ).map(([m, label]) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setForm({ ...form, mode: m })}
-                  className={`rounded-lg border px-3 py-1.5 text-sm transition ${
-                    form.mode === m
-                      ? "border-foreground/40 bg-muted"
-                      : "border-border hover:border-foreground/30"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+        <div className="mt-5 flex flex-col gap-1.5">
+          <span className={labelCls}>Agendamento</span>
+          <div className="inline-flex w-fit gap-1 rounded-[11px] border border-border bg-background/40 p-1">
+            {SCHEDULE_TABS.map((t) => (
+              <button
+                key={t.mode}
+                type="button"
+                onClick={() => setForm({ ...form, mode: t.mode })}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition-colors",
+                  form.mode === t.mode
+                    ? "bg-muted text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <t.icon className="size-3.5" />
+                {t.label}
+              </button>
+            ))}
           </div>
+
           {form.mode === "interval" && (
-            <div className="flex items-end gap-2 text-xs opacity-70">
-              A cada
+            <div className="mt-3 flex flex-wrap items-center gap-2.5">
+              <span className="text-sm text-muted-foreground">A cada</span>
               <input
                 type="number"
                 min={1}
-                className={`${inputCls} w-20`}
+                className={cn(fieldCls, "w-20")}
                 value={form.every}
                 onChange={(e) => setForm({ ...form, every: Number(e.target.value) || 1 })}
               />
               <select
-                className={inputCls}
+                className={cn(fieldCls, "w-auto")}
                 value={form.unit}
                 onChange={(e) => setForm({ ...form, unit: Number(e.target.value) })}
               >
@@ -532,36 +567,45 @@ export function ScheduledAgentsPage() {
                   </option>
                 ))}
               </select>
+              <span className="text-xs text-muted-foreground">
+                próximo disparo{" "}
+                <b className="font-semibold text-[color-mix(in_srgb,var(--brand-accent)_80%,var(--foreground))]">
+                  {nextIntervalPreview(form.every, form.unit)}
+                </b>
+              </span>
             </div>
           )}
+
           {form.mode === "cron" && (
-            <div className="flex flex-col gap-2">
+            <div className="mt-3 flex flex-col gap-3">
               <div className="flex flex-wrap gap-1.5">
                 {CRON_PRESETS.map((p) => (
                   <button
                     key={p.cron}
                     type="button"
                     onClick={() => setForm({ ...form, cron: p.cron })}
-                    className="rounded border border-border px-2 py-1 text-[11px] transition hover:border-foreground/30"
+                    className="rounded-md border border-border px-2.5 py-1 text-[11.5px] text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground"
                   >
                     {p.label}
                   </button>
                 ))}
               </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                <label className="flex flex-col gap-1 text-xs opacity-70">
-                  Expressão cron (min hora dia mês dia-semana)
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="flex flex-col gap-1.5">
+                  <span className={labelCls}>
+                    Expressão cron <span className={hintCls}>· min hora dia mês dia-semana</span>
+                  </span>
                   <input
-                    className={`${inputCls} font-mono`}
+                    className={cn(fieldCls, "font-mono")}
                     value={form.cron}
                     placeholder="0 9 * * 1-5"
                     onChange={(e) => setForm({ ...form, cron: e.target.value })}
                   />
                 </label>
-                <label className="flex flex-col gap-1 text-xs opacity-70">
-                  Fuso horário
+                <label className="flex flex-col gap-1.5">
+                  <span className={labelCls}>Fuso horário</span>
                   <input
-                    className={inputCls}
+                    className={fieldCls}
                     value={form.tz}
                     placeholder="America/Sao_Paulo"
                     onChange={(e) => setForm({ ...form, tz: e.target.value })}
@@ -570,23 +614,45 @@ export function ScheduledAgentsPage() {
               </div>
             </div>
           )}
-          <label className="flex items-center gap-2 text-xs opacity-70">
-            <input
-              type="checkbox"
-              checked={form.no_overlap}
-              onChange={(e) => setForm({ ...form, no_overlap: e.target.checked })}
-            />
-            Não sobrepor — pular disparo agendado se a execução anterior ainda estiver rodando
-          </label>
+
+          {form.mode === "webhook" && (
+            <p className="mt-3 rounded-lg border border-border/60 bg-background/40 px-3.5 py-3 text-xs leading-relaxed text-muted-foreground">
+              Sem agenda automática — o agente dispara só quando o webhook é chamado. A URL aparece
+              no card depois de criar; o corpo do POST é interpolado no prompt via{" "}
+              <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+                {"{{campo}}"}
+              </code>
+              .
+            </p>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, no_overlap: !form.no_overlap })}
+            className="mt-4 flex items-center gap-2.5 text-left"
+          >
+            <span
+              className={cn(
+                "grid size-[18px] shrink-0 place-items-center rounded-[5px] border transition-colors",
+                form.no_overlap ? "border-transparent" : "border-border",
+              )}
+              style={form.no_overlap ? { backgroundColor: "var(--brand-accent)" } : undefined}
+            >
+              {form.no_overlap && <CheckIcon className="size-3 text-black" strokeWidth={3.5} />}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Não sobrepor — pular disparo se a execução anterior ainda estiver rodando
+            </span>
+          </button>
         </div>
 
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex items-center gap-2">
+        {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
+        <div className="mt-5 flex items-center gap-3.5 border-t border-border/60 pt-5">
           <button
             type="button"
             disabled={busy}
             onClick={() => void submit()}
-            className="rounded-lg px-4 py-1.5 text-sm font-medium text-black disabled:opacity-40"
+            className="rounded-lg px-4 py-2 text-sm font-semibold text-black transition disabled:opacity-40"
             style={{ backgroundColor: "var(--brand-accent)" }}
           >
             {busy ? "Salvando…" : editingId ? "Salvar" : "Criar agendamento"}
@@ -595,20 +661,28 @@ export function ScheduledAgentsPage() {
             <button
               type="button"
               onClick={resetForm}
-              className="rounded-lg border border-border px-3 py-1.5 text-sm transition hover:border-foreground/30"
+              className="rounded-lg border border-border px-3 py-2 text-sm transition hover:border-foreground/30"
             >
               Cancelar
             </button>
           )}
-          <span className="text-[11px] opacity-40">⌘/Ctrl+Enter</span>
+          <span className="text-xs text-muted-foreground">⌘/Ctrl+Enter</span>
         </div>
       </section>
 
       {/* Jobs list */}
       {jobs === null ? (
-        <p className="text-sm opacity-60">Carregando…</p>
+        <p className="text-sm text-muted-foreground">Carregando…</p>
       ) : jobs.length === 0 ? (
-        <p className="text-sm opacity-40">Nenhum agendamento ainda.</p>
+        <div className="flex flex-col items-center gap-1.5 py-12 text-center">
+          <span className="mb-2 grid size-11 place-items-center rounded-xl border border-border bg-background/40 text-muted-foreground">
+            <ClockIcon className="size-5" />
+          </span>
+          <h3 className="text-sm font-semibold">Nenhum agendamento ainda</h3>
+          <p className="max-w-[42ch] text-xs text-muted-foreground">
+            Os agendamentos criados aparecem aqui, com o histórico de disparos.
+          </p>
+        </div>
       ) : (
         <div className="flex flex-col gap-4">
           {jobs.map((j) => {
@@ -616,7 +690,7 @@ export function ScheduledAgentsPage() {
             return (
               <div
                 key={j.id}
-                className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4"
+                className="flex flex-col gap-3 rounded-xl border border-border bg-card p-5"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
@@ -633,15 +707,15 @@ export function ScheduledAgentsPage() {
                         </span>
                       )}
                     </div>
-                    <p className="mt-1 line-clamp-2 text-sm opacity-70">{j.prompt}</p>
+                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{j.prompt}</p>
                   </div>
-                  <label className="flex shrink-0 items-center gap-1.5 text-xs opacity-70">
+                  <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
                     <input type="checkbox" checked={j.enabled} onChange={() => void toggle(j)} />
                     Ativo
                   </label>
                 </div>
 
-                <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs opacity-60">
+                <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
                   <span>📁 {j.workspace ?? "—"}</span>
                   {(j.interval_seconds || j.cron) && <span>Próximo: {fmtTime(j.next_run_at)}</span>}
                   <span>Último: {fmtTime(j.last_run_at)}</span>
@@ -649,13 +723,13 @@ export function ScheduledAgentsPage() {
 
                 {/* Webhook URL */}
                 <div className="flex items-center gap-2">
-                  <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 text-[11px] opacity-70">
+                  <code className="min-w-0 flex-1 truncate rounded-md bg-muted px-2 py-1 text-[11px] text-muted-foreground">
                     {webhookUrl(j.webhook_token)}
                   </code>
                   <button
                     type="button"
                     onClick={() => copy(webhookUrl(j.webhook_token))}
-                    className="rounded border border-border px-2 py-1 text-[11px] transition hover:border-foreground/30"
+                    className="rounded-md border border-border px-2 py-1 text-[11px] transition hover:border-foreground/30"
                   >
                     Copiar
                   </button>
@@ -663,7 +737,7 @@ export function ScheduledAgentsPage() {
 
                 {/* History */}
                 {j.history.length > 0 && (
-                  <div className="flex flex-col gap-0.5 text-[11px] opacity-55">
+                  <div className="flex flex-col gap-0.5 text-[11px] text-muted-foreground/80">
                     {j.history.slice(0, 3).map((h, i) => (
                       <div key={i} className="flex items-center gap-2">
                         <span>{fmtTime(h.at)}</span>
@@ -689,7 +763,7 @@ export function ScheduledAgentsPage() {
                 {j.id in testOpen && (
                   <div className="flex flex-col gap-1.5">
                     <textarea
-                      className={`${inputCls} min-h-[60px] resize-y font-mono text-[11px]`}
+                      className={cn(fieldCls, "min-h-[60px] resize-y font-mono text-[11px]")}
                       value={testOpen[j.id]}
                       placeholder='{"issue": {"title": "Bug de exemplo"}}'
                       onChange={(e) => setTestOpen((t) => ({ ...t, [j.id]: e.target.value }))}
@@ -751,7 +825,7 @@ export function ScheduledAgentsPage() {
                     Excluir
                   </button>
                   {fireResult[j.id] && (
-                    <span className="text-xs opacity-70">{fireResult[j.id]}</span>
+                    <span className="text-xs text-muted-foreground">{fireResult[j.id]}</span>
                   )}
                 </div>
               </div>

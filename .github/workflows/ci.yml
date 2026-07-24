@@ -34,7 +34,9 @@ concurrency:
 jobs:
   pytest:
     name: Pytest (${{ matrix.group }})
-    if: ${{ !github.event.pull_request.draft }}
+    # Runs only on the canonical public repo; the private mirror has no free
+    # Actions minutes, so its jobs would just fail at startup and go red.
+    if: ${{ !github.event.pull_request.draft && github.repository == 'Omni-Craft/OmniCraft' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
@@ -226,7 +228,9 @@ jobs:
 
   stores-postgres:
     name: Pytest (stores-postgres)
-    if: ${{ !github.event.pull_request.draft }}
+    # Runs only on the canonical public repo; the private mirror has no free
+    # Actions minutes, so its jobs would just fail at startup and go red.
+    if: ${{ !github.event.pull_request.draft && github.repository == 'Omni-Craft/OmniCraft' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -271,7 +275,9 @@ jobs:
 
   stores-mysql:
     name: Pytest (stores-mysql)
-    if: ${{ !github.event.pull_request.draft }}
+    # Runs only on the canonical public repo; the private mirror has no free
+    # Actions minutes, so its jobs would just fail at startup and go red.
+    if: ${{ !github.event.pull_request.draft && github.repository == 'Omni-Craft/OmniCraft' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -318,7 +324,9 @@ jobs:
 
   codex-parity:
     name: Pytest (codex-parity)
-    if: ${{ !github.event.pull_request.draft }}
+    # Runs only on the canonical public repo; the private mirror has no free
+    # Actions minutes, so its jobs would just fail at startup and go red.
+    if: ${{ !github.event.pull_request.draft && github.repository == 'Omni-Craft/OmniCraft' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -419,7 +427,7 @@ jobs:
     # unprivileged pull_request context (read-only); code-coverage.yml consumes
     # the artifact and posts the status. Report-only.
     needs: pytest
-    if: ${{ !cancelled() && !github.event.pull_request.draft }}
+    if: ${{ !cancelled() && !github.event.pull_request.draft && github.repository == 'Omni-Craft/OmniCraft' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

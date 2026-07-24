@@ -31,7 +31,9 @@ concurrency:
 jobs:
   pre-commit:
     name: Pre-commit checks
-    if: ${{ !github.event.pull_request.draft }}
+    # Runs only on the canonical public repo; the private mirror has no free
+    # Actions minutes, so its jobs would just fail at startup and go red.
+    if: ${{ !github.event.pull_request.draft && github.repository == 'Omni-Craft/OmniCraft' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
 

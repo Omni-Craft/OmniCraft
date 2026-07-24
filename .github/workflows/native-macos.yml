@@ -27,7 +27,10 @@ concurrency:
 jobs:
   swift-build:
     name: swift build
-    if: ${{ !github.event.pull_request.draft }}
+    # Runs only on the canonical public repo; the private mirror has no free
+    # Actions minutes (macos-latest counts 10x), so its jobs would just fail at
+    # startup and go red.
+    if: ${{ !github.event.pull_request.draft && github.repository == 'Omni-Craft/OmniCraft' }}
     runs-on: macos-latest
     timeout-minutes: 20
 

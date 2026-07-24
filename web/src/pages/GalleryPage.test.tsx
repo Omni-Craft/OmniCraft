@@ -55,7 +55,7 @@ const AGENTS = [
 ];
 
 function mockList(agents = AGENTS) {
-  fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+  fetchMock.mockImplementation((_input, init) => {
     if (init?.method === "POST") {
       return Promise.resolve({ ok: true, json: async () => ({}) } as Response);
     }

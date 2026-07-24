@@ -1,9 +1,10 @@
 """Tests for the runner-local iOS Simulator tool.
 
-The tool shells out to ``xcrun simctl`` / ``xcodebuild`` / ``idb`` on the runner
-host. These tests stub the shell-out (``_shell``) so they run anywhere — no
-Xcode, no booted simulator, no idb — and exercise the command wiring, argument
-validation, the no-runtime and no-idb degradations, and screenshot saving.
+The tool shells out to ``xcrun simctl`` / ``xcodebuild`` / ``idb`` (or
+``cliclick``) on the runner host. These tests stub the shell-out (``_shell``)
+so they run anywhere — no Xcode, no booted simulator, no idb — and exercise the
+command wiring, argument validation, the no-runtime degradation, the cliclick
+touch fallback and its screen calibration, and screenshot saving.
 """
 
 from __future__ import annotations
@@ -138,13 +139,15 @@ def test_build_needs_scheme() -> None:
     assert "scheme" in out
 
 
-# --- idb degradation --------------------------------------------------------
+# --- touch degradation ------------------------------------------------------
 
 
-def test_tap_without_idb(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tap_without_any_injector(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Neither idb nor cliclick: the hint must point at cliclick, since idb is
+    # archived and no longer installable on recent macOS.
     monkeypatch.setattr(ios.shutil, "which", lambda _name: None)
     out = asyncio.run(ios.run_action("tap", {"x": 10, "y": 20}, workspace=None))
-    assert "idb" in out
+    assert "cliclick" in out and "idb-companion" not in out
 
 
 def test_tap_needs_coords(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -249,3 +252,62 @@ def test_boot_opens_simulator_app(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_execute_wrapper_requires_action(tmp_path: Path) -> None:
     out = asyncio.run(_execute_ios_simulator_tool({}, runner_workspace=tmp_path))
     assert "action" in out
+
+
+# --- cliclick fallback (idb is archived / unavailable on recent macOS) -------
+
+
+def _png_bytes(width: int, height: int) -> bytes:
+    """Minimal PNG header carrying the given pixel dimensions."""
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + b"\x00\x00\x00\rIHDR"
+        + width.to_bytes(4, "big")
+        + height.to_bytes(4, "big")
+    )
+
+
+def test_device_screen_rect_solves_scale_and_chrome() -> None:
+    # iPhone 17 Pro at 100%: window 456x972 pt wraps a 402x874 pt screen —
+    # measured live: bezel 27, title bar 44.
+    rect = ios._device_screen_rect((627.0, 65.0, 456.0, 972.0), (1206, 2622))
+    assert rect is not None
+    x, y, w, h = rect
+    assert (round(x), round(y)) == (654, 136)
+    assert (round(w), round(h)) == (402, 874)
+
+
+def test_device_screen_rect_rejects_mismatched_window() -> None:
+    # A zoomed (or wrong) window leaves no plausible bezel/title bar.
+    assert ios._device_screen_rect((0.0, 0.0, 300.0, 400.0), (1206, 2622)) is None
+
+
+def test_to_screen_maps_pixel_to_screen_point() -> None:
+    rect = (654.0, 136.0, 402.0, 874.0)
+    # Centre of the screenshot lands at the centre of the on-screen rect.
+    assert ios._to_screen(rect, 1206, 2622, 603, 1311) == (855, 573)
+    assert ios._to_screen(rect, 1206, 2622, 0, 0) == (654, 136)
+
+
+def test_tap_falls_back_to_cliclick_when_idb_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(
+        ios.shutil, "which", lambda name: None if name == "idb" else "/bin/" + name
+    )
+    calls: list[list[str]] = []
+
+    async def fake(argv: list[str], *, timeout: float = 60.0) -> ShellResult:
+        calls.append(argv)
+        if argv[0] == "osascript" and "position" in argv[-1]:
+            return ShellResult(0, "627, 65, 456, 972", "")
+        if argv[0] == "xcrun":  # calibration screenshot
+            Path(argv[-1]).write_bytes(_png_bytes(1206, 2622))
+        return ShellResult(0, "", "")
+
+    monkeypatch.setattr(ios, "_shell", fake)
+    out = asyncio.run(ios.run_action("tap", {"x": 1018, "y": 1267}, workspace=tmp_path))
+    assert "cliclick" in out
+    # Focused first, then clicked at the mapped screen point.
+    assert ["osascript", "-e", 'tell application "Simulator" to activate'] in calls
+    assert ["cliclick", "c:993,558"] in calls

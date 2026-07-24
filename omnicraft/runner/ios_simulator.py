@@ -7,9 +7,11 @@ browser tools. Screenshots are saved into the session workspace
 (``<workspace>/.omnicraft/ios/``) and only the path is returned: a raw image in
 a tool result would cost hundreds of thousands of tokens.
 
-Touch input (tap/type/swipe) is not something ``simctl`` exposes, so those
-actions go through ``idb`` (fb-idb) when it is installed and degrade to an
-actionable message when it is not.
+Touch input (tap/type/swipe) is not something ``simctl`` exposes. It goes
+through ``idb`` (fb-idb) when that is installed; otherwise it falls back to
+clicking the Simulator window on screen with ``cliclick``. The fallback exists
+because idb is archived and no longer installable on recent macOS, where it
+would otherwise leave touch input dead.
 """
 
 from __future__ import annotations
@@ -151,20 +153,174 @@ async def _screenshot(device: str | None, workspace: Path | None) -> str:
 
 
 def _idb_missing(action: str) -> str | None:
-    """Actionable hint when idb isn't installed, else ``None``."""
-    if shutil.which("idb") is not None:
+    """Actionable hint when neither idb nor the cliclick fallback is usable."""
+    if shutil.which("idb") is not None or shutil.which("cliclick") is not None:
         return None
     return (
-        f"Erro: '{action}' precisa do idb (fb-idb), que injeta toques no "
-        "simulador — o simctl não faz isso. Instale com "
-        "`brew install idb-companion && pipx install fb-idb`."
+        f"Erro: '{action}' precisa injetar toques no simulador, e o simctl não "
+        "faz isso. Instale `brew install cliclick` (clica na janela do "
+        "Simulator; exige o app aberto e permissão de Acessibilidade)."
     )
+
+
+# --- cliclick fallback -------------------------------------------------
+# idb is archived and no longer installable on recent macOS, so touch input
+# falls back to clicking the Simulator window on screen. Coordinates arrive in
+# screenshot PIXELS and must land on macOS screen POINTS, which means locating
+# the device screen inside the window (title bar + bezel) first.
+
+# Plausible chrome for a Simulator window, used to pick the device scale.
+_MIN_BEZEL_PT, _MAX_BEZEL_PT = 0.0, 80.0
+_MIN_TITLEBAR_PT, _MAX_TITLEBAR_PT = 15.0, 80.0
+
+
+async def _osascript(script: str) -> str | None:
+    """Run an AppleScript snippet, returning stdout or ``None`` on failure."""
+    res = await _shell(["osascript", "-e", script])
+    return res.stdout.strip() if res.ok else None
+
+
+async def _simulator_window() -> tuple[float, float, float, float] | None:
+    """Front Simulator window as ``(x, y, w, h)`` in screen points."""
+    out = await _osascript(
+        'tell application "System Events" to tell process "Simulator" '
+        "to get {position, size} of window 1"
+    )
+    if not out:
+        return None
+    try:
+        x, y, w, h = (float(p.strip()) for p in out.split(",")[:4])
+    except ValueError:
+        return None
+    return (x, y, w, h) if w > 0 and h > 0 else None
+
+
+def _png_size(path: Path) -> tuple[int, int] | None:
+    """Read a PNG's pixel dimensions from its IHDR header."""
+    try:
+        head = path.read_bytes()[:24]
+    except OSError:
+        return None
+    if len(head) < 24 or head[:8] != b"\x89PNG\r\n\x1a\n":
+        return None
+    return (int.from_bytes(head[16:20], "big"), int.from_bytes(head[20:24], "big"))
+
+
+def _device_screen_rect(
+    window: tuple[float, float, float, float], shot: tuple[int, int]
+) -> tuple[float, float, float, float] | None:
+    """Locate the device screen inside the Simulator window, in screen points.
+
+    The window wraps the screen in a title bar and a symmetric bezel, and the
+    screenshot is in pixels at the device's scale (2x or 3x). Solve for the
+    scale that leaves plausible chrome — a wrong scale yields a negative or
+    absurd bezel — so nothing about the window's size is hard-coded. Assumes
+    the Simulator is at 100% zoom; a zoomed window fails the chrome check.
+    """
+    win_x, win_y, win_w, win_h = window
+    px_w, px_h = shot
+    for scale in (3.0, 2.0, 1.0):
+        dev_w, dev_h = px_w / scale, px_h / scale
+        bezel = (win_w - dev_w) / 2
+        titlebar = win_h - dev_h - 2 * bezel
+        if not (_MIN_BEZEL_PT <= bezel <= _MAX_BEZEL_PT):
+            continue
+        if not (_MIN_TITLEBAR_PT <= titlebar <= _MAX_TITLEBAR_PT):
+            continue
+        return (win_x + bezel, win_y + titlebar + bezel, dev_w, dev_h)
+    return None
+
+
+async def _cliclick_calibrate(
+    target: str, workspace: Path | None
+) -> tuple[tuple[float, float, float, float], tuple[int, int]] | str:
+    """Resolve the on-screen device rect and the screenshot size it maps from.
+
+    :returns: ``(rect, (px_w, px_h))``, or an actionable error string.
+    """
+    window = await _simulator_window()
+    if window is None:
+        return (
+            "Erro: não achei a janela do Simulator. Abra o app "
+            "(`open -a Simulator`) — o fallback por cliclick clica nela."
+        )
+    out_dir = (workspace or Path.cwd()) / ".omnicraft" / "ios"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    probe = out_dir / "._calib.png"
+    res = await _shell(["xcrun", "simctl", "io", target, "screenshot", str(probe)])
+    shot = _png_size(probe) if res.ok else None
+    probe.unlink(missing_ok=True)
+    if shot is None:
+        return "Erro: não consegui medir a tela do simulador para calibrar o toque."
+    rect = _device_screen_rect(window, shot)
+    if rect is None:
+        return (
+            "Erro: a janela do Simulator não bate com a tela do device. "
+            "Deixe o zoom em 100% (Janela ▸ Tamanho Físico) e tente de novo."
+        )
+    return rect, shot
+
+
+def _to_screen(
+    rect: tuple[float, float, float, float], shot_w: int, shot_h: int, x: int, y: int
+) -> tuple[int, int]:
+    """Map a screenshot-pixel point onto macOS screen points."""
+    rx, ry, rw, rh = rect
+    return (round(rx + (x / shot_w) * rw), round(ry + (y / shot_h) * rh))
+
+
+async def _cliclick_gesture(
+    kind: str, coords: list[int], device: str | None, ok_msg: str, workspace: Path | None
+) -> str:
+    """Tap or swipe by clicking the Simulator window with cliclick."""
+    target = _target(device, kind)
+    calib = await _cliclick_calibrate(target, workspace)
+    if isinstance(calib, str):
+        return calib
+    rect, (shot_w, shot_h) = calib
+    # A click only raises an unfocused window — the event never reaches the
+    # device — so bring the Simulator forward first.
+    await _osascript('tell application "Simulator" to activate')
+    pts = [
+        _to_screen(rect, shot_w, shot_h, coords[i], coords[i + 1])
+        for i in range(0, len(coords) - 1, 2)
+    ]
+    if kind == "tap":
+        argv = ["cliclick", f"c:{pts[0][0]},{pts[0][1]}"]
+    else:
+        argv = [
+            "cliclick",
+            f"dd:{pts[0][0]},{pts[0][1]}",
+            f"du:{pts[-1][0]},{pts[-1][1]}",
+        ]
+    res = await _shell(argv)
+    if res.ok:
+        return f"{ok_msg} (via cliclick na janela do Simulator)"
+    return f"Erro ({kind}) via cliclick: {_tail(res.stderr or res.stdout)}"
+
+
+async def _cliclick_text(text: str, device: str | None) -> str:
+    """Type into the focused simulator by driving the keyboard with cliclick."""
+    del device  # Typing goes to whatever the Simulator has focused.
+    if await _simulator_window() is None:
+        return (
+            "Erro: não achei a janela do Simulator. Abra o app "
+            "(`open -a Simulator`) — o fallback por cliclick digita nela."
+        )
+    await _osascript('tell application "Simulator" to activate')
+    res = await _shell(["cliclick", f"t:{text}"])
+    if res.ok:
+        return "Texto digitado (via cliclick na janela do Simulator)"
+    return f"Erro (type) via cliclick: {_tail(res.stderr or res.stdout)}"
 
 
 async def _idb(ui_args: list[str], device: str | None, action: str, ok_msg: str) -> str:
     hint = _idb_missing(action)
     if hint:
         return hint
+    if shutil.which("idb") is None:
+        # Only `type` reaches here without idb; its text is the last argument.
+        return await _cliclick_text(ui_args[-1], device)
     target = _target(device, action)
     res = await _shell(["idb", "ui", *ui_args, "--udid", target])
     if res.ok:
@@ -194,11 +350,19 @@ async def _idb_point_scale(target: str) -> tuple[float, float]:
     return (1.0, 1.0)
 
 
-async def _idb_gesture(kind: str, coords: list[int], device: str | None, ok_msg: str) -> str:
-    """Run an idb tap/swipe, scaling the pixel coords into idb's point space."""
+async def _idb_gesture(
+    kind: str,
+    coords: list[int],
+    device: str | None,
+    ok_msg: str,
+    workspace: Path | None = None,
+) -> str:
+    """Run a tap/swipe, scaling the pixel coords into the injector's space."""
     hint = _idb_missing(kind)
     if hint:
         return hint
+    if shutil.which("idb") is None:
+        return await _cliclick_gesture(kind, coords, device, ok_msg, workspace)
     target = _target(device, kind)
     sx, sy = await _idb_point_scale(target)
     # Even indices are X, odd are Y — scale each by its axis ratio.
@@ -279,14 +443,14 @@ async def run_action(action: str, args: dict[str, Any], *, workspace: Path | Non
             x, y = int(args["x"]), int(args["y"])
         except (KeyError, TypeError, ValueError):
             return "Erro: 'tap' precisa de 'x' e 'y' inteiros."
-        return await _idb_gesture("tap", [x, y], device, f"Toque em ({x}, {y}).")
+        return await _idb_gesture("tap", [x, y], device, f"Toque em ({x}, {y}).", workspace)
     if action == "swipe":
         try:
             x1, y1 = int(args["x1"]), int(args["y1"])
             x2, y2 = int(args["x2"]), int(args["y2"])
         except (KeyError, TypeError, ValueError):
             return "Erro: 'swipe' precisa de 'x1','y1','x2','y2' inteiros."
-        return await _idb_gesture("swipe", [x1, y1, x2, y2], device, "Swipe executado.")
+        return await _idb_gesture("swipe", [x1, y1, x2, y2], device, "Swipe executado.", workspace)
     if action == "type":
         text = str(args.get("text") or "")
         if not text:

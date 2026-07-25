@@ -12,6 +12,17 @@ const FRAME_INTERVAL_MS = 800;
 /** The codec the stream route encodes with — checked before opening a buffer. */
 const STREAM_MIME = 'video/mp4; codecs="avc1.42E01E"';
 
+/**
+ * Playback starts a few seconds behind the capture and, left alone, stays
+ * there — a live view of the device would lag by that much forever. Past
+ * ``MAX_LAG_S`` the playhead jumps back to the live edge, keeping
+ * ``TARGET_LAG_S`` of cushion so it doesn't stall on the next frame.
+ */
+const MAX_LAG_S = 1.5;
+const TARGET_LAG_S = 0.4;
+/** Buffered video older than this is dropped, so a long session can't grow forever. */
+const KEEP_BEHIND_S = 20;
+
 type Health = "connecting" | "live" | "empty" | "error";
 /**
  * How the live view is fed. ``video`` screen-captures the Simulator window at
@@ -23,6 +34,30 @@ type Feed = "video" | "frames";
 interface BootedDevice {
   udid?: string;
   name?: string;
+}
+
+/**
+ * Hold playback at the live edge and drop what has already been watched.
+ *
+ * The decoder starts a few seconds behind the capture and would keep that
+ * distance for the whole session, so the "live" view would show the past.
+ */
+function keepAtLiveEdge(video: HTMLVideoElement, buffer: SourceBuffer) {
+  const ranges = buffer.buffered;
+  if (!ranges.length) return;
+  const end = ranges.end(ranges.length - 1);
+  if (end - video.currentTime > MAX_LAG_S) {
+    video.currentTime = Math.max(0, end - TARGET_LAG_S);
+  }
+  // Evicting is only legal between appends, and only behind the playhead.
+  const start = ranges.start(0);
+  if (!buffer.updating && video.currentTime - start > KEEP_BEHIND_S) {
+    try {
+      buffer.remove(start, video.currentTime - KEEP_BEHIND_S);
+    } catch {
+      // A racing append makes this throw; the next chunk retries.
+    }
+  }
 }
 
 export interface SimulatorPaneProps {
@@ -164,6 +199,7 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
           }
           if (cancelled || mediaSource.readyState !== "open") break;
           buffer.appendBuffer(value);
+          keepAtLiveEdge(video, buffer);
         }
       } catch {
         if (!cancelled) fallback();

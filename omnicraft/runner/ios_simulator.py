@@ -319,8 +319,14 @@ async def _cliclick_text(text: str, device: str | None) -> str:
 # ``simctl recordVideo`` only finalizes its QuickTime file on stop, so it can't
 # feed a live view. Real video instead screen-captures the Simulator window
 # with ffmpeg and crops to the device screen — the same rect the tap fallback
-# solves for. Needs the window visible and Screen Recording permission; the
-# screenshot poll stays as the headless fallback.
+# solves for. Needs the window visible and Screen Recording permission.
+#
+# Two limits come with capturing a screen *region* rather than a window, which
+# is why the pane treats this as opt-in and defaults to the screenshot poll:
+# whatever sits on top of the Simulator is what gets captured (the app's own
+# window, usually), and the crop is fixed when the stream starts, so moving or
+# resizing the window afterwards points the capture at the wrong place.
+# Capturing the window's own buffer (ScreenCaptureKit) would fix both.
 
 # Matches ffmpeg's device listing, e.g. ``[4] Capture screen 0``.
 _AVF_SCREEN_RE = re.compile(r"\[(\d+)\]\s+Capture screen", re.IGNORECASE)

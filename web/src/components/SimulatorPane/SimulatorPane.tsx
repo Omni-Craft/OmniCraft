@@ -79,13 +79,10 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
   const [health, setHealth] = useState<Health>("connecting");
   const [streaming, setStreaming] = useState(true);
   const [device, setDevice] = useState<BootedDevice | null>(null);
-  // Start on real video and drop to frames if the stream can't run (no ffmpeg,
-  // window hidden, no screen-recording permission).
-  const [feed, setFeed] = useState<Feed>(() =>
-    typeof window !== "undefined" && window.MediaSource?.isTypeSupported?.(STREAM_MIME) === true
-      ? "video"
-      : "frames",
-  );
+  // Frames are the default even though video is smoother: video screen-captures
+  // the Simulator window, so anything covering it (this very app, usually) is
+  // what gets captured. Opt in when the window is parked in the clear.
+  const [feed, setFeed] = useState<Feed>("frames");
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Device screenshot size, reported by the stream route (see the tap mapping).
@@ -383,7 +380,11 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
           {streaming ? <Pause className="size-4" /> : <Play className="size-4" />}
         </ControlButton>
         <ControlButton
-          label={feed === "video" ? "Usar quadros" : "Usar vídeo"}
+          label={
+            feed === "video"
+              ? "Usar quadros"
+              : "Usar vídeo (deixe a janela do Simulator visível e descoberta)"
+          }
           onClick={() => {
             setHealth("connecting");
             setFeed((f) => (f === "video" ? "frames" : "video"));

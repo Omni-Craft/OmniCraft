@@ -11508,6 +11508,63 @@
         ]
       }
     },
+    "/v1/sessions/{session_id}/ios/stream": {
+      "get": {
+        "description": "Stream the simulator window as fragmented MP4, for the live view.\n\nScreen-capture based: it needs the Simulator window visible and Screen\nRecording permission. The pane falls back to polling `/screenshot`\nwhen this answers 409.",
+        "operationId": "stream_v1_sessions__session_id__ios_stream_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "device",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Device"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream",
+        "tags": [
+          "ios_simulator"
+        ]
+      }
+    },
     "/v1/sessions/{session_id}/ios/tap": {
       "post": {
         "description": "Forward a tap from the pane to the simulator (via idb).",

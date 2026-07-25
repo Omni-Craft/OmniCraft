@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import tempfile
 import time
 from pathlib import Path
 from typing import Any
@@ -312,6 +313,121 @@ async def _cliclick_text(text: str, device: str | None) -> str:
     if res.ok:
         return "Texto digitado (via cliclick na janela do Simulator)"
     return f"Erro (type) via cliclick: {_tail(res.stderr or res.stdout)}"
+
+
+# --- live video ---------------------------------------------------------
+# ``simctl recordVideo`` only finalizes its QuickTime file on stop, so it can't
+# feed a live view. Real video instead screen-captures the Simulator window
+# with ffmpeg and crops to the device screen — the same rect the tap fallback
+# solves for. Needs the window visible and Screen Recording permission; the
+# screenshot poll stays as the headless fallback.
+
+# Matches ffmpeg's device listing, e.g. ``[4] Capture screen 0``.
+_AVF_SCREEN_RE = re.compile(r"\[(\d+)\]\s+Capture screen", re.IGNORECASE)
+
+
+def parse_avfoundation_screen_index(listing: str) -> str | None:
+    """Pick the ``Capture screen`` input index out of ffmpeg's device listing.
+
+    The index is machine-specific — cameras are enumerated first — so it is
+    read rather than assumed.
+
+    :param listing: ffmpeg's ``-list_devices true`` output (it writes stderr).
+    :returns: The index as a string, or ``None`` when no screen device exists.
+    """
+    match = _AVF_SCREEN_RE.search(listing)
+    return match.group(1) if match else None
+
+
+def stream_ffmpeg_args(
+    screen_index: str, crop: tuple[int, int, int, int], framerate: int = 30
+) -> list[str]:
+    """Build the ffmpeg argv that streams a screen region as fragmented MP4.
+
+    Fragmented output (``empty_moov``) is what makes the stream playable while
+    it is still being written — a plain MP4 keeps its index at the end.
+
+    :param screen_index: avfoundation input index for the screen.
+    :param crop: ``(w, h, x, y)`` in captured pixels.
+    :param framerate: Capture rate in frames per second.
+    :returns: The full argv, writing the stream to stdout.
+    """
+    w, h, x, y = crop
+    return [
+        "ffmpeg",
+        "-loglevel", "error",
+        "-f", "avfoundation",
+        "-capture_cursor", "0",
+        # The screen device only offers uyvy422; asking it for anything else
+        # (including the yuv420p the browser needs) makes it refuse to open.
+        "-pixel_format", "uyvy422",
+        "-framerate", str(framerate),
+        "-i", screen_index,
+        # Convert in the filter chain instead — yuv420p is what browsers decode.
+        "-vf", f"crop={w}:{h}:{x}:{y},format=yuv420p",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        # A fragment only flushes on a keyframe, and x264 defaults to one every
+        # ~250 frames — that would stall the first frame for seconds.
+        "-g", str(framerate),
+        "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+        "-f", "mp4",
+        "pipe:1",
+    ]  # fmt: skip
+
+
+async def _display_scale(rect: tuple[float, float, float, float]) -> float:
+    """Captured pixels per screen point, measured rather than assumed.
+
+    Reads it from a probe capture of *rect*: the desktop's own bounds are an
+    unreliable source on a multi-monitor setup.
+    """
+    x, y, w, h = rect
+    with tempfile.TemporaryDirectory() as tmp:
+        probe = Path(tmp) / "scale.png"
+        res = await _shell(
+            [
+                "screencapture",
+                "-x",
+                "-R",
+                f"{round(x)},{round(y)},{round(w)},{round(h)}",
+                str(probe),
+            ]
+        )
+        size = _png_size(probe) if res.ok else None
+    if not size or not w:
+        return 1.0
+    return size[0] / w
+
+
+async def live_stream_command(device: str | None) -> tuple[list[str], tuple[int, int]] | str:
+    """Resolve the ffmpeg command that streams the booted simulator's screen.
+
+    :param device: Device reference, or ``None`` for the booted one.
+    :returns: ``(argv, (px_w, px_h))``, or an actionable error string.
+    """
+    if shutil.which("ffmpeg") is None:
+        return "Erro: o vídeo ao vivo precisa do ffmpeg (`brew install ffmpeg`)."
+    listing = await _shell(["ffmpeg", "-f", "avfoundation", "-list_devices", "true", "-i", ""])
+    # ffmpeg writes the listing to stderr and exits non-zero by design.
+    index = parse_avfoundation_screen_index(listing.stderr or listing.stdout)
+    if index is None:
+        return "Erro: o ffmpeg não achou um dispositivo de captura de tela."
+    calib = await _cliclick_calibrate(_target(device, "screenshot"), None)
+    if isinstance(calib, str):
+        return calib
+    rect, shot = calib
+    scale = await _display_scale(rect)
+    x, y, w, h = rect
+    # Even dimensions only — H.264 chroma subsampling rejects odd sizes.
+    crop = (
+        int(w * scale) // 2 * 2,
+        int(h * scale) // 2 * 2,
+        round(x * scale),
+        round(y * scale),
+    )
+    return stream_ffmpeg_args(index, crop), shot
 
 
 async def _idb(ui_args: list[str], device: str | None, action: str, ok_msg: str) -> str:

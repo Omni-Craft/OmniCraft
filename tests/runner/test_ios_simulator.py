@@ -311,3 +311,32 @@ def test_tap_falls_back_to_cliclick_when_idb_missing(
     # Focused first, then clicked at the mapped screen point.
     assert ["osascript", "-e", 'tell application "Simulator" to activate'] in calls
     assert ["cliclick", "c:993,558"] in calls
+
+
+# --- live video (screen capture, since recordVideo can't stream) -------------
+
+
+def test_parse_avfoundation_screen_index() -> None:
+    listing = (
+        "[AVFoundation indev @ 0x1] [0] Câmera do MacBook Air\n"
+        "[AVFoundation indev @ 0x1] [4] Capture screen 0\n"
+    )
+    # The index is machine-specific — cameras come first — so it must be read.
+    assert ios.parse_avfoundation_screen_index(listing) == "4"
+
+
+def test_parse_avfoundation_screen_index_absent() -> None:
+    assert ios.parse_avfoundation_screen_index("[0] Câmera do MacBook Air") is None
+
+
+def test_stream_ffmpeg_args_shape() -> None:
+    argv = ios.stream_ffmpeg_args("4", (804, 1748, 376, 348), framerate=30)
+    joined = " ".join(argv)
+    # The capture device only offers uyvy422; asking for anything else fails.
+    assert "-pixel_format uyvy422" in joined
+    # Browsers decode yuv420p, so the conversion happens in the filter chain.
+    assert "crop=804:1748:376:348,format=yuv420p" in joined
+    # Fragmented output + a short GOP are what make it playable while live.
+    assert "+frag_keyframe+empty_moov" in joined
+    assert argv[argv.index("-g") + 1] == "30"
+    assert argv[-1] == "pipe:1"

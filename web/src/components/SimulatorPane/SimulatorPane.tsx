@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Camera, Loader2, Pause, Play, RotateCw, Smartphone, X } from "lucide-react";
+import { Camera, Loader2, Pause, Play, RotateCw, Smartphone, Video, X } from "lucide-react";
 
 import { hostFetch } from "@/lib/host";
 import { isElectronShell } from "@/lib/nativeBridge";
 import { useChatStore } from "@/store/chatStore";
 import { cn } from "@/lib/utils";
 
-/** How often the live view pulls a fresh frame (simctl screenshot ~3-5 fps). */
+/** How often the frame fallback pulls a picture (simctl screenshot ~3-5 fps). */
 const FRAME_INTERVAL_MS = 800;
 
+/** The codec the stream route encodes with — checked before opening a buffer. */
+const STREAM_MIME = 'video/mp4; codecs="avc1.42E01E"';
+
 type Health = "connecting" | "live" | "empty" | "error";
+/**
+ * How the live view is fed. ``video`` screen-captures the Simulator window at
+ * 30fps and needs it visible; ``frames`` polls screenshots and works headless,
+ * so it is the fallback whenever the stream can't start.
+ */
+type Feed = "video" | "frames";
 
 interface BootedDevice {
   udid?: string;
@@ -26,15 +35,26 @@ export interface SimulatorPaneProps {
 /**
  * The "iOS Simulator" workspace pane — a live view of the simulator on the
  * runner's Mac. The agent drives the device through the `ios_simulator` tool;
- * this pane is the window onto it: it polls the server for a fresh screenshot
- * (the closest thing to a stream without an encoder pipeline), shows which
- * device is booted, and forwards click-to-tap. When nothing is booted it rests
- * on an empty state rather than a broken image.
+ * this pane is the window onto it: it streams real H.264 video of the device
+ * (falling back to polling screenshots when the host can't screen-capture),
+ * shows which device is booted, and forwards click-to-tap. When nothing is
+ * booted it rests on an empty state rather than a broken image.
  */
 export function SimulatorPane({ conversationId, onClose, className }: SimulatorPaneProps) {
   const [health, setHealth] = useState<Health>("connecting");
   const [streaming, setStreaming] = useState(true);
   const [device, setDevice] = useState<BootedDevice | null>(null);
+  // Start on real video and drop to frames if the stream can't run (no ffmpeg,
+  // window hidden, no screen-recording permission).
+  const [feed, setFeed] = useState<Feed>(() =>
+    typeof window !== "undefined" && window.MediaSource?.isTypeSupported?.(STREAM_MIME) === true
+      ? "video"
+      : "frames",
+  );
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  // Device screenshot size, reported by the stream route (see the tap mapping).
+  const shotSizeRef = useRef<[number, number] | null>(null);
   // Frame aspect ratio — seeded to the iPhone Pro screen and refined from the
   // first real frame so an iPad (or any device) isn't squeezed into a phone.
   const [aspect, setAspect] = useState("1206 / 2622");
@@ -89,11 +109,80 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
   }, [refreshDevices]);
 
   useEffect(() => {
-    if (!streaming) return;
+    if (!streaming || feed !== "frames") return;
     void pullFrame();
     const id = window.setInterval(() => void pullFrame(), FRAME_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [streaming, pullFrame]);
+  }, [streaming, feed, pullFrame]);
+
+  // Pump the fragmented-MP4 stream into a MediaSource. The <video> can't fetch
+  // it directly — hostFetch carries the auth the route requires — so the bytes
+  // are read here and appended by hand.
+  useEffect(() => {
+    if (!streaming || feed !== "video") return;
+    const video = videoRef.current;
+    if (!video) return;
+    const abort = new AbortController();
+    abortRef.current = abort;
+    const mediaSource = new MediaSource();
+    const src = URL.createObjectURL(mediaSource);
+    video.src = src;
+    let cancelled = false;
+
+    const fallback = () => {
+      if (!cancelled) setFeed("frames");
+    };
+
+    const onOpen = async () => {
+      let buffer: SourceBuffer;
+      try {
+        buffer = mediaSource.addSourceBuffer(STREAM_MIME);
+      } catch {
+        fallback();
+        return;
+      }
+      try {
+        const res = await hostFetch(`${base}/stream`, { signal: abort.signal });
+        if (res.status === 409 || !res.ok || !res.body) {
+          // 409 means the host can't screen-capture — frames still work.
+          fallback();
+          return;
+        }
+        // Taps are addressed in screenshot pixels, which the cropped video
+        // doesn't share — the route reports them so a click can be converted.
+        const dims = res.headers.get("X-Device-Screenshot");
+        const parsed = dims?.match(/^(\d+)x(\d+)$/);
+        if (parsed) shotSizeRef.current = [Number(parsed[1]), Number(parsed[2])];
+        const reader = res.body.getReader();
+        setHealth("live");
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done || cancelled) break;
+          // Appends must be serialized; wait out the previous one.
+          if (buffer.updating) {
+            await new Promise((r) => buffer.addEventListener("updateend", r, { once: true }));
+          }
+          if (cancelled || mediaSource.readyState !== "open") break;
+          buffer.appendBuffer(value);
+        }
+      } catch {
+        if (!cancelled) fallback();
+      }
+    };
+
+    mediaSource.addEventListener("sourceopen", () => void onOpen(), { once: true });
+    void video.play().catch(() => {
+      /* autoplay is muted, so a rejection here is benign */
+    });
+
+    return () => {
+      cancelled = true;
+      abort.abort();
+      URL.revokeObjectURL(src);
+      video.removeAttribute("src");
+      video.load();
+    };
+  }, [streaming, feed, base]);
 
   useEffect(
     () => () => {
@@ -118,13 +207,24 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
   }, []);
 
   const handleTap = useCallback(
-    async (e: React.MouseEvent<HTMLImageElement>) => {
-      const img = imgRef.current;
-      if (!img || !img.naturalWidth) return;
-      const rect = img.getBoundingClientRect();
-      // Map the click within the displayed image to device pixel coordinates.
-      const x = Math.round(((e.clientX - rect.left) / rect.width) * img.naturalWidth);
-      const y = Math.round(((e.clientY - rect.top) / rect.height) * img.naturalHeight);
+    async (e: React.MouseEvent<HTMLImageElement | HTMLVideoElement>) => {
+      const el = feed === "video" ? videoRef.current : imgRef.current;
+      if (!el) return;
+      // Both feeds show the same screen, but at different resolutions — the
+      // tap endpoint speaks screenshot pixels, so convert through the fraction.
+      const natural: [number, number] | null =
+        feed === "video"
+          ? (shotSizeRef.current ??
+            (videoRef.current?.videoWidth
+              ? [videoRef.current.videoWidth, videoRef.current.videoHeight]
+              : null))
+          : imgRef.current?.naturalWidth
+            ? [imgRef.current.naturalWidth, imgRef.current.naturalHeight]
+            : null;
+      if (!natural) return;
+      const rect = el.getBoundingClientRect();
+      const x = Math.round(((e.clientX - rect.left) / rect.width) * natural[0]);
+      const y = Math.round(((e.clientY - rect.top) / rect.height) * natural[1]);
       try {
         await hostFetch(`${base}/tap`, {
           method: "POST",
@@ -132,12 +232,21 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
           body: JSON.stringify({ x, y }),
         });
       } catch {
-        // Tap needs idb on the host; failures are surfaced by the tool, not here.
+        // Touch injection can fail on the host; the tool surfaces why, not here.
       }
-      void pullFrame();
+      // The video feed shows the result on its own; only frames need a nudge.
+      if (feed === "frames") void pullFrame();
     },
-    [base, pullFrame],
+    [base, feed, pullFrame],
   );
+
+  const handleVideoLoad = useCallback(() => {
+    const video = videoRef.current;
+    if (video?.videoWidth && video.videoHeight) {
+      setAspect(`${video.videoWidth} / ${video.videoHeight}`);
+      setHealth("live");
+    }
+  }, []);
 
   const handleImgLoad = useCallback(() => {
     const img = imgRef.current;
@@ -157,7 +266,8 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{device?.name ?? "iOS Simulator"}</div>
             <div className="truncate text-[11px] text-muted-foreground">
-              {device ? "Simulator" : "sem dispositivo"} · 50% · H.264
+              {device ? "Simulator" : "sem dispositivo"} ·{" "}
+              {feed === "video" ? "vídeo H.264 30fps" : "quadros ~1fps"}
             </div>
           </div>
         </div>
@@ -181,16 +291,32 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
               className="relative h-full w-full overflow-hidden bg-black"
               style={{ borderRadius: "14% / 6.6%" }}
             >
-              <img
-                ref={imgRef}
-                alt="Tela do simulador iOS"
-                onClick={handleTap}
-                onLoad={handleImgLoad}
-                className={cn(
-                  "h-full w-full object-cover transition-opacity duration-200",
-                  health === "live" ? "cursor-pointer opacity-100" : "opacity-0",
-                )}
-              />
+              {feed === "video" ? (
+                <video
+                  ref={videoRef}
+                  muted
+                  playsInline
+                  autoPlay
+                  aria-label="Tela do simulador iOS"
+                  onClick={handleTap}
+                  onLoadedMetadata={handleVideoLoad}
+                  className={cn(
+                    "h-full w-full object-cover transition-opacity duration-200",
+                    health === "live" ? "cursor-pointer opacity-100" : "opacity-0",
+                  )}
+                />
+              ) : (
+                <img
+                  ref={imgRef}
+                  alt="Tela do simulador iOS"
+                  onClick={handleTap}
+                  onLoad={handleImgLoad}
+                  className={cn(
+                    "h-full w-full object-cover transition-opacity duration-200",
+                    health === "live" ? "cursor-pointer opacity-100" : "opacity-0",
+                  )}
+                />
+              )}
               {/* Dynamic Island */}
               <div className="pointer-events-none absolute left-1/2 top-[1.4%] h-[3.4%] w-[30%] -translate-x-1/2 rounded-full bg-black" />
               {health !== "live" ? (
@@ -219,6 +345,15 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
           onClick={() => setStreaming((s) => !s)}
         >
           {streaming ? <Pause className="size-4" /> : <Play className="size-4" />}
+        </ControlButton>
+        <ControlButton
+          label={feed === "video" ? "Usar quadros" : "Usar vídeo"}
+          onClick={() => {
+            setHealth("connecting");
+            setFeed((f) => (f === "video" ? "frames" : "video"));
+          }}
+        >
+          <Video className="size-4" />
         </ControlButton>
         <ControlButton label="Capturar" onClick={handleDownload} disabled={health !== "live"}>
           <Camera className="size-4" />

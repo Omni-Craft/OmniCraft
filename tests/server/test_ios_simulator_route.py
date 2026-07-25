@@ -31,9 +31,29 @@ def test_first_booted_handles_empty() -> None:
     assert _first_booted({}) is None
 
 
-def test_router_exposes_the_three_endpoints() -> None:
+def test_router_exposes_the_view_endpoints() -> None:
     router = create_ios_simulator_router()
     paths = {route.path for route in router.routes}  # type: ignore[attr-defined]
     assert "/sessions/{session_id}/ios/devices" in paths
     assert "/sessions/{session_id}/ios/screenshot" in paths
     assert "/sessions/{session_id}/ios/tap" in paths
+    # Real video; the pane falls back to /screenshot when it answers 409.
+    assert "/sessions/{session_id}/ios/stream" in paths
+
+
+def test_stream_answers_409_when_capture_is_impossible(monkeypatch) -> None:
+    """No ffmpeg / hidden window ⇒ 409, which is the pane's cue to poll frames."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from omnicraft.server.routes import ios_simulator as route_mod
+
+    async def refuse(_device):
+        return "Erro: o vídeo ao vivo precisa do ffmpeg (`brew install ffmpeg`)."
+
+    monkeypatch.setattr(route_mod.ios, "live_stream_command", refuse)
+    app = FastAPI()
+    app.include_router(create_ios_simulator_router(), prefix="/v1")
+    res = TestClient(app).get("/v1/sessions/s1/ios/stream")
+    assert res.status_code == 409
+    assert "ffmpeg" in res.json()["error"]

@@ -22,6 +22,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/nativeBridge", () => ({
   isElectronShell: () => mocks.isElectronShell,
+  // The push status line reads this to decide whether the native shell owns
+  // notifications; without it the whole settings page fails to render here.
+  isNativeShell: () => false,
   getHudSettings: mocks.getHudSettings,
   setHudSettings: mocks.setHudSettings,
   getCliStatus: vi.fn().mockResolvedValue(null),

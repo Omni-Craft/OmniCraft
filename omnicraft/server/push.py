@@ -36,7 +36,12 @@ from cryptography.hazmat.primitives.asymmetric import ec
 _logger = logging.getLogger(__name__)
 
 # mailto used as the VAPID ``sub`` claim (push services want a contact).
-_VAPID_SUBJECT = "mailto:push@omnicraft.local"
+# VAPID's `sub` claim identifies who is sending. Apple's push service validates
+# it and rejects the whole JWT (403 BadJwtToken) when it isn't a routable
+# mailto: or https: URL — a `.local` address, being reserved for mDNS, never
+# passes, which silently broke every push to an iPhone. Overridable for
+# self-hosters who prefer their own contact.
+_VAPID_SUBJECT = os.environ.get("OMNICRAFT_VAPID_SUBJECT") or "https://omnicraft.ai"
 
 _lock = threading.Lock()
 

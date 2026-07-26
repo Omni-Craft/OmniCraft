@@ -82,7 +82,9 @@ def test_send_web_push_calls_webpush_with_vapid(push, monkeypatch: pytest.Monkey
     assert call["subscription_info"] == subscription
     assert '"title": "OmniCraft"' in call["data"]
     assert call["vapid_private_key"].endswith("push_vapid_private.pem")
-    assert call["vapid_claims"]["sub"].startswith("mailto:")
+    # Either scheme is valid VAPID; what matters is that it's routable, which
+    # is what Apple checks before accepting the JWT at all.
+    assert call["vapid_claims"]["sub"].startswith(("mailto:", "https://"))
 
 
 def test_send_web_push_reports_gone_subscription(push, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,3 +121,32 @@ def test_send_web_push_without_pywebpush_is_a_noop(push, monkeypatch: pytest.Mon
     # ImportError even if the package happens to be installed.
     monkeypatch.setitem(sys.modules, "pywebpush", None)
     assert push.send_web_push({"endpoint": "e"}, {}) is None
+
+
+def test_vapid_subject_is_routable() -> None:
+    """Apple rejects the JWT outright when `sub` isn't a routable URL.
+
+    A `.local` address (reserved for mDNS) earns a 403 BadJwtToken from
+    web.push.apple.com, which silently broke every notification to an iPhone
+    while looking like a working configuration everywhere else.
+    """
+    from omnicraft.server import push as push_mod
+
+    subject = push_mod._VAPID_SUBJECT
+    assert subject.startswith(("https://", "mailto:"))
+    assert ".local" not in subject
+
+
+def test_vapid_subject_is_overridable(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Self-hosters can point `sub` at their own contact."""
+    import importlib
+
+    from omnicraft.server import push as push_mod
+
+    monkeypatch.setenv("OMNICRAFT_VAPID_SUBJECT", "mailto:eu@exemplo.com")
+    reloaded = importlib.reload(push_mod)
+    try:
+        assert reloaded._VAPID_SUBJECT == "mailto:eu@exemplo.com"
+    finally:
+        monkeypatch.delenv("OMNICRAFT_VAPID_SUBJECT", raising=False)
+        importlib.reload(push_mod)

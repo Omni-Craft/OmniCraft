@@ -146,10 +146,17 @@ guard args.count >= 2 else {
     fail("usage: simcapture <owner-app-name> [fps]", .badArguments)
 }
 let owner = args[1]
-let fps = args.count > 2 ? Int(args[2]) ?? 30 : 30
+// A zero or negative here would scale the capture down to nothing — an empty
+// stream with no error to explain it — so fall back to the default instead of
+// trusting the number through.
+func positiveArg(_ index: Int, default fallback: Int) -> Int {
+    guard args.count > index, let value = Int(args[index]), value > 0 else { return fallback }
+    return value
+}
+let fps = positiveArg(2, default: 30)
 // Raw BGRA is ~7MB a frame at Retina size; the pane draws the phone small, so
 // capping the width keeps the pipe (and the encoder) from doing pointless work.
-let maxWidth = args.count > 3 ? Int(args[3]) ?? 640 : 640
+let maxWidth = positiveArg(3, default: 640)
 /// How often to check the window is still on screen, in seconds.
 let watchdogInterval = 2.0
 

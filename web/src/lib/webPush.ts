@@ -21,13 +21,63 @@ function urlBase64ToUint8Array(base64: string): Uint8Array {
 }
 
 function pushSupported(): boolean {
-  return (
-    !isNativeShell() &&
-    typeof navigator !== "undefined" &&
-    "serviceWorker" in navigator &&
-    typeof window !== "undefined" &&
-    "PushManager" in window
-  );
+  return pushBlocker() === null;
+}
+
+/**
+ * Why Web Push can't run here, or ``null`` when it can.
+ *
+ * Every failure in this file is swallowed, so a phone that silently never
+ * subscribes leaves nothing to look at — the reason has to be readable in the
+ * UI. On iOS especially, the APIs simply don't exist until the page is
+ * launched from a Home Screen icon, which is impossible to guess from the
+ * outside.
+ */
+export function pushBlocker(): string | null {
+  if (isNativeShell()) return "O app nativo usa as notificações do sistema.";
+  if (typeof navigator === "undefined" || typeof window === "undefined") {
+    return "Sem ambiente de navegador.";
+  }
+  if (!("serviceWorker" in navigator)) {
+    return "Este navegador não tem service worker.";
+  }
+  if (!("PushManager" in window)) {
+    // The iOS giveaway: Safari only exposes PushManager to an installed PWA.
+    return isAppleMobile()
+      ? "No iPhone, abra pelo ícone na Tela de Início (Compartilhar ▸ Adicionar à Tela de Início). Numa aba do Safari o push não existe."
+      : "Este navegador não suporta Web Push.";
+  }
+  if (!window.isSecureContext) return "É preciso acessar por https.";
+  return null;
+}
+
+function isAppleMobile(): boolean {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent ?? "");
+}
+
+/** A short, human-readable state of Web Push on this device. */
+export async function pushStatus(): Promise<{ active: boolean; reason: string }> {
+  const blocker = pushBlocker();
+  if (blocker) return { active: false, reason: blocker };
+  const permission = typeof Notification !== "undefined" ? Notification.permission : "default";
+  if (permission === "denied") {
+    return { active: false, reason: "Notificações bloqueadas nos ajustes do sistema." };
+  }
+  if (permission !== "granted") {
+    return {
+      active: false,
+      reason: "Falta permitir notificações — toque na tela para o pedido aparecer.",
+    };
+  }
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const existing = await registration.pushManager.getSubscription();
+    return existing
+      ? { active: true, reason: "Push ativo neste aparelho." }
+      : { active: false, reason: "Permissão concedida, mas a inscrição ainda não foi criada." };
+  } catch (error) {
+    return { active: false, reason: `Falha ao ler a inscrição: ${String(error)}` };
+  }
 }
 
 /**

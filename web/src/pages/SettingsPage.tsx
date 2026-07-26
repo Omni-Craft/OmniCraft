@@ -145,6 +145,7 @@ import {
 } from "@/lib/nativeBridge";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { pushStatus } from "@/lib/webPush";
 
 // Admin-only management surfaces, rendered as the Members / Policies settings
 // sub-categories. Visible to admins in all modes (accounts, OIDC, single-user).
@@ -1139,6 +1140,38 @@ const DEFAULT_QUIET_TO = "07:00";
 const QUIET_TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /**
+ * Whether push reaches this device with the app closed, and why not when it
+ * doesn't. Web Push fails silently by design — no prompt, no error — so
+ * without this line a phone that never subscribes looks identical to one that
+ * did, and the cause (an iPhone opened in a Safari tab instead of from the
+ * Home Screen) is invisible.
+ */
+function PushStatusLine() {
+  const [state, setState] = useState<{ active: boolean; reason: string } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void pushStatus().then((s) => {
+      if (!cancelled) setState(s);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!state) return null;
+  return (
+    <p
+      data-testid="push-status"
+      className={cn("text-sm", state.active ? "text-success" : "text-muted-foreground")}
+    >
+      {state.active ? "✓ " : "Push com o app fechado: "}
+      {state.reason}
+    </p>
+  );
+}
+
+/**
  * The notification preferences, inside the HUD section because that is what
  * they depend on: these alerts are raised from the HUD's feed reports, so they
  * only exist while the HUD is ON. A HUD hidden by its visibility mode still
@@ -1190,6 +1223,7 @@ function HudNotificationsFields({
             O HUD está desligado agora — nada aqui vai disparar até você ligá-lo.
           </p>
         )}
+        <PushStatusLine />
       </div>
 
       <div className="flex flex-col gap-4">

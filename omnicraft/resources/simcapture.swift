@@ -79,13 +79,20 @@ final class FrameWriter: NSObject, SCStreamOutput {
         defer { CVPixelBufferUnlockBaseAddress(pixels, .readOnly) }
         guard let base = CVPixelBufferGetBaseAddress(pixels) else { return }
 
+        // Downstream is told one fixed geometry, so a buffer of any other size
+        // can't be turned into a valid frame — and copying a configured row
+        // width out of a narrower buffer would read past its last row.
+        // Dropping the odd frame is safe: the ticker repeats the previous one.
+        guard CVPixelBufferGetWidth(pixels) == width,
+              CVPixelBufferGetHeight(pixels) == height else { return }
+
         let stride = CVPixelBufferGetBytesPerRow(pixels)
         let rowBytes = width * 4
-        let rows = min(height, CVPixelBufferGetHeight(pixels))
-        var frame = Data(capacity: rowBytes * rows)
+        guard stride >= rowBytes else { return }
+        var frame = Data(capacity: rowBytes * height)
         // Rows are padded to the hardware's alignment; copy only the visible
         // bytes so the raw stream matches the size ffmpeg is told to expect.
-        for row in 0..<rows {
+        for row in 0..<height {
             frame.append(Data(bytes: base.advanced(by: row * stride), count: rowBytes))
         }
         lock.lock()

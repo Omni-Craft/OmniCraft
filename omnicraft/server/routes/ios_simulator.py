@@ -136,11 +136,22 @@ def create_ios_simulator_router(
             header = await asyncio.wait_for(helper.stderr.readline(), timeout=_HELPER_START_S)
         except asyncio.TimeoutError:
             header = b""
+
+        async def discard_helper() -> None:
+            """Reap the helper on a path that never starts streaming.
+
+            It may already be gone — announcing nothing is exactly what a
+            helper that died on startup does — so a missing process is normal
+            here, not an error to propagate.
+            """
+            with suppress(ProcessLookupError):
+                helper.kill()
+            await helper.wait()
+
         frame = _parse_frame_size(header)
         if frame is None:
             os.close(read_fd)
-            helper.kill()
-            await helper.wait()
+            await discard_helper()
             return JSONResponse(
                 {
                     "ok": False,
@@ -152,12 +163,22 @@ def create_ios_simulator_router(
                 status_code=409,
             )
         crop = ios.crop_within_window(plan.window, plan.screen_rect, frame)
-        proc = await asyncio.create_subprocess_exec(
-            *ios.window_stream_ffmpeg_args(frame, crop, plan.framerate),
-            stdin=read_fd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.DEVNULL,
-        )
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *ios.window_stream_ffmpeg_args(frame, crop, plan.framerate),
+                stdin=read_fd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.DEVNULL,
+            )
+        except OSError:
+            # Nothing owns the helper or the pipe yet, so failing to spawn the
+            # encoder would strand both — and a live helper holds the capture.
+            os.close(read_fd)
+            await discard_helper()
+            return JSONResponse(
+                {"ok": False, "error": "não consegui iniciar o encoder de vídeo"},
+                status_code=409,
+            )
         os.close(read_fd)
 
         async def pump() -> AsyncIterator[bytes]:

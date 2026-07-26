@@ -193,7 +193,13 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
         setHealth("live");
         for (;;) {
           const { done, value } = await reader.read();
-          if (done || cancelled) break;
+          if (done) {
+            // The host stopped capturing (the window left the screen). Without
+            // this the last frame would sit there looking live.
+            fallback();
+            return;
+          }
+          if (cancelled) break;
           // Appends must be serialized; wait out the previous one.
           if (buffer.updating) {
             await new Promise((r) => buffer.addEventListener("updateend", r, { once: true }));

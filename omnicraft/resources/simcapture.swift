@@ -103,6 +103,22 @@ final class FrameWriter: NSObject, SCStreamOutput {
     }
 }
 
+/// Count *owner*'s on-screen windows.
+///
+/// "On screen" keeps a window that is merely covered by another and drops one
+/// that is minimized — which is the distinction that matters here, since a
+/// minimized window has no surface and yields no frames.
+func onScreenWindowCount(owner: String) async -> Int {
+    guard
+        let content = try? await SCShareableContent.excludingDesktopWindows(
+            false, onScreenWindowsOnly: true
+        )
+    else { return -1 }  // unknown; treated as "keep going"
+    return content.windows.filter {
+        $0.owningApplication?.applicationName == owner && $0.frame.width > 1
+    }.count
+}
+
 /// Find the largest on-screen window belonging to *owner*, occluded or not.
 func findWindow(owner: String) async throws -> SCWindow {
     let content = try await SCShareableContent.excludingDesktopWindows(
@@ -127,6 +143,8 @@ let fps = args.count > 2 ? Int(args[2]) ?? 30 : 30
 // Raw BGRA is ~7MB a frame at Retina size; the pane draws the phone small, so
 // capping the width keeps the pipe (and the encoder) from doing pointless work.
 let maxWidth = args.count > 3 ? Int(args[3]) ?? 640 : 640
+/// How often to check the window is still on screen, in seconds.
+let watchdogInterval = 2.0
 
 // Held for the process's lifetime: the stream keeps no strong reference to its
 // output, so letting these go out of scope silently stops the capture.
@@ -167,6 +185,17 @@ Task {
         liveWriter = writer
         try await stream.startCapture()
         writer.start(fps: fps)
+
+        // Minimizing mid-stream stops the frames without ending the capture,
+        // which would leave the viewer staring at a frozen picture believing
+        // it is live. Ending the process instead lets the caller fall back.
+        while true {
+            try? await Task.sleep(nanoseconds: UInt64(watchdogInterval * 1_000_000_000))
+            if await onScreenWindowCount(owner: owner) == 0 {
+                FileHandle.standardError.write(Data("simcapture: window left the screen\n".utf8))
+                exit(0)
+            }
+        }
     } catch {
         fail("capture failed: \(error.localizedDescription)", .captureFailed)
     }

@@ -9,11 +9,11 @@ enum ServerURLError: LocalizedError, Equatable {
   var errorDescription: String? {
     switch self {
     case .empty:
-      "Server URL is empty."
+      "Informe o endereço do servidor."
     case .invalid(let message):
-      "Invalid URL: \(message)"
+      "Endereço inválido: \(message)"
     case .unsupportedScheme(let scheme):
-      "Unsupported scheme '\(scheme)'. Use https."
+      "Esquema '\(scheme)' não suportado. Use https."
     case .insecureHTTPNotAllowed:
       "iOS release builds require https:// server URLs."
     }

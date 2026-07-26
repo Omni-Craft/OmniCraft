@@ -31,7 +31,7 @@ struct ConnectView: View {
           .frame(height: 80)
           .padding(.bottom, 12)
 
-        Text("Enter the URL of the OmniCrafts server.")
+        Text("Informe o endereço do servidor OmniCraft.")
           .font(.system(size: 14))
           .lineSpacing(2)
           .multilineTextAlignment(.center)
@@ -39,7 +39,7 @@ struct ConnectView: View {
           .padding(.bottom, 24)
 
         VStack(alignment: .leading, spacing: 8) {
-          Text("Server URL")
+          Text("Endereço do servidor")
             .font(.system(size: 14, weight: .medium))
             .foregroundStyle(DesignTokens.foreground(colorScheme))
 
@@ -65,10 +65,10 @@ struct ConnectView: View {
             HStack(spacing: 8) {
               ProgressView()
                 .tint(primaryForeground)
-              Text("Connecting…")
+              Text("Conectando…")
             }
           } else {
-            Text("Connect")
+            Text("Conectar")
           }
         }
         .buttonStyle(PrimaryButtonStyle(background: primary, foreground: primaryForeground))
@@ -88,7 +88,7 @@ struct ConnectView: View {
 
         if !settings.recentServers.isEmpty {
           VStack(alignment: .leading, spacing: 8) {
-            Text("Recent servers")
+            Text("Servidores recentes")
               .font(.system(size: 13, weight: .medium))
               .foregroundStyle(DesignTokens.mutedForeground(colorScheme))
 
@@ -143,17 +143,17 @@ struct ConnectView: View {
       Button {
         infoLink = .website
       } label: {
-        Label("Website", systemImage: "globe")
+        Label("Site", systemImage: "globe")
       }
       Button {
         infoLink = .docs
       } label: {
-        Label("Documentation", systemImage: "book")
+        Label("Documentação", systemImage: "book")
       }
       Button {
         infoLink = .privacy
       } label: {
-        Label("Privacy Policy", systemImage: "hand.raised")
+        Label("Política de privacidade", systemImage: "hand.raised")
       }
     } label: {
       Image(systemName: "info.circle")
@@ -162,7 +162,7 @@ struct ConnectView: View {
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
     }
-    .accessibilityLabel("About OmniCraft")
+    .accessibilityLabel("Sobre o OmniCraft")
   }
 
   private var primary: Color {

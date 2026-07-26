@@ -22,7 +22,7 @@ final class OmniCraftUITests: XCTestCase {
     app.launch()
 
     XCTAssertTrue(
-      app.staticTexts["Server URL"].waitForExistence(timeout: 15),
+      app.staticTexts["Endereço do servidor"].waitForExistence(timeout: 15),
       "Expected OmniCraft to show the server selection screen before connecting."
     )
     snapshot("01-home", timeWaitingForIdle: 2)
@@ -37,7 +37,7 @@ final class OmniCraftUITests: XCTestCase {
   }
 
   private func connectFromSetupIfNeeded(_ app: XCUIApplication, serverURL: String) {
-    let setupLabel = app.staticTexts["Server URL"]
+    let setupLabel = app.staticTexts["Endereço do servidor"]
     guard setupLabel.waitForExistence(timeout: 5) else { return }
 
     let textField = app.textFields["server-url-field"]

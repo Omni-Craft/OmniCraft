@@ -167,7 +167,7 @@ private struct ServerSwitcher: View {
         .stroke(Color.primary.opacity(colorScheme == .dark ? 0.16 : 0.10), lineWidth: 0.5)
     }
     .shadow(color: .black.opacity(colorScheme == .dark ? 0.22 : 0.08), radius: 10, y: 4)
-    .accessibilityLabel("Switch server")
+    .accessibilityLabel("Trocar de servidor")
   }
 }
 

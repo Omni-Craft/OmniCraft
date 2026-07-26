@@ -22,7 +22,7 @@ struct ChatTerminalBar: View {
     .modifier(GlassCapsule(colorScheme: colorScheme))
     .animation(.easeInOut(duration: 0.18), value: mode)
     .accessibilityElement(children: .contain)
-    .accessibilityLabel("View mode")
+    .accessibilityLabel("Modo de visualização")
   }
 
   @ViewBuilder

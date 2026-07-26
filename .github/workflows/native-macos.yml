@@ -1,20 +1,26 @@
 name: native macOS
 
 # Builds the native macOS surfaces (the notch island and the floating widgets)
-# on every non-draft PR that touches native/macos/** and on push to main.
-# They are Swift packages with no external dependencies, so the build is the
-# check: it catches a broken source tree before anyone opens Xcode.
+# on every non-draft PR that touches them, and on push to main. They are Swift
+# packages with no external dependencies, so the build is the check: it catches
+# a broken source tree before anyone opens Xcode.
+#
+# Also type-checks the loose Swift under omnicraft/resources/, which belongs to
+# no package and is compiled on the user's machine at first use — without this
+# a syntax error would ship and only surface at runtime.
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - "native/macos/**"
+      - "omnicraft/resources/*.swift"
   push:
     branches:
       - main
     paths:
       - "native/macos/**"
+      - "omnicraft/resources/*.swift"
 
 permissions:
   contents: read
@@ -63,3 +69,33 @@ jobs:
           else
             echo "sem alvo de teste — só build"
           fi
+
+  standalone-swift:
+    name: swift typecheck (resources)
+    # Same guard as above: only the public repo has Actions minutes to spend.
+    if: ${{ !github.event.pull_request.draft && github.repository == 'Omni-Craft/OmniCraft' }}
+    runs-on: macos-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
+
+      - name: Show toolchain
+        run: swift --version
+
+      - name: Type-check loose Swift sources
+        # These files ship as data and are compiled on the user's Mac at first
+        # use, so nothing else would catch a break in them. Type-checking is
+        # enough — and seconds rather than a full build.
+        run: |
+          shopt -s nullglob
+          files=(omnicraft/resources/*.swift)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "nenhum .swift solto para checar"
+            exit 0
+          fi
+          for f in "${files[@]}"; do
+            echo "→ $f"
+            swiftc -typecheck "$f"
+          done

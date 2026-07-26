@@ -84,6 +84,16 @@ repos:
         files: ^web/ios/.*\.swift$
         exclude: ^web/ios/(build|vendor)/
 
+      # Loose Swift under omnicraft/resources/ ships as data and is compiled on
+      # the user's Mac at first use, so a break in it would only surface at
+      # runtime. Type-checking costs seconds and no-ops where Swift is absent
+      # (the ubuntu CI job); the macOS CI job runs the same check.
+      - id: resources-swift-typecheck
+        name: resources swift typecheck
+        language: system
+        entry: bash -c 'command -v swiftc >/dev/null 2>&1 || exit 0; for f in "$@"; do swiftc -typecheck "$f" || exit 1; done' --
+        files: ^omnicraft/resources/.*\.swift$
+
       # Keep omnicraft/version.py's VERSION constant equal to the canonical
       # [project].version in pyproject.toml (the runtime imports the constant;
       # the build reads pyproject). Fixer: rewrites the constant and re-stages.

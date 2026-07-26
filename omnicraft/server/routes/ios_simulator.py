@@ -36,8 +36,11 @@ from omnicraft.server.routes._auth_helpers import require_user
 _STREAM_CHUNK_BYTES = 64 * 1024
 # How long ffmpeg gets to exit on SIGTERM before it is killed.
 _STREAM_KILL_GRACE_S = 3.0
-# How long to wait for the capture helper to announce its frame size.
-_HELPER_START_S = 20.0
+# How long to wait for the helper's first frame before giving up on video. It
+# announces only once a frame really arrives, so this doubles as the check for
+# a window that can't be captured (a minimized one has no surface) — short
+# enough that the pane drops to frames quickly instead of hanging.
+_HELPER_START_S = 6.0
 
 _FRAME_SIZE_RE = re.compile(rb"(\d+)x(\d+)")
 
@@ -139,7 +142,14 @@ def create_ios_simulator_router(
             helper.kill()
             await helper.wait()
             return JSONResponse(
-                {"ok": False, "error": "a captura de janela não iniciou"}, status_code=409
+                {
+                    "ok": False,
+                    "error": (
+                        "a captura de janela não rendeu nenhum quadro — o "
+                        "Simulator pode estar minimizado (restaure a janela)"
+                    ),
+                },
+                status_code=409,
             )
         crop = ios.crop_within_window(plan.window, plan.screen_rect, frame)
         proc = await asyncio.create_subprocess_exec(

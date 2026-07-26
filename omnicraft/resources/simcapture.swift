@@ -42,6 +42,7 @@ final class FrameWriter: NSObject, SCStreamOutput {
     private let lock = NSLock()
     private var latest: Data?
     private var ticker: DispatchSourceTimer?
+    private var announced = false
 
     init(width: Int, height: Int) {
         self.width = width
@@ -89,7 +90,16 @@ final class FrameWriter: NSObject, SCStreamOutput {
         }
         lock.lock()
         latest = frame
+        let first = !announced
+        announced = true
         lock.unlock()
+        if first {
+            // Announced only now, on the first real frame: a minimized window
+            // has no surface to capture and never gets here, which is exactly
+            // how the caller learns to fall back instead of serving a stream
+            // that would stay empty forever.
+            FileHandle.standardError.write(Data("\(width)x\(height)\n".utf8))
+        }
     }
 }
 
@@ -150,8 +160,9 @@ Task {
         try stream.addStreamOutput(
             writer, type: .screen, sampleHandlerQueue: DispatchQueue(label: "ai.omnicraft.simcapture")
         )
-        // The caller reads this to tell ffmpeg the exact frame geometry.
-        FileHandle.standardError.write(Data("\(width)x\(height)\n".utf8))
+        // The geometry is announced by the writer on its first real frame, not
+        // here: starting the capture succeeds even for a window that will
+        // never produce one.
         liveStream = stream
         liveWriter = writer
         try await stream.startCapture()

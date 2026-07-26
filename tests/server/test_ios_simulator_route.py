@@ -7,6 +7,7 @@ device out of a simctl listing.
 
 from __future__ import annotations
 
+from omnicraft.runner import ios_simulator as ios
 from omnicraft.server.routes.ios_simulator import _first_booted, create_ios_simulator_router
 
 
@@ -68,3 +69,33 @@ def test_parse_frame_size_reads_helper_header() -> None:
     # A helper that died before announcing leaves nothing to parse.
     assert _parse_frame_size(b"") is None
     assert _parse_frame_size(b"simcapture: no window owned by Simulator\n") is None
+
+
+def test_stream_409s_when_the_helper_never_yields_a_frame(monkeypatch) -> None:
+    """A window that can't be captured (minimized) must fall back, not hang.
+
+    The helper announces its geometry only once a real frame arrives, so a
+    silent helper is the signal — answering 200 here would leave the pane on an
+    empty "live" view forever.
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from omnicraft.server.routes import ios_simulator as route_mod
+
+    async def plan(_device):
+        return ios.WindowStreamPlan(
+            helper=["/bin/sh", "-c", "sleep 30"],  # starts, never announces
+            window=(0.0, 0.0, 456.0, 972.0),
+            screen_rect=(27.0, 71.0, 402.0, 874.0),
+            shot=(1206, 2622),
+            framerate=15,
+        )
+
+    monkeypatch.setattr(route_mod.ios, "window_stream_plan", plan)
+    monkeypatch.setattr(route_mod, "_HELPER_START_S", 0.5)
+    app = FastAPI()
+    app.include_router(create_ios_simulator_router(), prefix="/v1")
+    res = TestClient(app).get("/v1/sessions/s1/ios/stream")
+    assert res.status_code == 409
+    assert "minimizado" in res.json()["error"]

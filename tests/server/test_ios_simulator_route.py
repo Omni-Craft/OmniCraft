@@ -51,9 +51,20 @@ def test_stream_answers_409_when_capture_is_impossible(monkeypatch) -> None:
     async def refuse(_device):
         return "Erro: o vídeo ao vivo precisa do ffmpeg (`brew install ffmpeg`)."
 
-    monkeypatch.setattr(route_mod.ios, "live_stream_command", refuse)
+    # Patch the path the route actually takes — the window-capture plan.
+    monkeypatch.setattr(route_mod.ios, "window_stream_plan", refuse)
     app = FastAPI()
     app.include_router(create_ios_simulator_router(), prefix="/v1")
     res = TestClient(app).get("/v1/sessions/s1/ios/stream")
     assert res.status_code == 409
     assert "ffmpeg" in res.json()["error"]
+
+
+def test_parse_frame_size_reads_helper_header() -> None:
+    from omnicraft.server.routes.ios_simulator import _parse_frame_size
+
+    # The capture helper announces its exact frame geometry before streaming.
+    assert _parse_frame_size(b"564x1202\n") == (564, 1202)
+    # A helper that died before announcing leaves nothing to parse.
+    assert _parse_frame_size(b"") is None
+    assert _parse_frame_size(b"simcapture: no window owned by Simulator\n") is None

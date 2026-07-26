@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import re
 import tempfile
 from collections.abc import AsyncIterator
 from contextlib import suppress
@@ -34,6 +36,18 @@ from omnicraft.server.routes._auth_helpers import require_user
 _STREAM_CHUNK_BYTES = 64 * 1024
 # How long ffmpeg gets to exit on SIGTERM before it is killed.
 _STREAM_KILL_GRACE_S = 3.0
+# How long to wait for the capture helper to announce its frame size.
+_HELPER_START_S = 20.0
+
+_FRAME_SIZE_RE = re.compile(rb"(\d+)x(\d+)")
+
+
+def _parse_frame_size(header: bytes) -> tuple[int, int] | None:
+    """Read the ``WIDTHxHEIGHT`` line the capture helper prints on startup."""
+    match = _FRAME_SIZE_RE.search(header)
+    if not match:
+        return None
+    return (int(match.group(1)), int(match.group(2)))
 
 
 class _TapBody(BaseModel):
@@ -101,13 +115,40 @@ def create_ios_simulator_router(
         """
         require_user(request, auth_provider)
         del session_id  # path-scoped by convention; the sim is host-global
-        built = await ios.live_stream_command(device)
-        if isinstance(built, str):
-            return JSONResponse({"ok": False, "error": built}, status_code=409)
-        argv, shot = built
-        proc = await asyncio.create_subprocess_exec(
-            *argv, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL
+        plan = await ios.window_stream_plan(device)
+        if isinstance(plan, str):
+            return JSONResponse({"ok": False, "error": plan}, status_code=409)
+        shot = plan.shot
+        # Wire helper → ffmpeg with an OS pipe so the raw frames never travel
+        # through Python; a StreamReader can't be another process's stdin.
+        read_fd, write_fd = os.pipe()
+        # The helper streams the window's own buffer; its first stderr line
+        # carries the frame size, which only it can know.
+        helper = await asyncio.create_subprocess_exec(
+            *plan.helper, stdout=write_fd, stderr=asyncio.subprocess.PIPE
         )
+        os.close(write_fd)
+        assert helper.stderr is not None
+        try:
+            header = await asyncio.wait_for(helper.stderr.readline(), timeout=_HELPER_START_S)
+        except asyncio.TimeoutError:
+            header = b""
+        frame = _parse_frame_size(header)
+        if frame is None:
+            os.close(read_fd)
+            helper.kill()
+            await helper.wait()
+            return JSONResponse(
+                {"ok": False, "error": "a captura de janela não iniciou"}, status_code=409
+            )
+        crop = ios.crop_within_window(plan.window, plan.screen_rect, frame)
+        proc = await asyncio.create_subprocess_exec(
+            *ios.window_stream_ffmpeg_args(frame, crop, plan.framerate),
+            stdin=read_fd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+        os.close(read_fd)
 
         async def pump() -> AsyncIterator[bytes]:
             """Forward ffmpeg's output until the client goes away."""
@@ -118,24 +159,28 @@ def create_ios_simulator_router(
                     return
                 yield chunk
 
-        async def reap() -> None:
-            """Stop ffmpeg once the response ends, however it ended.
-
-            A surviving ffmpeg holds the screen-capture device, and every later
-            capture then silently yields nothing. This runs as the response's
-            background task rather than in the pump's ``finally``: a client
-            disconnect cancels the pump outright, so its cleanup is not
-            reliably reached.
-            """
-            if proc.returncode is None:
+        async def stop(child: asyncio.subprocess.Process) -> None:
+            """Terminate a child, escalating to a kill, and reap it."""
+            if child.returncode is None:
                 with suppress(ProcessLookupError):
-                    proc.terminate()
+                    child.terminate()
                 with suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(proc.wait(), timeout=_STREAM_KILL_GRACE_S)
-            if proc.returncode is None:
+                    await asyncio.wait_for(child.wait(), timeout=_STREAM_KILL_GRACE_S)
+            if child.returncode is None:
                 with suppress(ProcessLookupError):
-                    proc.kill()
-                await proc.wait()
+                    child.kill()
+                await child.wait()
+
+        async def reap() -> None:
+            """Stop both children once the response ends, however it ended.
+
+            Survivors keep capturing and encoding a stream nobody reads. This
+            runs as the response's background task rather than in the pump's
+            ``finally``: a client disconnect cancels the pump outright, so its
+            cleanup is not reliably reached.
+            """
+            await stop(proc)
+            await stop(helper)
 
         return StreamingResponse(
             pump(),

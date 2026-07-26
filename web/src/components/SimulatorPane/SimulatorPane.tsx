@@ -25,9 +25,9 @@ const KEEP_BEHIND_S = 20;
 
 type Health = "connecting" | "live" | "empty" | "error";
 /**
- * How the live view is fed. ``video`` screen-captures the Simulator window at
- * 30fps and needs it visible; ``frames`` polls screenshots and works headless,
- * so it is the fallback whenever the stream can't start.
+ * How the live view is fed. ``video`` streams the Simulator window's own
+ * buffer, so it survives the window being covered or moved; ``frames`` polls
+ * screenshots and is the fallback whenever the stream can't start.
  */
 type Feed = "video" | "frames";
 
@@ -79,10 +79,14 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
   const [health, setHealth] = useState<Health>("connecting");
   const [streaming, setStreaming] = useState(true);
   const [device, setDevice] = useState<BootedDevice | null>(null);
-  // Frames are the default even though video is smoother: video screen-captures
-  // the Simulator window, so anything covering it (this very app, usually) is
-  // what gets captured. Opt in when the window is parked in the clear.
-  const [feed, setFeed] = useState<Feed>("frames");
+  // Video by default: the stream reads the Simulator window's own buffer, so
+  // it stays correct with the window covered or moved. Frames remain the
+  // fallback for hosts that can't capture at all.
+  const [feed, setFeed] = useState<Feed>(() =>
+    typeof window !== "undefined" && window.MediaSource?.isTypeSupported?.(STREAM_MIME) === true
+      ? "video"
+      : "frames",
+  );
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   // Device screenshot size, reported by the stream route (see the tap mapping).
@@ -380,11 +384,7 @@ export function SimulatorPane({ conversationId, onClose, className }: SimulatorP
           {streaming ? <Pause className="size-4" /> : <Play className="size-4" />}
         </ControlButton>
         <ControlButton
-          label={
-            feed === "video"
-              ? "Usar quadros"
-              : "Usar vídeo (deixe a janela do Simulator visível e descoberta)"
-          }
+          label={feed === "video" ? "Usar quadros" : "Usar vídeo"}
           onClick={() => {
             setHealth("connecting");
             setFeed((f) => (f === "video" ? "frames" : "video"));

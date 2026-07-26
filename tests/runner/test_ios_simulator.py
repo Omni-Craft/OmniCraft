@@ -340,3 +340,40 @@ def test_stream_ffmpeg_args_shape() -> None:
     assert "+frag_keyframe+empty_moov" in joined
     assert argv[argv.index("-g") + 1] == "30"
     assert argv[-1] == "pipe:1"
+
+
+# --- window capture (occlusion-proof path) -----------------------------------
+
+
+def test_crop_within_window_converts_origin_and_scale() -> None:
+    # Window at (627,65) 456x972 pt; device screen at (654,136) 402x874 pt.
+    # The helper frame is 564 px wide, so scale = 564/456 ≈ 1.237.
+    crop = ios.crop_within_window(
+        (627.0, 65.0, 456.0, 972.0), (654.0, 136.0, 402.0, 874.0), (564, 1202)
+    )
+    w, h, x, y = crop
+    # Origin becomes window-relative, then scales with the frame.
+    assert (x, y) == (round(27 * 564 / 456), round(71 * 564 / 456))
+    assert w % 2 == 0 and h % 2 == 0  # H.264 rejects odd sizes
+    assert w == int(402 * 564 / 456) // 2 * 2
+
+
+def test_window_stream_ffmpeg_args_reads_raw_frames() -> None:
+    argv = ios.window_stream_ffmpeg_args((564, 1202), (496, 1078, 33, 88), 15)
+    joined = " ".join(argv)
+    # Frames arrive raw from the helper on stdin, at the size it announced.
+    assert "-f rawvideo" in joined and "-pixel_format bgra" in joined
+    assert "-video_size 564x1202" in joined
+    assert argv[argv.index("-i") + 1] == "pipe:0"
+    assert "crop=496:1078:33:88,format=yuv420p" in joined
+    assert "+frag_keyframe+empty_moov" in joined
+
+
+def test_window_stream_ffmpeg_args_without_crop() -> None:
+    argv = ios.window_stream_ffmpeg_args((100, 200), None, 15)
+    assert "-vf" in argv and argv[argv.index("-vf") + 1] == "format=yuv420p"
+
+
+def test_simcapture_binary_is_keyed_by_source() -> None:
+    # A changed helper must not reuse a stale binary.
+    assert ios._simcapture_binary().name.startswith("simcapture-")

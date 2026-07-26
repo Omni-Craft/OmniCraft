@@ -16,11 +16,13 @@ would otherwise leave touch input dead.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import shutil
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -52,6 +54,8 @@ _BOOTED_DEFAULT_ACTIONS = frozenset(
 # are quick simctl calls.
 _SIMCTL_TIMEOUT_S = 60.0
 _BUILD_TIMEOUT_S = 1200.0
+# Compiling the small capture helper; generous, but it only happens once.
+_SWIFT_BUILD_TIMEOUT_S = 180.0
 
 
 def _destination(device: str | None) -> str:
@@ -321,12 +325,12 @@ async def _cliclick_text(text: str, device: str | None) -> str:
 # with ffmpeg and crops to the device screen — the same rect the tap fallback
 # solves for. Needs the window visible and Screen Recording permission.
 #
-# Two limits come with capturing a screen *region* rather than a window, which
-# is why the pane treats this as opt-in and defaults to the screenshot poll:
-# whatever sits on top of the Simulator is what gets captured (the app's own
-# window, usually), and the crop is fixed when the stream starts, so moving or
-# resizing the window afterwards points the capture at the wrong place.
-# Capturing the window's own buffer (ScreenCaptureKit) would fix both.
+# That region-capture path is the fallback. It has two flaws that only show up
+# in real use: whatever sits on top of the Simulator is what gets captured (the
+# app's own window, usually), and the crop is fixed when the stream starts, so
+# moving the window points the capture at the wrong place. `window_stream_plan`
+# is the preferred path and has neither — it reads the window's own buffer via
+# the ScreenCaptureKit helper in resources/simcapture.swift.
 
 # Matches ffmpeg's device listing, e.g. ``[4] Capture screen 0``.
 _AVF_SCREEN_RE = re.compile(r"\[(\d+)\]\s+Capture screen", re.IGNORECASE)
@@ -343,6 +347,67 @@ def parse_avfoundation_screen_index(listing: str) -> str | None:
     """
     match = _AVF_SCREEN_RE.search(listing)
     return match.group(1) if match else None
+
+
+# The window-capture helper, compiled on demand. Anyone driving an iOS
+# simulator already has Xcode, so swiftc is available where this matters.
+_SIMCAPTURE_SRC = Path(__file__).resolve().parents[1] / "resources" / "simcapture.swift"
+_SIMCAPTURE_FPS = 15
+_SIMCAPTURE_MAX_WIDTH = 640
+
+
+def _simcapture_binary() -> Path:
+    """Path of the compiled helper, keyed by the source it was built from."""
+    digest = hashlib.sha256(_SIMCAPTURE_SRC.read_bytes()).hexdigest()[:12]
+    return Path.home() / ".omnicraft" / "bin" / f"simcapture-{digest}"
+
+
+async def _ensure_simcapture() -> Path | None:
+    """Compile the capture helper if needed; ``None`` when that isn't possible.
+
+    The binary is cached under a hash of its source, so a changed helper
+    rebuilds and an unchanged one costs nothing.
+    """
+    if not _SIMCAPTURE_SRC.is_file() or shutil.which("swiftc") is None:
+        return None
+    binary = _simcapture_binary()
+    if binary.exists():
+        return binary
+    binary.parent.mkdir(parents=True, exist_ok=True)
+    res = await _shell(
+        ["swiftc", "-O", "-o", str(binary), str(_SIMCAPTURE_SRC)], timeout=_SWIFT_BUILD_TIMEOUT_S
+    )
+    return binary if res.ok and binary.exists() else None
+
+
+def window_stream_ffmpeg_args(
+    size: tuple[int, int], crop: tuple[int, int, int, int] | None, framerate: int
+) -> list[str]:
+    """ffmpeg argv that encodes raw BGRA frames from stdin into fragmented MP4.
+
+    :param size: ``(w, h)`` of the incoming frames, as the helper reports them.
+    :param crop: Optional ``(w, h, x, y)`` to trim the window chrome away.
+    :param framerate: The cadence the helper emits at.
+    """
+    w, h = size
+    chain = f"crop={crop[0]}:{crop[1]}:{crop[2]}:{crop[3]}," if crop else ""
+    return [
+        "ffmpeg",
+        "-loglevel", "error",
+        "-f", "rawvideo",
+        "-pixel_format", "bgra",
+        "-video_size", f"{w}x{h}",
+        "-framerate", str(framerate),
+        "-i", "pipe:0",
+        "-vf", f"{chain}format=yuv420p",
+        "-c:v", "libx264",
+        "-preset", "ultrafast",
+        "-tune", "zerolatency",
+        "-g", str(framerate),
+        "-movflags", "+frag_keyframe+empty_moov+default_base_moof",
+        "-f", "mp4",
+        "pipe:1",
+    ]  # fmt: skip
 
 
 def stream_ffmpeg_args(
@@ -405,6 +470,89 @@ async def _display_scale(rect: tuple[float, float, float, float]) -> float:
     if not size or not w:
         return 1.0
     return size[0] / w
+
+
+@dataclass(frozen=True)
+class WindowStreamPlan:
+    """Everything needed to start a window-capture stream.
+
+    The helper announces its exact frame size on stderr once running, which is
+    only knowable then — so the ffmpeg side is built afterwards, from
+    :func:`crop_within_window` and :func:`window_stream_ffmpeg_args`.
+    """
+
+    helper: list[str]
+    window: tuple[float, float, float, float]
+    screen_rect: tuple[float, float, float, float]
+    shot: tuple[int, int]
+    framerate: int
+
+
+async def window_stream_plan(device: str | None) -> WindowStreamPlan | str:
+    """Resolve how to stream the device screen from the window's own buffer.
+
+    Preferred over :func:`live_stream_command`: reading the window's buffer
+    keeps working when the window is covered or moved, which capturing a screen
+    region does not.
+
+    :returns: A :class:`WindowStreamPlan`, or an actionable error string.
+    """
+    if shutil.which("ffmpeg") is None:
+        return "Erro: o vídeo ao vivo precisa do ffmpeg (`brew install ffmpeg`)."
+    binary = await _ensure_simcapture()
+    if binary is None:
+        return (
+            "Erro: não consegui preparar a captura de janela (precisa do "
+            "swiftc, que vem com o Xcode)."
+        )
+    window = await _simulator_window()
+    if window is None:
+        return "Erro: não achei a janela do Simulator. Abra o app (`open -a Simulator`)."
+    shot = await _shot_size(_target(device, "screenshot"))
+    if shot is None:
+        return "Erro: não consegui medir a tela do simulador."
+    rect = _device_screen_rect(window, shot)
+    if rect is None:
+        return (
+            "Erro: a janela do Simulator não bate com a tela do device. "
+            "Deixe o zoom em 100% (Janela ▸ Tamanho Físico)."
+        )
+    return WindowStreamPlan(
+        helper=[str(binary), "Simulator", str(_SIMCAPTURE_FPS), str(_SIMCAPTURE_MAX_WIDTH)],
+        window=window,
+        screen_rect=rect,
+        shot=shot,
+        framerate=_SIMCAPTURE_FPS,
+    )
+
+
+def crop_within_window(
+    window: tuple[float, float, float, float],
+    rect: tuple[float, float, float, float],
+    frame: tuple[int, int],
+) -> tuple[int, int, int, int]:
+    """Device-screen crop in helper-frame pixels, from the screen-space rect.
+
+    The rect is in screen points and the frame in the helper's pixels, so both
+    the origin (window-relative) and the scale have to be converted.
+    """
+    win_x, win_y, win_w, _ = window
+    rx, ry, rw, rh = rect
+    scale = frame[0] / win_w if win_w else 1.0
+    return (
+        max(2, int(rw * scale) // 2 * 2),
+        max(2, int(rh * scale) // 2 * 2),
+        max(0, round((rx - win_x) * scale)),
+        max(0, round((ry - win_y) * scale)),
+    )
+
+
+async def _shot_size(target: str) -> tuple[int, int] | None:
+    """Pixel size of the device's screenshot."""
+    with tempfile.TemporaryDirectory() as tmp:
+        probe = Path(tmp) / "probe.png"
+        res = await _shell(["xcrun", "simctl", "io", target, "screenshot", str(probe)])
+        return _png_size(probe) if res.ok else None
 
 
 async def live_stream_command(device: str | None) -> tuple[list[str], tuple[int, int]] | str:

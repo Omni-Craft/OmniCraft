@@ -407,7 +407,7 @@ export function ScheduledAgentsPage() {
     setForm((f) => ({ ...f, name: t.name, prompt: t.prompt, mode: "cron", cron: t.cron }));
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Agentes agendados</h1>
         <p className="max-w-[66ch] text-sm text-muted-foreground">

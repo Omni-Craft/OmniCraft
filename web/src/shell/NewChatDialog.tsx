@@ -76,6 +76,7 @@ import { useBrainHarnessLabels } from "@/lib/agentLabels";
 import { CLAUDE_NATIVE_MODELS } from "@/lib/claudeNativeModels";
 import { sortAgentsForDisplay } from "@/lib/agentGrouping";
 import { cn } from "@/lib/utils";
+import { apiErrorMessage } from "@/lib/apiErrors";
 import {
   isNativeCodingAgent,
   nativeAgentHasCapability,
@@ -2694,7 +2695,7 @@ export function NewChatLandingScreen() {
           const j = (await res.json().catch(() => null)) as {
             error?: { message?: string };
           } | null;
-          setCreateError(j?.error?.message ?? `Falha ao agendar (HTTP ${res.status}).`);
+          setCreateError(apiErrorMessage(j, `Falha ao agendar (HTTP ${res.status}).`));
           return;
         }
         setMessage("");

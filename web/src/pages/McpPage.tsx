@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { authenticatedFetch } from "@/lib/identity";
 import { Link } from "@/lib/routing";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 interface McpServer {
   name: string;
@@ -115,7 +116,7 @@ export function McpPage() {
       );
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-        setError(j?.error?.message ?? `Falha (HTTP ${res.status}).`);
+        setError(apiErrorMessage(j, `Falha (HTTP ${res.status}).`));
         return;
       }
       resetForm();

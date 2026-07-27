@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { authenticatedFetch } from "@/lib/identity";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 interface AgentRow {
   id: string;
@@ -129,7 +130,7 @@ export function ConnectorsPage() {
         const j = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
         setStatus((s) => ({
           ...s,
-          [connector.id]: `❌ ${j?.error?.message ?? `Falha (HTTP ${res.status}).`}`,
+          [connector.id]: `❌ ${apiErrorMessage(j, `Falha (HTTP ${res.status}).`)}`,
         }));
         return;
       }

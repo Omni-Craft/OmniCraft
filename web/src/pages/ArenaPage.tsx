@@ -10,6 +10,7 @@ import {
   nativeWrapperLabelsForAgent,
 } from "@/lib/nativeCodingAgents";
 import { useNavigate, useParams } from "@/lib/routing";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 // Mirror of omnicraft.stores.conversation_store.ARENA_GROUP_LABEL_KEY and the
 // sibling arena.* keys. Every racer in one arena carries these so the
@@ -429,7 +430,7 @@ function RacerCard({ racer, onOpen }: { racer: RacerSession; onOpen: (id: string
         error?: { message?: string };
       };
       if (!res.ok) {
-        setMerge({ error: j?.error?.message ?? `HTTP ${res.status}` });
+        setMerge({ error: apiErrorMessage(j, `HTTP ${res.status}`) });
         return;
       }
       setMerge({ outcome: j.outcome ?? "?", detail: j.detail });

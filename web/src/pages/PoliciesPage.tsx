@@ -44,6 +44,7 @@ import { CLAUDE_NATIVE_MODELS } from "@/lib/claudeNativeModels";
 import { authenticatedFetch, getCurrentIsAdmin, resolveIdentity } from "@/lib/identity";
 import { useServerInfo } from "@/lib/CapabilitiesContext";
 import { coercePolicyParams } from "@/lib/policyParams";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 // ---------------------------------------------------------------------------
 // Add-policy dialog (registry-driven, same UX as session policies)
@@ -489,7 +490,7 @@ function SimulatePolicyDialog({ policy, onClose }: { policy: DefaultPolicy; onCl
       });
       const j = (await res.json().catch(() => ({}))) as SimData & { error?: { message?: string } };
       if (!res.ok) {
-        setError(j?.error?.message ?? "Falha na simulação.");
+        setError(apiErrorMessage(j, "Falha na simulação."));
         return;
       }
       setData(j);

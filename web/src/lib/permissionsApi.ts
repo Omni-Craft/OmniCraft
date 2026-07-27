@@ -6,6 +6,7 @@
 import type { Conversation } from "@/hooks/useConversations";
 import type { Session } from "@/lib/types";
 import { authenticatedFetch } from "./identity";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 /**
  * Numeric permission level of the session owner. Mirrors
@@ -120,7 +121,7 @@ export async function grantPermission(
   );
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error?.message ?? `${res.status} ${res.statusText}`);
+    throw new Error(apiErrorMessage(body, `${res.status} ${res.statusText}`));
   }
   return (await res.json()) as Permission;
 }
@@ -132,6 +133,6 @@ export async function revokePermission(sessionId: string, userId: string): Promi
   );
   if (!res.ok && res.status !== 204) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body?.error?.message ?? `${res.status} ${res.statusText}`);
+    throw new Error(apiErrorMessage(body, `${res.status} ${res.statusText}`));
   }
 }

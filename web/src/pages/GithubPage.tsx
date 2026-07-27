@@ -4,6 +4,7 @@ import { setComposeSeed } from "@/lib/composeSeed";
 import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { authenticatedFetch } from "@/lib/identity";
 import { useNavigate } from "@/lib/routing";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 const LAST_REPO_KEY = "omnicraft.github.lastRepo";
 
@@ -91,7 +92,7 @@ export function GithubPage() {
       );
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-        setListError(j?.error?.message ?? `Erro ${res.status}`);
+        setListError(apiErrorMessage(j, `Erro ${res.status}`));
         setItems("error");
         return;
       }

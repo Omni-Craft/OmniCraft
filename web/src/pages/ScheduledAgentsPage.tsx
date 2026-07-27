@@ -14,6 +14,7 @@ import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { authenticatedFetch } from "@/lib/identity";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@/lib/routing";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 interface HistoryEntry {
   at: number;
@@ -273,7 +274,7 @@ export function ScheduledAgentsPage() {
         const body = (await res.json().catch(() => null)) as {
           error?: { message?: string };
         } | null;
-        setError(body?.error?.message ?? `Falha (HTTP ${res.status}).`);
+        setError(apiErrorMessage(body, `Falha (HTTP ${res.status}).`));
         return;
       }
       resetForm();

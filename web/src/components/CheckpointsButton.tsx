@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { isImeCompositionKeyEvent } from "@/lib/ime";
 import { authenticatedFetch } from "@/lib/identity";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 interface Snapshot {
   id: string;
@@ -77,7 +78,7 @@ export function CheckpointsButton({ sessionId }: { sessionId: string }) {
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-        setNote(j?.error?.message ?? "Falha ao criar o checkpoint.");
+        setNote(apiErrorMessage(j, "Falha ao criar o checkpoint."));
       } else {
         setLabel("");
         await refresh();
@@ -98,7 +99,7 @@ export function CheckpointsButton({ sessionId }: { sessionId: string }) {
       });
       if (!res.ok) {
         const j = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
-        setNote(j?.error?.message ?? "Falha ao excluir.");
+        setNote(apiErrorMessage(j, "Falha ao excluir."));
       } else {
         setSnapshots((prev) => prev.filter((s) => s.id !== snap.id));
       }
@@ -130,7 +131,7 @@ export function CheckpointsButton({ sessionId }: { sessionId: string }) {
         error?: { message?: string };
       };
       if (!res.ok) {
-        setNote(j?.error?.message ?? "Falha ao restaurar.");
+        setNote(apiErrorMessage(j, "Falha ao restaurar."));
       } else {
         setNote("Restaurado. O estado anterior virou um checkpoint (para desfazer).");
         await refresh();

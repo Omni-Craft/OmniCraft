@@ -4,6 +4,7 @@ import { FileTextIcon, TrashIcon, UploadIcon } from "lucide-react";
 import { authenticatedFetch } from "@/lib/identity";
 import { Link, useParams } from "@/lib/routing";
 import { useProjectSessions } from "@/hooks/useConversations";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 interface ProjectDocument {
   id: string;
@@ -66,7 +67,7 @@ export function ProjectPage() {
       const res = await authenticatedFetch(`${base}/documents`, { method: "POST", body: form });
       if (!res.ok) {
         const j = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
-        setError(j?.error?.message ?? `Falha no envio (HTTP ${res.status}).`);
+        setError(apiErrorMessage(j, `Falha no envio (HTTP ${res.status}).`));
         return;
       }
       await load();

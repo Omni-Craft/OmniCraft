@@ -2,13 +2,48 @@ import SwiftUI
 import OmniCraftPets
 import Observation
 
-/// Estado central dos widgets. Só fixtures + timers de simulação — nada de rede.
+/// De onde vêm os dados dos widgets.
+enum FonteWidgets: String, CaseIterable, Identifiable {
+    /// Fixtures do `MockFeed` — o modo de desenvolvimento.
+    case mock
+    /// Feed real do OmniCraft (`GET /v1/monitor/sessions`).
+    case servidor
+
+    var id: String { rawValue }
+    var label: String {
+        switch self {
+        case .mock: "Mock"
+        case .servidor: "Servidor"
+        }
+    }
+}
+
+/// Estado central dos widgets: fixtures do `MockFeed` ou o feed real, conforme
+/// a fonte escolhida.
 @MainActor
 @Observable
 final class WidgetStore {
+    /// Chave da base do servidor, a mesma que o notch usa nesta máquina.
+    static let baseURLDefaultsKey = "OmniCraftFeedBaseURL"
+
     var cenario: CenarioWidgets = .streaming {
-        didSet { aplicarCenario() }
+        didSet { if fonte == .mock { aplicarCenario() } }
     }
+
+    var fonte: FonteWidgets = .mock {
+        didSet { trocarFonte() }
+    }
+
+    /// Base do servidor; persiste em UserDefaults e vale na próxima busca.
+    var baseURLString: String = UserDefaults.standard.string(forKey: WidgetStore.baseURLDefaultsKey)
+        ?? "http://127.0.0.1:6767"
+    {
+        didSet { UserDefaults.standard.set(baseURLString, forKey: Self.baseURLDefaultsKey) }
+    }
+
+    /// Por que a última busca falhou. Um erro NÃO limpa o snapshot anterior —
+    /// apagar a tela por causa de um blip esconderia o que ainda vale.
+    private(set) var erroFeed: String?
 
     /// Os widgets (menos o board) partem da sessão selecionada.
     var sessaoSelecionadaID: String?
@@ -17,9 +52,20 @@ final class WidgetStore {
     private(set) var actionLog: [String] = []
 
     private var timer: Timer?
+    private let api: WidgetsAPI
+    private var buscaEmVoo = false
 
-    init() {
+    init(api: WidgetsAPI = FeedClient()) {
+        self.api = api
         aplicarCenario()
+    }
+
+    /// O que os widgets de detalhe não têm no modo servidor.
+    ///
+    /// O feed descreve sessões, não o interior delas: dizer "nenhuma conversa"
+    /// aqui afirmaria algo que não sabemos, então a mensagem diz a verdade.
+    var motivoSemDetalhe: String? {
+        fonte == .servidor ? "O feed do servidor ainda não traz este detalhe" : nil
     }
 
     var sessaoSelecionada: SessaoDetalhe? {
@@ -73,6 +119,48 @@ final class WidgetStore {
     func registrar(_ acao: String) {
         actionLog.append(acao)
         print("[OmniCraftWidgets] \(acao)")
+    }
+
+    // MARK: - Feed real
+
+    private func trocarFonte() {
+        timer?.invalidate()
+        timer = nil
+        erroFeed = nil
+        switch fonte {
+        case .mock:
+            aplicarCenario()
+        case .servidor:
+            // Um intervalo só: estes painéis ficam abertos o dia todo ao lado
+            // do trabalho, e o feed é barato.
+            timer = Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { [weak self] _ in
+                Task { @MainActor [weak self] in await self?.buscar() }
+            }
+            Task { await buscar() }
+        }
+    }
+
+    /// Uma busca por vez: um servidor lento não deve empilhar requests.
+    func buscar() async {
+        guard fonte == .servidor, !buscaEmVoo else { return }
+        buscaEmVoo = true
+        defer { buscaEmVoo = false }
+        do {
+            let dto = try await api.fetch(baseURL: baseURLString)
+            let novo = FeedMapper.snapshot(from: dto)
+            snapshot = novo
+            erroFeed = nil
+            // Mantém a seleção quando a sessão continua no feed; só então cai
+            // para a primeira, para o painel não pular de sessão a cada busca.
+            if sessaoSelecionadaID == nil
+                || !novo.sessoes.contains(where: { $0.id == sessaoSelecionadaID }) {
+                sessaoSelecionadaID = novo.sessoes.first?.id
+            }
+        } catch let erro as FeedError {
+            erroFeed = erro.mensagem
+        } catch {
+            erroFeed = "sem resposta do servidor"
+        }
     }
 
     // MARK: - Cenário e simulações

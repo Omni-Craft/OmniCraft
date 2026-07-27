@@ -15,7 +15,9 @@ struct TranscriptView: View {
         if let sessao = store.sessaoSelecionada, !sessao.transcript.isEmpty {
             conteudo(sessao)
         } else {
-            VazioView(icone: "text.bubble", texto: "Nenhuma conversa nesta sessão")
+            VazioView(
+                icone: "text.bubble",
+                texto: store.motivoSemDetalhe ?? "Nenhuma conversa nesta sessão")
         }
     }
 

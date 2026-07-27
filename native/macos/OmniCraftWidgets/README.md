@@ -3,7 +3,15 @@
 Widgets nativos (Swift + SwiftUI, macOS 14+) do mesmo produto do
 [OmniCraftNotch](../OmniCraftNotch/): painéis independentes, always-on-top e que
 **nunca roubam foco**, para acompanhar agentes de IA sem manter a janela principal
-aberta. **Só interface**: todos os dados vêm de fixtures (`MockFeed`) — nenhuma rede.
+aberta. Duas fontes, alternáveis no menu ▦: **Mock** (fixtures do `MockFeed`, o modo
+de desenvolvimento) e **Servidor** (feed real, `GET /v1/monitor/sessions`).
+
+O feed descreve **sessões** — título, estado, projeto, agente, gasto, pedido
+pendente, janelas de limite —, então no modo Servidor o Board, o seletor de sessão
+e o Uso são reais. O **interior** da sessão (transcript, ferramentas, subagentes,
+tarefas) vive nos itens da sessão, que ainda não são buscados: esses widgets dizem
+"o feed do servidor ainda não traz este detalhe" em vez de mostrar fixture como se
+fosse dado real.
 
 Mesma linguagem visual do notch: rótulos de estado idênticos (`em execução` ·
 `aguardando você` · `ocioso` · `falhou` + `concluída`/`desconhecido`), o mesmo âmbar
@@ -19,6 +27,8 @@ swift build
 .build/debug/OmniCraftWidgets --cenario 7 --widget board
 .build/debug/OmniCraftWidgets --cenario 5 --widget todos
 .build/debug/OmniCraftWidgets --cenario 5 --rail ferramentas   # abre já no rail
+.build/debug/OmniCraftWidgets --live --widget board            # liga direto no feed real
+.build/debug/OmniCraftWidgets --live -OmniCraftFeedBaseURL "http://127.0.0.1:7777"
 ```
 
 O menu ▦ na barra de menus é o debug: cenário, sessão selecionada e "destacar" cada

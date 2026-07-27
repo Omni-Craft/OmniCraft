@@ -188,7 +188,9 @@ struct TarefasView: View {
         if let sessao = store.sessaoSelecionada, !sessao.tarefas.isEmpty {
             conteudo(sessao.tarefas)
         } else {
-            VazioView(icone: "checklist", texto: "Nenhuma tarefa neste turno")
+            VazioView(
+                icone: "checklist",
+                texto: store.motivoSemDetalhe ?? "Nenhuma tarefa neste turno")
         }
     }
 

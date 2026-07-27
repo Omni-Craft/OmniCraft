@@ -12,6 +12,11 @@ let package = Package(
             name: "OmniCraftWidgets",
             dependencies: ["OmniCraftPets"],
             path: "Sources/OmniCraftWidgets"
-        )
+        ),
+        .testTarget(
+            name: "OmniCraftWidgetsTests",
+            dependencies: ["OmniCraftWidgets"],
+            path: "Tests/OmniCraftWidgetsTests"
+        ),
     ]
 )

@@ -10,7 +10,9 @@ struct FerramentasView: View {
         if let sessao = store.sessaoSelecionada, !sessao.ferramentas.isEmpty {
             conteudo(sessao)
         } else {
-            VazioView(icone: "wrench.and.screwdriver", texto: "Nenhuma ferramenta chamada ainda")
+            VazioView(
+                icone: "wrench.and.screwdriver",
+                texto: store.motivoSemDetalhe ?? "Nenhuma ferramenta chamada ainda")
         }
     }
 
@@ -104,7 +106,7 @@ struct SubagentesView: View {
             }
         } else {
             VazioView(icone: "point.3.filled.connected.trianglepath.dotted",
-                      texto: "Nenhum subagente nesta sessão")
+                      texto: store.motivoSemDetalhe ?? "Nenhum subagente nesta sessão")
         }
     }
 

@@ -12,10 +12,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// Debug por terminal, como o notch: `--cenario 1..10` escolhe a fixture;
-    /// `--widget transcript|ferramentas|subagentes|uso|tarefas|board|todos` abre janelas.
+    /// `--widget transcript|ferramentas|subagentes|uso|tarefas|board|todos` abre janelas;
+    /// `--live` liga direto no feed real.
     private func aplicarArgumentos() {
         let args = CommandLine.arguments
         let store = Self.sharedStore
+
+        if let i = args.firstIndex(of: "-OmniCraftFeedBaseURL"), args.indices.contains(i + 1) {
+            store.baseURLString = args[i + 1]
+        }
+        if args.contains("--live") { store.fonte = .servidor }
 
         if let i = args.firstIndex(of: "--cenario"), args.indices.contains(i + 1),
            let n = Int(args[i + 1]), (1...CenarioWidgets.allCases.count).contains(n) {
@@ -60,9 +66,29 @@ struct DebugMenuView: View {
         @Bindable var store = store
 
         VStack(alignment: .leading, spacing: 10) {
-            Picker("Cenário", selection: $store.cenario) {
-                ForEach(CenarioWidgets.allCases) { cenario in
-                    Text(cenario.label).tag(cenario)
+            Picker("Fonte", selection: $store.fonte) {
+                ForEach(FonteWidgets.allCases) { fonte in
+                    Text(fonte.label).tag(fonte)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if store.fonte == .servidor {
+                TextField("http://127.0.0.1:6767", text: $store.baseURLString)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 11, design: .monospaced))
+                if let erro = store.erroFeed {
+                    // O snapshot anterior continua na tela; a linha diz por que
+                    // ele parou de ser atualizado.
+                    Text(erro)
+                        .font(.system(size: 10))
+                        .foregroundStyle(.orange)
+                }
+            } else {
+                Picker("Cenário", selection: $store.cenario) {
+                    ForEach(CenarioWidgets.allCases) { cenario in
+                        Text(cenario.label).tag(cenario)
+                    }
                 }
             }
 

@@ -170,6 +170,9 @@ const DoctorPage = lazy(() =>
   import("@/pages/DoctorPage").then((m) => ({ default: m.DoctorPage })),
 );
 const McpPage = lazy(() => import("@/pages/McpPage").then((m) => ({ default: m.McpPage })));
+const ConnectorsPage = lazy(() =>
+  import("@/pages/ConnectorsPage").then((m) => ({ default: m.ConnectorsPage })),
+);
 
 /**
  * Settings content panel. The section nav lives in the sidebar card
@@ -206,6 +209,7 @@ export function SettingsPage() {
   if (
     section === "costs" ||
     section === "evals" ||
+    section === "connectors" ||
     section === "gallery" ||
     section === "scheduled" ||
     section === "mcps" ||
@@ -216,6 +220,7 @@ export function SettingsPage() {
         <Suspense fallback={null}>
           {section === "costs" && <CostPage />}
           {section === "evals" && <EvalsPage />}
+          {section === "connectors" && <ConnectorsPage />}
           {section === "gallery" && <GalleryPage />}
           {section === "scheduled" && <ScheduledAgentsPage />}
           {section === "mcps" && <McpPage />}

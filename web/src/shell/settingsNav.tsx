@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import {
   ArchiveIcon,
   ArrowLeftIcon,
+  BlocksIcon,
   ChartColumnIcon,
   ClipboardCheckIcon,
   ClockIcon,
@@ -43,6 +44,7 @@ export type SettingsSectionId =
   | "evals"
   | "gallery"
   | "scheduled"
+  | "connectors"
   | "mcps"
   | "doctor"
   | "members"
@@ -60,6 +62,7 @@ const SECTION_IDS: readonly SettingsSectionId[] = [
   "evals",
   "gallery",
   "scheduled",
+  "connectors",
   "mcps",
   "doctor",
   "members",
@@ -128,6 +131,7 @@ export function settingsNavGroups(
       { id: "evals", label: "Avaliações de agentes", icon: ClipboardCheckIcon },
       { id: "gallery", label: "Galeria de agentes", icon: LayoutGridIcon },
       { id: "scheduled", label: "Agentes agendados", icon: ClockIcon },
+      { id: "connectors", label: "Conectores", icon: BlocksIcon },
       { id: "mcps", label: "Servidores MCP", icon: PlugIcon },
       { id: "doctor", label: "Diagnóstico", icon: StethoscopeIcon },
     ],

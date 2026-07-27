@@ -1077,6 +1077,33 @@ def _ensure_default_fucho_agent(
     )
 
 
+# Push bodies are truncated by the OS anyway; keep enough for a command line
+# without letting a verbose prompt fill the lock screen.
+_APPROVAL_BODY_CHARS = 180
+
+
+def _approval_summary(event: dict[str, Any]) -> str:
+    """What an elicitation is asking, as one line for a notification.
+
+    The event already carries the human-readable request (``params.message``,
+    e.g. "Approve running 'rm -rf /tmp/cache'?"), so the notification can name
+    what it wants instead of only that something wants something. Falls back to
+    the generic line when a producer omits it.
+
+    :param event: A ``response.elicitation_request`` event.
+    :returns: A single-line summary, never empty.
+    """
+    params = event.get("params")
+    message = params.get("message") if isinstance(params, dict) else None
+    if not isinstance(message, str) or not message.strip():
+        return "Uma sessão precisa da sua aprovação."
+    # Collapse whitespace: a multi-line prompt would otherwise render ragged.
+    flat = " ".join(message.split())
+    if len(flat) <= _APPROVAL_BODY_CHARS:
+        return flat
+    return flat[: _APPROVAL_BODY_CHARS - 1].rstrip() + "…"
+
+
 def create_app(
     agent_store: AgentStore,
     file_store: FileStore,
@@ -1293,9 +1320,13 @@ def create_app(
             elicitation_id = event.get("elicitation_id")
             if not isinstance(elicitation_id, str) or not elicitation_id:
                 return
+            # Say what is being approved, not just that something is. On iOS
+            # the notification can't carry Aprovar/Negar buttons (Safari has no
+            # Web Push actions), so it is only ever a heads-up — and deciding
+            # whether to stop what you are doing needs the actual request.
             payload = {
-                "title": "OmniCraft",
-                "body": "Uma sessão precisa da sua aprovação.",
+                "title": "Aprovação necessária",
+                "body": _approval_summary(event),
                 "tag": f"omnicraft:session:{conversation_id}",
                 "requireInteraction": True,
                 "data": {

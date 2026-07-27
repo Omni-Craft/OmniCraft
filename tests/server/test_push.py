@@ -150,3 +150,34 @@ def test_vapid_subject_is_overridable(monkeypatch: pytest.MonkeyPatch) -> None:
     finally:
         monkeypatch.delenv("OMNICRAFT_VAPID_SUBJECT", raising=False)
         importlib.reload(push_mod)
+
+
+def test_approval_summary_names_the_request() -> None:
+    """The notification says what is being approved, not just that something is."""
+    from omnicraft.server.app import _approval_summary
+
+    event = {
+        "type": "response.elicitation_request",
+        "params": {"message": "Approve running 'rm -rf /tmp/cache'?"},
+    }
+    assert _approval_summary(event) == "Approve running 'rm -rf /tmp/cache'?"
+
+
+def test_approval_summary_flattens_and_truncates() -> None:
+    """A long, multi-line prompt still renders as one readable line."""
+    from omnicraft.server.app import _approval_summary
+
+    event = {"params": {"message": "linha um\n\n   linha dois " + "x" * 300}}
+    out = _approval_summary(event)
+    assert "\n" not in out
+    assert out.startswith("linha um linha dois")
+    assert len(out) <= 180
+    assert out.endswith("…")
+
+
+def test_approval_summary_falls_back_when_message_is_missing() -> None:
+    """A producer that omits the message still gets a usable notification."""
+    from omnicraft.server.app import _approval_summary
+
+    for event in ({}, {"params": {}}, {"params": {"message": "   "}}, {"params": "nope"}):
+        assert _approval_summary(event) == "Uma sessão precisa da sua aprovação."

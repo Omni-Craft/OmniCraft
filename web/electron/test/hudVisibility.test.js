@@ -61,6 +61,9 @@ const unknown = {
   notifications: null,
   sound: null,
   surface: null,
+  islandPet: null,
+  islandRhythm: null,
+  islandMode: null,
 };
 
 describe("readHudSettings", () => {
@@ -72,6 +75,9 @@ describe("readHudSettings", () => {
       notifications: defaultNotifications(),
       sound: false,
       surface: "ilha",
+      islandPet: "fucho",
+      islandRhythm: "ameno",
+      islandMode: "notch",
     });
   });
 
@@ -83,6 +89,9 @@ describe("readHudSettings", () => {
       notifications: defaultNotifications(),
       sound: false,
       surface: "ilha",
+      islandPet: "fucho",
+      islandRhythm: "ameno",
+      islandMode: "notch",
     });
   });
 
@@ -94,6 +103,9 @@ describe("readHudSettings", () => {
       notifications: defaultNotifications(),
       sound: false,
       surface: "ilha",
+      islandPet: "fucho",
+      islandRhythm: "ameno",
+      islandMode: "notch",
     });
   });
 
@@ -217,6 +229,9 @@ describe("mergeHudSettings", () => {
         mode: DEFAULT_HUD_VISIBILITY,
         notifications: defaultNotifications(),
         surface: "ilha",
+        islandPet: "fucho",
+        islandRhythm: "ameno",
+        islandMode: "notch",
       },
     });
   });
@@ -236,6 +251,9 @@ describe("mergeHudSettings", () => {
       mode: DEFAULT_HUD_VISIBILITY,
       notifications: defaultNotifications(),
       surface: "ilha",
+      islandPet: "fucho",
+      islandRhythm: "ameno",
+      islandMode: "notch",
     });
     assert.deepEqual(settings.hud, hud);
   });
@@ -248,6 +266,9 @@ describe("mergeHudSettings", () => {
       mode: "attention-only",
       notifications: defaultNotifications(),
       surface: "ilha",
+      islandPet: "fucho",
+      islandRhythm: "ameno",
+      islandMode: "notch",
     });
     assert.equal(settings.server_url, "https://a", "the rest of the file survives");
   });

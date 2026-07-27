@@ -140,6 +140,9 @@ import {
   type HudSettingsRead,
   type HudSurface,
   type HudVisibilityMode,
+  type IslandMode,
+  type IslandPet,
+  type IslandRhythm,
   isElectronShell,
   type IslandStatus,
   islandStatus,
@@ -1435,6 +1438,9 @@ function HudSection() {
           // A shell installed before this choice existed answers without it.
           // That is "this app can't do it", not an unreadable file.
           surface: read.surface ?? null,
+          islandPet: read.islandPet ?? null,
+          islandRhythm: read.islandRhythm ?? null,
+          islandMode: read.islandMode ?? null,
         }
       : null;
 
@@ -1501,7 +1507,14 @@ function HudSection() {
             />
           </div>
 
-          <HudSurfaceFields surface={settings.surface} apply={(patch) => void apply(patch)} />
+          <HudSurfaceFields
+            surface={settings.surface}
+            pet={settings.islandPet}
+            rhythm={settings.islandRhythm}
+            islandMode={settings.islandMode}
+            busy={busy}
+            apply={(patch) => void apply(patch)}
+          />
 
           <HudNotificationsFields
             notifications={settings.notifications}
@@ -1529,9 +1542,17 @@ function HudSection() {
  */
 function HudSurfaceFields({
   surface,
+  pet,
+  rhythm,
+  islandMode,
+  busy,
   apply,
 }: {
   surface: HudSurface | null;
+  pet: IslandPet | null;
+  rhythm: IslandRhythm | null;
+  islandMode: IslandMode | null;
+  busy: boolean;
   apply: (patch: HudSettingsPatch) => void;
 }) {
   const [status, setStatus] = useState<IslandStatus | null | "loading">("loading");
@@ -1609,6 +1630,138 @@ function HudSurfaceFields({
           {status.running ? "A ilha está rodando agora." : "A ilha está parada agora."}
         </p>
       )}
+
+      {surface === "ilha" && (
+        <IslandLookFields
+          pet={pet}
+          rhythm={rhythm}
+          islandMode={islandMode}
+          busy={busy}
+          apply={apply}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * A aparência da ilha.
+ *
+ * A ilha é um app à parte que lê estas preferências ao subir, então mudar
+ * qualquer uma delas a reinicia — é isso que faz a escolha aparecer na tela em
+ * vez de só no próximo boot. Só tem sentido quando a ilha é a superfície
+ * escolhida, por isso vive dentro daquele ramo.
+ */
+function IslandLookFields({
+  pet,
+  rhythm,
+  islandMode,
+  busy,
+  apply,
+}: {
+  pet: IslandPet | null;
+  rhythm: IslandRhythm | null;
+  islandMode: IslandMode | null;
+  busy: boolean;
+  apply: (patch: HudSettingsPatch) => void;
+}) {
+  // Um app instalado antes destas preferências responde sem elas.
+  if (pet === null || rhythm === null || islandMode === null) return null;
+
+  return (
+    <div className="mt-2 flex flex-col gap-4 border-t border-border pt-4">
+      <IslandChoice
+        label="Mascote"
+        helper="Quem aparece na ilha. Ele reage ao que as sessões estão fazendo."
+        value={pet}
+        busy={busy}
+        options={[
+          { value: "fucho", label: "Fucho" },
+          { value: "polly", label: "Polly" },
+          { value: "desenhado", label: "Desenhado" },
+        ]}
+        onSelect={(escolha) => apply({ islandPet: escolha as IslandPet })}
+        testId="island-pet"
+      />
+
+      <IslandChoice
+        label="Ritmo da animação"
+        helper="Quão agitado o mascote se mexe."
+        value={rhythm}
+        busy={busy}
+        options={[
+          { value: "calmo", label: "Calmo" },
+          { value: "ameno", label: "Ameno" },
+          { value: "manifesto", label: "Agitado" },
+        ]}
+        onSelect={(escolha) => apply({ islandRhythm: escolha as IslandRhythm })}
+        testId="island-rhythm"
+      />
+
+      <IslandChoice
+        label="Onde a ilha aparece"
+        helper="Fundida com a notch, ou só o ícone na barra de menus."
+        value={islandMode}
+        busy={busy}
+        options={[
+          { value: "notch", label: "Notch + barra de menus" },
+          { value: "soBarraDeMenus", label: "Só barra de menus" },
+        ]}
+        onSelect={(escolha) => apply({ islandMode: escolha as IslandMode })}
+        testId="island-mode"
+      />
+    </div>
+  );
+}
+
+/** Uma escolha da ilha: rótulo, explicação e botões lado a lado. */
+function IslandChoice({
+  label,
+  helper,
+  value,
+  options,
+  busy,
+  onSelect,
+  testId,
+}: {
+  label: string;
+  helper: string;
+  value: string;
+  options: { value: string; label: string }[];
+  busy: boolean;
+  onSelect: (value: string) => void;
+  testId: string;
+}) {
+  const labelId = useId();
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col">
+        <span id={labelId} className="text-sm font-medium">
+          {label}
+        </span>
+        <span className="text-sm text-muted-foreground">{helper}</span>
+      </div>
+      <div role="radiogroup" aria-labelledby={labelId} className="flex flex-wrap gap-2">
+        {options.map((opcao) => (
+          <button
+            key={opcao.value}
+            type="button"
+            role="radio"
+            aria-checked={value === opcao.value}
+            disabled={busy}
+            data-testid={`${testId}-${opcao.value}`}
+            onClick={() => onSelect(opcao.value)}
+            className={cn(
+              "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+              value === opcao.value
+                ? "border-transparent bg-[color-mix(in_srgb,var(--brand-accent)_16%,transparent)] text-foreground"
+                : "border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {opcao.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

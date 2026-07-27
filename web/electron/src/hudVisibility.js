@@ -53,6 +53,9 @@ const HUD_SETTINGS_UNREADABLE = Object.freeze({
   notifications: null,
   sound: null,
   surface: null,
+  islandPet: null,
+  islandRhythm: null,
+  islandMode: null,
 });
 
 /**
@@ -64,6 +67,19 @@ const HUD_SETTINGS_UNREADABLE = Object.freeze({
  * screen, which is what having both looked like.
  */
 const HUD_SURFACES = ["ilha", "janela"];
+
+/** Mascotes que a ilha sabe desenhar (o pacote OmniCraftPets). */
+const ISLAND_PETS = ["fucho", "polly", "desenhado"];
+
+/** Velocidade da animação do mascote. */
+const ISLAND_RHYTHMS = ["calmo", "ameno", "manifesto"];
+
+/** Onde a ilha se desenha: fundida com a notch, ou só o ícone na barra. */
+const ISLAND_MODES = ["notch", "soBarraDeMenus"];
+
+const DEFAULT_ISLAND_PET = "fucho";
+const DEFAULT_ISLAND_RHYTHM = "ameno";
+const DEFAULT_ISLAND_MODE = "notch";
 
 // The island shipped first and has ridden the shell's lifetime since, so a
 // settings file written before this choice existed keeps it.
@@ -164,6 +180,9 @@ function readHudSettings(settings) {
       notifications: { ...DEFAULT_HUD_NOTIFICATIONS },
       sound,
       surface: DEFAULT_HUD_SURFACE,
+      islandPet: DEFAULT_ISLAND_PET,
+      islandRhythm: DEFAULT_ISLAND_RHYTHM,
+      islandMode: DEFAULT_ISLAND_MODE,
     };
   }
   if (hud === null || typeof hud !== "object" || Array.isArray(hud)) return HUD_SETTINGS_UNREADABLE;
@@ -176,7 +195,26 @@ function readHudSettings(settings) {
   if (notifications === null) return HUD_SETTINGS_UNREADABLE;
   const surface = hud.surface === undefined ? DEFAULT_HUD_SURFACE : hud.surface;
   if (!HUD_SURFACES.includes(surface)) return HUD_SETTINGS_UNREADABLE;
-  return { readable: true, enabled: hud.enabled, mode, notifications, sound, surface };
+  const island = readIslandLook(hud);
+  if (island === null) return HUD_SETTINGS_UNREADABLE;
+  return { readable: true, enabled: hud.enabled, mode, notifications, sound, surface, ...island };
+}
+
+/**
+ * The island's appearance out of a hud blob: absent is the default, present
+ * but unrecognized is a file we cannot interpret (``null``).
+ *
+ * @param {Record<string, unknown>} hud
+ * @returns {{islandPet: string, islandRhythm: string, islandMode: string} | null}
+ */
+function readIslandLook(hud) {
+  const pet = hud.islandPet === undefined ? DEFAULT_ISLAND_PET : hud.islandPet;
+  const rhythm = hud.islandRhythm === undefined ? DEFAULT_ISLAND_RHYTHM : hud.islandRhythm;
+  const mode = hud.islandMode === undefined ? DEFAULT_ISLAND_MODE : hud.islandMode;
+  if (!ISLAND_PETS.includes(pet)) return null;
+  if (!ISLAND_RHYTHMS.includes(rhythm)) return null;
+  if (!ISLAND_MODES.includes(mode)) return null;
+  return { islandPet: pet, islandRhythm: rhythm, islandMode: mode };
 }
 
 /**
@@ -218,12 +256,18 @@ function mergeHudSettings(read, patch) {
         mode: current.mode,
         notifications: current.notifications,
         surface: current.surface,
+        islandPet: current.islandPet,
+        islandRhythm: current.islandRhythm,
+        islandMode: current.islandMode,
       }
     : {
         enabled: false,
         mode: DEFAULT_HUD_VISIBILITY,
         notifications: { ...DEFAULT_HUD_NOTIFICATIONS },
         surface: DEFAULT_HUD_SURFACE,
+        islandPet: DEFAULT_ISLAND_PET,
+        islandRhythm: DEFAULT_ISLAND_RHYTHM,
+        islandMode: DEFAULT_ISLAND_MODE,
       };
   const { notifications: notificationsPatch, sound, ...top } = patch ?? {};
   const hud = {
@@ -460,6 +504,9 @@ function isRestingCertain(report) {
 module.exports = {
   HUD_VISIBILITY_MODES,
   HUD_SURFACES,
+  ISLAND_PETS,
+  ISLAND_RHYTHMS,
+  ISLAND_MODES,
   DEFAULT_HUD_SURFACE,
   DEFAULT_HUD_VISIBILITY,
   DEFAULT_HUD_NOTIFICATIONS,

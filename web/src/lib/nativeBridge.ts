@@ -177,7 +177,22 @@ export interface HudSettings {
   sound: boolean;
   /** Where the HUD is drawn: the native island, or the floating window. */
   surface: HudSurface;
+  /** Which mascot the island draws. */
+  islandPet: IslandPet;
+  /** How fast the mascot animates. */
+  islandRhythm: IslandRhythm;
+  /** Whether the island fuses with the notch or lives in the menu bar only. */
+  islandMode: IslandMode;
 }
+
+/** Mascots the island can draw. */
+export type IslandPet = "fucho" | "polly" | "desenhado";
+
+/** Mascot animation speed. */
+export type IslandRhythm = "calmo" | "ameno" | "manifesto";
+
+/** Where the island draws itself. */
+export type IslandMode = "notch" | "soBarraDeMenus";
 
 /**
  * Where the HUD is drawn.
@@ -208,6 +223,9 @@ export interface HudSettingsRead {
   sound: boolean | null;
   /** Where the HUD is drawn, or null on a shell that predates the choice. */
   surface: HudSurface | null;
+  islandPet: IslandPet | null;
+  islandRhythm: IslandRhythm | null;
+  islandMode: IslandMode | null;
 }
 
 /**

@@ -51,13 +51,22 @@ enum ModoExibicao: String, CaseIterable, Identifiable {
 @Observable
 final class HUDStore {
     static let baseURLDefaultsKey = "OmniCraftFeedBaseURL"
+    /// Preferências que as Configurações do OmniCraft escrevem neste domínio
+    /// antes de subir a ilha. Ler no init é o que faz a escolha valer.
+    static let petDefaultsKey = "OmniCraftPet"
+    static let ritmoDefaultsKey = "OmniCraftRitmoPet"
+    static let modoDefaultsKey = "OmniCraftModoExibicao"
 
     var scenario: MockScenario = .tresAtivasUmaAguardando {
         didSet { if feedSource == .mock { applyScenario() } }
     }
     var visibility: PillVisibility = .sempre
     var isExpanded: Bool = false
-    var modo: ModoExibicao = .notch
+    var modo: ModoExibicao = UserDefaults.standard.string(forKey: HUDStore.modoDefaultsKey)
+        .flatMap(ModoExibicao.init(rawValue:)) ?? .notch
+    {
+        didSet { UserDefaults.standard.set(modo.rawValue, forKey: Self.modoDefaultsKey) }
+    }
 
     /// Expansão veio do hover (não de clique/atenção): sair com o mouse recolhe.
     private(set) var expandidoPorHover = false
@@ -184,10 +193,22 @@ final class HUDStore {
     private(set) var concluidasNaoVistas: Set<String> = []
 
     /// Qual pet aparece na notch (Fucho é o mascote do OmniCraft).
-    var pet: Pet = .fucho
+    ///
+    /// Persistido: quem escolheu um mascote não quer reescolher a cada
+    /// abertura, e é por aqui que as Configurações do OmniCraft chegam — elas
+    /// escrevem no domínio de preferências deste app antes de subi-lo.
+    var pet: Pet = UserDefaults.standard.string(forKey: HUDStore.petDefaultsKey)
+        .flatMap(Pet.init(rawValue:)) ?? .fucho
+    {
+        didSet { UserDefaults.standard.set(pet.rawValue, forKey: Self.petDefaultsKey) }
+    }
 
     /// Velocidade da animação do pet — o padrão desacelera o manifesto.
-    var ritmoPet: RitmoPet = .ameno
+    var ritmoPet: RitmoPet = UserDefaults.standard.string(forKey: HUDStore.ritmoDefaultsKey)
+        .flatMap(RitmoPet.init(rawValue:)) ?? .ameno
+    {
+        didSet { UserDefaults.standard.set(ritmoPet.rawValue, forKey: Self.ritmoDefaultsKey) }
+    }
 
     /// Injeta um snapshot no lugar de uma busca — só para os testes, que
     /// precisam de um feed sem rede.

@@ -43,9 +43,8 @@ const { registerWorkspaceChromeHide } = require("./workspace-chrome");
 const { mergeHudSettings, readHudSettings } = require("./hudVisibility");
 const { createHudPolicy } = require("./hudPolicy");
 const { registerHudIpc } = require("./hudIpc");
-const { NativeIslandController, resolveIslandApp } = require("./nativeIsland");
+const { NativeIslandController } = require("./nativeIsland");
 const { hostEnrollmentDecision } = require("./hostEnrollment");
-const { shouldDismissSplash } = require("./splash");
 const {
   createHudNotifier,
   isCategoryEnabled,
@@ -64,9 +63,6 @@ const SETUP_PAGE = path.join(__dirname, "..", "setup", "index.html");
 
 /** The setup page's file:// URL, for verifying IPC sender frames. */
 const SETUP_PAGE_URL = pathToFileURL(SETUP_PAGE);
-
-/** The splash shown while the local server boots (covers the cold-start gap). */
-const SPLASH_PAGE = path.join(__dirname, "..", "splash", "index.html");
 
 /** Absolute path to the bundled find-in-page bar page. */
 const FIND_PAGE = path.join(__dirname, "..", "find", "index.html");
@@ -960,39 +956,9 @@ function cascadeIfCovering(win) {
 async function autoStartLocalStack(win) {
   const saved = loadSettings().server_url;
   const cliPath = resolvedCliPath();
-  if (!cliPath || typeof saved !== "string" || !omnicraftCli.isLoopbackServer(saved)) {
-    // Nothing to boot (remote server, or no CLI) — the setup page IS the
-    // destination, so let it show instead of holding the splash for 45s.
-    dismissSplash();
-    return;
-  }
+  if (!cliPath || typeof saved !== "string" || !omnicraftCli.isLoopbackServer(saved)) return;
   const savedOrigin = originOf(saved);
-  if (!savedOrigin) {
-    dismissSplash();
-    return;
-  }
-  // From here a local server is genuinely booting: keep the splash up (and keep
-  // a transient setup-page fallback from dismissing it) until the server page
-  // loads. `finally` clears the flag on every exit, including the failures
-  // below, so a server that never comes up still reveals its setup-page error.
-  autostartInProgress = true;
-  try {
-    await bootLocalStack(win, { cliPath, saved, savedOrigin });
-  } finally {
-    autostartInProgress = false;
-  }
-}
-
-/**
- * Boot the local server and connect this machine as its host. Split out of
- * {@link autoStartLocalStack} so the splash-lifetime flag can wrap it in a
- * single try/finally regardless of how many ways the boot can bail.
- *
- * @param {BrowserWindow} win The startup window.
- * @param {{cliPath: string, saved: string, savedOrigin: string}} ctx
- * @returns {Promise<void>}
- */
-async function bootLocalStack(win, { cliPath, saved, savedOrigin }) {
+  if (!savedOrigin) return;
   try {
     const res = await serverManager.startLocalServer(cliPath);
     if (!res || res.ok === false) return;
@@ -1001,11 +967,9 @@ async function bootLocalStack(win, { cliPath, saved, savedOrigin }) {
   }
   if (!win || win.isDestroyed()) return;
   // The window's first load may have raced a cold server boot, failed with
-  // connection-refused, and fallen back to the setup page. Now that the server
-  // is up, point it back. Gate on the REAL current URL, not the pinned-origin
-  // bookkeeping, which lags the page and made this miss the reload on a cold
-  // boot — leaving the window on setup and the splash stuck over it.
-  if (originOf(win.webContents.getURL()) !== savedOrigin) {
+  // connection-refused, and fallen back to the setup page (unpinning the
+  // window). Now that the server is up, point it back.
+  if (windows.get(win)?.origin !== savedOrigin) {
     pinWindow(win, savedOrigin);
     const state = windows.get(win);
     if (state) state.serverUrl = saved;
@@ -1015,10 +979,6 @@ async function bootLocalStack(win, { cliPath, saved, savedOrigin }) {
       return; // did-fail-load falls back to the setup page with the error
     }
   }
-  // The server page is up: take the splash down here, deterministically, rather
-  // than leave it to the did-finish-load listener winning a race with the load
-  // above. Safe to call when already dismissed.
-  dismissSplash();
   // Enroll for the SAVED loopback origin directly, as a trusted origin: this is
   // a main-process auto-start (not page-controllable) of the server the user
   // saved, so it needn't wait for the page to finish loading to offer "Always
@@ -1034,129 +994,6 @@ async function bootLocalStack(win, { cliPath, saved, savedOrigin }) {
     // must never crash over them.
   }
   broadcastHostStatus();
-}
-
-// The boot splash: a frameless, transparent window that sits over the main
-// window while the local server cold-starts, showing the Fucho animation
-// instead of a black rectangle. It is torn down the moment the main window
-// finishes loading a real page (see wireSplashDismissal).
-let splashWindow = null;
-// True while autoStartLocalStack is booting/re-pointing the local server, so a
-// transient setup-page fallback does not dismiss the splash early.
-let autostartInProgress = false;
-// When the splash opened, and whether its close is already deferred. The boot
-// scene is a full loop the user wants to watch, so the splash stays up for at
-// least one loop even when the app is ready sooner — the reveal happens at
-// max(scene loop, app ready).
-let splashOpenedAt = 0;
-let splashCloseScheduled = false;
-// One full loop of the boot scene (measured beat by beat in splash/index.html);
-// the fish is swimming back off screen at the end, a natural point to reveal.
-const MIN_SPLASH_MS = 36000;
-
-/**
- * Open the boot splash over a main window, matching its bounds so the reveal is
- * seamless.
- *
- * @param {BrowserWindow} mainWin The window the splash covers.
- * @returns {void}
- */
-function openSplash(mainWin) {
-  if (splashWindow) return;
-  const bounds = mainWin.getBounds();
-  splashWindow = new BrowserWindow({
-    x: bounds.x,
-    y: bounds.y,
-    width: bounds.width,
-    height: bounds.height,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    movable: false,
-    focusable: false, // never steals focus / keystrokes from the booting app
-    show: false,
-    skipTaskbar: true,
-    alwaysOnTop: true,
-    backgroundColor: "#00000000",
-    // No preload, no node: the splash is a static local animation.
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
-  });
-  splashOpenedAt = Date.now();
-  splashCloseScheduled = false;
-  splashWindow.once("ready-to-show", () => splashWindow?.show());
-  void splashWindow.loadFile(SPLASH_PAGE);
-  // If the main window is closed before it ever loads, don't leave the splash.
-  mainWin.once("closed", closeSplashNow);
-}
-
-/**
- * Ask to take the splash down. The app may be ready, but the boot scene runs
- * for one full loop the user wants to see, so a request that arrives early is
- * deferred until the loop finishes; a request at or past that just closes.
- * Safe to call repeatedly.
- */
-function dismissSplash() {
-  if (!splashWindow) return;
-  const remaining = MIN_SPLASH_MS - (Date.now() - splashOpenedAt);
-  if (remaining > 0) {
-    if (!splashCloseScheduled) {
-      splashCloseScheduled = true;
-      setTimeout(closeSplashNow, remaining);
-    }
-    return;
-  }
-  closeSplashNow();
-}
-
-/**
- * Close the splash now, fading it out first. The splash paints an ocean-blue
- * card and the app behind it is near-black, so a hard close would flash
- * blue→black; fading the window's opacity dissolves the splash into the app
- * instead. Safe to call repeatedly.
- */
-function closeSplashNow() {
-  if (!splashWindow) return;
-  const win = splashWindow;
-  splashWindow = null;
-  if (win.isDestroyed()) return;
-  let opacity = 1;
-  const fade = setInterval(() => {
-    opacity -= 0.12;
-    if (opacity <= 0 || win.isDestroyed()) {
-      clearInterval(fade);
-      if (!win.isDestroyed()) win.close();
-    } else {
-      win.setOpacity(opacity);
-    }
-  }, 24);
-}
-
-/**
- * Tear the splash down once the main window shows a real page, with a timeout
- * so a server that never comes up can't strand it on screen forever.
- *
- * @param {BrowserWindow} mainWin The window whose loads gate the splash.
- * @returns {void}
- */
-function wireSplashDismissal(mainWin) {
-  const onLoad = () => {
-    if (mainWin.isDestroyed()) return;
-    const decided = shouldDismissSplash({
-      loadedUrl: mainWin.webContents.getURL(),
-      pinnedOrigin: pinnedOrigin(mainWin),
-      autostartInProgress,
-      setupPageUrl: SETUP_PAGE_URL.href,
-    });
-    if (decided) dismissSplash();
-  };
-  mainWin.webContents.on("did-finish-load", onLoad);
-  // The first load is kicked off in createWindow, before this wiring — on a
-  // warm server it can finish before the listener attaches, so evaluate the
-  // current state once too rather than wait for a page already shown.
-  if (!mainWin.webContents.isLoading()) onLoad();
-  // Backstop: reveal whatever is there rather than hide forever. Above the
-  // minimum scene time so a genuinely slow cold boot isn't cut short.
-  setTimeout(dismissSplash, 60000);
 }
 
 function createWindow(targetUrl, opts = {}) {
@@ -1886,23 +1723,6 @@ const nativeIsland = new NativeIslandController({
   },
   onWarn: (message) => console.warn(`[omnicraft] ${message}`),
 });
-
-/**
- * Whether the island can run here, and whether it is up right now.
- *
- * Resolving the bundle is what separates "off" from "there is nothing to turn
- * on" — a checkout that never ran make-app.sh has no island to start, and the
- * settings page has to say that instead of offering a dead switch.
- */
-function islandStatus() {
-  const found = resolveIslandApp({
-    resourcesPath: process.resourcesPath,
-    appPath: app.getAppPath(),
-  });
-  return found.path
-    ? { available: true, running: nativeIsland.running }
-    : { available: false, reason: found.reason, running: false };
-}
 
 /** Bring the HUD in line with the persisted settings and the last feed report. */
 function applyHudPolicy() {
@@ -2796,12 +2616,6 @@ function registerIpc() {
     isPinnedOriginSender,
     readSettings: hudSettingsState,
     writeSettings: writeHudSettings,
-    applyIsland: (enabled) => nativeIsland.apply(enabled),
-    applyIslandLook: (look, running) => {
-      nativeIsland.apply(running);
-      nativeIsland.applyLook(look, running);
-    },
-    islandStatus: () => islandStatus(),
     onWarn: (message) => console.warn(`[omnicraft] ${message}`),
   });
 
@@ -3028,13 +2842,8 @@ if (!gotLock) {
     buildMenu();
     // The island rides the shell's lifetime: up with the app, down on quit.
     // It draws above the menu bar, which no Electron window can do, so it is a
-    // separate process rather than another window. An unreadable settings file
-    // is not a reason to withhold it — the default is on.
-    const hudAtStartup = hudSettingsState();
-    const ilhaDePe = hudAtStartup.enabled === true && hudAtStartup.surface === "ilha";
-    // A aparência é escrita ANTES de subir: a ilha lê no lançamento.
-    nativeIsland.applyLook(hudAtStartup, false);
-    nativeIsland.apply(ilhaDePe);
+    // separate process rather than another window.
+    nativeIsland.start();
     // Patch PATH for GUI-launched Electron on macOS/Linux:
     // A desktop launcher inherits a minimal system PATH that omits directories like
     // /opt/homebrew/bin and ~/.nvm/... where CLI tools (claude, codex, tmux) live.
@@ -3052,10 +2861,6 @@ if (!gotLock) {
     // setup page / Local CLI settings pre-fill the resolved path immediately.
     resolvedCliPath();
     const startupWindow = createWindow();
-    // Cover the cold-start black screen with the Fucho boot animation until the
-    // main window shows a real page.
-    openSplash(startupWindow);
-    wireSplashDismissal(startupWindow);
     // Saved LOCAL server → boot the whole stack (server + host) so opening
     // the app is enough for the harnesses to work; no manual terminals.
     void autoStartLocalStack(startupWindow);

@@ -12,7 +12,13 @@
 
 "use strict";
 
-const { HUD_SURFACES, HUD_VISIBILITY_MODES } = require("./hudVisibility");
+const {
+  HUD_SURFACES,
+  HUD_VISIBILITY_MODES,
+  ISLAND_MODES,
+  ISLAND_PETS,
+  ISLAND_RHYTHMS,
+} = require("./hudVisibility");
 const {
   HUD_NOTIFICATION_CATEGORIES,
   isValidBudgetThreshold,
@@ -73,6 +79,8 @@ function validateNotificationsPatch(patch) {
  *   point: Settings renders "não pôde ser salva" instead of a stale value.
  * @param {(enabled: boolean) => void} [deps.applyIsland] Bring the native
  *   island process in line with the settings that were just written.
+ * @param {(look: object, running: boolean) => void} [deps.applyIslandLook] Write
+ *   the island's appearance into its own preferences and restart it.
  * @param {() => {available: boolean, reason?: string, running: boolean}} [deps.islandStatus]
  * @param {(message: string) => void} [deps.onWarn]
  */
@@ -84,6 +92,7 @@ function registerHudIpc({
   readSettings,
   writeSettings,
   applyIsland,
+  applyIslandLook,
   islandStatus,
   onWarn,
 }) {
@@ -168,15 +177,33 @@ function registerHudIpc({
       if (!HUD_SURFACES.includes(patch.surface)) throw new Error("unknown hud surface");
       next.surface = patch.surface;
     }
+    // The island's appearance. Validated here for the same reason as the rest:
+    // a value this build doesn't know would land in settings.json and read back
+    // unreadable on the next launch.
+    for (const [campo, permitidos] of [
+      ["islandPet", ISLAND_PETS],
+      ["islandRhythm", ISLAND_RHYTHMS],
+      ["islandMode", ISLAND_MODES],
+    ]) {
+      if (patch?.[campo] === undefined) continue;
+      if (!permitidos.includes(patch[campo])) throw new Error(`unknown ${campo}`);
+      next[campo] = patch[campo];
+    }
     // Throws through to the renderer when the file can't be read — the write is
     // refused rather than clobbering settings we never parsed.
     writeSettings(next);
     policy.applyPolicy();
     // Both switches move the island: turning the HUD off takes it down, and
     // choosing the window takes it down too.
-    if (applyIsland && (next.surface !== undefined || next.enabled !== undefined)) {
+    const mudouLook =
+      next.islandPet !== undefined ||
+      next.islandRhythm !== undefined ||
+      next.islandMode !== undefined;
+    if (applyIsland && (next.surface !== undefined || next.enabled !== undefined || mudouLook)) {
       const now = readSettings();
-      applyIsland(now.enabled === true && now.surface === "ilha");
+      const deveEstarDePe = now.enabled === true && now.surface === "ilha";
+      if (mudouLook && applyIslandLook) applyIslandLook(now, deveEstarDePe);
+      else applyIsland(deveEstarDePe);
     }
     return readSettings();
   });

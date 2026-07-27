@@ -5,9 +5,19 @@
 // start it when the setting is on, stop it on quit — and the island talks to
 // the OmniCraft server directly for everything else.
 
-const { spawn } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
 const fs = require("node:fs");
 const path = require("node:path");
+
+/** The island's own preferences domain — where it reads its appearance. */
+const ISLAND_DEFAULTS_DOMAIN = "app.omnicraft.notch";
+
+/** Settings key → the island's UserDefaults key. */
+const LOOK_KEYS = {
+  islandPet: "OmniCraftPet",
+  islandRhythm: "OmniCraftRitmoPet",
+  islandMode: "OmniCraftModoExibicao",
+};
 
 /** Where the bundle lives inside a packaged app, relative to resourcesPath. */
 const PACKAGED_RELATIVE = path.join("native", "OmniCraftNotch.app");
@@ -123,6 +133,40 @@ class NativeIslandController {
   }
 
   /**
+   * Write the island's appearance into its own preferences, then restart it
+   * so the change is on screen.
+   *
+   * The island is a separate process that reads these at launch: writing
+   * without restarting would leave the old look up until the next boot, which
+   * reads as "the setting did nothing".
+   *
+   * @param {{islandPet?: string, islandRhythm?: string, islandMode?: string}} look
+   * @param {boolean} running Whether the island should be up afterwards.
+   */
+  applyLook(look, running) {
+    const pairs = Object.entries(LOOK_KEYS)
+      .filter(([campo]) => typeof look?.[campo] === "string")
+      .map(([campo, chave]) => [chave, look[campo]]);
+    if (!pairs.length) return;
+    let pendentes = pairs.length;
+    const seguir = () => {
+      if (--pendentes > 0) return;
+      // Só reinicia o que já estava de pé: escrever a preferência não é motivo
+      // para subir uma ilha que a pessoa desligou.
+      if (running && this._child) {
+        this.stop();
+        this.start();
+      }
+    };
+    for (const [chave, valor] of pairs) {
+      execFile("/usr/bin/defaults", ["write", ISLAND_DEFAULTS_DOMAIN, chave, valor], (error) => {
+        if (error) this._warn(`preferência da ilha não escrita (${chave}): ${error.message}`);
+        seguir();
+      });
+    }
+  }
+
+  /**
    * Bring the process in line with the setting.
    *
    * @param {boolean} enabled
@@ -135,4 +179,11 @@ class NativeIslandController {
   }
 }
 
-module.exports = { resolveIslandApp, NativeIslandController, PACKAGED_RELATIVE, CHECKOUT_RELATIVE };
+module.exports = {
+  resolveIslandApp,
+  NativeIslandController,
+  PACKAGED_RELATIVE,
+  CHECKOUT_RELATIVE,
+  ISLAND_DEFAULTS_DOMAIN,
+  LOOK_KEYS,
+};

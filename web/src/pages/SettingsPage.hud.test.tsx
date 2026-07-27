@@ -75,6 +75,9 @@ function settings(overrides: Partial<HudSettingsRead> = {}): HudSettingsRead {
     notifications: notifications(),
     sound: false,
     surface: "ilha" as const,
+    islandPet: "fucho" as const,
+    islandRhythm: "ameno" as const,
+    islandMode: "notch" as const,
     ...overrides,
   };
 }
@@ -364,5 +367,30 @@ describe("Settings → HUD flutuante → onde mostrar", () => {
     expect(await screen.findByTestId("hud-surface-unavailable")).toHaveTextContent(
       /atualize o OmniCraft/i,
     );
+  });
+});
+
+describe("Settings → HUD flutuante → a aparência da ilha", () => {
+  it("changes the mascot through the same settings write", async () => {
+    mocks.setHudSettings.mockResolvedValue(settings({ islandPet: "polly" }));
+    await renderSettled();
+
+    fireEvent.click(await screen.findByTestId("island-pet-polly"));
+
+    expect(mocks.setHudSettings).toHaveBeenCalledWith({ islandPet: "polly" });
+  });
+
+  it("hides the look when the HUD is in the window, not the island", async () => {
+    mocks.getHudSettings.mockResolvedValue(settings({ surface: "janela" }));
+    await renderSettled();
+
+    expect(screen.queryByTestId("island-pet-fucho")).not.toBeInTheDocument();
+  });
+
+  it("offers nothing when the installed app predates these preferences", async () => {
+    mocks.getHudSettings.mockResolvedValue(settings({ islandPet: null }));
+    await renderSettled();
+
+    expect(screen.queryByTestId("island-pet-fucho")).not.toBeInTheDocument();
   });
 });

@@ -48,6 +48,8 @@ function harness({
       calls.push(["writeSettings", patch]);
     },
     applyIsland: (enabled) => calls.push(["applyIsland", enabled]),
+    applyIslandLook: (look, running) =>
+      calls.push(["applyIslandLook", look.islandPet, look.islandRhythm, look.islandMode, running]),
     islandStatus: () => state.island,
     onWarn: (message) => state.warnings.push(message),
   });
@@ -270,5 +272,31 @@ describe("hudIpc — the native island", () => {
 
     const foreign = harness({ pinned: false });
     assert.equal(await foreign.invoke("omnicraft:island-status", foreign.fromElsewhere), null);
+  });
+});
+
+describe("hudIpc — a aparência da ilha", () => {
+  it("writes the look and restarts the island that is up", async () => {
+    // A ilha lê a preferência no lançamento: escrever sem reiniciar deixaria
+    // a escolha sem efeito até o próximo boot.
+    const h = harness({
+      settings: { readable: true, enabled: true, surface: "ilha", islandRhythm: "ameno" },
+    });
+    await h.invoke("omnicraft:hud-set-settings", h.fromHud, { islandPet: "polly" });
+    assert.deepEqual(h.calls.at(-1), ["applyIslandLook", "polly", "ameno", undefined, true]);
+  });
+
+  it("refuses a pet this build cannot draw", async () => {
+    const h = harness();
+    await assert.rejects(() =>
+      h.invoke("omnicraft:hud-set-settings", h.fromHud, { islandPet: "capivara" }),
+    );
+    assert.deepEqual(h.calls, []);
+  });
+
+  it("does not raise an island the person turned off", async () => {
+    const h = harness({ settings: { readable: true, enabled: false, surface: "ilha" } });
+    await h.invoke("omnicraft:hud-set-settings", h.fromHud, { islandRhythm: "calmo" });
+    assert.equal(h.calls.at(-1)?.at(-1), false, "não sobe uma ilha desligada");
   });
 });

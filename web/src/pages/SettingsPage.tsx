@@ -212,7 +212,7 @@ export function SettingsPage() {
     section === "doctor"
   ) {
     return (
-      <PageScroll>
+      <PageScroll maxWidthClassName="max-w-none">
         <Suspense fallback={null}>
           {section === "costs" && <CostPage />}
           {section === "evals" && <EvalsPage />}

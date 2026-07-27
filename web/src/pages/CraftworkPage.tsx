@@ -189,7 +189,10 @@ function Hub() {
 export function CraftworkPage() {
   const { section } = useCraftworkRoute();
   return (
-    <PageScroll>
+    // Each section below centers itself at its own max-width, so the scroll
+    // container must not impose one — otherwise a card grid gets squeezed into
+    // the text-column default and the page sits in a wide empty margin.
+    <PageScroll maxWidthClassName="max-w-none">
       <Suspense fallback={null}>
         {section === "home" && <Hub />}
         {section === "gallery" && <GalleryPage />}

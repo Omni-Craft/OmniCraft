@@ -180,7 +180,7 @@ export function GalleryPage() {
   ];
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col px-6 py-8">
+    <div className="mx-auto flex max-w-7xl flex-col px-6 py-8">
       <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-semibold">Galeria de agentes</h1>
@@ -241,7 +241,7 @@ export function GalleryPage() {
             Nenhum agente encontrado para esse filtro.
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 2xl:grid-cols-3">
             {visible.map((a) => {
               const c = chipData(a);
               return (

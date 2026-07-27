@@ -14,7 +14,7 @@ do app desktop nativo.
 [![Licença: Apache 2.0](https://img.shields.io/badge/Licen%C3%A7a-Apache_2.0-0fb5bd.svg)](LICENSE)
 ![Status: alpha](https://img.shields.io/badge/status-alpha-orange.svg)
 ![Idioma: pt--BR](https://img.shields.io/badge/idioma-pt--BR-0fb5bd.svg)
-![Agentes na galeria](https://img.shields.io/badge/galeria-16_agentes_%C2%B7_51_especialistas_%C2%B7_133_skills-0fb5bd.svg)
+![Agentes na galeria](https://img.shields.io/badge/galeria-11_agentes_%C2%B7_21_especialistas_%C2%B7_21_skills-0fb5bd.svg)
 
 </div>
 
@@ -149,9 +149,12 @@ uv tool install --force --editable .
 
 ## 🤖 Galeria de agentes: times prontos
 
-**18 agentes instaláveis com um clique** — de assistentes simples a times
-inteiros de especialistas convertidos das *fábricas* (toolkits de
-desenvolvimento), somando **51 sub-agentes** e **133 skills**:
+**11 agentes instaláveis com um clique** — de assistentes simples a times
+que dividem o trabalho entre sub-agentes de fornecedores diferentes, somando
+**21 sub-agentes** e **21 skills**.
+
+A galeria filtra por tipo (orquestradores, conversa), tem busca por `⌘K` e um
+painel de detalhes com a lista completa de sub-agentes e skills de cada um:
 
 <p align="center">
   <img src="docs/images/agent-gallery.png" alt="A galeria de agentes com cards mostrando descrição, chips de sub-agentes e skills de cada agente" width="860" />
@@ -325,6 +328,18 @@ omnicraft host                      # registra o notebook como host do servidor
   outra máquina e segue de forma independente.
 - **SSO** — Google, GitHub, Okta e Microsoft via `OMNICRAFT_OIDC_ISSUER`.
 
+### 📲 Notificação no celular, com o app fechado
+
+Abra a web UI no Safari do iPhone e use **Compartilhar ▸ Adicionar à Tela de
+Início**: instalada assim, ela recebe **Web Push** de verdade (iOS 16.4+) — o
+agente pedindo aprovação, o agendado que terminou, o agendado que falhou três
+vezes seguidas. Nada de conta paga de desenvolvedor.
+
+Exige que o servidor esteja em **https** (um endereço Tailscale resolve isso de
+graça e ainda dá acesso de fora) e que o servidor confie nessa origem, via
+`OMNICRAFT_WS_ALLOWED_ORIGINS`. A tela de Configurações mostra o estado do push
+e, quando ele não está ativo, diz o motivo.
+
 `docker compose up` sobe em qualquer VPS; **Render** e **Railway** implantam
 com um clique; **Fly.io**, **Hugging Face Spaces**, **Modal**, **Cloudflare**
 e **Databricks Apps** também são cobertos — e um quick tunnel do Cloudflare ou
@@ -390,7 +405,9 @@ que não existem no upstream:
 | **MCP** | Página de gestão para agentes template, **catálogo de um clique**, **teste de conexão real** |
 | **Cockpit** | Dashboard pessoal do Code (streaks, heatmap, modelo favorito), custos ao vivo, avaliações/regressão, **Diagnóstico** |
 | **Integrações** | GitHub (issues/PRs → sessão semeada), menu **`/`** de skills, onboarding de primeiro uso |
-| **Confiabilidade** | **Runners sobrevivem ao reinício do host** (registro + readoção), **watchdog** para sub-agente que morre calado, **aprovação automática por sessão** (alternável em pleno voo), PATH do shell de login no daemon, e uma auditoria de **26 correções** (scheduler, escrita atômica, locks, DST) |
+| **Celular** | **Push de verdade no iPhone sem conta paga da Apple** — a web UI instala na Tela de Início e recebe notificação com o app fechado (Web Push, iOS 16.4+). O aviso de aprovação diz **o que** está sendo aprovado, não só que algo está. App iOS nativo (SwiftUI/WKWebView) como alternativa |
+| **iOS/macOS** | Painel do **Simulador iOS** com **vídeo H.264 ao vivo** — captura o buffer da janela (ScreenCaptureKit), então continua correto com a janela coberta ou movida — e **clique-para-tocar** no device, que voltou a funcionar depois que o `idb` foi descontinuado |
+| **Confiabilidade** | **Runners sobrevivem ao reinício do host** (registro + readoção), **watchdog** para sub-agente que morre calado, **aprovação automática por sessão** (alternável em pleno voo), PATH do shell de login no daemon, **verificação de saúde da instalação em uso** (`scripts/health-check.sh`: abre sessão, pergunta e espera a resposta), e uma auditoria de **26 correções** (scheduler, escrita atômica, locks, DST) |
 
 ---
 

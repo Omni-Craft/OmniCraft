@@ -18,6 +18,7 @@ const {
   ISLAND_MODES,
   ISLAND_PETS,
   ISLAND_RHYTHMS,
+  WIDGET_PANELS,
 } = require("./hudVisibility");
 const {
   HUD_NOTIFICATION_CATEGORIES,
@@ -81,7 +82,10 @@ function validateNotificationsPatch(patch) {
  *   island process in line with the settings that were just written.
  * @param {(look: object, running: boolean) => void} [deps.applyIslandLook] Write
  *   the island's appearance into its own preferences and restart it.
+ * @param {(enabled: boolean, panels: string[]) => void} [deps.applyWidgets] Bring
+ *   the widgets process in line with the settings that were just written.
  * @param {() => {available: boolean, reason?: string, running: boolean}} [deps.islandStatus]
+ * @param {() => {available: boolean, reason?: string, running: boolean}} [deps.widgetsStatus]
  * @param {(message: string) => void} [deps.onWarn]
  */
 function registerHudIpc({
@@ -93,7 +97,9 @@ function registerHudIpc({
   writeSettings,
   applyIsland,
   applyIslandLook,
+  applyWidgets,
   islandStatus,
+  widgetsStatus,
   onWarn,
 }) {
   const warn = onWarn ?? (() => {});
@@ -195,6 +201,23 @@ function registerHudIpc({
     policy.applyPolicy();
     // Both switches move the island: turning the HUD off takes it down, and
     // choosing the window takes it down too.
+    // Os widgets são outro processo, com o mesmo trato da ilha: o shell só
+    // manda subir e descer, e QUAIS painéis abrem faz parte do lançamento.
+    if (patch?.widgetsEnabled !== undefined) {
+      if (typeof patch.widgetsEnabled !== "boolean") {
+        throw new Error("widgetsEnabled must be a boolean");
+      }
+      next.widgetsEnabled = patch.widgetsEnabled;
+    }
+    if (patch?.widgetPanels !== undefined) {
+      if (
+        !Array.isArray(patch.widgetPanels) ||
+        !patch.widgetPanels.every((panel) => WIDGET_PANELS.includes(panel))
+      ) {
+        throw new Error("unknown widget panel");
+      }
+      next.widgetPanels = [...patch.widgetPanels];
+    }
     const mudouLook =
       next.islandPet !== undefined ||
       next.islandRhythm !== undefined ||
@@ -204,6 +227,10 @@ function registerHudIpc({
       const deveEstarDePe = now.enabled === true && now.surface === "ilha";
       if (mudouLook && applyIslandLook) applyIslandLook(now, deveEstarDePe);
       else applyIsland(deveEstarDePe);
+    }
+    if (applyWidgets && (next.widgetsEnabled !== undefined || next.widgetPanels !== undefined)) {
+      const now = readSettings();
+      applyWidgets(now.widgetsEnabled === true, now.widgetPanels ?? []);
     }
     return readSettings();
   });
@@ -217,6 +244,15 @@ function registerHudIpc({
       return null;
     }
     return islandStatus ? islandStatus() : null;
+  });
+
+  // SPA → whether the widgets can run at all. Same contract as the island.
+  ipcMain.handle("omnicraft:widgets-status", (event) => {
+    if (!isPinnedOriginSender(event)) {
+      warn("widgets-status from untrusted sender dropped");
+      return null;
+    }
+    return widgetsStatus ? widgetsStatus() : null;
   });
 }
 

@@ -143,6 +143,8 @@ import {
   type IslandMode,
   type IslandPet,
   type IslandRhythm,
+  type WidgetPanel,
+  widgetsStatus,
   isElectronShell,
   type IslandStatus,
   islandStatus,
@@ -1441,6 +1443,8 @@ function HudSection() {
           islandPet: read.islandPet ?? null,
           islandRhythm: read.islandRhythm ?? null,
           islandMode: read.islandMode ?? null,
+          widgetsEnabled: typeof read.widgetsEnabled === "boolean" ? read.widgetsEnabled : null,
+          widgetPanels: read.widgetPanels ?? null,
         }
       : null;
 
@@ -1512,6 +1516,13 @@ function HudSection() {
             pet={settings.islandPet}
             rhythm={settings.islandRhythm}
             islandMode={settings.islandMode}
+            busy={busy}
+            apply={(patch) => void apply(patch)}
+          />
+
+          <WidgetsFields
+            enabled={settings.widgetsEnabled}
+            panels={settings.widgetPanels}
             busy={busy}
             apply={(patch) => void apply(patch)}
           />
@@ -1643,6 +1654,143 @@ function HudSurfaceFields({
     </div>
   );
 }
+
+/**
+ * Os painéis flutuantes.
+ *
+ * São um terceiro app, com o mesmo trato da ilha: o OmniCraft só manda subir e
+ * descer. QUAIS painéis abrem faz parte do lançamento, então trocar a seleção
+ * reinicia o processo — é isso que põe a escolha na tela.
+ *
+ * Vem desligado: subir janelas flutuantes que ninguém pediu é pior que não
+ * subir nenhuma.
+ */
+function WidgetsFields({
+  enabled,
+  panels,
+  busy,
+  apply,
+}: {
+  enabled: boolean | null;
+  panels: WidgetPanel[] | null;
+  busy: boolean;
+  apply: (patch: HudSettingsPatch) => void;
+}) {
+  const [status, setStatus] = useState<IslandStatus | null | "loading">("loading");
+
+  useEffect(() => {
+    void widgetsStatus().then(setStatus);
+  }, []);
+
+  if (status === "loading") return null;
+  // Um app instalado antes destes painéis responde sem eles.
+  const tooOld = enabled === null || panels === null;
+  const unavailable = status !== null && !status.available;
+  const why = tooOld
+    ? "Esta versão do aplicativo ainda não abre os painéis — atualize o OmniCraft."
+    : unavailable
+      ? status?.reason
+      : null;
+
+  const alternar = (painel: WidgetPanel) => {
+    const atuais = panels ?? [];
+    const proximos = atuais.includes(painel)
+      ? atuais.filter((item) => item !== painel)
+      : [...atuais, painel];
+    apply({ widgetPanels: proximos });
+  };
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-border pt-6">
+      <div className="flex flex-col">
+        <span className="text-sm font-medium">Painéis flutuantes</span>
+        <span className="text-sm text-muted-foreground">
+          Janelas independentes que ficam sobre os outros apps e nunca roubam foco, para acompanhar
+          uma sessão sem manter a janela principal aberta.
+        </span>
+      </div>
+
+      {why ? (
+        <p data-testid="widgets-unavailable" className="text-sm text-muted-foreground">
+          {why}
+        </p>
+      ) : (
+        <>
+          <label className="flex items-center justify-between gap-4">
+            <span className="flex flex-col">
+              <span className="text-sm font-medium">Mostrar os painéis</span>
+              <span className="text-sm text-muted-foreground">
+                Sobem junto com o app e mostram a sessão selecionada.
+              </span>
+            </span>
+            <Switch
+              data-testid="widgets-enabled"
+              checked={enabled === true}
+              disabled={busy}
+              onCheckedChange={(checked) => apply({ widgetsEnabled: checked })}
+            />
+          </label>
+
+          {enabled === true && (
+            <div className="flex flex-col gap-2">
+              <span className="text-sm text-muted-foreground">
+                Quais abrir. O Board é global; os outros seguem a sessão escolhida.
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {WIDGET_CARDS.map((card) => {
+                  const ligado = (panels ?? []).includes(card.value);
+                  return (
+                    <button
+                      key={card.value}
+                      type="button"
+                      role="switch"
+                      aria-checked={ligado}
+                      disabled={busy}
+                      data-testid={`widget-panel-${card.value}`}
+                      onClick={() => alternar(card.value)}
+                      className={cn(
+                        "rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50",
+                        ligado
+                          ? "border-transparent bg-[color-mix(in_srgb,var(--brand-accent)_16%,transparent)] text-foreground"
+                          : "border-border text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {card.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {(panels ?? []).length === 0 && (
+                <p className="text-xs text-warning">
+                  Sem nenhum painel escolhido não há o que abrir.
+                </p>
+              )}
+              {status !== null && (
+                <p data-testid="widgets-running" className="text-xs text-muted-foreground">
+                  {status.running
+                    ? "Os painéis estão rodando agora."
+                    : "Os painéis estão parados agora."}
+                </p>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Os painéis, na ordem em que fazem sentido escolher. */
+const WIDGET_CARDS: { value: WidgetPanel; label: string }[] = [
+  { value: "board", label: "Board" },
+  { value: "transcript", label: "Transcript" },
+  { value: "ferramentas", label: "Ferramentas" },
+  { value: "subagentes", label: "Subagentes" },
+  { value: "uso", label: "Uso" },
+  { value: "tarefas", label: "Tarefas" },
+  { value: "servidores", label: "Servidores" },
+  { value: "rotas", label: "Rotas" },
+];
 
 /**
  * A aparência da ilha.

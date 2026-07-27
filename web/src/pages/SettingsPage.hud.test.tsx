@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   getHudSettings: vi.fn(),
   setHudSettings: vi.fn(),
   islandStatus: vi.fn(),
+  widgetsStatus: vi.fn(),
 }));
 
 vi.mock("@/lib/nativeBridge", () => ({
@@ -29,6 +30,7 @@ vi.mock("@/lib/nativeBridge", () => ({
   getHudSettings: mocks.getHudSettings,
   setHudSettings: mocks.setHudSettings,
   islandStatus: mocks.islandStatus,
+  widgetsStatus: mocks.widgetsStatus,
   getCliStatus: vi.fn().mockResolvedValue(null),
   resetCliPath: vi.fn().mockResolvedValue(null),
 }));
@@ -78,6 +80,8 @@ function settings(overrides: Partial<HudSettingsRead> = {}): HudSettingsRead {
     islandPet: "fucho" as const,
     islandRhythm: "ameno" as const,
     islandMode: "notch" as const,
+    widgetsEnabled: false,
+    widgetPanels: ["board" as const],
     ...overrides,
   };
 }
@@ -103,6 +107,7 @@ beforeEach(() => {
   mocks.getHudSettings.mockReset().mockResolvedValue(settings());
   mocks.setHudSettings.mockReset();
   mocks.islandStatus.mockReset().mockResolvedValue({ available: true, running: true });
+  mocks.widgetsStatus.mockReset().mockResolvedValue({ available: true, running: false });
 });
 afterEach(cleanup);
 
@@ -392,5 +397,54 @@ describe("Settings → HUD flutuante → a aparência da ilha", () => {
     await renderSettled();
 
     expect(screen.queryByTestId("island-pet-fucho")).not.toBeInTheDocument();
+  });
+});
+
+describe("Settings → HUD flutuante → os painéis flutuantes", () => {
+  it("turns the panels on through the same settings write", async () => {
+    mocks.setHudSettings.mockResolvedValue(settings({ widgetsEnabled: true }));
+    await renderSettled();
+
+    fireEvent.click(await screen.findByTestId("widgets-enabled"));
+
+    expect(mocks.setHudSettings).toHaveBeenCalledWith({ widgetsEnabled: true });
+  });
+
+  it("only offers the panel list once they are on", async () => {
+    await renderSettled();
+    expect(screen.queryByTestId("widget-panel-board")).not.toBeInTheDocument();
+
+    cleanup();
+    mocks.getHudSettings.mockResolvedValue(settings({ widgetsEnabled: true }));
+    await renderSettled();
+    expect(await screen.findByTestId("widget-panel-board")).toBeInTheDocument();
+  });
+
+  it("adds a panel to the selection instead of replacing it", async () => {
+    mocks.getHudSettings.mockResolvedValue(
+      settings({ widgetsEnabled: true, widgetPanels: ["board"] }),
+    );
+    mocks.setHudSettings.mockResolvedValue(
+      settings({ widgetsEnabled: true, widgetPanels: ["board", "uso"] }),
+    );
+    await renderSettled();
+
+    fireEvent.click(await screen.findByTestId("widget-panel-uso"));
+
+    expect(mocks.setHudSettings).toHaveBeenCalledWith({ widgetPanels: ["board", "uso"] });
+  });
+
+  it("says why instead of offering a switch that would do nothing", async () => {
+    mocks.widgetsStatus.mockResolvedValue({
+      available: false,
+      reason: "os widgets ainda não foram construídos",
+      running: false,
+    });
+    await renderSettled();
+
+    expect(await screen.findByTestId("widgets-unavailable")).toHaveTextContent(
+      /ainda não foram construídos/i,
+    );
+    expect(screen.queryByTestId("widgets-enabled")).not.toBeInTheDocument();
   });
 });

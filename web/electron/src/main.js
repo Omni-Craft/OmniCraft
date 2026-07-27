@@ -44,6 +44,7 @@ const { mergeHudSettings, readHudSettings } = require("./hudVisibility");
 const { createHudPolicy } = require("./hudPolicy");
 const { registerHudIpc } = require("./hudIpc");
 const { NativeIslandController, resolveIslandApp } = require("./nativeIsland");
+const { NativeWidgetsController, resolveWidgetsApp } = require("./nativeWidgets");
 const { hostEnrollmentDecision } = require("./hostEnrollment");
 const { shouldDismissSplash } = require("./splash");
 const {
@@ -1887,6 +1888,32 @@ const nativeIsland = new NativeIslandController({
   onWarn: (message) => console.warn(`[omnicraft] ${message}`),
 });
 
+// The floating panels, on the same terms as the island: the shell owns their
+// lifetime and nothing else.
+const nativeWidgets = new NativeWidgetsController({
+  env: {
+    get resourcesPath() {
+      return process.resourcesPath;
+    },
+    get appPath() {
+      return app.getAppPath();
+    },
+  },
+  serverUrl: () => hudServerUrl(),
+  onWarn: (message) => console.warn(`[omnicraft] ${message}`),
+});
+
+/** Whether the widgets can run here, and whether they are up right now. */
+function widgetsStatus() {
+  const found = resolveWidgetsApp({
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+  });
+  return found.path
+    ? { available: true, running: nativeWidgets.running }
+    : { available: false, reason: found.reason, running: false };
+}
+
 /**
  * Whether the island can run here, and whether it is up right now.
  *
@@ -2797,6 +2824,8 @@ function registerIpc() {
     readSettings: hudSettingsState,
     writeSettings: writeHudSettings,
     applyIsland: (enabled) => nativeIsland.apply(enabled),
+    applyWidgets: (enabled, panels) => nativeWidgets.apply(enabled, panels),
+    widgetsStatus: () => widgetsStatus(),
     applyIslandLook: (look, running) => {
       nativeIsland.apply(running);
       nativeIsland.applyLook(look, running);
@@ -3035,6 +3064,7 @@ if (!gotLock) {
     // A aparência é escrita ANTES de subir: a ilha lê no lançamento.
     nativeIsland.applyLook(hudAtStartup, false);
     nativeIsland.apply(ilhaDePe);
+    nativeWidgets.apply(hudAtStartup.widgetsEnabled === true, hudAtStartup.widgetPanels ?? []);
     // Patch PATH for GUI-launched Electron on macOS/Linux:
     // A desktop launcher inherits a minimal system PATH that omits directories like
     // /opt/homebrew/bin and ~/.nvm/... where CLI tools (claude, codex, tmux) live.
@@ -3084,7 +3114,10 @@ if (!gotLock) {
   // Belt and braces: `before-quit` defers itself while the server shuts down,
   // and a quit that never reaches that callback (or reaches it twice) must
   // still not leave the island drawing over the menu bar with no app behind it.
-  app.on("will-quit", () => nativeIsland.stop());
+  app.on("will-quit", () => {
+    nativeIsland.stop();
+    nativeWidgets.stop();
+  });
 
   app.on("before-quit", (event) => {
     // Quitting takes the HUD's window down with everything else. That is the
@@ -3092,8 +3125,10 @@ if (!gotLock) {
     // Cmd-Q would persist the HUD as "off" and it would never come back.
     hudPolicy.shellClosing();
     // Before the early return: a second Cmd-Q must not skip this, or the island
-    // outlives the app that started it and cannot be closed from anywhere.
+    // and the widgets outlive the app that started them and cannot be closed
+    // from anywhere.
     nativeIsland.stop();
+    nativeWidgets.stop();
     if (quitCleanupDone) return;
     // A second quit (e.g. Cmd-Q again during the SIGKILL grace window) must not
     // re-enter shutdown() concurrently — just keep deferring until the first

@@ -19,11 +19,13 @@
     "dev": "electron .",
     "test": "node --test",
     "build": "electron-builder",
-    "build:mac": "npm run build:island && electron-builder --mac",
-    "build:mac:release": "npm run build:island && electron-builder --mac -c.mac.notarize=true",
+    "build:mac": "npm run build:native && electron-builder --mac",
+    "build:mac:release": "npm run build:native && electron-builder --mac -c.mac.notarize=true",
     "build:linux": "electron-builder --linux",
     "build:win": "electron-builder --win",
-    "build:island": "bash ../../native/macos/OmniCraftNotch/scripts/make-app.sh release"
+    "build:island": "bash ../../native/macos/OmniCraftNotch/scripts/make-app.sh release",
+    "build:widgets": "bash ../../native/macos/OmniCraftWidgets/scripts/make-app.sh release",
+    "build:native": "npm run build:island && npm run build:widgets"
   },
   "devDependencies": {
     "electron": "^42.3.2",
@@ -61,6 +63,13 @@
       {
         "from": "../../native/macos/OmniCraftNotch/.build/OmniCraftNotch.app",
         "to": "native/OmniCraftNotch.app",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "../../native/macos/OmniCraftWidgets/.build/OmniCraftWidgets.app",
+        "to": "native/OmniCraftWidgets.app",
         "filter": [
           "**/*"
         ]

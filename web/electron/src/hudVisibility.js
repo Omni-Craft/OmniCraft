@@ -56,6 +56,8 @@ const HUD_SETTINGS_UNREADABLE = Object.freeze({
   islandPet: null,
   islandRhythm: null,
   islandMode: null,
+  widgetsEnabled: null,
+  widgetPanels: null,
 });
 
 /**
@@ -80,6 +82,23 @@ const ISLAND_MODES = ["notch", "soBarraDeMenus"];
 const DEFAULT_ISLAND_PET = "fucho";
 const DEFAULT_ISLAND_RHYTHM = "ameno";
 const DEFAULT_ISLAND_MODE = "notch";
+
+/** Painéis flutuantes que o app de widgets sabe abrir. */
+const WIDGET_PANELS = [
+  "board",
+  "transcript",
+  "ferramentas",
+  "subagentes",
+  "uso",
+  "tarefas",
+  "servidores",
+  "rotas",
+];
+
+// Desligados por padrão: subir janelas flutuantes que ninguém pediu é pior que
+// não subir nenhuma.
+const DEFAULT_WIDGETS_ENABLED = false;
+const DEFAULT_WIDGET_PANELS = ["board"];
 
 // The island shipped first and has ridden the shell's lifetime since, so a
 // settings file written before this choice existed keeps it.
@@ -183,6 +202,8 @@ function readHudSettings(settings) {
       islandPet: DEFAULT_ISLAND_PET,
       islandRhythm: DEFAULT_ISLAND_RHYTHM,
       islandMode: DEFAULT_ISLAND_MODE,
+      widgetsEnabled: DEFAULT_WIDGETS_ENABLED,
+      widgetPanels: [...DEFAULT_WIDGET_PANELS],
     };
   }
   if (hud === null || typeof hud !== "object" || Array.isArray(hud)) return HUD_SETTINGS_UNREADABLE;
@@ -197,7 +218,18 @@ function readHudSettings(settings) {
   if (!HUD_SURFACES.includes(surface)) return HUD_SETTINGS_UNREADABLE;
   const island = readIslandLook(hud);
   if (island === null) return HUD_SETTINGS_UNREADABLE;
-  return { readable: true, enabled: hud.enabled, mode, notifications, sound, surface, ...island };
+  const widgets = readWidgets(hud);
+  if (widgets === null) return HUD_SETTINGS_UNREADABLE;
+  return {
+    readable: true,
+    enabled: hud.enabled,
+    mode,
+    notifications,
+    sound,
+    surface,
+    ...island,
+    ...widgets,
+  };
 }
 
 /**
@@ -215,6 +247,25 @@ function readIslandLook(hud) {
   if (!ISLAND_RHYTHMS.includes(rhythm)) return null;
   if (!ISLAND_MODES.includes(mode)) return null;
   return { islandPet: pet, islandRhythm: rhythm, islandMode: mode };
+}
+
+/**
+ * The widgets' preferences out of a hud blob.
+ *
+ * A panel this build doesn't know makes the whole blob uninterpretable, same
+ * rule as everywhere else here: silently dropping a panel the person chose and
+ * showing the rest would pass their choice off as something they never made.
+ *
+ * @param {Record<string, unknown>} hud
+ * @returns {{widgetsEnabled: boolean, widgetPanels: string[]} | null}
+ */
+function readWidgets(hud) {
+  const enabled = hud.widgetsEnabled === undefined ? DEFAULT_WIDGETS_ENABLED : hud.widgetsEnabled;
+  if (typeof enabled !== "boolean") return null;
+  const panels = hud.widgetPanels === undefined ? [...DEFAULT_WIDGET_PANELS] : hud.widgetPanels;
+  if (!Array.isArray(panels)) return null;
+  if (!panels.every((panel) => WIDGET_PANELS.includes(panel))) return null;
+  return { widgetsEnabled: enabled, widgetPanels: [...panels] };
 }
 
 /**
@@ -259,6 +310,8 @@ function mergeHudSettings(read, patch) {
         islandPet: current.islandPet,
         islandRhythm: current.islandRhythm,
         islandMode: current.islandMode,
+        widgetsEnabled: current.widgetsEnabled,
+        widgetPanels: current.widgetPanels,
       }
     : {
         enabled: false,
@@ -268,6 +321,8 @@ function mergeHudSettings(read, patch) {
         islandPet: DEFAULT_ISLAND_PET,
         islandRhythm: DEFAULT_ISLAND_RHYTHM,
         islandMode: DEFAULT_ISLAND_MODE,
+        widgetsEnabled: DEFAULT_WIDGETS_ENABLED,
+        widgetPanels: [...DEFAULT_WIDGET_PANELS],
       };
   const { notifications: notificationsPatch, sound, ...top } = patch ?? {};
   const hud = {
@@ -507,6 +562,7 @@ module.exports = {
   ISLAND_PETS,
   ISLAND_RHYTHMS,
   ISLAND_MODES,
+  WIDGET_PANELS,
   DEFAULT_HUD_SURFACE,
   DEFAULT_HUD_VISIBILITY,
   DEFAULT_HUD_NOTIFICATIONS,

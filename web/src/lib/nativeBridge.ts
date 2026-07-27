@@ -136,6 +136,8 @@ interface ElectronDesktopApi extends NativeShellApi {
   setHudSettings?: (patch: HudSettingsPatch) => Promise<HudSettingsRead | null>;
   /** Whether the native island can run here, and whether it is up right now. */
   getIslandStatus?: () => Promise<IslandStatus | null>;
+  /** The same, for the floating widget panels. */
+  getWidgetsStatus?: () => Promise<IslandStatus | null>;
 }
 
 /**
@@ -183,6 +185,10 @@ export interface HudSettings {
   islandRhythm: IslandRhythm;
   /** Whether the island fuses with the notch or lives in the menu bar only. */
   islandMode: IslandMode;
+  /** Whether the floating widget panels run alongside the app. */
+  widgetsEnabled: boolean;
+  /** Which panels open when they do. */
+  widgetPanels: WidgetPanel[];
 }
 
 /** Mascots the island can draw. */
@@ -193,6 +199,17 @@ export type IslandRhythm = "calmo" | "ameno" | "manifesto";
 
 /** Where the island draws itself. */
 export type IslandMode = "notch" | "soBarraDeMenus";
+
+/** The floating panels the widgets app can open. */
+export type WidgetPanel =
+  | "board"
+  | "transcript"
+  | "ferramentas"
+  | "subagentes"
+  | "uso"
+  | "tarefas"
+  | "servidores"
+  | "rotas";
 
 /**
  * Where the HUD is drawn.
@@ -226,6 +243,10 @@ export interface HudSettingsRead {
   islandPet: IslandPet | null;
   islandRhythm: IslandRhythm | null;
   islandMode: IslandMode | null;
+  /** Whether the floating widget panels run alongside the app. */
+  widgetsEnabled: boolean | null;
+  /** Which panels open when they do. */
+  widgetPanels: WidgetPanel[] | null;
 }
 
 /**
@@ -723,4 +744,11 @@ export async function islandStatus(): Promise<IslandStatus | null> {
   const electron = electronApi();
   if (!electron?.getIslandStatus) return null;
   return withIpcTimeout(electron.getIslandStatus());
+}
+
+/** Whether the floating widget panels can run on this machine. */
+export async function widgetsStatus(): Promise<IslandStatus | null> {
+  const electron = electronApi();
+  if (!electron?.getWidgetsStatus) return null;
+  return withIpcTimeout(electron.getWidgetsStatus());
 }

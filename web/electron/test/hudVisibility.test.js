@@ -64,6 +64,8 @@ const unknown = {
   islandPet: null,
   islandRhythm: null,
   islandMode: null,
+  widgetsEnabled: null,
+  widgetPanels: null,
 };
 
 describe("readHudSettings", () => {
@@ -78,6 +80,8 @@ describe("readHudSettings", () => {
       islandPet: "fucho",
       islandRhythm: "ameno",
       islandMode: "notch",
+      widgetsEnabled: false,
+      widgetPanels: ["board"],
     });
   });
 
@@ -92,6 +96,8 @@ describe("readHudSettings", () => {
       islandPet: "fucho",
       islandRhythm: "ameno",
       islandMode: "notch",
+      widgetsEnabled: false,
+      widgetPanels: ["board"],
     });
   });
 
@@ -106,6 +112,8 @@ describe("readHudSettings", () => {
       islandPet: "fucho",
       islandRhythm: "ameno",
       islandMode: "notch",
+      widgetsEnabled: false,
+      widgetPanels: ["board"],
     });
   });
 
@@ -232,6 +240,8 @@ describe("mergeHudSettings", () => {
         islandPet: "fucho",
         islandRhythm: "ameno",
         islandMode: "notch",
+        widgetsEnabled: false,
+        widgetPanels: ["board"],
       },
     });
   });
@@ -254,6 +264,8 @@ describe("mergeHudSettings", () => {
       islandPet: "fucho",
       islandRhythm: "ameno",
       islandMode: "notch",
+      widgetsEnabled: false,
+      widgetPanels: ["board"],
     });
     assert.deepEqual(settings.hud, hud);
   });
@@ -269,6 +281,8 @@ describe("mergeHudSettings", () => {
       islandPet: "fucho",
       islandRhythm: "ameno",
       islandMode: "notch",
+      widgetsEnabled: false,
+      widgetPanels: ["board"],
     });
     assert.equal(settings.server_url, "https://a", "the rest of the file survives");
   });

@@ -118,6 +118,7 @@ contextBridge.exposeInMainWorld("omnicraftDesktop", {
    */
   setHudSettings: (patch) => ipcRenderer.invoke("omnicraft:hud-set-settings", patch),
   getIslandStatus: () => ipcRenderer.invoke("omnicraft:island-status"),
+  getWidgetsStatus: () => ipcRenderer.invoke("omnicraft:widgets-status"),
 
   // ── Embedded browser pane ──────────────────────────────────────────────
   // The relay hook (web/src/hooks/useBrowserAgentRelay.ts) drives a native

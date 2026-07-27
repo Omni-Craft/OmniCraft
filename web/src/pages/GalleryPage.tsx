@@ -10,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { avatarColor } from "@/lib/avatarColor";
 import { authenticatedFetch } from "@/lib/identity";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@/lib/routing";
@@ -42,25 +43,6 @@ const CATEGORY_ORDER = ["orquestrador", "fábrica", "conversa"];
 function tabLabel(category: string): string {
   if (!category) return "Outros";
   return CATEGORY_TAB[category] ?? category.charAt(0).toUpperCase() + category.slice(1);
-}
-
-// Stable avatar tint per agent — a hash of the id picks from a fixed palette so
-// a given agent always wears the same color across reloads.
-const AVATAR_COLORS = [
-  "#39c9b4",
-  "#e8a83c",
-  "#a884f0",
-  "#4a90e2",
-  "#e86a9c",
-  "#3ec6e0",
-  "#5cbf6a",
-  "#f0776a",
-];
-
-function avatarColor(id: string): string {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return AVATAR_COLORS[h % AVATAR_COLORS.length];
 }
 
 function initial(name: string): string {

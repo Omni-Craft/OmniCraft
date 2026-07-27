@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { apiErrorMessage } from "@/lib/apiErrors";
+import { avatarColor, avatarInitials } from "@/lib/avatarColor";
 import { authenticatedFetch } from "@/lib/identity";
 import { Link } from "@/lib/routing";
-import { apiErrorMessage } from "@/lib/apiErrors";
 
 interface McpServer {
   name: string;
@@ -17,6 +18,18 @@ interface AgentRow {
   id: string;
   name: string;
   display_name?: string;
+}
+
+/** A catalog entry, as the connector directory serves it. */
+interface Connector {
+  id: string;
+  title: string;
+  description: string;
+  transport: "stdio" | "http";
+  command?: string;
+  args?: string[];
+  url?: string;
+  env_required?: { name: string }[];
 }
 
 interface FormState {
@@ -37,6 +50,11 @@ const EMPTY_FORM: FormState = {
   args: "",
 };
 
+// The quick-fill shelf, in the order it reads best — the everyday servers
+// first. Anything not listed (or that needs a credential) lives in the
+// directory, which can collect the secret; this form cannot.
+const SHELF = ["memory", "fetch", "filesystem", "playwright", "sequential-thinking", "git"];
+
 function splitArgs(raw: string): string[] {
   return raw
     .split(/\s+/)
@@ -48,6 +66,7 @@ export function McpPage() {
   const [agents, setAgents] = useState<AgentRow[]>([]);
   const [agentId, setAgentId] = useState<string>("");
   const [servers, setServers] = useState<McpServer[] | "loading" | null>(null);
+  const [catalog, setCatalog] = useState<Connector[]>([]);
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +83,10 @@ export function McpPage() {
         setAgentId((prev) => prev || chat?.id || j.data[0]?.id || "");
       })
       .catch(() => setAgents([]));
+    void authenticatedFetch("/v1/mcp-catalog")
+      .then((r) => (r.ok ? r.json() : { connectors: [] }))
+      .then((j: { connectors?: Connector[] }) => setCatalog(j.connectors ?? []))
+      .catch(() => setCatalog([]));
   }, []);
 
   const load = useCallback(async (id: string) => {
@@ -81,8 +104,30 @@ export function McpPage() {
     void load(agentId);
   }, [agentId, load]);
 
+  // Only servers this form can fully describe: one that wants an API key would
+  // save without it and fail at connect time, so those stay in the directory.
+  const shelf = useMemo(() => {
+    const byId = new Map(catalog.map((c) => [c.id, c]));
+    return SHELF.map((id) => byId.get(id)).filter(
+      (c): c is Connector => !!c && !(c.env_required ?? []).length,
+    );
+  }, [catalog]);
+
   const resetForm = () => {
     setForm(EMPTY_FORM);
+    setEditing(null);
+    setError(null);
+  };
+
+  const prefill = (c: Connector) => {
+    setForm({
+      name: c.id,
+      transport: c.transport,
+      description: c.description,
+      url: c.url ?? "",
+      command: c.command ?? "",
+      args: (c.args ?? []).join(" "),
+    });
     setEditing(null);
     setError(null);
   };
@@ -176,42 +221,77 @@ export function McpPage() {
   };
 
   const inputCls =
-    "w-full rounded-lg border border-border bg-card/40 px-3 py-2 text-sm outline-none focus:border-ring";
+    "w-full rounded-lg border border-border bg-background/60 px-3 py-2 text-sm outline-none transition-colors placeholder:opacity-40 focus:border-ring";
+  const labelCls = "flex flex-col gap-1.5 text-xs font-medium";
+  const count = Array.isArray(servers) ? servers.length : null;
+  const agent = agents.find((a) => a.id === agentId);
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
-      <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold">Servidores MCP</h1>
-        <p className="text-sm opacity-60">
-          Conecte ferramentas externas (Model Context Protocol) aos seus agentes — as tools do
-          servidor ficam disponíveis nas sessões do agente. Segredos (env/headers) são preservados
-          no bundle e nunca expostos aqui.
-        </p>
+    <div className="mx-auto flex max-w-5xl flex-col gap-7 px-6 py-8">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold">Servidores MCP</h1>
+          <p className="max-w-[62ch] text-sm text-muted-foreground">
+            Conecte ferramentas externas (Model Context Protocol) aos seus agentes. Segredos
+            (env/headers) ficam no bundle e nunca são expostos aqui.
+          </p>
+        </div>
+        <label className="flex w-full flex-col gap-1.5 text-xs font-medium sm:w-64">
+          Agente
+          <div className="relative">
+            {agent && (
+              <span
+                className="pointer-events-none absolute top-1/2 left-2 grid size-6 -translate-y-1/2 place-items-center rounded-md text-[11px] font-bold text-black/85"
+                style={{ backgroundColor: avatarColor(agent.id) }}
+                aria-hidden
+              >
+                {avatarInitials(agent.display_name ?? agent.name, 2)}
+              </span>
+            )}
+            <select
+              className={`${inputCls} ${agent ? "pl-10" : ""}`}
+              value={agentId}
+              onChange={(e) => setAgentId(e.target.value)}
+              aria-label="Agente"
+            >
+              {agents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.display_name ?? a.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </label>
       </header>
 
-      {/* Agent picker */}
-      <label className="flex max-w-md flex-col gap-1 text-xs opacity-70">
-        Agente
-        <select className={inputCls} value={agentId} onChange={(e) => setAgentId(e.target.value)}>
-          {agents.map((a) => (
-            <option key={a.id} value={a.id}>
-              {a.display_name ?? a.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
       {/* Server list */}
-      <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide opacity-50">
-          Servidores do agente
-        </h2>
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center gap-2">
+          <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+            Servidores do agente
+          </h2>
+          {count !== null && (
+            <span className="rounded-full border border-border px-2 text-[11px] text-muted-foreground">
+              {count}
+            </span>
+          )}
+          <span className="h-px flex-1 bg-border" />
+        </div>
+
         {servers === "loading" || servers === null ? (
-          <p className="text-sm opacity-50">Carregando…</p>
+          <p className="text-sm text-muted-foreground">Carregando…</p>
         ) : servers.length === 0 ? (
-          <p className="text-sm opacity-40">
-            Nenhum servidor MCP neste agente — adicione um abaixo ou instale pelo diretório.
-          </p>
+          <div className="flex items-center gap-3 rounded-xl border border-border bg-card/30 p-4">
+            <span
+              className="grid size-8 shrink-0 place-items-center rounded-lg bg-muted text-sm text-muted-foreground"
+              aria-hidden
+            >
+              ⇅
+            </span>
+            <p className="text-sm text-muted-foreground">
+              Nenhum servidor MCP neste agente — adicione um abaixo ou use um item do catálogo.
+            </p>
+          </div>
         ) : (
           servers.map((s) => (
             <div
@@ -220,10 +300,10 @@ export function McpPage() {
             >
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-sm font-medium">{s.name}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] opacity-70">
+                <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
                   {s.transport}
                 </span>
-                <span className="min-w-0 flex-1 truncate text-xs opacity-50">
+                <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                   {s.transport === "http" ? s.url : `${s.command} ${(s.args ?? []).join(" ")}`}
                 </span>
                 <button
@@ -249,7 +329,7 @@ export function McpPage() {
                   Remover
                 </button>
               </div>
-              {s.description && <p className="text-xs opacity-60">{s.description}</p>}
+              {s.description && <p className="text-xs text-muted-foreground">{s.description}</p>}
               {testResult[s.name] && (
                 <p
                   className="font-mono text-xs opacity-80"
@@ -264,76 +344,84 @@ export function McpPage() {
       </section>
 
       {/* Add / edit form */}
-      <section className="flex flex-col gap-3 rounded-xl border border-border bg-card/40 p-4">
-        <h2 className="text-sm font-semibold opacity-80">
+      <section className="overflow-hidden rounded-xl border border-border">
+        <h2 className="border-b border-border bg-card/40 px-4 py-3 text-sm font-semibold">
           {editing ? `Editar "${editing}"` : "Adicionar servidor"}
         </h2>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-1 text-xs opacity-70">
-            Nome
-            <input
-              className={inputCls}
-              value={form.name}
-              placeholder="ex.: fetch"
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-            />
-          </label>
-          <label className="flex flex-col gap-1 text-xs opacity-70">
-            Transporte
-            <select
-              className={inputCls}
-              value={form.transport}
-              onChange={(e) =>
-                setForm({ ...form, transport: e.target.value as FormState["transport"] })
-              }
-            >
-              <option value="stdio">stdio (comando local)</option>
-              <option value="http">http (URL remota)</option>
-            </select>
-          </label>
-        </div>
-        {form.transport === "http" ? (
-          <label className="flex flex-col gap-1 text-xs opacity-70">
-            URL
-            <input
-              className={inputCls}
-              value={form.url}
-              placeholder="https://mcp.exemplo.com/sse"
-              onChange={(e) => setForm({ ...form, url: e.target.value })}
-            />
-          </label>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <label className="flex flex-col gap-1 text-xs opacity-70">
-              Comando
+        <div className="flex flex-col gap-4 p-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <label className={labelCls}>
+              Nome
               <input
                 className={inputCls}
-                value={form.command}
-                placeholder="npx"
-                onChange={(e) => setForm({ ...form, command: e.target.value })}
+                value={form.name}
+                placeholder="ex.: fetch"
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
               />
             </label>
-            <label className="flex flex-col gap-1 text-xs opacity-70">
-              Argumentos (separados por espaço)
-              <input
+            <label className={labelCls}>
+              Transporte
+              <select
                 className={inputCls}
-                value={form.args}
-                placeholder="-y @modelcontextprotocol/server-fetch"
-                onChange={(e) => setForm({ ...form, args: e.target.value })}
-              />
+                value={form.transport}
+                onChange={(e) =>
+                  setForm({ ...form, transport: e.target.value as FormState["transport"] })
+                }
+              >
+                <option value="stdio">stdio (comando local)</option>
+                <option value="http">http (URL remota)</option>
+              </select>
             </label>
           </div>
-        )}
-        <label className="flex flex-col gap-1 text-xs opacity-70">
-          Descrição (opcional)
-          <input
-            className={inputCls}
-            value={form.description}
-            onChange={(e) => setForm({ ...form, description: e.target.value })}
-          />
-        </label>
-        {error && <p className="text-sm text-destructive">{error}</p>}
-        <div className="flex items-center gap-2">
+          {form.transport === "http" ? (
+            <label className={labelCls}>
+              URL
+              <input
+                className={inputCls}
+                value={form.url}
+                placeholder="https://mcp.exemplo.com/sse"
+                onChange={(e) => setForm({ ...form, url: e.target.value })}
+              />
+            </label>
+          ) : (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <label className={labelCls}>
+                Comando
+                <input
+                  className={inputCls}
+                  value={form.command}
+                  placeholder="npx"
+                  onChange={(e) => setForm({ ...form, command: e.target.value })}
+                />
+              </label>
+              <label className={labelCls}>
+                <span>
+                  Argumentos{" "}
+                  <span className="font-normal text-muted-foreground">· separados por espaço</span>
+                </span>
+                <input
+                  className={`${inputCls} font-mono text-xs`}
+                  value={form.args}
+                  placeholder="-y @modelcontextprotocol/server-fetch"
+                  onChange={(e) => setForm({ ...form, args: e.target.value })}
+                />
+              </label>
+            </div>
+          )}
+          <label className={labelCls}>
+            <span>
+              Descrição <span className="font-normal text-muted-foreground">· opcional</span>
+            </span>
+            <input
+              className={inputCls}
+              value={form.description}
+              placeholder="Para que serve este servidor?"
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+            />
+          </label>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </div>
+        <div className="flex flex-wrap items-center gap-3 border-t border-border bg-card/40 px-4 py-3">
           <button
             type="button"
             disabled={busy || !agentId}
@@ -353,21 +441,68 @@ export function McpPage() {
               Cancelar
             </button>
           )}
-          <span className="text-[11px] opacity-40">
+          <span className="text-[11px] text-muted-foreground">
             Mudanças valem para novas sessões do agente.
           </span>
         </div>
       </section>
 
-      {/* Discovery lives in the connector directory now — this page stays for
-          manual and advanced setup (custom servers, editing, testing). */}
-      <p className="text-sm opacity-60">
-        Procurando um conector pronto?{" "}
-        <Link to="/craftwork/connectors" className="underline underline-offset-2">
-          Veja o diretório
-        </Link>{" "}
-        — instala num clique e já pede a credencial quando o conector precisa.
-      </p>
+      {/* Quick fill. Installing with a credential is the directory's job — it
+          can collect the secret, and this form has nowhere to put one. */}
+      {shelf.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              Catálogo
+            </h2>
+            <span className="text-xs text-muted-foreground opacity-70">
+              um clique preenche o formulário
+            </span>
+            <Link
+              to="/craftwork/connectors"
+              className="ml-auto text-xs text-brand-accent underline-offset-2 hover:underline"
+            >
+              Ver todos, inclusive os que pedem credencial →
+            </Link>
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {shelf.map((c) => (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => prefill(c)}
+                className="group flex items-start gap-3 rounded-xl border border-border bg-card/30 p-3 text-left transition-colors hover:border-foreground/20"
+                data-testid={`mcp-shelf-${c.id}`}
+              >
+                <span
+                  className="grid size-8 shrink-0 place-items-center rounded-lg text-[13px] font-bold text-black/85"
+                  style={{ backgroundColor: avatarColor(c.id) }}
+                  aria-hidden
+                >
+                  {avatarInitials(c.title, 2)}
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col gap-1">
+                  <span className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold">{c.title}</span>
+                    <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                      {c.transport}
+                    </span>
+                  </span>
+                  <span className="text-xs leading-snug text-muted-foreground">
+                    {c.description}
+                  </span>
+                </span>
+                <span
+                  className="text-lg leading-none text-muted-foreground transition-colors group-hover:text-foreground"
+                  aria-hidden
+                >
+                  +
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   );
 }

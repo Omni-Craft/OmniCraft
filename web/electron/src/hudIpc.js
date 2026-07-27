@@ -68,9 +68,12 @@ function validateNotificationsPatch(patch) {
  * @param {() => {readable: boolean, enabled: boolean | null, mode: string | null,
  *   notifications: object | null, sound: boolean | null}} deps.readSettings
  * @param {(patch: {enabled?: boolean, mode?: string, notifications?: object,
- *   sound?: boolean}) => void} deps.writeSettings
+ *   sound?: boolean, island?: boolean}) => void} deps.writeSettings
  *   Throws when settings.json is present but unreadable — the rejection is the
  *   point: Settings renders "não pôde ser salva" instead of a stale value.
+ * @param {(enabled: boolean) => void} [deps.applyIsland] Bring the native
+ *   island process in line with the setting that was just written.
+ * @param {() => {available: boolean, reason?: string, running: boolean}} [deps.islandStatus]
  * @param {(message: string) => void} [deps.onWarn]
  */
 function registerHudIpc({
@@ -80,6 +83,8 @@ function registerHudIpc({
   isPinnedOriginSender,
   readSettings,
   writeSettings,
+  applyIsland,
+  islandStatus,
   onWarn,
 }) {
   const warn = onWarn ?? (() => {});
@@ -157,11 +162,29 @@ function registerHudIpc({
       if (typeof patch.sound !== "boolean") throw new Error("hud sound must be a boolean");
       next.sound = patch.sound;
     }
+    // The native island is a separate process, not a window, so it is applied
+    // by its own controller rather than by the HUD policy below.
+    if (patch?.island !== undefined) {
+      if (typeof patch.island !== "boolean") throw new Error("hud island must be a boolean");
+      next.island = patch.island;
+    }
     // Throws through to the renderer when the file can't be read — the write is
     // refused rather than clobbering settings we never parsed.
     writeSettings(next);
     policy.applyPolicy();
+    if (next.island !== undefined && applyIsland) applyIsland(next.island);
     return readSettings();
+  });
+
+  // SPA → whether the island can run at all. A checkout that never built it,
+  // or a non-macOS shell, has to SAY so: a switch that silently does nothing
+  // is worse than no switch.
+  ipcMain.handle("omnicraft:island-status", (event) => {
+    if (!isPinnedOriginSender(event)) {
+      warn("island-status from untrusted sender dropped");
+      return null;
+    }
+    return islandStatus ? islandStatus() : null;
   });
 }
 

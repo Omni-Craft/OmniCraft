@@ -140,6 +140,8 @@ import {
   type HudSettingsRead,
   type HudVisibilityMode,
   isElectronShell,
+  type IslandStatus,
+  islandStatus,
   resetCliPath,
   setHudSettings,
 } from "@/lib/nativeBridge";
@@ -1429,6 +1431,9 @@ function HudSection() {
           mode: read.mode,
           notifications: read.notifications,
           sound: read.sound,
+          // A shell installed before this switch existed answers without it.
+          // That is "this app can't do it", not an unreadable file.
+          island: typeof read.island === "boolean" ? read.island : null,
         }
       : null;
 
@@ -1495,6 +1500,12 @@ function HudSection() {
             />
           </div>
 
+          <IslandFields
+            enabled={settings.island}
+            busy={busy}
+            apply={(patch) => void apply(patch)}
+          />
+
           <HudNotificationsFields
             notifications={settings.notifications}
             sound={settings.sound}
@@ -1505,6 +1516,75 @@ function HudSection() {
         </div>
       )}
     </Section>
+  );
+}
+
+/**
+ * The native island (the notch HUD) — a separate macOS app, not a window,
+ * because it draws over the menu bar where no Electron window can.
+ *
+ * The switch only exists when the bundle is actually there: a checkout that
+ * never built it has nothing to start, and the reason is shown instead. An
+ * older shell that can't answer at all reads as "can't tell", never as
+ * unavailable.
+ */
+function IslandFields({
+  enabled,
+  busy,
+  apply,
+}: {
+  enabled: boolean | null;
+  busy: boolean;
+  apply: (patch: HudSettingsPatch) => void;
+}) {
+  const [status, setStatus] = useState<IslandStatus | null | "loading">("loading");
+
+  useEffect(() => {
+    void islandStatus().then(setStatus);
+  }, []);
+
+  // An installed app older than this setting would take the click and drop it.
+  const tooOld = enabled === null;
+  const unavailable = tooOld || (status !== "loading" && status !== null && !status.available);
+  const why = tooOld
+    ? "Esta versão do aplicativo ainda não controla a ilha — atualize o OmniCraft."
+    : status !== "loading" && status !== null && !status.available
+      ? status.reason
+      : null;
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-border pt-6">
+      <div className="flex flex-col">
+        <span className="text-sm font-medium">A ilha</span>
+        <span className="text-sm text-muted-foreground">
+          A faixa preta fundida com a notch, no topo da tela. É um app à parte, que sobe e desce
+          junto com o OmniCraft — e desenha acima da barra de menus, onde a janela do HUD não
+          alcança.
+        </span>
+      </div>
+
+      <label className="flex items-center justify-between gap-4">
+        <span className="flex flex-col">
+          <span className="text-sm font-medium">Mostrar a ilha</span>
+          <span className="text-sm text-muted-foreground">
+            {why ??
+              "Sobe junto com o app e mostra as sessões em execução e as que esperam por você."}
+          </span>
+        </span>
+        <Switch
+          data-testid="island-enabled"
+          checked={enabled === true && !unavailable}
+          disabled={busy || unavailable}
+          onCheckedChange={(checked) => apply({ island: checked })}
+        />
+      </label>
+
+      {!tooOld && status !== "loading" && status !== null && status.available && (
+        <p data-testid="island-running" className="text-xs text-muted-foreground">
+          {status.running ? "Rodando agora." : "Parada agora."}
+        </p>
+      )}
+    </div>
   );
 }
 

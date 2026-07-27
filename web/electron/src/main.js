@@ -43,7 +43,7 @@ const { registerWorkspaceChromeHide } = require("./workspace-chrome");
 const { mergeHudSettings, readHudSettings } = require("./hudVisibility");
 const { createHudPolicy } = require("./hudPolicy");
 const { registerHudIpc } = require("./hudIpc");
-const { NativeIslandController } = require("./nativeIsland");
+const { NativeIslandController, resolveIslandApp } = require("./nativeIsland");
 const { hostEnrollmentDecision } = require("./hostEnrollment");
 const { shouldDismissSplash } = require("./splash");
 const {
@@ -1887,6 +1887,23 @@ const nativeIsland = new NativeIslandController({
   onWarn: (message) => console.warn(`[omnicraft] ${message}`),
 });
 
+/**
+ * Whether the island can run here, and whether it is up right now.
+ *
+ * Resolving the bundle is what separates "off" from "there is nothing to turn
+ * on" — a checkout that never ran make-app.sh has no island to start, and the
+ * settings page has to say that instead of offering a dead switch.
+ */
+function islandStatus() {
+  const found = resolveIslandApp({
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+  });
+  return found.path
+    ? { available: true, running: nativeIsland.running }
+    : { available: false, reason: found.reason, running: false };
+}
+
 /** Bring the HUD in line with the persisted settings and the last feed report. */
 function applyHudPolicy() {
   hudPolicy.applyPolicy();
@@ -2779,6 +2796,8 @@ function registerIpc() {
     isPinnedOriginSender,
     readSettings: hudSettingsState,
     writeSettings: writeHudSettings,
+    applyIsland: (enabled) => nativeIsland.apply(enabled),
+    islandStatus: () => islandStatus(),
     onWarn: (message) => console.warn(`[omnicraft] ${message}`),
   });
 
@@ -3005,8 +3024,9 @@ if (!gotLock) {
     buildMenu();
     // The island rides the shell's lifetime: up with the app, down on quit.
     // It draws above the menu bar, which no Electron window can do, so it is a
-    // separate process rather than another window.
-    nativeIsland.start();
+    // separate process rather than another window. An unreadable settings file
+    // is not a reason to withhold it — the default is on.
+    nativeIsland.apply(hudSettingsState().island !== false);
     // Patch PATH for GUI-launched Electron on macOS/Linux:
     // A desktop launcher inherits a minimal system PATH that omits directories like
     // /opt/homebrew/bin and ~/.nvm/... where CLI tools (claude, codex, tmux) live.

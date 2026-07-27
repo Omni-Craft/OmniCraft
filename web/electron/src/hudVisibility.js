@@ -52,7 +52,13 @@ const HUD_SETTINGS_UNREADABLE = Object.freeze({
   mode: null,
   notifications: null,
   sound: null,
+  island: null,
 });
+
+// The island has ridden the shell's lifetime since it shipped, so a settings
+// file written before this switch existed means "on" — reading it as off would
+// silently take away something the user already has.
+const DEFAULT_ISLAND_ENABLED = true;
 
 /** Whether a quiet-hours endpoint was left unset at all. */
 function unsetQuietTime(value) {
@@ -148,6 +154,7 @@ function readHudSettings(settings) {
       mode: DEFAULT_HUD_VISIBILITY,
       notifications: { ...DEFAULT_HUD_NOTIFICATIONS },
       sound,
+      island: DEFAULT_ISLAND_ENABLED,
     };
   }
   if (hud === null || typeof hud !== "object" || Array.isArray(hud)) return HUD_SETTINGS_UNREADABLE;
@@ -158,7 +165,9 @@ function readHudSettings(settings) {
   if (!HUD_VISIBILITY_MODES.includes(mode)) return HUD_SETTINGS_UNREADABLE;
   const notifications = readNotificationSettings(hud.notifications);
   if (notifications === null) return HUD_SETTINGS_UNREADABLE;
-  return { readable: true, enabled: hud.enabled, mode, notifications, sound };
+  const island = hud.island === undefined ? DEFAULT_ISLAND_ENABLED : hud.island;
+  if (typeof island !== "boolean") return HUD_SETTINGS_UNREADABLE;
+  return { readable: true, enabled: hud.enabled, mode, notifications, sound, island };
 }
 
 /**
@@ -195,11 +204,17 @@ function mergeHudSettings(read, patch) {
   }
   const current = readHudSettings(read.settings);
   const base = current.readable
-    ? { enabled: current.enabled, mode: current.mode, notifications: current.notifications }
+    ? {
+        enabled: current.enabled,
+        mode: current.mode,
+        notifications: current.notifications,
+        island: current.island,
+      }
     : {
         enabled: false,
         mode: DEFAULT_HUD_VISIBILITY,
         notifications: { ...DEFAULT_HUD_NOTIFICATIONS },
+        island: DEFAULT_ISLAND_ENABLED,
       };
   const { notifications: notificationsPatch, sound, ...top } = patch ?? {};
   const hud = {

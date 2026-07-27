@@ -21,7 +21,13 @@ function harness({
   const handlers = new Map();
   const calls = [];
   const hudWebContents = { id: "hud" };
-  const state = { settings: { ...settings }, writeFails: false, warnings: [], hudOpen: true };
+  const state = {
+    settings: { ...settings },
+    writeFails: false,
+    warnings: [],
+    hudOpen: true,
+    island: { available: true, running: true },
+  };
 
   registerHudIpc({
     ipcMain: {
@@ -41,6 +47,8 @@ function harness({
       Object.assign(state.settings, patch);
       calls.push(["writeSettings", patch]);
     },
+    applyIsland: (enabled) => calls.push(["applyIsland", enabled]),
+    islandStatus: () => state.island,
     onWarn: (message) => state.warnings.push(message),
   });
 
@@ -210,5 +218,44 @@ describe("hudIpc — notification preferences", () => {
     const h = harness();
     await set(h, { sound: true });
     assert.deepEqual(h.calls[0], ["writeSettings", { sound: true }]);
+  });
+});
+
+describe("hudIpc — the native island", () => {
+  it("persists the switch and brings the process in line with it", async () => {
+    const h = harness();
+    await h.invoke("omnicraft:hud-set-settings", h.fromHud, { island: false });
+    assert.deepEqual(h.calls, [
+      ["writeSettings", { island: false }],
+      ["applyPolicy"],
+      ["applyIsland", false],
+    ]);
+  });
+
+  it("leaves the island alone when the patch doesn't mention it", async () => {
+    // Every other switch on the page writes through here; none of them should
+    // stop a process the user did not ask to stop.
+    const h = harness();
+    await h.invoke("omnicraft:hud-set-settings", h.fromHud, { mode: "attention-only" });
+    assert.ok(!h.calls.some(([name]) => name === "applyIsland"));
+  });
+
+  it("refuses a non-boolean without touching the file", async () => {
+    const h = harness();
+    await assert.rejects(() =>
+      h.invoke("omnicraft:hud-set-settings", h.fromHud, { island: "sim" }),
+    );
+    assert.deepEqual(h.calls, []);
+  });
+
+  it("reports availability, and gives an unpinned page nothing", async () => {
+    const h = harness();
+    assert.deepEqual(await h.invoke("omnicraft:island-status", h.fromHud), {
+      available: true,
+      running: true,
+    });
+
+    const foreign = harness({ pinned: false });
+    assert.equal(await foreign.invoke("omnicraft:island-status", foreign.fromElsewhere), null);
   });
 });

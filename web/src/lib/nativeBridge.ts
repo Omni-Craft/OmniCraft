@@ -134,6 +134,8 @@ interface ElectronDesktopApi extends NativeShellApi {
   getHudSettings?: () => Promise<HudSettingsRead | null>;
   /** Turn the HUD on/off or change its visibility mode; resolves the new settings. */
   setHudSettings?: (patch: HudSettingsPatch) => Promise<HudSettingsRead | null>;
+  /** Whether the native island can run here, and whether it is up right now. */
+  getIslandStatus?: () => Promise<IslandStatus | null>;
 }
 
 /**
@@ -173,6 +175,8 @@ export interface HudSettings {
   notifications: HudNotificationSettings;
   /** The app-wide notification sound, not a HUD-only copy of it. */
   sound: boolean;
+  /** Whether the native island (the notch HUD) runs alongside the app. */
+  island: boolean;
 }
 
 /**
@@ -193,6 +197,20 @@ export interface HudSettingsRead {
   mode: HudVisibilityMode | null;
   notifications: HudNotificationSettings | null;
   sound: boolean | null;
+  /** Whether the native island (the notch HUD) should run. */
+  island: boolean | null;
+}
+
+/**
+ * Whether the island is even available on this machine.
+ *
+ * A checkout that never built the bundle has nothing to start, so the page
+ * shows the reason instead of a switch that would do nothing.
+ */
+export interface IslandStatus {
+  available: boolean;
+  reason?: string;
+  running: boolean;
 }
 
 /** How long a HUD-settings IPC call may hang before it counts as no answer. */
@@ -666,4 +684,16 @@ export async function setHudSettings(patch: HudSettingsPatch): Promise<HudSettin
   const electron = electronApi();
   if (!electron?.setHudSettings) return null;
   return withIpcTimeout(electron.setHudSettings(patch));
+}
+
+/**
+ * Whether the native island can run on this machine.
+ *
+ * Null when the shell predates this call — an older installed shell serving a
+ * newer SPA — which reads as "can't tell", not as "unavailable".
+ */
+export async function islandStatus(): Promise<IslandStatus | null> {
+  const electron = electronApi();
+  if (!electron?.getIslandStatus) return null;
+  return withIpcTimeout(electron.getIslandStatus());
 }

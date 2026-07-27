@@ -138,6 +138,7 @@ import {
   type HudNotificationSettings,
   type HudSettingsPatch,
   type HudSettingsRead,
+  type HudSurface,
   type HudVisibilityMode,
   isElectronShell,
   type IslandStatus,
@@ -1431,9 +1432,9 @@ function HudSection() {
           mode: read.mode,
           notifications: read.notifications,
           sound: read.sound,
-          // A shell installed before this switch existed answers without it.
+          // A shell installed before this choice existed answers without it.
           // That is "this app can't do it", not an unreadable file.
-          island: typeof read.island === "boolean" ? read.island : null,
+          surface: read.surface ?? null,
         }
       : null;
 
@@ -1460,7 +1461,7 @@ function HudSection() {
             <span className="flex flex-col">
               <span className="text-sm font-medium">Mostrar o HUD</span>
               <span className="text-sm text-muted-foreground">
-                Abre a janela flutuante e a traz de volta a cada inicialização do app.
+                Sobe junto com o app e mostra o que está rodando e o que espera por você.
               </span>
             </span>
             <Switch
@@ -1500,11 +1501,7 @@ function HudSection() {
             />
           </div>
 
-          <IslandFields
-            enabled={settings.island}
-            busy={busy}
-            apply={(patch) => void apply(patch)}
-          />
+          <HudSurfaceFields surface={settings.surface} apply={(patch) => void apply(patch)} />
 
           <HudNotificationsFields
             notifications={settings.notifications}
@@ -1520,81 +1517,102 @@ function HudSection() {
 }
 
 /**
- * The native island (the notch HUD) — a separate macOS app, not a window,
- * because it draws over the menu bar where no Electron window can.
+ * Where the HUD is drawn — the native island, or the floating window.
  *
- * The switch only exists when the bundle is actually there: a checkout that
- * never built it has nothing to start, and the reason is shown instead. An
- * older shell that can't answer at all reads as "can't tell", never as
- * unavailable.
+ * They show the same feed in the same place (centered at the top of the
+ * screen), so this is a choice between them, not two switches: turning both on
+ * parked a second bar right under the island. The island wins by default,
+ * because it is the one that can draw over the menu bar.
+ *
+ * The choice only appears when the island can actually run: a checkout that
+ * never built it, or a shell older than this setting, gets the reason instead.
  */
-function IslandFields({
-  enabled,
-  busy,
+function HudSurfaceFields({
+  surface,
   apply,
 }: {
-  enabled: boolean | null;
-  busy: boolean;
+  surface: HudSurface | null;
   apply: (patch: HudSettingsPatch) => void;
 }) {
   const [status, setStatus] = useState<IslandStatus | null | "loading">("loading");
+  const labelId = useId();
 
   useEffect(() => {
     void islandStatus().then(setStatus);
   }, []);
 
+  if (status === "loading") return null;
+
   // An installed app older than this setting would take the click and drop it.
-  const tooOld = enabled === null;
-  const unavailable = tooOld || (status !== "loading" && status !== null && !status.available);
+  const tooOld = surface === null;
+  const unavailable = status !== null && !status.available;
   const why = tooOld
-    ? "Esta versão do aplicativo ainda não controla a ilha — atualize o OmniCraft."
-    : status !== "loading" && status !== null && !status.available
-      ? status.reason
+    ? "Esta versão do aplicativo ainda não escolhe onde o HUD aparece — atualize o OmniCraft."
+    : unavailable
+      ? status?.reason
       : null;
 
+  if (why) {
+    return (
+      <p data-testid="hud-surface-unavailable" className="text-sm text-muted-foreground">
+        {why} O HUD aparece na janela flutuante.
+      </p>
+    );
+  }
+
   return (
-    <div className="flex flex-col gap-3 border-t border-border pt-6">
+    <div className="flex flex-col gap-3">
       <div className="flex flex-col">
-        <span className="text-sm font-medium">A ilha</span>
+        <span id={labelId} className="text-sm font-medium">
+          Onde mostrar
+        </span>
         <span className="text-sm text-muted-foreground">
-          A faixa preta fundida com a notch, no topo da tela. É um app à parte, que sobe e desce
-          junto com o OmniCraft — e desenha acima da barra de menus, onde a janela do HUD não
-          alcança.
+          Os dois mostram o mesmo, no mesmo lugar da tela, então só um fica de pé por vez.
         </span>
       </div>
-
-      <label className="flex items-center justify-between gap-4">
-        <span className="flex flex-col">
-          <span className="text-sm font-medium">Mostrar a ilha</span>
-          <span className="text-sm text-muted-foreground">
-            {why ??
-              "Sobe junto com o app e mostra as sessões em execução e as que esperam por você."}
-          </span>
-        </span>
-        <Switch
-          data-testid="island-enabled"
-          checked={enabled === true && !unavailable}
-          disabled={busy || unavailable}
-          onCheckedChange={(checked) => apply({ island: checked })}
-        />
-      </label>
-
-      {!tooOld && status !== "loading" && status !== null && status.available && (
+      <CardRadioGroup
+        labelledBy={labelId}
+        value={surface ?? "ilha"}
+        onSelect={(escolha) => apply({ surface: escolha as HudSurface })}
+        className="grid gap-2 sm:grid-cols-2"
+        cardClassName="flex-col items-start gap-1 p-3 text-left"
+        items={[
+          {
+            value: "ilha",
+            testId: "hud-surface-ilha",
+            body: (
+              <>
+                <span className="text-sm font-medium">A ilha</span>
+                <span className="text-xs text-muted-foreground">
+                  A faixa preta fundida com a notch. É um app à parte e desenha acima da barra de
+                  menus, onde uma janela não alcança.
+                </span>
+              </>
+            ),
+          },
+          {
+            value: "janela",
+            testId: "hud-surface-janela",
+            body: (
+              <>
+                <span className="text-sm font-medium">Janela flutuante</span>
+                <span className="text-xs text-muted-foreground">
+                  Uma janela do próprio OmniCraft, logo abaixo do topo. Não cobre a barra de menus.
+                </span>
+              </>
+            ),
+          },
+        ]}
+      />
+      {status !== null && (
         <p data-testid="island-running" className="text-xs text-muted-foreground">
-          {status.running ? "Rodando agora." : "Parada agora."}
+          {status.running ? "A ilha está rodando agora." : "A ilha está parada agora."}
         </p>
       )}
     </div>
   );
 }
 
-/**
- * Desktop-only: shows which OmniCraft CLI binary the shell resolved
- * (auto-detected or a custom override). Read-only — setting a custom path is
- * done on the connect/setup screen (the trusted surface that allows free-text
- * entry); the SPA exposes no path setter. A safe "reset to auto-detected" stays
- * here since it chooses no path.
- */
 function LocalCliSection() {
   const [status, setStatus] = useState<CliStatus | null | "loading">("loading");
   const [busy, setBusy] = useState(false);

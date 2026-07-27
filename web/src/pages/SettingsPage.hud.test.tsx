@@ -74,7 +74,7 @@ function settings(overrides: Partial<HudSettingsRead> = {}): HudSettingsRead {
     mode: "always",
     notifications: notifications(),
     sound: false,
-    island: true,
+    surface: "ilha" as const,
     ...overrides,
   };
 }
@@ -324,18 +324,18 @@ describe("Settings → HUD flutuante", () => {
   });
 });
 
-describe("Settings → HUD flutuante → a ilha", () => {
-  it("turns the island off through the same settings write", async () => {
-    mocks.setHudSettings.mockResolvedValue(settings({ island: false }));
+describe("Settings → HUD flutuante → onde mostrar", () => {
+  it("moves the HUD to the window through the same settings write", async () => {
+    mocks.setHudSettings.mockResolvedValue(settings({ surface: "janela" }));
     await renderSettled();
 
-    fireEvent.click(await screen.findByTestId("island-enabled"));
+    fireEvent.click(await screen.findByTestId("hud-surface-janela"));
 
-    expect(mocks.setHudSettings).toHaveBeenCalledWith({ island: false });
+    expect(mocks.setHudSettings).toHaveBeenCalledWith({ surface: "janela" });
   });
 
-  it("says why instead of offering a switch that would do nothing", async () => {
-    // A checkout that never ran make-app.sh has no island to start.
+  it("offers no choice when the island cannot run, and says so", async () => {
+    // A checkout that never ran make-app.sh has no island to choose.
     mocks.islandStatus.mockResolvedValue({
       available: false,
       reason: "a ilha ainda não foi construída",
@@ -343,28 +343,26 @@ describe("Settings → HUD flutuante → a ilha", () => {
     });
     await renderSettled();
 
-    const toggle = await screen.findByTestId("island-enabled");
-    await waitFor(() => expect(toggle).toBeDisabled());
-    expect(screen.getByText("a ilha ainda não foi construída")).toBeInTheDocument();
-    expect(screen.queryByTestId("island-running")).not.toBeInTheDocument();
+    expect(await screen.findByTestId("hud-surface-unavailable")).toHaveTextContent(
+      /ainda não foi construída/i,
+    );
+    expect(screen.queryByTestId("hud-surface-ilha")).not.toBeInTheDocument();
   });
 
   it("reports whether the island is up right now", async () => {
     mocks.islandStatus.mockResolvedValue({ available: true, running: false });
     await renderSettled();
 
-    expect(await screen.findByTestId("island-running")).toHaveTextContent("Parada agora.");
+    expect(await screen.findByTestId("island-running")).toHaveTextContent("parada agora");
   });
-});
-describe("Settings → HUD flutuante → uma versão antiga do app", () => {
-  it("says the app can't do it instead of offering a switch that drops the click", async () => {
-    // An installed shell older than this setting answers without `island`.
-    mocks.getHudSettings.mockResolvedValue({ ...settings(), island: undefined });
+
+  it("says an older app can't choose, instead of dropping the click", async () => {
+    mocks.getHudSettings.mockResolvedValue(settings({ surface: null }));
     mocks.islandStatus.mockResolvedValue(null);
     await renderSettled();
 
-    const toggle = await screen.findByTestId("island-enabled");
-    await waitFor(() => expect(toggle).toBeDisabled());
-    expect(screen.getByText(/atualize o OmniCraft/i)).toBeInTheDocument();
+    expect(await screen.findByTestId("hud-surface-unavailable")).toHaveTextContent(
+      /atualize o OmniCraft/i,
+    );
   });
 });

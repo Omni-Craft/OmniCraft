@@ -60,7 +60,7 @@ const unknown = {
   mode: null,
   notifications: null,
   sound: null,
-  island: null,
+  surface: null,
 };
 
 describe("readHudSettings", () => {
@@ -71,7 +71,7 @@ describe("readHudSettings", () => {
       mode: DEFAULT_HUD_VISIBILITY,
       notifications: defaultNotifications(),
       sound: false,
-      island: true,
+      surface: "ilha",
     });
   });
 
@@ -82,7 +82,7 @@ describe("readHudSettings", () => {
       mode: "attention-only",
       notifications: defaultNotifications(),
       sound: false,
-      island: true,
+      surface: "ilha",
     });
   });
 
@@ -93,7 +93,7 @@ describe("readHudSettings", () => {
       mode: DEFAULT_HUD_VISIBILITY,
       notifications: defaultNotifications(),
       sound: false,
-      island: true,
+      surface: "ilha",
     });
   });
 
@@ -216,7 +216,7 @@ describe("mergeHudSettings", () => {
         enabled: true,
         mode: DEFAULT_HUD_VISIBILITY,
         notifications: defaultNotifications(),
-        island: true,
+        surface: "ilha",
       },
     });
   });
@@ -235,7 +235,7 @@ describe("mergeHudSettings", () => {
       enabled: true,
       mode: DEFAULT_HUD_VISIBILITY,
       notifications: defaultNotifications(),
-      island: true,
+      surface: "ilha",
     });
     assert.deepEqual(settings.hud, hud);
   });
@@ -247,7 +247,7 @@ describe("mergeHudSettings", () => {
       enabled: false,
       mode: "attention-only",
       notifications: defaultNotifications(),
-      island: true,
+      surface: "ilha",
     });
     assert.equal(settings.server_url, "https://a", "the rest of the file survives");
   });

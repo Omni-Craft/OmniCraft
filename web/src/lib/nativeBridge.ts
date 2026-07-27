@@ -175,9 +175,18 @@ export interface HudSettings {
   notifications: HudNotificationSettings;
   /** The app-wide notification sound, not a HUD-only copy of it. */
   sound: boolean;
-  /** Whether the native island (the notch HUD) runs alongside the app. */
-  island: boolean;
+  /** Where the HUD is drawn: the native island, or the floating window. */
+  surface: HudSurface;
 }
+
+/**
+ * Where the HUD is drawn.
+ *
+ * Both show the same feed centered at the top of the screen, so only one is up
+ * at a time — `ilha` is the native app fused with the notch (above the menu
+ * bar, where a window cannot go) and `janela` is the Electron window.
+ */
+export type HudSurface = "ilha" | "janela";
 
 /**
  * A patch: the top-level fields are replaced, and `notifications` is merged
@@ -197,8 +206,8 @@ export interface HudSettingsRead {
   mode: HudVisibilityMode | null;
   notifications: HudNotificationSettings | null;
   sound: boolean | null;
-  /** Whether the native island (the notch HUD) should run. */
-  island: boolean | null;
+  /** Where the HUD is drawn, or null on a shell that predates the choice. */
+  surface: HudSurface | null;
 }
 
 /**

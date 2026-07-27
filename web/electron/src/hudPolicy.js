@@ -88,14 +88,16 @@ function createHudPolicy({
    * closes it.
    */
   function apply() {
-    const { enabled, mode } = readSettings();
+    const { enabled, mode, surface } = readSettings();
     const win = getWindow();
-    if (enabled !== true) {
+    // The island draws the same feed in the same corner of the screen, so the
+    // window stays shut while it is the chosen surface — two of them stack.
+    if (enabled !== true || surface === "ilha") {
       // Unknown settings neither open an always-on-top window nor close one the
       // user already has: only an explicit `false` closes.
       autoExpanded = false;
       acknowledged = null;
-      if (enabled === false && win) {
+      if ((enabled === false || surface === "ilha") && win) {
         shellInitiatedClose = true;
         win.close();
       }

@@ -222,17 +222,30 @@ describe("hudIpc — notification preferences", () => {
 });
 
 describe("hudIpc — the native island", () => {
-  it("persists the switch and brings the process in line with it", async () => {
-    const h = harness();
-    await h.invoke("omnicraft:hud-set-settings", h.fromHud, { island: false });
+  it("takes the island down when the window becomes the surface", async () => {
+    // Both draw the same feed at the top of the screen: two of them stack.
+    const h = harness({ settings: { readable: true, enabled: true, surface: "ilha" } });
+    await h.invoke("omnicraft:hud-set-settings", h.fromHud, { surface: "janela" });
     assert.deepEqual(h.calls, [
-      ["writeSettings", { island: false }],
+      ["writeSettings", { surface: "janela" }],
       ["applyPolicy"],
       ["applyIsland", false],
     ]);
   });
 
-  it("leaves the island alone when the patch doesn't mention it", async () => {
+  it("takes the island down when the HUD itself is turned off", async () => {
+    const h = harness({ settings: { readable: true, enabled: true, surface: "ilha" } });
+    await h.invoke("omnicraft:hud-set-settings", h.fromHud, { enabled: false });
+    assert.deepEqual(h.calls.at(-1), ["applyIsland", false]);
+  });
+
+  it("brings it back up when the HUD is turned on over the island", async () => {
+    const h = harness({ settings: { readable: true, enabled: false, surface: "ilha" } });
+    await h.invoke("omnicraft:hud-set-settings", h.fromHud, { enabled: true });
+    assert.deepEqual(h.calls.at(-1), ["applyIsland", true]);
+  });
+
+  it("leaves the island alone when the patch touches neither", async () => {
     // Every other switch on the page writes through here; none of them should
     // stop a process the user did not ask to stop.
     const h = harness();
@@ -240,10 +253,10 @@ describe("hudIpc — the native island", () => {
     assert.ok(!h.calls.some(([name]) => name === "applyIsland"));
   });
 
-  it("refuses a non-boolean without touching the file", async () => {
+  it("refuses a surface it does not document, without touching the file", async () => {
     const h = harness();
     await assert.rejects(() =>
-      h.invoke("omnicraft:hud-set-settings", h.fromHud, { island: "sim" }),
+      h.invoke("omnicraft:hud-set-settings", h.fromHud, { surface: "notch" }),
     );
     assert.deepEqual(h.calls, []);
   });

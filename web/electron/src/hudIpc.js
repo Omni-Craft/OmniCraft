@@ -12,7 +12,7 @@
 
 "use strict";
 
-const { HUD_VISIBILITY_MODES } = require("./hudVisibility");
+const { HUD_SURFACES, HUD_VISIBILITY_MODES } = require("./hudVisibility");
 const {
   HUD_NOTIFICATION_CATEGORIES,
   isValidBudgetThreshold,
@@ -72,7 +72,7 @@ function validateNotificationsPatch(patch) {
  *   Throws when settings.json is present but unreadable — the rejection is the
  *   point: Settings renders "não pôde ser salva" instead of a stale value.
  * @param {(enabled: boolean) => void} [deps.applyIsland] Bring the native
- *   island process in line with the setting that was just written.
+ *   island process in line with the settings that were just written.
  * @param {() => {available: boolean, reason?: string, running: boolean}} [deps.islandStatus]
  * @param {(message: string) => void} [deps.onWarn]
  */
@@ -162,17 +162,22 @@ function registerHudIpc({
       if (typeof patch.sound !== "boolean") throw new Error("hud sound must be a boolean");
       next.sound = patch.sound;
     }
-    // The native island is a separate process, not a window, so it is applied
-    // by its own controller rather than by the HUD policy below.
-    if (patch?.island !== undefined) {
-      if (typeof patch.island !== "boolean") throw new Error("hud island must be a boolean");
-      next.island = patch.island;
+    // Where the HUD is drawn. The island is a separate process, not a window,
+    // so it is applied by its own controller rather than by the policy below.
+    if (patch?.surface !== undefined) {
+      if (!HUD_SURFACES.includes(patch.surface)) throw new Error("unknown hud surface");
+      next.surface = patch.surface;
     }
     // Throws through to the renderer when the file can't be read — the write is
     // refused rather than clobbering settings we never parsed.
     writeSettings(next);
     policy.applyPolicy();
-    if (next.island !== undefined && applyIsland) applyIsland(next.island);
+    // Both switches move the island: turning the HUD off takes it down, and
+    // choosing the window takes it down too.
+    if (applyIsland && (next.surface !== undefined || next.enabled !== undefined)) {
+      const now = readSettings();
+      applyIsland(now.enabled === true && now.surface === "ilha");
+    }
     return readSettings();
   });
 

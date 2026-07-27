@@ -52,13 +52,22 @@ const HUD_SETTINGS_UNREADABLE = Object.freeze({
   mode: null,
   notifications: null,
   sound: null,
-  island: null,
+  surface: null,
 });
 
-// The island has ridden the shell's lifetime since it shipped, so a settings
-// file written before this switch existed means "on" — reading it as off would
-// silently take away something the user already has.
-const DEFAULT_ISLAND_ENABLED = true;
+/**
+ * Where the HUD is drawn.
+ *
+ * `ilha` is the native island — a separate app fused with the notch, above the
+ * menu bar. `janela` is the Electron window. They show the SAME feed, so only
+ * one is ever up: two of them stack on top of each other at the top of the
+ * screen, which is what having both looked like.
+ */
+const HUD_SURFACES = ["ilha", "janela"];
+
+// The island shipped first and has ridden the shell's lifetime since, so a
+// settings file written before this choice existed keeps it.
+const DEFAULT_HUD_SURFACE = "ilha";
 
 /** Whether a quiet-hours endpoint was left unset at all. */
 function unsetQuietTime(value) {
@@ -154,7 +163,7 @@ function readHudSettings(settings) {
       mode: DEFAULT_HUD_VISIBILITY,
       notifications: { ...DEFAULT_HUD_NOTIFICATIONS },
       sound,
-      island: DEFAULT_ISLAND_ENABLED,
+      surface: DEFAULT_HUD_SURFACE,
     };
   }
   if (hud === null || typeof hud !== "object" || Array.isArray(hud)) return HUD_SETTINGS_UNREADABLE;
@@ -165,9 +174,9 @@ function readHudSettings(settings) {
   if (!HUD_VISIBILITY_MODES.includes(mode)) return HUD_SETTINGS_UNREADABLE;
   const notifications = readNotificationSettings(hud.notifications);
   if (notifications === null) return HUD_SETTINGS_UNREADABLE;
-  const island = hud.island === undefined ? DEFAULT_ISLAND_ENABLED : hud.island;
-  if (typeof island !== "boolean") return HUD_SETTINGS_UNREADABLE;
-  return { readable: true, enabled: hud.enabled, mode, notifications, sound, island };
+  const surface = hud.surface === undefined ? DEFAULT_HUD_SURFACE : hud.surface;
+  if (!HUD_SURFACES.includes(surface)) return HUD_SETTINGS_UNREADABLE;
+  return { readable: true, enabled: hud.enabled, mode, notifications, sound, surface };
 }
 
 /**
@@ -208,13 +217,13 @@ function mergeHudSettings(read, patch) {
         enabled: current.enabled,
         mode: current.mode,
         notifications: current.notifications,
-        island: current.island,
+        surface: current.surface,
       }
     : {
         enabled: false,
         mode: DEFAULT_HUD_VISIBILITY,
         notifications: { ...DEFAULT_HUD_NOTIFICATIONS },
-        island: DEFAULT_ISLAND_ENABLED,
+        surface: DEFAULT_HUD_SURFACE,
       };
   const { notifications: notificationsPatch, sound, ...top } = patch ?? {};
   const hud = {
@@ -450,6 +459,8 @@ function isRestingCertain(report) {
 
 module.exports = {
   HUD_VISIBILITY_MODES,
+  HUD_SURFACES,
+  DEFAULT_HUD_SURFACE,
   DEFAULT_HUD_VISIBILITY,
   DEFAULT_HUD_NOTIFICATIONS,
   UNNAMED_DISMISSAL,

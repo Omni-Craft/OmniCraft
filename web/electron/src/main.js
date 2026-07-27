@@ -3026,7 +3026,8 @@ if (!gotLock) {
     // It draws above the menu bar, which no Electron window can do, so it is a
     // separate process rather than another window. An unreadable settings file
     // is not a reason to withhold it — the default is on.
-    nativeIsland.apply(hudSettingsState().island !== false);
+    const hudAtStartup = hudSettingsState();
+    nativeIsland.apply(hudAtStartup.enabled === true && hudAtStartup.surface === "ilha");
     // Patch PATH for GUI-launched Electron on macOS/Linux:
     // A desktop launcher inherits a minimal system PATH that omits directories like
     // /opt/homebrew/bin and ~/.nvm/... where CLI tools (claude, codex, tmux) live.

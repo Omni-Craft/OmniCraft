@@ -511,3 +511,24 @@ describe("hudPolicy — the desktop notifications ride on the feed report", () =
     assert.equal(state.observed.at(-1), "reset");
   });
 });
+
+describe("hudPolicy — the island takes the window's place", () => {
+  it("never opens the window while the island is the chosen surface", () => {
+    // Both draw the same feed centered at the top of the screen, so opening
+    // the window here parks a second bar right under the island.
+    const h = harness({ settings: { readable: true, enabled: true, surface: "ilha" } });
+    h.policy.applyPolicy();
+    assert.ok(!h.state.calls.includes("open"), "a janela não deve abrir");
+  });
+
+  it("closes an open window when the island becomes the surface", () => {
+    const h = harness({ settings: { readable: true, enabled: true, mode: "always" } });
+    h.policy.applyPolicy();
+    h.policy.windowReady();
+    assert.ok(h.state.visible);
+
+    h.state.settings.surface = "ilha";
+    h.policy.applyPolicy();
+    assert.ok(h.state.calls.includes("close"), "a janela deve fechar");
+  });
+});

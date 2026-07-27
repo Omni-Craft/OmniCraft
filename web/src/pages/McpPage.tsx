@@ -179,7 +179,7 @@ export function McpPage() {
     "w-full rounded-lg border border-border bg-card/40 px-3 py-2 text-sm outline-none focus:border-ring";
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex max-w-5xl flex-col gap-6 px-6 py-8">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">Servidores MCP</h1>
         <p className="text-sm opacity-60">

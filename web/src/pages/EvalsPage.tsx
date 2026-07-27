@@ -168,7 +168,7 @@ function EvalsList({ onOpen }: { onOpen: (suiteId: string) => void }) {
   }, [load]);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-8">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-8">
       <header className="flex items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Avaliações de agentes</h1>
@@ -353,7 +353,7 @@ function SuiteDetail({ suiteId, onBack }: { suiteId: string; onBack: () => void 
   const workspaceValid = workspace.trim().startsWith("/");
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-5 px-6 py-8">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-8">
       <header className="flex items-center justify-between gap-3">
         <div>
           <button className="text-xs opacity-50 hover:opacity-100" onClick={onBack}>

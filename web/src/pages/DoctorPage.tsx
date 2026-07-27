@@ -39,7 +39,7 @@ export function DoctorPage() {
   }, [load]);
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-8">
+    <div className="mx-auto flex max-w-5xl flex-col gap-5 px-6 py-8">
       <header className="flex items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-semibold">Diagnóstico</h1>

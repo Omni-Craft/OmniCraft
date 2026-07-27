@@ -13,7 +13,12 @@ vi.mock("@/lib/identity", async (importOriginal) => ({
 const fetchMock = vi.mocked(authenticatedFetch);
 
 // The catalog link needs a router in scope.
-const render = () => rtlRender(<McpPage />, { wrapper: MemoryRouter });
+const render = (at = "/craftwork/mcps") =>
+  rtlRender(
+    <MemoryRouter initialEntries={[at]}>
+      <McpPage />
+    </MemoryRouter>,
+  );
 
 const AGENTS = [{ id: "ag_chat", name: "chat" }];
 
@@ -74,6 +79,22 @@ describe("McpPage", () => {
     render();
     await screen.findByTestId("mcp-shelf-memory");
     expect(screen.queryByTestId("mcp-shelf-github")).not.toBeInTheDocument();
+  });
+
+  it("keeps the directory link inside the shell the reader is in", async () => {
+    // Crossing to the other shell would swap the sidebar out mid-task.
+    render("/settings/mcps");
+    expect(await screen.findByTestId("mcp-directory-link")).toHaveAttribute(
+      "href",
+      "/settings/connectors",
+    );
+    cleanup();
+
+    render("/craftwork/mcps");
+    expect(await screen.findByTestId("mcp-directory-link")).toHaveAttribute(
+      "href",
+      "/craftwork/connectors",
+    );
   });
 
   it("counts the servers the agent already has", async () => {

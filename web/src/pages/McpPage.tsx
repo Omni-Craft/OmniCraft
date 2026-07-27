@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { apiErrorMessage } from "@/lib/apiErrors";
 import { avatarColor, avatarInitials } from "@/lib/avatarColor";
 import { authenticatedFetch } from "@/lib/identity";
-import { Link } from "@/lib/routing";
+import { Link, useLocation } from "@/lib/routing";
 
 interface McpServer {
   name: string;
@@ -225,6 +225,11 @@ export function McpPage() {
   const labelCls = "flex flex-col gap-1.5 text-xs font-medium";
   const count = Array.isArray(servers) ? servers.length : null;
   const agent = agents.find((a) => a.id === agentId);
+  // This page renders in both shells, and each has its own copy of the
+  // directory. Crossing over would swap the sidebar out from under the reader,
+  // so link to the one that lives in the shell they're already in.
+  const inSettings = useLocation().pathname.includes("/settings");
+  const directoryPath = inSettings ? "/settings/connectors" : "/craftwork/connectors";
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-7 px-6 py-8">
@@ -459,8 +464,9 @@ export function McpPage() {
               um clique preenche o formulário
             </span>
             <Link
-              to="/craftwork/connectors"
+              to={directoryPath}
               className="ml-auto text-xs text-brand-accent underline-offset-2 hover:underline"
+              data-testid="mcp-directory-link"
             >
               Ver todos, inclusive os que pedem credencial →
             </Link>

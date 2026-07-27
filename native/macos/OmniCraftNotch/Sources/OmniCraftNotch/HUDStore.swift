@@ -154,6 +154,15 @@ final class HUDStore {
         }
     }
 
+    /// O que a lista mostra por padrão: o que pode estar acontecendo agora.
+    ///
+    /// Uma sessão de dias atrás cujo runner caiu não está rodando — isso é
+    /// fato, não palpite, e enterrava o que importa numa parede de linhas. Já
+    /// "desconhecido" com o runner de pé continua na lista: pode estar rodando,
+    /// e a regra é que incerteza não some. O resto fica atrás de "mostrar
+    /// todas", nunca descartado.
+    var sessoesAtivas: [AgentSession] { visibleSessions.filter(\.podeEstarRodando) }
+
     private func rank(_ state: SessionState) -> Int {
         switch state {
         case .aguardandoVoce: 0

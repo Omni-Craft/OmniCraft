@@ -162,12 +162,20 @@ struct ExpandedIslandView: View {
         return store.visibleSessions.filter { $0.id != idNoCard }
     }
 
-    /// Lista longa colapsa em 5 + "Mostrar todas as N sessões" (lição do VibeIsland);
-    /// aberta, rola dentro da altura máxima — nenhuma sessão some do dado.
+    /// O que a lista mostra fechada: só o que pode estar acontecendo agora.
+    private var sessoesAtivas: [AgentSession] {
+        let idNoCard = store.pedidoAtual?.sessao.id
+        return store.sessoesAtivas.filter { $0.id != idNoCard }
+    }
+
+    /// Por padrão, só as ativas; "mostrar todas" abre o histórico inteiro, que
+    /// então colapsa em 5 e rola dentro da altura máxima. Nenhuma sessão some
+    /// do dado — só sai da primeira tela.
     @ViewBuilder
     private var sessionList: some View {
         let todas = sessoesEmLista
-        if todas.count <= 5 || store.mostrarTodasSessoes {
+        let ativas = sessoesAtivas
+        if store.mostrarTodasSessoes {
             if todas.count <= 8 {
                 sessionRows(todas)
             } else {
@@ -176,12 +184,20 @@ struct ExpandedIslandView: View {
                 }
                 .frame(height: maxListHeight)
             }
-            if todas.count > 5 {
-                botaoMostrar("Mostrar menos", contrair: true)
-            }
+            botaoMostrar("Mostrar menos", contrair: true)
         } else {
-            sessionRows(Array(todas.prefix(5)))
-            botaoMostrar("Mostrar todas as \(todas.count) sessões", contrair: false)
+            if ativas.isEmpty {
+                Text("Nada em execução agora")
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 2)
+            } else {
+                sessionRows(Array(ativas.prefix(5)))
+            }
+            if todas.count > ativas.count || ativas.count > 5 {
+                botaoMostrar("Mostrar todas as \(todas.count) sessões", contrair: false)
+            }
         }
     }
 

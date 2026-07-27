@@ -102,6 +102,19 @@ struct AgentSession: Identifiable, Equatable {
 
     var needsAttention: Bool { state == .aguardandoVoce && !requests.isEmpty }
 
+    /// Se esta sessão pode estar acontecendo agora.
+    ///
+    /// Uma sessão cujo runner caiu não está rodando — isso é fato. Já um
+    /// estado ilegível com o runner de pé pode estar: incerteza não vira
+    /// silêncio, então ela continua à vista.
+    var podeEstarRodando: Bool {
+        switch state {
+        case .emExecucao, .aguardandoVoce: true
+        case .desconhecido: runnerOnline != false
+        case .falhou, .ocioso: false
+        }
+    }
+
     /// "runner: online · host: macbook · custo: US$ 0,42" — desconhecido vira "—".
     var metadataLine: String {
         let runner = runnerOnline.map { $0 ? "online" : "offline" } ?? "—"

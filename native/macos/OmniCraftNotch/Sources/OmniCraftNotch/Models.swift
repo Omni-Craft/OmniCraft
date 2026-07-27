@@ -198,6 +198,8 @@ struct ServidorLocal: Identifiable, Equatable {
     var uptime: String?        // "há 40 min" — nil = desconhecido
     var rodando: Bool
     var principal: Bool = true // false = vai para o grupo "outros ouvintes"
+    /// Dono da porta; `nil` nas fixtures, e sem ele não há o que parar.
+    var pid: Int32?
 
     var url: String { "http://\(host)" }
 }

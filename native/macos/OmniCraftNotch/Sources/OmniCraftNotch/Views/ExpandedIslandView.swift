@@ -265,12 +265,19 @@ struct ExpandedIslandView: View {
 
     @State private var utilidadeAberta: Utilidade?
 
+    /// Comandos e rotas ainda não existem fora da demonstração — não há de onde
+    /// tirá-los, e uma aba de fixtures oferece botões sobre projetos que não
+    /// são seus. Servidores, esse sim, é lido desta máquina.
+    private var utilidadesDisponiveis: [Utilidade] {
+        store.utilidadesDeDemonstracao ? Utilidade.allCases : [.servidores]
+    }
+
     private var utilidadesView: some View {
         VStack(alignment: .leading, spacing: 8) {
             Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
 
             HStack(spacing: 6) {
-                ForEach(Utilidade.allCases) { utilidade in
+                ForEach(utilidadesDisponiveis) { utilidade in
                     botaoUtilidade(utilidade)
                 }
                 Spacer(minLength: 0)
@@ -285,10 +292,19 @@ struct ExpandedIslandView: View {
         }
     }
 
+    private func avisoUtilidade(_ texto: String) -> some View {
+        Text(texto)
+            .font(.system(size: 10.5))
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
     private func botaoUtilidade(_ utilidade: Utilidade) -> some View {
         let aberta = utilidadeAberta == utilidade
         return Button {
             utilidadeAberta = aberta ? nil : utilidade
+            // `lsof` é caro demais para o polling do feed; relê ao abrir.
+            if !aberta && utilidade == .servidores { store.atualizarServidores() }
         } label: {
             HStack(spacing: 4) {
                 Image(systemName: utilidade.icone)
@@ -313,6 +329,11 @@ struct ExpandedIslandView: View {
         let principais = store.servidores.filter(\.principal)
         let outros = store.servidores.filter { !$0.principal }
         return VStack(alignment: .leading, spacing: 8) {
+            if store.servidoresIlegiveis {
+                avisoUtilidade("Não deu para ler quem está escutando nesta máquina")
+            } else if principais.isEmpty && outros.isEmpty {
+                avisoUtilidade("Nenhum servidor escutando agora")
+            }
             ForEach(principais) { linhaServidor($0) }
             if !outros.isEmpty {
                 Text("outros ouvintes")
@@ -356,14 +377,14 @@ struct ExpandedIslandView: View {
                 .foregroundStyle(.tertiary)
                 .fixedSize()
             botaoIcone("arrow.up.right.square", "Abrir \(servidor.host) no navegador") {
-                store.acaoServidor(servidor, "abrir")
+                store.abrirServidor(servidor)
             }
             botaoIcone("doc.on.doc", "Copiar a URL de \(servidor.nome)") {
                 store.copiar(servidor.url, rotulo: servidor.nome)
             }
             if servidor.rodando {
                 botaoIcone("stop.circle", "Parar o servidor \(servidor.nome)", cor: .red) {
-                    store.acaoServidor(servidor, "parar")
+                    store.pararServidor(servidor)
                 }
             }
         }

@@ -326,9 +326,37 @@ final class HUDStore {
 
     // MARK: Utilidades locais (ações visuais: log; copiar usa o clipboard de verdade)
 
-    let servidores = MockFeed.servidores
+    /// Ouvintes desta máquina. `nil` = ainda não olhamos ou o `lsof` não
+    /// respondeu; vazio = ninguém escutando. As fixtures valem só no modo Mock,
+    /// onde a ilha inteira é demonstração.
+    private(set) var servidoresDetectados: [ServidorLocal]?
+    private let detectorServidores = ServidorDetector()
+
+    var servidores: [ServidorLocal] {
+        feedSource == .mock ? MockFeed.servidores : (servidoresDetectados ?? [])
+    }
+
+    /// Se a leitura dos ouvintes falhou — a aba diz isso em vez de "nenhum".
+    var servidoresIlegiveis: Bool { feedSource != .mock && servidoresDetectados == nil }
+
+    /// Comandos salvos e rotas ainda não existem fora da demonstração: não há
+    /// de onde tirá-los, e mostrar a fixture seria oferecer botões que agem
+    /// sobre projetos que não são seus.
+    var utilidadesDeDemonstracao: Bool { feedSource == .mock }
+
     let comandos = MockFeed.comandos
     let atalhos = MockFeed.atalhos
+
+    /// Relê os ouvintes. Chamada ao abrir a aba: `lsof` custa caro demais para
+    /// entrar no polling do feed.
+    func atualizarServidores() {
+        guard feedSource != .mock else { return }
+        let detector = detectorServidores
+        Task.detached(priority: .utility) {
+            let lista = detector.detectar()
+            await MainActor.run { self.servidoresDetectados = lista }
+        }
+    }
 
     func copiar(_ texto: String, rotulo: String) {
         NSPasteboard.general.clearContents()
@@ -336,8 +364,24 @@ final class HUDStore {
         log("⧉ Copiado \(rotulo): \(texto)")
     }
 
-    func acaoServidor(_ servidor: ServidorLocal, _ acao: String) {
-        log("⚙ Servidor \(servidor.nome): \(acao) (visual)")
+    func abrirServidor(_ servidor: ServidorLocal) {
+        guard let url = URL(string: servidor.url) else { return }
+        NSWorkspace.shared.open(url)
+        log("→ Abrindo \(servidor.url)")
+    }
+
+    /// Encerra o servidor com SIGTERM — o mesmo que Ctrl-C no terminal dele.
+    func pararServidor(_ servidor: ServidorLocal) {
+        if let motivo = detectorServidores.parar(servidor) {
+            log("⚠︎ Não parou \(servidor.host): \(motivo)")
+        } else {
+            log("■ Encerrando \(servidor.host)")
+        }
+        // O processo leva um instante para sair; a releitura confirma.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1))
+            self.atualizarServidores()
+        }
     }
 
     func abrirAtalho(_ atalho: AtalhoLocal) {

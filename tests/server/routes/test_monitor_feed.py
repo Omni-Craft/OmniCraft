@@ -328,6 +328,42 @@ def test_missing_status_for_a_dispatched_session_is_unknown_not_idle(db_uri: str
     assert body["counts"]["active"] == 0
 
 
+def test_offline_runner_settles_a_dispatched_session_instead_of_unknown(db_uri: str) -> None:
+    """Nothing executes a session without a connected runner, so a cache
+    miss stops being ignorance once liveness says the runner is down.
+
+    Without this every session on the server reads ``unknown`` forever
+    after a restart — the cache that would clear them only fills for
+    sessions that run again, and a finished one never will."""
+
+    def _runner_down(ids: list[str]) -> dict[str, SessionLiveness]:
+        return {sid: SessionLiveness(runner_online=False, host_online=True) for sid in ids}
+
+    seeded = _seed(db_uri, title="Ontem", host_id="host_a", runner_id="runner_1")
+    assert seeded not in sessions_module._session_status_cache
+
+    body = _get(_app(db_uri, liveness_lookup=_runner_down), "?only_active=false")
+
+    row = next(r for r in body["sessions"] if r["session_id"] == seeded)
+    assert row["status"] == "idle"
+    assert "status_unknown" not in row["degraded"]
+    assert body["counts"]["unknown"] == 0
+
+
+def test_unresolved_liveness_still_reads_unknown(db_uri: str) -> None:
+    """ "We could not tell" is not "the runner is down": a lookup that
+    skips the row must not settle it."""
+
+    def _sem_resposta(ids: list[str]) -> dict[str, SessionLiveness]:
+        return {}
+
+    _seed(db_uri, title="Incerta", host_id="host_a", runner_id="runner_1")
+
+    body = _get(_app(db_uri, liveness_lookup=_sem_resposta))
+
+    assert body["sessions"][0]["status"] == "unknown"
+
+
 def test_never_dispatched_session_with_no_status_is_idle(db_uri: str) -> None:
     """The boundary: no runner and no host means it never ran anywhere, so
     ``idle`` is read off the row rather than assumed from silence."""

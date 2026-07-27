@@ -135,6 +135,7 @@ def _monitor_status(
     child_session_ids: list[str],
     *,
     dispatched: bool,
+    runner_offline: bool = False,
 ) -> tuple[MonitorStatus, list[str]]:
     """
     Resolve a session's monitor status, preserving ``waiting``.
@@ -153,9 +154,20 @@ def _monitor_status(
     no binding at all has never been dispatched anywhere, so ``idle``
     there is a fact off the row, not an absence.
 
+    A cache miss stops being ignorance once liveness answers: nothing
+    executes a session without a connected runner, so a dispatched row
+    whose runner is KNOWN offline reads ``idle`` — that is proof off the
+    liveness lookup, not an assumption. Unresolved liveness
+    (``runner_offline=False`` because nobody could tell) keeps
+    ``unknown``. Without this every session on the server reads
+    ``unknown`` forever after a restart, since the cache that would
+    clear them only fills for sessions that run again.
+
     :param conversation_id: Session identifier, e.g. ``"conv_abc123"``.
     :param child_session_ids: Direct sub-agent child ids.
     :param dispatched: Whether the session has a runner or host binding.
+    :param runner_offline: Whether liveness resolved the session's runner
+        as disconnected. ``False`` also covers "we could not tell".
     :returns: ``(status, degraded)`` — the status literal, plus the
         degradation slugs earned while resolving it.
     """
@@ -188,6 +200,8 @@ def _monitor_status(
     if unreadable:
         return "unknown", degraded
     if dispatched:
+        if runner_offline:
+            return "idle", degraded
         return "unknown", [*degraded, "status_unknown"]
     return "idle", degraded
 
@@ -1075,6 +1089,8 @@ def create_monitor_router(
                 item.id,
                 child_ids,
                 dispatched=conv.runner_id is not None or conv.host_id is not None,
+                # Only a resolved ``False`` is proof; ``None`` is ignorance.
+                runner_offline=item.runner_online is False,
             )
             pending_count, pending, pending_degraded = _pending_for_row(
                 item.id, child_ids, pending_counts

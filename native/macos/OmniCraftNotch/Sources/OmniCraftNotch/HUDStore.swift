@@ -189,13 +189,25 @@ final class HUDStore {
     /// Velocidade da animação do pet — o padrão desacelera o manifesto.
     var ritmoPet: RitmoPet = .ameno
 
+    /// Injeta um snapshot no lugar de uma busca — só para os testes, que
+    /// precisam de um feed sem rede.
+    func aplicarSnapshotParaTeste(_ novo: FeedSnapshot) {
+        snapshot = novo
+    }
+
     /// Prioridade: o que exige você primeiro, depois o que está acontecendo.
     var estadoMascote: EstadoMascote {
         if hasAttention { return .atencao }
         if visibleSessions.contains(where: { $0.state == .falhou }) { return .erro }
         if visibleSessions.contains(where: { $0.state == .emExecucao }) { return .trabalhando }
         if !concluidasNaoVistas.isEmpty { return .concluido }
-        return visibleSessions.isEmpty ? .oculto : .ocioso
+        // Máquina parada é o estado mais comum, e some o pet junto seria tirar
+        // o rosto da ilha justamente na maior parte do tempo. Ele só se
+        // esconde quando não há feed para representar.
+        switch snapshot.counts {
+        case .unavailable, .disconnected: return .oculto
+        case .exact, .floor: return .ocioso
+        }
     }
 
     /// Chamado a cada leitura: o que saiu de "em execução" virou conclusão pendente.

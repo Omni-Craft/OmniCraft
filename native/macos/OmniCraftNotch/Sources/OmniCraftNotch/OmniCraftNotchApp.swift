@@ -82,6 +82,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let args = CommandLine.arguments
         if let i = args.firstIndex(of: "--cenario"), args.indices.contains(i + 1),
            let n = Int(args[i + 1]), (1...MockScenario.allCases.count).contains(n) {
+            // Pedir uma fixture é pedir o modo Mock: a fonte padrão é o feed
+            // ao vivo, e o cenário sozinho não muda nada — o `didSet` do store
+            // só aplica quando a fonte é Mock. Sem isto, `--cenario` abria a
+            // ilha no feed real e a documentação prometia o contrário.
+            store.feedSource = .mock
             store.scenario = MockScenario.allCases[n - 1]
         }
         if args.contains("--live") {

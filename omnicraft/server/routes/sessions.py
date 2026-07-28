@@ -11754,11 +11754,13 @@ async def _stream_live_events(
     reconcile pre-subscribe state via the snapshot endpoint
     (``GET /v1/sessions/{id}``) and dedupe by item id.
 
-    On client disconnect the subscribe loop breaks; the
-    ``finally`` block emits a ``[DONE]`` sentinel so well-behaved
-    SSE consumers see a clean stream termination. The pub-sub
-    layer auto-cleans this generator's subscriber slot in its own
-    ``finally`` when iteration exits.
+    On client disconnect the subscribe loop breaks; the ``finally`` block
+    emits a ``[DONE]`` sentinel so well-behaved SSE consumers see a clean
+    stream termination. A subscriber-queue overflow instead ends without
+    ``[DONE]`` so clients treat it as a dropped transport, reconnect, and
+    reconcile from the persisted snapshot. The pub-sub layer auto-cleans
+    this generator's subscriber slot in its own ``finally`` when iteration
+    exits.
 
     Each emitted dict is validated against
     :data:`ServerStreamEvent` at the wire boundary so a runtime
@@ -11850,6 +11852,14 @@ async def _stream_live_events(
         # fecha, o gerador recebe ``GeneratorExit`` ali, e um ``yield`` nessa
         # hora levanta ``RuntimeError: async generator ignored GeneratorExit``.
         yield "data: [DONE]\n\n"
+    except session_stream.SubscriberOverflowError:
+        # Assinante que ficou para trás do limite da fila: encerra sem
+        # ``[DONE]`` para o cliente tratar como transporte caído, reconectar e
+        # reconciliar pelo snapshot persistido.
+        _logger.warning(
+            "session stream subscriber overflowed for %s; closing for snapshot reconnect",
+            session_id,
+        )
     finally:
         # The non-None checks besides presence_token's are type
         # narrowing only: a minted token implies both were set above.

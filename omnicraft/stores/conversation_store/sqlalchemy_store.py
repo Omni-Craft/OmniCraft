@@ -2300,7 +2300,14 @@ class SqlAlchemyConversationStore(ConversationStore):
                 )
                 .all()
             )
-            return [_to_conversation(row) for row in rows]
+            # Hidrata os rótulos (uma consulta em lote, sem N+1): o envelope de
+            # init da sessão é montado a partir de ``conversation.labels``, e o
+            # caminho de reconexão (``_on_runner_connect``) tira as conversas
+            # daqui. Sem isto o envelope vai com rótulos vazios, as diretivas de
+            # fork (carry-history / transcript de origem) nunca chegam ao runner,
+            # e uma sessão nativa forkada sobe sem histórico.
+            labels_by_conv = _fetch_labels_bulk(session, [row.id for row in rows])
+            return [_to_conversation(row, labels_by_conv.get(row.id, {})) for row in rows]
 
     def list_stale_unbound_conversations(
         self,

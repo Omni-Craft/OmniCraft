@@ -396,9 +396,7 @@ name: meu-agente
 description: >-
   Um revisor de PRs que lê o diff e comenta em pt-BR.
 executor:
-  type: omnicraft
-  config:
-    harness: claude-sdk
+  harness: claude-sdk
 os_env:
   type: caller_process
   cwd: .

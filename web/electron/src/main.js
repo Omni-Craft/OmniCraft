@@ -1045,15 +1045,14 @@ let splashWindow = null;
 // True while autoStartLocalStack is booting/re-pointing the local server, so a
 // transient setup-page fallback does not dismiss the splash early.
 let autostartInProgress = false;
-// When the splash opened, and whether its close is already deferred. The boot
-// scene is a full loop the user wants to watch, so the splash stays up for at
-// least one loop even when the app is ready sooner — the reveal happens at
-// max(scene loop, app ready).
+// When the splash opened, and whether its close is already deferred.
 let splashOpenedAt = 0;
 let splashCloseScheduled = false;
-// One full loop of the boot scene (measured beat by beat in splash/index.html);
-// the fish is swimming back off screen at the end, a natural point to reveal.
-const MIN_SPLASH_MS = 36000;
+// Só o suficiente para o splash não piscar: numa inicialização quente o app
+// fica pronto em instantes, e segurar a tela para a animação terminar é fazer
+// quem abriu o app esperar por um enfeite. A cena continua rodando enquanto o
+// servidor sobe — que é para isso que ela existe.
+const MIN_SPLASH_MS = 900;
 
 /**
  * Open the boot splash over a main window, matching its bounds so the reveal is
@@ -1092,9 +1091,9 @@ function openSplash(mainWin) {
 
 /**
  * Ask to take the splash down. The app may be ready, but the boot scene runs
- * for one full loop the user wants to see, so a request that arrives early is
- * deferred until the loop finishes; a request at or past that just closes.
- * Safe to call repeatedly.
+ * for a beat, so a request that arrives in the first instants is deferred just
+ * long enough to avoid a flash; anything later closes at once. Safe to call
+ * repeatedly.
  */
 function dismissSplash() {
   if (!splashWindow) return;

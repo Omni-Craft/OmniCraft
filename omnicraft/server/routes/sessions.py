@@ -11819,27 +11819,37 @@ async def _stream_live_events(
             presence_root_id, session_id, viewer_user_id, viewer_idle
         )
     try:
-        async for event in session_stream.subscribe(
-            session_id,
-            heartbeat_interval_s=_SESSION_STREAM_HEARTBEAT_INTERVAL_S,
-            ready_event={"type": "session.heartbeat"},
-            # In-flight text replay must be captured synchronously at slot
-            # registration (before ``ready_event`` suspends), not in the
-            # async ``on_subscribed`` hook, or window deltas double-render.
-            # Resource state stays in ``on_subscribed`` — it needs
-            # awaits and is not dedup-sensitive.
-            pre_ready_snapshot=lambda: inflight_text.snapshot_for(session_id),
-            on_subscribed=on_subscribed,
-        ):
-            if await request.is_disconnected():
-                break
-            event_type = event.get("type")
-            if not isinstance(event_type, str):
-                raise ValueError(
-                    f"session stream event missing string ``type`` field: {event!r}",
-                )
-            validated = _SERVER_STREAM_EVENT_ADAPTER.validate_python(event)
-            yield _format_sse(event_type, validated.model_dump())
+        # ``aclosing`` propaga o ``aclose`` de fora para dentro do
+        # ``subscribe``; um ``async for`` solto deixaria a vaga de assinante
+        # presa até o coletor de lixo passar.
+        async with contextlib.aclosing(
+            session_stream.subscribe(
+                session_id,
+                heartbeat_interval_s=_SESSION_STREAM_HEARTBEAT_INTERVAL_S,
+                ready_event={"type": "session.heartbeat"},
+                # In-flight text replay must be captured synchronously at slot
+                # registration (before ``ready_event`` suspends), not in the
+                # async ``on_subscribed`` hook, or window deltas double-render.
+                # Resource state stays in ``on_subscribed`` — it needs
+                # awaits and is not dedup-sensitive.
+                pre_ready_snapshot=lambda: inflight_text.snapshot_for(session_id),
+                on_subscribed=on_subscribed,
+            )
+        ) as live_events:
+            async for event in live_events:
+                if await request.is_disconnected():
+                    break
+                event_type = event.get("type")
+                if not isinstance(event_type, str):
+                    raise ValueError(
+                        f"session stream event missing string ``type`` field: {event!r}",
+                    )
+                validated = _SERVER_STREAM_EVENT_ADAPTER.validate_python(event)
+                yield _format_sse(event_type, validated.model_dump())
+        # Só no fim normal. NUNCA dentro do ``finally``: quando o cliente
+        # fecha, o gerador recebe ``GeneratorExit`` ali, e um ``yield`` nessa
+        # hora levanta ``RuntimeError: async generator ignored GeneratorExit``.
+        yield "data: [DONE]\n\n"
     finally:
         # The non-None checks besides presence_token's are type
         # narrowing only: a minted token implies both were set above.
@@ -11849,7 +11859,6 @@ async def _stream_live_events(
             and presence_root_id is not None
         ):
             presence.disconnect(presence_root_id, viewer_user_id, presence_token)
-        yield "data: [DONE]\n\n"
 
 
 # Bounds for per-session native-terminal pass-through args

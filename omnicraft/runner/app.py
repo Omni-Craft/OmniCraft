@@ -14829,6 +14829,29 @@ def create_runner_app(
 
                     _on_proxy_stream_end(conv_id, error=_stream_failed_error)
 
+            except _ContextWindowOverflow as overflow:
+                # Tratado aqui, e não em quem chama ``proxy_stream``, para o
+                # marcador de turno em voo ser limpo em TODOS os chamadores —
+                # ao vivo e em segundo plano. Sem isto, o turno ao vivo deixava
+                # o marcador preso para sempre, escondendo o processo do
+                # harness do coletor de ociosos pelo resto da vida do servidor.
+                _error = {
+                    "code": "context_length_exceeded",
+                    "message": (
+                        f"Context window exceeded: {overflow.actual_tokens} tokens "
+                        f"> {overflow.max_tokens} max"
+                    ),
+                    "type": "_ContextWindowOverflow",
+                }
+                _overflow_fail = {
+                    "type": "response.failed",
+                    "response": {"status": "failed", "error": _error},
+                    "error": _error,
+                }
+                _publish_event(conv_id, _overflow_fail)
+                _on_proxy_stream_end(conv_id, error=_error)
+                yield _response_failed_event(_error)
+
             except (httpx.HTTPError, RuntimeError) as exc:
                 # RuntimeError covers httpx.StreamClosed which
                 # is NOT an HTTPError subclass — raised when the

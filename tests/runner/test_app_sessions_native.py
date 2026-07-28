@@ -16,6 +16,7 @@ import logging
 import shutil
 import sys
 import threading
+import time
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -11114,7 +11115,13 @@ async def test_required_terminal_exit_while_idle_does_not_fail_session(tmp_path:
         }
         queued_events: list[dict[str, Any]] = []
         parent_events: list[dict[str, Any]] = []
-        for _ in range(1000):
+        # Espera com prazo REAL, não com cessão de loop: `sleep(0)` devolve o
+        # controle ao event loop mas não deixa o relógio andar, então mil voltas
+        # podem passar em microssegundos enquanto a tarefa de fundo ainda espera
+        # por algo que leva tempo de verdade. Num runner carregado isso vira
+        # sorteio — e foi assim que este teste caiu no CI.
+        prazo = time.monotonic() + 5.0
+        while time.monotonic() < prazo:
             queued_events.extend(
                 _drain_session_event_queue(_session_event_queues_ref.get(conv_id))
             )
@@ -11123,7 +11130,7 @@ async def test_required_terminal_exit_while_idle_does_not_fail_session(tmp_path:
             )
             if pm.released and deleted_event in queued_events:
                 break
-            await asyncio.sleep(0)
+            await asyncio.sleep(0.01)
     finally:
         _session_event_queues_ref.pop(conv_id, None)
         _session_event_queues_ref.pop(parent_id, None)

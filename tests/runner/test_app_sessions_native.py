@@ -18067,3 +18067,226 @@ async def test_events_stop_session_on_kiro_native_503_when_kill_fails(
         f"No session.status: idle should be enqueued when kill_session failed; "
         f"got {status_idle!r}."
     )
+
+
+async def test_ensure_terminal_route_recreates_dead_registered_pane(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Ensure route detects a dead-but-registered pane and auto-creates.
+
+    When a Claude terminal dies without cleanup (external tmux kill), the
+    registry retains a stale entry whose tmux pane is dead.
+    ``get_terminal_resource`` probes ``is_alive()`` and returns ``None``,
+    so the ensure route falls through to ``_auto_create_claude_terminal``.
+    The turn-time self-heal (``_ensure_native_terminal_for_turn``) delegates
+    to this same ensure route after closing the stale registry entry.
+
+    :param monkeypatch: Pytest monkeypatch fixture.
+    :param tmp_path: Temporary directory fixture.
+    :returns: None.
+    """
+    sid = "deadbeef12345678deadbeef12345678"
+    auto_create_calls: list[str] = []
+
+    async def _stub_auto_create(
+        session_id: str,
+        resource_registry: object,
+        publish_event: object,
+        **_kwargs: object,
+    ) -> SessionResourceView:
+        auto_create_calls.append(session_id)
+        return SessionResourceView(
+            id="terminal_claude_main", type="terminal", session_id=session_id, name="re-created"
+        )
+
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_claude_terminal", _stub_auto_create)
+
+    registry = TerminalRegistry()
+    dead_instance = TerminalInstance(
+        name="claude",
+        session_key="main",
+        socket_path=tmp_path / "dead.sock",
+        private_dir=tmp_path / "dead_private",
+    )
+    dead_instance.running = True
+    (tmp_path / "dead_private").mkdir(exist_ok=True)
+
+    async def _fake_is_alive() -> bool:
+        dead_instance.running = False
+        return False
+
+    dead_instance.is_alive = _fake_is_alive  # type: ignore[assignment]
+
+    async def _noop_close() -> None:
+        pass
+
+    dead_instance.close = _noop_close  # type: ignore[assignment]
+
+    with registry._lock:
+        registry._by_conversation[sid] = {("claude", "main"): dead_instance}
+        registry._instance_locks[(sid, "claude", "main")] = threading.Lock()
+
+    app = create_runner_app(
+        process_manager=_FakeProcessManager(_ScriptedHarnessClient([])),  # type: ignore[arg-type]
+        server_client=NullServerClient(),  # type: ignore[arg-type]
+        terminal_registry=registry,
+    )
+
+    async with _runner_client(app) as client:
+        resp = await client.post(
+            f"/v1/sessions/{sid}/resources/terminals",
+            json={"terminal": "claude", "session_key": "main", "ensure_native_terminal": True},
+        )
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["name"] == "re-created", (
+        f"Expected ensure to auto-create after dead pane; got {resp.json()['name']!r}"
+    )
+    assert auto_create_calls == [sid], (
+        f"Expected _auto_create_claude_terminal to be called; got {auto_create_calls}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_dead_registered_pane_close_restores_running_for_kill_server(
+    tmp_path: Path,
+) -> None:
+    """``running`` must be restored before ``close()`` so kill-server runs.
+
+    ``is_alive()`` sets ``instance.running = False`` as a side effect when
+    the pane is dead. ``TerminalInstance.close()`` checks ``self.running``
+    before issuing ``tmux kill-server``. The self-heal path in
+    ``_ensure_native_terminal_for_turn`` must restore ``running = True``
+    after detecting a dead pane so the subsequent ``close()`` properly
+    kills the remain-on-exit tmux server instead of leaving it orphaned.
+
+    This test exercises the contract directly on ``TerminalRegistry.close``
+    with a tracking ``close()`` stub that captures ``running`` at call time.
+
+    :param tmp_path: Temporary directory fixture.
+    :returns: None.
+    """
+    sid = "deadbeef12345678deadbeef12345678"
+    registry = TerminalRegistry()
+    dead_instance = TerminalInstance(
+        name="claude",
+        session_key="main",
+        socket_path=tmp_path / "dead.sock",
+        private_dir=tmp_path / "dead_private",
+    )
+    dead_instance.running = True
+    (tmp_path / "dead_private").mkdir(exist_ok=True)
+
+    async def _fake_is_alive() -> bool:
+        dead_instance.running = False
+        return False
+
+    dead_instance.is_alive = _fake_is_alive  # type: ignore[assignment]
+
+    running_at_close: list[bool] = []
+
+    async def _tracking_close() -> None:
+        running_at_close.append(dead_instance.running)
+
+    dead_instance.close = _tracking_close  # type: ignore[assignment]
+
+    with registry._lock:
+        registry._by_conversation[sid] = {("claude", "main"): dead_instance}
+        registry._instance_locks[(sid, "claude", "main")] = threading.Lock()
+
+    alive = await dead_instance.is_alive()
+    assert alive is False
+    assert dead_instance.running is False, "is_alive() should set running=False"
+
+    # This is what _ensure_native_terminal_for_turn does: restore running
+    # before calling registry.close() so close() issues kill-server.
+    dead_instance.running = True
+    await registry.close(sid, "claude", "main")
+
+    assert len(running_at_close) == 1, (
+        f"Expected close() to be called once; got {len(running_at_close)} calls"
+    )
+    assert running_at_close[0] is True, (
+        "running must be True when close() is called so tmux kill-server runs; "
+        "was False — is_alive() side-effect was not restored"
+    )
+    assert registry.get(sid, "claude", "main") is None, (
+        "Stale entry must be removed from the registry"
+    )
+
+
+@pytest.mark.asyncio
+async def test_turn_time_self_heal_probes_a_registered_but_dead_pane(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """Um painel registrado mas morto é reconstruído antes do turno.
+
+    O reaper de ociosos remove a entrada do registro quando ele mesmo recolhe
+    o painel, e esse caso já era coberto. O que faltava é o painel que morre
+    SEM passar pelo reaper — um ``tmux kill`` externo, por exemplo: a entrada
+    continua no registro, o self-heal confiava nessa presença e devolvia sem
+    fazer nada, e o turno era injetado num alvo morto (a mensagem se perde).
+
+    Este teste chama o self-heal de verdade, com um painel registrado cuja
+    sonda ``is_alive()`` diz que ele morreu, e exige que a rota de ensure seja
+    acionada. Sem a sonda, nada é chamado e o teste falha.
+
+    :param monkeypatch: Fixture de monkeypatch.
+    :param tmp_path: Diretório temporário.
+    :returns: None.
+    """
+    sid = "deadpane12345678deadpane12345678"
+    ensure_calls: list[str] = []
+
+    async def _stub_auto_create(
+        session_id: str,
+        resource_registry: object,
+        publish_event: object,
+        **_kwargs: object,
+    ) -> SessionResourceView:
+        del resource_registry, publish_event
+        ensure_calls.append(session_id)
+        return SessionResourceView(
+            id="terminal_claude_main", type="terminal", session_id=session_id, name="re-created"
+        )
+
+    monkeypatch.setattr("omnicraft.runner.app._auto_create_claude_terminal", _stub_auto_create)
+
+    registry = TerminalRegistry()
+    dead = TerminalInstance(
+        name="claude",
+        session_key="main",
+        socket_path=tmp_path / "dead.sock",
+        private_dir=tmp_path / "dead_private",
+    )
+    (tmp_path / "dead_private").mkdir(exist_ok=True)
+    dead.running = True
+
+    async def _dead_is_alive() -> bool:
+        dead.running = False
+        return False
+
+    async def _noop_close() -> None:
+        return None
+
+    dead.is_alive = _dead_is_alive  # type: ignore[assignment]
+    dead.close = _noop_close  # type: ignore[assignment]
+    with registry._lock:
+        registry._by_conversation[sid] = {("claude", "main"): dead}
+        registry._instance_locks[(sid, "claude", "main")] = threading.Lock()
+
+    app = create_runner_app(
+        process_manager=_FakeProcessManager(_ScriptedHarnessClient([])),  # type: ignore[arg-type]
+        server_client=NullServerClient(),  # type: ignore[arg-type]
+        terminal_registry=registry,
+    )
+
+    heal = app.state.ensure_native_terminal_for_turn
+    await heal(sid, "claude-native")
+
+    assert ensure_calls == [sid], (
+        "o self-heal deveria ter recriado o painel morto-mas-registrado; "
+        f"chamadas de ensure: {ensure_calls!r}"
+    )

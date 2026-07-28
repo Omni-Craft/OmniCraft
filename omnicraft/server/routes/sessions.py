@@ -11091,9 +11091,20 @@ def _build_evaluation_context(
         text = data.get("text") or data.get("content") or str(data)
     else:
         text = str(data)
+    text_str = text if isinstance(text, str) else json.dumps(text)
+    # O conteúdo de REQUEST é o dicionário estruturado
+    # ({"user_content", "attachments"}), para toda requisição chegar às
+    # políticas na mesma forma, venha de onde vier. Este caminho
+    # nativo/terminal não carrega upload, então ``attachments`` fica sempre
+    # vazio; quem o preenche é o portão de entrada da web
+    # (``_evaluate_input_policy``). RESPONSE segue string simples — anexo é
+    # assunto de entrada.
+    request_or_response_content: Any = (
+        {"user_content": text_str, "attachments": []} if phase == Phase.REQUEST else text_str
+    )
     return EvaluationContext(
         phase=phase,
-        content=text if isinstance(text, str) else json.dumps(text),
+        content=request_or_response_content,
         actor=actor,
         model=hook_model,
         harness=hook_harness,
@@ -11372,6 +11383,8 @@ async def _evaluate_input_policy(
     _runner_router: RunnerRouter | None,
     *,
     actor: dict[str, str] | None = None,
+    file_store: FileStore | None = None,
+    artifact_store: ArtifactStore | None = None,
 ) -> dict[str, Any] | None:
     """
     Evaluate a user message against REQUEST (input) phase policy rules.
@@ -11407,7 +11420,14 @@ async def _evaluate_input_policy(
     """
 
     user_text = _extract_user_text_from_event(body)
-    if not user_text:
+    # Uma mensagem com anexo de texto (um CSV enviado, por exemplo) pode não ter
+    # texto digitado nenhum — esses blocos ``input_file`` são decodificados
+    # abaixo e não podem ser pulados aqui. A lista de blocos é a pré-condição
+    # barata; a decodificação (bloqueante) fica para depois da checagem de
+    # "esta sessão tem política?".
+    content_blocks = body.data.get("content")
+    has_content_blocks = isinstance(content_blocks, list) and len(content_blocks) > 0
+    if not user_text and not has_content_blocks:
         return None
 
     # Resolve the agent spec off the event loop (blocking DB + cold-cache
@@ -11423,12 +11443,36 @@ async def _evaluate_input_policy(
     if not spec.guardrails and not get_caps().default_policies and get_policy_store() is None:
         return None
 
+    # Anexos de texto (um CSV enviado, por exemplo) chegam como blocos
+    # ``input_file`` embutidos em base64 direto para o modelo — NÃO fazem parte
+    # do ``user_text`` e, sem isto, chegariam ao LLM sem varredura nenhuma.
+    # Decodifica aqui para as políticas de request (ex.: deny_pii_in_llm_request)
+    # lerem também o conteúdo do anexo. Fica depois da checagem de política para
+    # um agente sem guardrails não pagar a busca do artefato. Melhor esforço: só
+    # roda quando os stores estão ligados.
+    attachments: list[dict[str, str]] = []
+    if has_content_blocks and file_store is not None and artifact_store is not None:
+        from omnicraft.runtime.content_resolver import extract_text_attachments
+
+        attachments = await asyncio.to_thread(
+            extract_text_attachments,
+            content_blocks,
+            file_store,
+            artifact_store,
+            session_id=session_id,
+        )
+    if not user_text and not attachments:
+        return None
+    # Conteúdo estruturado ({"user_content", "attachments"}) para a política
+    # raciocinar por arquivo, em vez de sobre uma string concatenada.
+    request_content = {"user_content": user_text, "attachments": attachments}
+
     engine = await asyncio.to_thread(
         _build_policy_engine_from_spec, spec, session_id, conversation_store
     )
     ctx = EvaluationContext(
         phase=Phase.REQUEST,
-        content=user_text,
+        content=request_content,
         tool_name=None,
         actor=actor,
     )
@@ -19961,6 +20005,8 @@ def create_sessions_router(
                     agent_store,
                     runner_router,
                     actor=_actor,
+                    file_store=file_store,
+                    artifact_store=artifact_store,
                 )
             except Exception as _policy_exc:  # noqa: BLE001 — fail-safe for misconfigured policies
                 # Policy evaluation crashed (e.g. factory misconfigured).
@@ -20010,6 +20056,8 @@ def create_sessions_router(
                 conversation_store,
                 agent_store,
                 runner_router,
+                file_store=file_store,
+                artifact_store=artifact_store,
             )
             if _input_verdict is not None:
                 reason = _input_verdict.get("reason", "Denied by policy")

@@ -36,7 +36,12 @@ try:
 except ImportError:
     _cel = None  # type: ignore[assignment]
 
-from omnicraft.policies.schema import PolicyCallable, PolicyEvent, PolicyResponse
+from omnicraft.policies.schema import (
+    PolicyCallable,
+    PolicyEvent,
+    PolicyResponse,
+    request_user_text,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -98,7 +103,17 @@ def cel_policy(
         :returns: A :class:`PolicyResponse` dict, or ``None``
             to abstain.
         """
-        result = compiled.eval(data={"event": dict(event)})
+        cel_event = dict(event)
+        # O ``data`` da fase REQUEST agora é o dicionário estruturado
+        # ({"user_content", "attachments"}) vindo do portão de entrada, mas
+        # expressões CEL escritas para essa fase esperam o texto como string
+        # (ex.: ``event.data.contains("secret")``). Projeta de volta para
+        # string: deixar o mapa falharia ABERTO em silêncio — operação de
+        # string sobre mapa vira erro, erro faz a política se abster, e
+        # abstenção é ALLOW.
+        if event.get("type") == "request":
+            cel_event["data"] = request_user_text(event.get("data"))
+        result = compiled.eval(data={"event": cel_event})
 
         # Eval errors (missing field, type mismatch) → abstain.
         if result.type() == _cel.Type.ERROR:

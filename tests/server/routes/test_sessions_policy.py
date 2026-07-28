@@ -602,7 +602,10 @@ async def test_skill_slash_command_policy_body_uses_typed_command_text():
             None,
         )
 
-    assert seen_content == ["/grill-me review Canada rollout"]
+    # REQUEST content is the structured dict ({"user_content", "attachments"})
+    # so policies can reason about attachments per-file; a slash command carries
+    # no attachments.
+    assert seen_content == [{"user_content": "/grill-me review Canada rollout", "attachments": []}]
     assert result["verdict"] == "deny"
     assert result["reason"] == "Input mentions Canada"
 
@@ -966,13 +969,82 @@ def test_build_evaluation_context_request_accepts_string_data() -> None:
     request-phase gate OPEN (cost-over-budget terminal prompts sailed through).
     """
     ctx = _build_evaluation_context(Phase.REQUEST, "delete the prod database", {})
-    assert ctx.content == "delete the prod database"
+    # REQUEST content is the structured dict ({"user_content", "attachments"}); the
+    # native / opencode path carries no attachments.
+    assert ctx.content == {"user_content": "delete the prod database", "attachments": []}
 
 
 def test_build_evaluation_context_request_dict_still_works() -> None:
     """The native-hook convention (dict with ``text``) still resolves."""
     ctx = _build_evaluation_context(Phase.REQUEST, {"text": "hello"}, {})
-    assert ctx.content == "hello"
+    assert ctx.content == {"user_content": "hello", "attachments": []}
     # ``content`` fallback also honored.
     ctx2 = _build_evaluation_context(Phase.REQUEST, {"content": "hi"}, {})
-    assert ctx2.content == "hi"
+    assert ctx2.content == {"user_content": "hi", "attachments": []}
+
+
+@pytest.mark.asyncio
+async def test_input_gate_decodes_text_attachments_for_policies() -> None:
+    """O texto do anexo chega à política, não só o que foi digitado.
+
+    Um CSV enviado vira um bloco ``input_file`` embutido em base64 e segue
+    direto para o modelo — ele NÃO faz parte do texto digitado. Sem decodificar
+    aqui, uma política de request (``deny_pii_in_llm_request``, por exemplo)
+    varre a mensagem vazia e deixa passar o arquivo inteiro.
+
+    O teste prova a fiação do servidor: entrega blocos de conteúdo e stores, e
+    exige que o ``content`` que chega ao motor de políticas traga o anexo
+    decodificado. Sem o repasse, ``attachments`` chega vazio e o teste falha.
+
+    :returns: None.
+    """
+    conv_store = _FakeConversationStore()
+    agent_store = _FakeAgentStore(agent=_make_agent())
+    conv = conv_store.get_conversation("sess_1")
+    body = _FakeBody(
+        type="message",
+        data={
+            "role": "user",
+            "content": [
+                {"type": "input_file", "file_id": "file_1", "filename": "dados.csv"},
+            ],
+        },
+    )
+    loaded = LoadedAgent(spec=_make_spec_with_guardrails(), workdir="/tmp/fake")
+    visto: list[Any] = []
+
+    async def _eval(ctx: Any) -> PolicyResult:
+        visto.append(ctx.content)
+        return PolicyResult(action=PolicyAction.ALLOW)
+
+    def _extrai(blocos: Any, _fs: Any, _as: Any, *, session_id: str) -> list[dict[str, str]]:
+        del blocos, session_id
+        return [{"filename": "dados.csv", "content_type": "text/csv", "text": "cpf,123"}]
+
+    with (
+        patch(_CACHE_PATCH) as mock_cache,
+        patch(_ENGINE_PATCH) as mock_build,
+        patch("omnicraft.runtime.content_resolver.extract_text_attachments", _extrai),
+    ):
+        mock_cache.return_value.load.return_value = loaded
+        mock_engine = mock_build.return_value
+        mock_engine.evaluate = _eval
+        mock_engine.apply_label_writes = lambda x: None
+
+        await _evaluate_input_policy(
+            _FakeRequest(),
+            "sess_1",
+            conv,
+            body,
+            conv_store,
+            agent_store,
+            None,
+            file_store=object(),
+            artifact_store=object(),
+        )
+
+    assert visto, "a política não chegou a ser avaliada"
+    anexos = visto[0].get("attachments") if isinstance(visto[0], dict) else None
+    assert anexos == [{"filename": "dados.csv", "content_type": "text/csv", "text": "cpf,123"}], (
+        f"o anexo não chegou à política; content recebido: {visto[0]!r}"
+    )

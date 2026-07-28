@@ -239,6 +239,43 @@ aceita nem os devolve.
 
 ---
 
+## 🏝️ A ilha e os painéis flutuantes
+
+Acompanhar agentes só funciona se você não precisar manter a janela aberta —
+eles trabalham por minutos, às vezes por horas. Daí dois apps nativos (macOS 14+)
+que sobem e descem junto com o OmniCraft e **nunca roubam foco**.
+
+**A ilha** ocupa a área da notch do MacBook. Fechada é um pill com a contagem;
+tocada, abre com as sessões, as janelas de limite do provedor e — o que
+importa — o pedido de aprovação em primeiro plano, com o comando que o agente
+quer rodar e os botões para decidir sem sair do que você está fazendo. Ela
+desenha **acima da barra de menus**, onde uma janela comum não alcança:
+
+<p align="center">
+  <img src="docs/images/island.png" alt="A ilha aberta: contagem de sessões, janelas de limite, um pedido de aprovação com o comando git push e botões de aprovar/rejeitar, e as sessões em execução" width="470" />
+</p>
+
+**Os painéis flutuantes** são janelas independentes para olhar uma sessão de
+perto: o **Board** com as colunas Ativas / Atenção / Concluídas derivadas do
+estado (nada de arrastar à mão), **Uso** com gasto e tokens, além de
+transcript, ferramentas, subagentes e tarefas:
+
+<p align="center">
+  <img src="docs/images/widgets.png" alt="Dois painéis flutuantes: o Board com colunas Ativas, Atenção e Concluídas, e o painel Uso com gasto e contagem de tokens" width="860" />
+</p>
+
+Os dois ligam em **Configurações ▸ HUD flutuante**, junto com o mascote, o
+ritmo da animação e quais painéis abrir. O HUD é um só: a ilha e a janela
+flutuante mostram o mesmo e no mesmo lugar da tela, então você escolhe **onde**
+ele aparece e nunca fica com os dois empilhados.
+
+Uma honestidade sobre o estado atual: o feed descreve **sessões**, então o
+Board, o Uso e o seletor de sessão são reais; o interior da sessão (transcript,
+ferramentas, subagentes, tarefas) ainda não é buscado, e esses painéis dizem
+isso em vez de mostrar exemplo como se fosse dado seu.
+
+---
+
 ## 🛡️ Governança: políticas e sandbox
 
 Cada agente roda sob **políticas** declarativas (23 no catálogo, em pt-BR):
@@ -402,6 +439,7 @@ que não existem no upstream:
 | **Fornecedores** | **Três misturáveis num run**: Claude, Codex e Google — **Gemini CLI** (via ACP) e **Antigravity** somados aos harnesses do upstream. Skill de **roteamento** com tabela tarefa→(worker, modelo) e a regra que importa: quem julga nunca é quem construiu |
 | **Assets locais** | **ComfyUI** ligado aos agentes: imagens de site (RealVisXL em 1024px + upscale 2x por IA) e **3D texto→GLB** (Hunyuan3D) — sem nuvem, sem chave |
 | **Desktop** | Abrir o app **sobe o stack local sozinho** (servidor + host); instaladores **Windows (.exe)** e **macOS (.dmg)**; navegador embutido dirigível pelo agente (`browser_*`) |
+| **Ilha e painéis** | Dois apps nativos que sobem com o OmniCraft e nunca roubam foco: a **ilha** fundida com a notch (acima da barra de menus, onde uma janela não alcança), com aprovação decidível ali mesmo, e os **painéis flutuantes** (Board, Uso, transcript, ferramentas, subagentes, tarefas). Um HUD só: você escolhe **onde** ele aparece, e mascote, ritmo e painéis se configuram na mesma tela |
 | **MCP** | Página de gestão para agentes template, **catálogo de um clique**, **teste de conexão real** |
 | **Cockpit** | Dashboard pessoal do Code (streaks, heatmap, modelo favorito), custos ao vivo, avaliações/regressão, **Diagnóstico** |
 | **Integrações** | GitHub (issues/PRs → sessão semeada), menu **`/`** de skills, onboarding de primeiro uso |

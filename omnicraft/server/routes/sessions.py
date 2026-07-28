@@ -998,6 +998,13 @@ def _prune_session_read_state(session_id: str) -> None:
 # turn's "running" status or on any terminal response.* event.
 _interrupt_fenced_sessions: set[str] = set()
 
+# Sessões cujo túnel do runner estamos prestes a derrubar DE PROPÓSITO, como
+# parte de um Stop pedido por quem usa. O tratamento de desconexão do relay
+# consulta isto para que a queda intencional vire um "parado" quieto em vez de
+# um `runner_disconnected` assustador. De uso único: o próprio tratamento
+# descarta, então uma desconexão real depois continua aparecendo.
+_intentional_stop_sessions: set[str] = set()
+
 # Turn-terminal response lifecycle events: the relay flushes buffered
 # assistant text on each of these and resets its turn-scoped state.
 _TERMINAL_RESPONSE_EVENT_TYPES: frozenset[str] = frozenset(
@@ -8252,7 +8259,7 @@ async def _stop_session_host_runner(
     host_id: str,
     runner_id: str,
     host_registry: Any,
-) -> None:
+) -> bool:
     """
     Terminate the host-launched runner backing a host-spawned session.
 
@@ -8289,10 +8296,14 @@ async def _stop_session_host_runner(
     :param host_registry: The :class:`HostRegistry` tracking live host
         tunnels on this replica, or ``None`` when host support is not wired
         (in-process / test setups without a host tunnel).
-    :returns: None.
+    :returns: ``True`` quando a parada foi entregue e confirmada (o runner
+        está saindo, então a queda do túnel é esperada); ``False`` em
+        qualquer saída de melhor-esforço (sem registro de hosts, host
+        offline ou substituído, timeout do ack, ou falha reportada pelo
+        host), onde o runner pode seguir vivo e nenhuma queda virá.
     """
     if host_registry is None:
-        return
+        return False
     conn = host_registry.get(host_id)
     if conn is None:
         _logger.warning(
@@ -8303,7 +8314,7 @@ async def _stop_session_host_runner(
             session_id,
             host_id,
         )
-        return
+        return False
     from omnicraft.host.frames import HostStopRunnerFrame, encode_host_frame
 
     request_id = secrets.token_hex(8)
@@ -8322,7 +8333,7 @@ async def _stop_session_host_runner(
             session_id,
             host_id,
         )
-        return
+        return False
     try:
         result = await asyncio.wait_for(
             future,
@@ -8336,7 +8347,7 @@ async def _stop_session_host_runner(
             runner_id,
             session_id,
         )
-        return
+        return False
     if result.get("status") == "failed":
         _logger.warning(
             "Host %s failed to stop runner %s for session %s: %s",
@@ -8345,6 +8356,8 @@ async def _stop_session_host_runner(
             session_id,
             result.get("error"),
         )
+        return False
+    return True
 
 
 def _build_new_item(
@@ -9932,6 +9945,14 @@ async def _relay_runner_stream(
                                     None,
                                     conversation_store,
                                 )
+                                # Um turno novo prova que o runner está vivo de
+                                # novo, então um Stop anterior que não derrubou o
+                                # túnel não pode deixar o marcador engolir a
+                                # desconexão real deste turno. Fica fora do
+                                # fence (que o evento terminal do stop já pode
+                                # ter limpado), para valer em toda borda de
+                                # "running".
+                                _intentional_stop_sessions.discard(session_id)
                             # PTY-activity status is a UI signal only. Terminal
                             # sub-agent delivery rides the Stop/StopFailure hook
                             # via external_session_status (the codex-shared path)
@@ -10250,26 +10271,42 @@ async def _relay_runner_stream(
             session_id,
             exc_info=True,
         )
-        # Publish a failed status so the client's SSE stream sees a
-        # clean error event instead of silent truncation (#1114).
-        disconnect_error = ErrorDetail(
-            code="runner_disconnected",
-            message="Runner disconnected unexpectedly.",
-        )
-        _publish_status(session_id, "failed", disconnect_error)
-        # Persist the disconnect cause as durable labels so the
-        # distinction survives into snapshots and child-session
-        # summaries. Without this the relay-fed cache only carries a
-        # generic ``failed`` and ``last_task_error`` is dropped, leaving
-        # the UI unable to tell a benign runner disconnect from a real
-        # task failure (Option B: render a "Disconnected" pill, not the
-        # red "Failed" pill). Cleared on the next ``running`` edge by the
-        # session.status handler, exactly like other failure labels.
-        await _persist_session_status_error_labels(
-            session_id,
-            disconnect_error,
-            conversation_store,
-        )
+        if session_id in _intentional_stop_sessions:
+            # A pessoa clicou em Parar: o próprio tratamento do Stop derrubou
+            # este túnel de propósito (ver ``_stop_session_host_runner``),
+            # então a queda é esperada — não é falha. Publica um ocioso quieto
+            # e limpa o rótulo de erro, para o chat e a barra lateral
+            # descansarem em "parado" em vez de mostrarem
+            # "Erro · runner_disconnected". De uso único: descarta o marcador
+            # para uma desconexão real depois continuar aparecendo.
+            _intentional_stop_sessions.discard(session_id)
+            _publish_status(session_id, "idle")
+            await _persist_session_status_error_labels(
+                session_id,
+                None,
+                conversation_store,
+            )
+        else:
+            # Publish a failed status so the client's SSE stream sees a
+            # clean error event instead of silent truncation (#1114).
+            disconnect_error = ErrorDetail(
+                code="runner_disconnected",
+                message="Runner disconnected unexpectedly.",
+            )
+            _publish_status(session_id, "failed", disconnect_error)
+            # Persist the disconnect cause as durable labels so the
+            # distinction survives into snapshots and child-session
+            # summaries. Without this the relay-fed cache only carries a
+            # generic ``failed`` and ``last_task_error`` is dropped, leaving
+            # the UI unable to tell a benign runner disconnect from a real
+            # task failure (Option B: render a "Disconnected" pill, not the
+            # red "Failed" pill). Cleared on the next ``running`` edge by the
+            # session.status handler, exactly like other failure labels.
+            await _persist_session_status_error_labels(
+                session_id,
+                disconnect_error,
+                conversation_store,
+            )
     except asyncio.CancelledError:
         raise
     finally:
@@ -10279,6 +10316,12 @@ async def _relay_runner_stream(
         # mid-turn, or a rebind cancellation) can't strand it forever.
         # Normal turn-ends already clear via record_publish.
         inflight_text.discard(session_id)
+        # O marcador de parada intencional é consumido pelo tratamento acima no
+        # caminho esperado; descarta aqui também para um relay que saia por
+        # outro caminho (fim limpo, cancelamento de rebind) não deixar um
+        # marcador velho engolir uma desconexão real depois, já que a tarefa de
+        # relay por sessão é reaproveitada.
+        _intentional_stop_sessions.discard(session_id)
         # Relay ended (runner dropped/rebound): re-discover runner-backed
         # snapshot overlays next time. Cancel in-flight fetches so they can't
         # land stale values from the dead runner after this pop.
@@ -19986,12 +20029,26 @@ def create_sessions_router(
             # only ever stop the runner bound to this session.
             stop_conv = await asyncio.to_thread(conversation_store.get_conversation, session_id)
             if stop_conv is not None and stop_conv.host_id and stop_conv.runner_id:
-                await _stop_session_host_runner(
+                # Marca a queda como intencional ANTES de derrubar, para o
+                # tratamento de desconexão do relay mostrar um "parado" quieto
+                # em vez de "Erro · runner_disconnected". Só sessões criadas
+                # pelo host derrubam o túnel no Stop; nos outros harnesses o
+                # runner segue conectado e não há nada a suprimir.
+                _intentional_stop_sessions.add(session_id)
+                teardown_delivered = await _stop_session_host_runner(
                     session_id,
                     stop_conv.host_id,
                     stop_conv.runner_id,
                     getattr(request.app.state, "host_registry", None),
                 )
+                if not teardown_delivered:
+                    # A parada de melhor-esforço não chegou (host offline,
+                    # timeout ou falha): nenhuma queda de túnel virá, então o
+                    # relay não alcança o tratamento que consome o marcador.
+                    # Descarta agora para ele não sobreviver a este turno na
+                    # tarefa de relay reaproveitada e engolir, mais tarde, uma
+                    # desconexão de verdade.
+                    _intentional_stop_sessions.discard(session_id)
             # Stop is non-sticky: no persistent marker is written. The
             # runner tunnel dropping above flips ``runner_online`` to false
             # honestly, and the next message auto-relaunches the session on
@@ -21011,6 +21068,7 @@ def create_sessions_router(
                 reason="session-delete",
             )
         _interrupt_fenced_sessions.discard(session_id)
+        _intentional_stop_sessions.discard(session_id)
         deleted = await conversation_store.delete_conversation(session_id)
         if not deleted:
             raise OmniCraftError(

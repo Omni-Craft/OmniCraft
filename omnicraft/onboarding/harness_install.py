@@ -40,6 +40,8 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
+from typing import NamedTuple
 
 from omnicraft._platform import resolve_cli_binary
 from omnicraft.harness_install_spec import HarnessInstallSpec
@@ -400,31 +402,89 @@ def harness_install_command(key: str) -> list[str]:
     return ["npm", "install", "-g", package]
 
 
-def install_harness_cli(key: str) -> bool:
-    """Install the harness CLI via npm; return whether it landed on ``PATH``.
+class HarnessInstallResult(NamedTuple):
+    """Outcome of :func:`try_install_harness_cli`.
+
+    :param installed: Whether the CLI resolves after the attempt, via the same
+        :func:`resolve_cli_binary` ladder readiness uses (``PATH`` plus the
+        common global install dirs), not bare ``PATH`` alone.
+    :param reason: Human-readable failure reason when ``installed`` is False;
+        ``None`` on success.
+    """
+
+    installed: bool
+    reason: str | None
+
+
+def try_install_harness_cli(key: str) -> HarnessInstallResult:
+    """Install the harness CLI, returning whether it landed and why not.
 
     Shells out to :func:`harness_install_command` and re-checks
     :func:`harness_cli_installed`. Surfaces npm's own output (no capture) so a
     failing install is visible. Requires ``npm`` on ``PATH``.
 
     :param key: A harness family or :data:`PI_KEY`.
-    :returns: ``True`` when the CLI is on ``PATH`` after the install attempt
-        (including the no-op case where npm reports success but the binary is
-        present), ``False`` if npm is missing or the install failed.
+    :returns: A :class:`HarnessInstallResult` — ``(True, None)`` once the CLI
+        resolves via :func:`resolve_cli_binary` (including the no-op where it
+        was already present), otherwise ``(False, reason)`` naming the failure
+        (manual-only spec, missing installer, timeout, OS error, non-zero exit,
+        or a post-install binary-not-found).
     :raises KeyError: If *key* has no install spec.
     """
     spec = harness_install_spec(key)
     if spec is not None and spec.package is None:
         # Non-npm CLI (e.g. cursor-agent): no auto-install; caller shows install_hint.
-        return False
+        return HarnessInstallResult(False, f"{spec.binary!r} is not installable automatically")
     if shutil.which("npm") is None:
-        return False
+        return HarnessInstallResult(False, "'npm' is not available on the host")
     cmd = harness_install_command(key)
     try:
-        subprocess.run(cmd, check=False, timeout=300)
-    except (OSError, subprocess.TimeoutExpired):
-        return False
-    return harness_cli_installed(key)
+        result = subprocess.run(cmd, check=False, timeout=300)
+    except subprocess.TimeoutExpired:
+        return HarnessInstallResult(False, "install timed out after 300s")
+    except OSError as exc:
+        return HarnessInstallResult(False, f"install command failed to run: {exc}")
+    # harness_install_command would have raised for a spec-less key, so spec is
+    # non-None past this point.
+    assert spec is not None
+    # Resolve the freshly-installed binary via the SAME ladder readiness uses
+    # (:func:`resolve_cli_binary` — ``PATH`` plus the nvm/npm-global/homebrew
+    # fallback dirs), so the install verdict and the readiness badge can never
+    # disagree. A bare ``shutil.which`` here would report "not found" for a
+    # binary the host daemon's frozen ``PATH`` omits but readiness still resolves
+    # via the ladder — the spurious "failed" toast next to a green "ready" tick.
+    resolved = resolve_cli_binary(spec.binary)
+    if resolved is not None:
+        # Put the resolving dir on ``PATH`` for this process so the setup
+        # wizard's *later* steps — harness_login / harness_cli_logged_in /
+        # harness_logout — which shell out with the bare binary name and only
+        # bare ``shutil.which``, can find it too. Without this, an install that
+        # succeeded via a fallback dir (nvm/homebrew/…) would be followed by a
+        # login step that can't locate the very binary just installed.
+        resolved_dir = str(Path(resolved).resolve().parent)
+        path_entries = os.environ.get("PATH", "").split(os.pathsep)
+        if resolved_dir not in path_entries:
+            os.environ["PATH"] = os.pathsep.join([resolved_dir, *path_entries])
+        return HarnessInstallResult(True, None)
+    if result.returncode != 0:
+        return HarnessInstallResult(False, f"installer exited with code {result.returncode}")
+    return HarnessInstallResult(
+        False, f"installer completed but {spec.binary!r} could not be found"
+    )
+
+
+def install_harness_cli(key: str) -> bool:
+    """Install the harness CLI; return whether it landed on ``PATH``.
+
+    Thin wrapper over :func:`try_install_harness_cli` that discards the failure
+    reason, preserving the boolean contract the setup wizard relies on.
+
+    :param key: A harness family or :data:`PI_KEY`.
+    :returns: ``True`` when the CLI is on ``PATH`` after the install attempt,
+        ``False`` if the installer is missing or the install failed.
+    :raises KeyError: If *key* has no install spec.
+    """
+    return try_install_harness_cli(key).installed
 
 
 def harness_cli_logged_in(key: str) -> bool:

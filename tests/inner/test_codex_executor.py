@@ -2812,6 +2812,24 @@ def test_declared_passthrough_reads_sandbox_env_passthrough():
     assert _declared_passthrough(OSEnvSpec(sandbox=OSEnvSandboxSpec(type="none"))) == ()
 
 
+def test_find_codex_cli_delegates_to_shared_resolver(monkeypatch):
+    """``_find_codex_cli`` resolves codex via the shared resolver with the
+    OMNICRAFT_CODEX_PATH override. (The resolver's own PATH/override/fallback
+    behavior is covered in tests/inner/test_proc_and_platform.py.)"""
+    from omnicraft.inner import codex_executor as ce
+
+    captured = {}
+
+    def fake_resolve(name, *, env_var=None):
+        captured["name"] = name
+        captured["env_var"] = env_var
+        return "/opt/homebrew/bin/codex"
+
+    monkeypatch.setattr(ce, "resolve_cli_binary", fake_resolve)
+    assert ce._find_codex_cli() == "/opt/homebrew/bin/codex"
+    assert captured == {"name": "codex", "env_var": "OMNICRAFT_CODEX_PATH"}
+
+
 def _codex_home_parent_for_start(cwd: str, monkeypatch: pytest.MonkeyPatch) -> str:
     """Start a session until spawn and capture the parent of its Codex home."""
     mkdtemp_dirs: list[str] = []

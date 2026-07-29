@@ -41,6 +41,7 @@ import shutil
 import subprocess
 import sys
 
+from omnicraft._platform import resolve_cli_binary
 from omnicraft.harness_install_spec import HarnessInstallSpec
 from omnicraft.onboarding.provider_config import ANTHROPIC_FAMILY, GEMINI_FAMILY, OPENAI_FAMILY
 
@@ -312,7 +313,7 @@ def missing_harness_cli(harness: str) -> HarnessInstallSpec | None:
     spec = required_cli_for_harness(harness)
     if spec is None:
         return None
-    if shutil.which(spec.binary) is not None:
+    if resolve_cli_binary(spec.binary) is not None:
         return None
     return spec
 
@@ -376,7 +377,7 @@ def harness_cli_installed(key: str) -> bool:
     spec = harness_install_spec(key)
     if spec is None:
         return False
-    return shutil.which(spec.binary) is not None
+    return resolve_cli_binary(spec.binary) is not None
 
 
 def harness_install_command(key: str) -> list[str]:

@@ -25,10 +25,10 @@ that would actually work.
 from __future__ import annotations
 
 import os
-import shutil
 from collections.abc import Callable
 
 import omnicraft.onboarding.gemini_auth as _gemini_auth
+from omnicraft._platform import resolve_cli_binary
 from omnicraft.harness_aliases import HARNESS_ALIASES, canonicalize_harness
 from omnicraft.harness_plugins import harness_install_keys, valid_harnesses
 from omnicraft.onboarding.harness_install import (
@@ -286,7 +286,7 @@ def harness_is_configured(harness: str) -> bool:
     ):
         required_cli = required_cli_for_harness(canonical) or required_cli_for_harness(harness)
         if required_cli is not None:
-            return shutil.which(required_cli.binary) is not None
+            return resolve_cli_binary(required_cli.binary) is not None
         # Unknown harness — the daemon has no install metadata for it, so
         # it can't assess readiness. Fail open (custom/newer harnesses,
         # version skew).

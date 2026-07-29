@@ -33,7 +33,6 @@ import json
 import logging
 import os
 import pathlib
-import shutil
 import sys
 import tempfile
 import time
@@ -43,7 +42,7 @@ from dataclasses import dataclass
 from types import ModuleType
 from typing import Any, Protocol, TypeAlias, TypeVar, cast
 
-from omnicraft._platform import stable_user_id
+from omnicraft._platform import resolve_cli_binary, stable_user_id
 from omnicraft.inner import _proc
 from omnicraft.inner.bundle_skills import ensure_bundle_plugin_manifest
 from omnicraft.llms._usage_observer import notify_from_dict as _notify_usage_from_dict
@@ -545,6 +544,11 @@ async def _multimodal_message_iter(
 # connect hang is sandbox-related vs. inside the binary itself.
 _NO_SANDBOX_ENV = "OMNICRAFT_CLAUDE_SDK_NO_SANDBOX"
 
+# Env override for an explicit claude binary, mirroring codex's
+# OMNICRAFT_CODEX_PATH. Set this when claude lives on a PATH the host
+# daemon doesn't inherit (e.g. an nvm-managed global bin dir).
+_CLAUDE_PATH_ENV = "OMNICRAFT_CLAUDE_PATH"
+
 
 def _sandbox_disabled_by_env() -> bool:
     """``True`` when the diagnostic bypass env var is set to a truthy
@@ -793,13 +797,16 @@ def _augment_system_prompt_for_omnicraft_mcp_tools(
 
 
 def _find_system_claude() -> str | None:
-    """Find a system-installed ``claude`` CLI binary on PATH.
+    """Find a system-installed ``claude`` CLI binary.
 
-    Returns the absolute path, or None if not found.  Prefers the system
-    install over the SDK's bundled CLI because the bundled version may be
-    older and send beta flags the Databricks gateway doesn't support.
+    Resolves via the ``OMNICRAFT_CLAUDE_PATH`` override, then ``PATH``, then
+    common global install dirs — so an nvm/npm-installed claude off the host
+    daemon's frozen ``PATH`` is still found. Prefers the system install over
+    the SDK's bundled CLI because the bundled version may be older and send
+    beta flags the Databricks gateway doesn't support. Returns the absolute
+    path, or ``None`` if not found.
     """
-    return shutil.which("claude")
+    return resolve_cli_binary("claude", env_var=_CLAUDE_PATH_ENV)
 
 
 def _resolve_gateway_env(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import importlib
 import io
 import logging
@@ -1649,3 +1650,63 @@ def test_agent_cache_dest_normal_id_round_trips(tmp_path: Path) -> None:
     dest = _agent_cache_dest(cache_root, "ag_abc123", "3")
 
     assert dest == cache_root / "ag_abc123-v3"
+
+
+@pytest.mark.asyncio
+async def test_idle_shutdown_signals_the_tunnel_instead_of_stopping_abruptly(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The idle reaper drains the tunnel; it does not sever it.
+
+    Guards the wiring in ``_run_tunnel_from_env``: the monitor must set the
+    tunnel's ``shutdown_event`` (so ``serve_tunnel`` flushes each session's
+    ``[DONE]`` and closes cleanly) and the caller must wait for that close.
+    Setting ``stop_event`` instead would cancel the tunnel mid-drain and the
+    server would render the ``runner_disconnected`` banner this whole path
+    exists to avoid.
+    """
+    from omnicraft.runner import _entry
+
+    visto: dict[str, Any] = {}
+    drenou = asyncio.Event()
+
+    class _App:
+        """Minimal stand-in for the runner FastAPI app."""
+
+        def __init__(self) -> None:
+            self.state = type("_S", (), {"drain_session_streams": drenou.set})()
+            self.router = self
+
+        def lifespan_context(self, _app: Any) -> Any:
+            """:returns: A no-op async context manager."""
+            return contextlib.nullcontext()
+
+    async def _serve_tunnel(_app: Any, **kwargs: Any) -> None:
+        """Wait for the graceful signal, then drain and return."""
+        visto.update(kwargs)
+        await kwargs["shutdown_event"].wait()
+        hook = kwargs["on_graceful_shutdown"]
+        if callable(hook):
+            hook()
+
+    async def _monitor(**kwargs: Any) -> None:
+        """Fire the idle shutdown immediately."""
+        kwargs["request_shutdown"]()
+
+    monkeypatch.setattr(_entry, "create_app", lambda **_kw: _App())
+    monkeypatch.setattr(_entry, "_server_url_from_env", lambda: "https://exemplo")
+    monkeypatch.setattr(_entry, "_make_auth_token_factory", lambda: None)
+    monkeypatch.setattr(_entry, "_runner_tunnel_binding_token_from_env", lambda: None)
+    monkeypatch.setattr(_entry, "_runner_parent_pid_from_env", lambda: None)
+    monkeypatch.setattr(_entry, "_load_runner_idle_timeout_s_from_config", lambda: 3600)
+    monkeypatch.setattr(_entry, "_run_inactivity_monitor", _monitor)
+    monkeypatch.setattr("omnicraft.runner.identity.get_stable_runner_id", lambda: "runner_teste")
+    monkeypatch.setattr("omnicraft.runner.transports.ws_tunnel.serve.serve_tunnel", _serve_tunnel)
+
+    await asyncio.wait_for(_entry._run_tunnel_from_env(), timeout=5)
+
+    assert "shutdown_event" in visto, "o túnel não recebeu o evento de desligamento"
+    assert visto["on_graceful_shutdown"] == drenou.set
+    # A drenagem só acontece se o evento do túnel — e não stop_event — foi
+    # marcado, e se o caller esperou o túnel terminar antes do finally.
+    assert drenou.is_set()

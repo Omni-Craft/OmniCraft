@@ -40,6 +40,12 @@ _RUNNER_VERSION = VERSION
 _RUNNER_CONFIG_HOME_ENV_VAR = "OMNICRAFT_CONFIG_HOME"
 _DEFAULT_RUNNER_IDLE_TIMEOUT_S = 60 * 60
 _RUNNER_IDLE_MONITOR_MAX_POLL_INTERVAL_S = 60.0
+# Teto de espera do desligamento gracioso (ceifador de ocioso) pelo túnel
+# drenar os streams e completar o handshake de fecho. Bem acima do orçamento
+# do próprio serve_tunnel (~10s somados), para um ida-e-volta remoto saudável
+# terminar limpo; um túnel travado além disso é cancelado para o desligamento
+# não pendurar.
+_GRACEFUL_SHUTDOWN_TUNNEL_TIMEOUT_S = 15.0
 # Re-mint a managed runner's owner JWT this many seconds before it
 # expires, so a live session's HTTP callbacks never present an expired
 # token. Well under the server-side token TTL.
@@ -1144,6 +1150,10 @@ async def _run_tunnel_from_env() -> None:
     # parent-death killer stand down so the runner outlives the CLI.
     adopted_event = threading.Event()
     _install_signal_handlers(stop_event, adopted_event=adopted_event)
+    # Marcado (em vez de stop_event) no desligamento por ociosidade, para o
+    # túnel drenar os streams de sessão e fechar limpo — o servidor vê um
+    # fim-de-stream, não uma queda abrupta que vira banner de erro.
+    tunnel_shutdown_event = asyncio.Event()
     tunnel_task = asyncio.create_task(
         serve_tunnel(
             cast("_ASGIApp", app),  # FastAPI is ASGI-compatible; cast narrows for mypy
@@ -1155,6 +1165,8 @@ async def _run_tunnel_from_env() -> None:
             auth_token_factory=auth_token_factory,
             on_reconnect=getattr(app.state, "catch_up_scan", None),
             on_activity=_mark_activity,
+            shutdown_event=tunnel_shutdown_event,
+            on_graceful_shutdown=getattr(app.state, "drain_session_streams", None),
         ),
         name=f"runner-ws-tunnel:{runner_id}",
     )
@@ -1166,7 +1178,7 @@ async def _run_tunnel_from_env() -> None:
                 idle_timeout_s=idle_timeout_s,
                 get_last_activity=_last_activity,
                 has_active_work=_has_active_work,
-                request_shutdown=stop_event.set,
+                request_shutdown=tunnel_shutdown_event.set,
             ),
             name=f"runner-idle-monitor:{runner_id}",
         )
@@ -1193,6 +1205,13 @@ async def _run_tunnel_from_env() -> None:
         )
         if tunnel_task in done:
             await tunnel_task
+        elif idle_task is not None and idle_task in done and tunnel_shutdown_event.is_set():
+            # O ceifador disparou: sinalizou o túnel para drenar os streams e
+            # fechar limpo, e o monitor retornou. Espera — com teto — o fecho
+            # terminar, em vez de cair direto no finally, que cancelaria o
+            # túnel no meio da drenagem e transformaria o fim-de-stream limpo
+            # de volta numa queda abrupta.
+            await asyncio.wait({tunnel_task}, timeout=_GRACEFUL_SHUTDOWN_TUNNEL_TIMEOUT_S)
     finally:
         for task in wait_tasks:
             task.cancel()

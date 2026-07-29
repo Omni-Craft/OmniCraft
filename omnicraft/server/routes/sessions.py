@@ -22317,6 +22317,16 @@ async def _get_session_snapshot(
                         agent_cache.load, agent.id, agent.bundle_location
                     )
                     spec = loaded.spec
+                    if conv.sub_agent_name:
+                        # Sessão de sub-agente: o snapshot descreve o FILHO
+                        # (nome, modelo, janela de contexto), não o bundle que
+                        # o contém. Sem isto a UI mostrava os metadados do
+                        # agente-pai em toda sessão de sub-agente.
+                        from omnicraft.runtime.workflow import _find_spec_by_name
+
+                        child_spec = _find_spec_by_name(spec, conv.sub_agent_name)
+                        if child_spec is not None:
+                            spec = child_spec
                     # Prefer the spec's name over the agent row's: a
                     # switch-created session-scoped clone is named
                     # "<builtin> (switch ag_…)" for row disambiguation,

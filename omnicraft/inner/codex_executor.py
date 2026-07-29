@@ -112,6 +112,9 @@ _DATABRICKS_CODEX_DEFAULT_MODEL = "databricks-gpt-5-5"
 # no mesmo caminho que as chaves de confiança reescritas passam a apontar.
 _CODEX_HOOKS_JSON = "hooks.json"
 _CODEX_HOME_SYMLINK_FILES = ("auth.json", _CODEX_HOOKS_JSON)
+# AGENTS.md / AGENTS.override.md: instruções globais que o codex lê do
+# CODEX_HOME. Symlinkadas para o home privado respeitá-las também.
+_CODEX_HOME_GLOBAL_INSTRUCTION_FILES = ("AGENTS.md", "AGENTS.override.md")
 
 # Files copied (not symlinked) from the real CODEX_HOME into the per-session
 # temp home. config.toml is intentionally copied so that an in-TUI ``/model``
@@ -715,6 +718,8 @@ def _populate_codex_home_config(target_dir: Path, source_dir: Path) -> None:
       enforcement isolated between concurrent sessions. Hook-trust keys inside
       the copy are rewritten to reference the private home's paths so Codex
       recognises previously-trusted hooks without an interactive prompt.
+    - ``AGENTS.md`` e ``AGENTS.override.md`` são **symlinkados** para as
+      instruções globais valerem dentro do home privado.
     - ``hooks.json`` is **symlinked** (when present) so the user's hooks are
       available at the same path within the private home that the rewritten
       trust keys reference.
@@ -728,7 +733,7 @@ def _populate_codex_home_config(target_dir: Path, source_dir: Path) -> None:
     if not source_dir.is_dir():
         return
 
-    for filename in _CODEX_HOME_SYMLINK_FILES:
+    for filename in (*_CODEX_HOME_SYMLINK_FILES, *_CODEX_HOME_GLOBAL_INSTRUCTION_FILES):
         source_file = source_dir / filename
         if not source_file.is_file():
             continue

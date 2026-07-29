@@ -2665,6 +2665,7 @@ def _build_session_response(
         items=items,
         permission_level=permission_level,
         sub_agent_name=conv.sub_agent_name,
+        kind=conv.kind,
         parent_session_id=conv.parent_conversation_id,
         root_conversation_id=conv.root_conversation_id,
         llm_model=llm_model,
@@ -20661,13 +20662,17 @@ def create_sessions_router(
             )
             if healed_client is not None:
                 runner_client = healed_client
-                _runner_needs_session_init = True
                 conv = await asyncio.to_thread(conversation_store.get_conversation, session_id)
                 if conv is None:
                     raise OmniCraftError(
                         "Session not found",
                         code=ErrorCode.NOT_FOUND,
                     )
+                # Sub-agente de terminal nativo (pi-native, claude-native): o
+                # runner de reposição precisa criar a sessão de terminal do
+                # filho. Nos harnesses SDK o runner do pai já carrega o estado
+                # do filho — reinicializar seria um no-op, ou um timeout à toa.
+                _runner_needs_session_init = _is_native_terminal_session(conv)
         if runner_client is None and conv.host_id is not None:
             _tunnel_registry = getattr(request.app.state, "tunnel_registry", None)
             # A just-created host session already has a runner_id before

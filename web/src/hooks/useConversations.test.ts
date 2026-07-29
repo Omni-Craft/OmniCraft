@@ -311,6 +311,7 @@ describe("useStopAndDeleteConversation cache eviction", () => {
       permissionLevel: null,
       parentSessionId: null,
       subAgentName: null,
+      kind: "default" as const,
     } satisfies Session);
     const wrapper = ({ children }: { children: ReactNode }) =>
       createElement(QueryClientProvider, { client: queryClient }, children);
@@ -421,6 +422,7 @@ describe("useRenameConversation cache patching", () => {
       permissionLevel: null,
       parentSessionId: null,
       subAgentName: null,
+      kind: "default" as const,
     } satisfies Session);
     const wrapper = ({ children }: { children: ReactNode }) =>
       createElement(QueryClientProvider, { client: queryClient }, children);

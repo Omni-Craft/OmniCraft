@@ -98,6 +98,7 @@ function defaultSession() {
       permissionLevel: 4,
       parentSessionId: null,
       subAgentName: null,
+      kind: "default" as const,
     },
     isLoading: false,
     error: null,

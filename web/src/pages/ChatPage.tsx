@@ -936,7 +936,11 @@ export function ChatPage() {
   // managed host classifies as `host_asleep` (composer open, send wakes it)
   // instead of dead-ending on `host_offline`.
   const livenessRow: LivenessRow | null = activeConv
-    ? { ...activeConv, host_resumable: activeSession?.hostResumable ?? false }
+    ? {
+        ...activeConv,
+        host_resumable: activeSession?.hostResumable ?? false,
+        kind: activeSession?.kind,
+      }
     : livenessRowFromSession(activeSession);
   const liveness = useSessionLiveness(urlConvId ?? undefined, livenessRow, {
     turnActive: status === "streaming",

@@ -200,6 +200,7 @@ describe("derivePermissionLevel — resolution order", () => {
       permissionLevel,
       parentSessionId: null,
       subAgentName: null,
+      kind: "default" as const,
     };
   }
 

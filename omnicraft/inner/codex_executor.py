@@ -119,6 +119,13 @@ _CODEX_HOME_SYMLINK_FILES = ("auth.json", _CODEX_HOOKS_JSON)
 # shared ``~/.codex/config.toml``. This keeps model selection and cost-policy
 # enforcement isolated between concurrent sessions.
 _CODEX_HOME_COPY_FILES = ("config.toml",)
+# Directories symlinked (not copied) from the real CODEX_HOME into the
+# per-session temp home. ``plugins/cache`` is codex's content-addressed
+# (versioned) plugin store — read-only reference data that codex would
+# otherwise re-materialize tens of MB into every private home. Sharing the
+# one real cache dedupes it across sessions; codex's own writes land in the
+# shared cache exactly as they would without the private home.
+_CODEX_HOME_SYMLINK_DIRS = (Path("plugins") / "cache",)
 
 # Environment variables explicitly excluded from the codex subprocess even
 # when their prefix is in the allowlist. ``OPENAI_API_KEY`` is stripped so
@@ -738,6 +745,27 @@ def _populate_codex_home_config(target_dir: Path, source_dir: Path) -> None:
                 exc,
             )
             shutil.copy2(source_file, link_path)
+
+    for reldir in _CODEX_HOME_SYMLINK_DIRS:
+        source_subdir = source_dir / reldir
+        if not source_subdir.is_dir():
+            continue
+        link_path = target_dir / reldir
+        if link_path.exists() or link_path.is_symlink():
+            continue
+        link_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            link_path.symlink_to(source_subdir.resolve())
+        except OSError as exc:
+            # Symlink unsupported (some Windows configs) or a race — skip
+            # the dedupe rather than abort session boot; codex re-populates
+            # its own private cache, costing disk but staying correct.
+            logger.warning(
+                "could not symlink %r into %s (%s); codex will repopulate it",
+                str(reldir),
+                target_dir,
+                exc,
+            )
 
     for filename in _CODEX_HOME_COPY_FILES:
         source_file = source_dir / filename

@@ -2149,6 +2149,35 @@ def test_populate_codex_home_config_symlinks_auth_and_config(tmp_path: Path) -> 
     assert (target / "config.toml").read_text() == '[default]\nmodel = "gpt-5.4"'
 
 
+def test_populate_codex_home_config_symlinks_plugins_cache(tmp_path: Path) -> None:
+    """``plugins/cache`` is symlinked to the shared home to dedupe it.
+
+    Codex materializes tens of MB of versioned plugin data into every private
+    home; sharing the one real cache keeps each session small. Only the
+    ``cache`` subdir is shared — sibling scratch dirs stay session-local.
+    """
+    from omnicraft.inner.codex_executor import _populate_codex_home_config
+
+    source = tmp_path / "real_codex_home"
+    source.mkdir()
+    (source / "auth.json").write_text('{"auth_mode": "chatgpt"}')
+    (source / "config.toml").write_text("[default]\n")
+    cache = source / "plugins" / "cache"
+    cache.mkdir(parents=True)
+    (cache / "big-plugin.bin").write_text("payload")
+    (source / "plugins" / ".remote-plugin-install-staging").mkdir()
+    target = tmp_path / "temp_codex_home"
+    target.mkdir()
+
+    _populate_codex_home_config(target, source)
+
+    link = target / "plugins" / "cache"
+    assert link.is_symlink()
+    assert (link / "big-plugin.bin").read_text() == "payload"
+    # Only cache is shared; the sibling scratch dir is not created here.
+    assert not (target / "plugins" / ".remote-plugin-install-staging").exists()
+
+
 def test_populate_codex_home_config_config_toml_copy_is_isolated(tmp_path: Path) -> None:
     """Writing to the session's ``config.toml`` copy does not affect the source.
 

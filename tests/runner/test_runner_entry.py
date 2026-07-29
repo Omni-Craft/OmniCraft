@@ -1710,3 +1710,42 @@ async def test_idle_shutdown_signals_the_tunnel_instead_of_stopping_abruptly(
     # A drenagem só acontece se o evento do túnel — e não stop_event — foi
     # marcado, e se o caller esperou o túnel terminar antes do finally.
     assert drenou.is_set()
+
+
+def test_runner_server_client_presents_the_tunnel_binding_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The runner's callbacks carry the tunnel token that proves who it is.
+
+    Without this header the server can't tell a runner-originated event from
+    any other client, so it rejects the runner's ``created_by`` — sub-agent
+    wake notices lose the human who triggered them.
+    """
+    from omnicraft.runner import _entry
+    from omnicraft.runner.identity import (
+        RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR,
+        RUNNER_TUNNEL_TOKEN_HEADER,
+    )
+
+    capturado: dict[str, Any] = {}
+
+    def _fake_create_runner_app(**kwargs: Any) -> Any:
+        """Capture the wired-up server client and return a router-shaped stub."""
+        capturado.update(kwargs)
+
+        class _App:
+            state = type("_S", (), {})()
+            router = type("_R", (), {"lifespan_context": None})()
+
+        return _App()
+
+    monkeypatch.setenv("RUNNER_SERVER_URL", "https://exemplo.test")
+    monkeypatch.setenv(RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR, "tok-abc")
+    # Importado dentro de create_app, então o alvo é o módulo de origem.
+    monkeypatch.setattr("omnicraft.runner.app.create_runner_app", _fake_create_runner_app)
+
+    _entry.create_app()
+
+    client = capturado["server_client"]
+    assert client.headers.get(RUNNER_TUNNEL_TOKEN_HEADER) == "tok-abc"
+    assert capturado["auth_token"] == "tok-abc"

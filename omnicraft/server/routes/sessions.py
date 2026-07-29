@@ -1191,6 +1191,12 @@ _pending_policy_ask_writes: cachetools.LRUCache[str, _PendingPolicyAskWrites] = 
     cachetools.LRUCache(maxsize=512)
 )
 
+# Label key used to persist the turn-initiating human's identity on the
+# conversation row.  Written at _forward_event_to_runner time so any
+# server replica can read it back when the runner calls /policies/evaluate
+# or /mcp (tools/call).
+_TURN_ACTOR_LABEL = "omnicraft.turn_actor"
+
 
 # (conversation_id, deciding_policy) -> lock serializing native ASK gates.
 # When an agent fires several tool calls in parallel, each spawns its own
@@ -9057,6 +9063,23 @@ async def _forward_event_to_runner(
         # resolved copy — id-based dedup, not a role/content guess.
         "persisted_item_id": persisted_items[0].id,
     }
+    # Persist the turn-initiating actor so /policies/evaluate and MCP
+    # tools/call can read it back on any server replica.  Skip system-driven
+    # forwards (sub-agent results, parent-wake carry created_by=None) — they
+    # must not stomp the in-flight turn's actor.
+    # Known gap: a queued message from user B can overwrite this label while
+    # user A's turn is still executing tool calls on a shared session.  The
+    # runner's _active_turns guard prevents two turns from running on the same
+    # session concurrently, but the label is written at server-forward time
+    # (before the runner queues the message), not at runner-turn-start time.
+    # For the common case (sequential users or single-user sessions) this is
+    # correct; strictly concurrent shared-session use is an accepted gap.
+    if created_by is not None:
+        await asyncio.to_thread(
+            conversation_store.set_labels,
+            session_id,
+            {_TURN_ACTOR_LABEL: created_by},
+        )
     # Forward request-supplied client-side tool schemas so non-native
     # harnesses can emit (and tunnel) the caller's tools — the runner
     # merges these into the harness tool list (_merge_request_client_tools).
@@ -12481,6 +12504,25 @@ def _reject_reserved_cost_control_label_seed(labels: dict[str, str]) -> None:
         )
 
 
+def _reject_server_reserved_label_seed(labels: dict[str, str] | None) -> None:
+    """
+    Reject a client-supplied label map that touches server-internal keys.
+
+    Keys in this set are written exclusively by server internals and must
+    not be client-settable — doing so would let callers forge security-
+    critical metadata (e.g. the policy-evaluation actor identity).
+
+    :param labels: The client-supplied label mapping, or ``None``.
+    :raises OmniCraftError: 400 when any reserved key is present.
+    """
+    if not labels or _TURN_ACTOR_LABEL not in labels:
+        return
+    raise OmniCraftError(
+        f"label {_TURN_ACTOR_LABEL!r} is server-internal and cannot be set by clients",
+        code=ErrorCode.INVALID_INPUT,
+    )
+
+
 def _require_cost_control_label_authority(
     *,
     reserved_keys: Sequence[str],
@@ -12577,6 +12619,7 @@ async def _create_session_from_existing_agent(
         fails authorization.
     """
     _reject_reserved_cost_control_label_seed(body.labels)
+    _reject_server_reserved_label_seed(body.labels)
 
     agent = await asyncio.to_thread(agent_store.get, body.agent_id)
     if agent is None:
@@ -14398,6 +14441,20 @@ def create_sessions_router(
     """
     router = APIRouter()
 
+    def _has_runner_created_by_authority(request: Request, conv: Any) -> bool:
+        """Whether this request may declare `created_by` for a session event.
+
+        Só o próprio runner pode: ele prova isso com o token de túnel, seja um
+        dos tokens do servidor, seja o token ligado ao runner desta conversa.
+        """
+        token = (request.headers.get(RUNNER_TUNNEL_TOKEN_HEADER) or "").strip()
+        if not token:
+            return False
+        if runner_tunnel_tokens is not None and token in runner_tunnel_tokens:
+            return True
+        runner_id = getattr(conv, "runner_id", None)
+        return isinstance(runner_id, str) and token_bound_runner_id(token) == runner_id
+
     # ── POST /sessions ───────────────────────────────────────────
 
     @router.post(
@@ -14776,6 +14833,7 @@ def create_sessions_router(
             raise HTTPException(status_code=422, detail=[_multipart_missing_detail("bundle")])
         parsed_metadata = _parse_session_create_metadata(metadata)
         _reject_reserved_cost_control_label_seed(parsed_metadata.labels)
+        _reject_server_reserved_label_seed(parsed_metadata.labels)
 
         inherited_runner_id: str | None = None
         if parsed_metadata.parent_session_id is not None:
@@ -15888,6 +15946,7 @@ def create_sessions_router(
                 code=ErrorCode.INVALID_INPUT,
             )
         if body.labels:
+            _reject_server_reserved_label_seed(body.labels)
             # Advisor-owned cost_control.* labels are written only by the
             # session's bound runner; gate them on runner proof BEFORE any
             # store mutation so a rejected request leaves the session untouched.
@@ -17197,7 +17256,16 @@ def create_sessions_router(
             )
 
         engine = _build_engine()
-        ctx = _build_evaluation_context(phase, data, event, actor=_build_actor(user_id))
+        # Use the turn-initiating human's identity (persisted at forward time)
+        # so per-user policies gate on the correct actor even when the HTTP
+        # caller is the runner's service-account credential.  Falls back to
+        # user_id for direct API callers and native-terminal sessions (whose
+        # turns go via _dispatch_session_event_to_runner, which does not write
+        # this label).
+        turn_actor = conv.labels.get(_TURN_ACTOR_LABEL)
+        ctx = _build_evaluation_context(
+            phase, data, event, actor=_build_actor(turn_actor or user_id)
+        )
         result = await engine.evaluate(ctx, read_only=is_read_only)
 
         # URL-based elicitation for blocking phases: on a TOOL_CALL or
@@ -19915,6 +19983,29 @@ def create_sessions_router(
                     "Session not found",
                     code=ErrorCode.NOT_FOUND,
                 )
+        created_by = _attribution_user(user_id)
+        body_created_by = _attribution_user(body.created_by)
+        if body_created_by is not None:
+            # O runner reivindica o ator humano que disparou o turno do filho,
+            # para o despertar do pai não aparecer como se ninguém o tivesse
+            # pedido. Só ele pode, e só se o ator ainda tiver acesso de edição.
+            if not _has_runner_created_by_authority(request, conv):
+                raise OmniCraftError(
+                    "created_by is reserved for runner-originated session events",
+                    code=ErrorCode.FORBIDDEN,
+                )
+            try:
+                await _require_access_and_level(
+                    body_created_by,
+                    session_id,
+                    LEVEL_EDIT,
+                    permission_store,
+                    conversation_store,
+                )
+            except OmniCraftError:
+                pass
+            else:
+                created_by = body_created_by
         # Validate event type at the route boundary. Anything not in
         # ``_ALLOWED_EVENT_TYPES`` is a client mistake — failing here
         # is far better than silently persisting an item the agent
@@ -20324,7 +20415,7 @@ def create_sessions_router(
                 conv,
                 body,
                 conversation_store,
-                created_by=_attribution_user(user_id),
+                created_by=created_by,
             )
             return {"queued": False, "item_id": item_id}
         if body.type == _EXTERNAL_OUTPUT_TEXT_DELTA_TYPE:
@@ -20731,7 +20822,7 @@ def create_sessions_router(
                             conversation_store,
                             launch_attempt.error,
                             runner_router,
-                            created_by=_attribution_user(user_id),
+                            created_by=created_by,
                         )
                         return {"queued": True, "item_id": item_id}
                     relaunched_runner_id = launch_attempt.runner_id
@@ -20818,7 +20909,7 @@ def create_sessions_router(
                     conversation_store,
                     offline_error,
                     runner_router,
-                    created_by=_attribution_user(user_id),
+                    created_by=created_by,
                 )
                 return {"queued": True, "item_id": item_id}
             # Raise so the OmniCraft server doesn't persist an item the
@@ -20916,7 +21007,7 @@ def create_sessions_router(
                 runner_client,
                 agent=_agent,
                 has_mcp_servers=_has_mcp_servers,
-                created_by=_attribution_user(user_id),
+                created_by=created_by,
             )
             return {"queued": True, "item_id": item_id}
         dispatch = await _dispatch_session_event_to_runner(
@@ -20929,7 +21020,7 @@ def create_sessions_router(
             file_store=file_store,
             artifact_store=artifact_store,
             has_mcp_servers=_has_mcp_servers,
-            created_by=_attribution_user(user_id),
+            created_by=created_by,
             runner_router=runner_router,
         )
         response: dict[str, Any] = {"queued": True}
@@ -21931,6 +22022,8 @@ def create_sessions_router(
             )
 
         if method == "tools/call":
+            _mcp_conv = await asyncio.to_thread(conversation_store.get_conversation, session_id)
+            turn_actor = _mcp_conv.labels.get(_TURN_ACTOR_LABEL) if _mcp_conv is not None else None
             return await _handle_mcp_tools_call(
                 rpc_id,
                 session_id,
@@ -21938,7 +22031,7 @@ def create_sessions_router(
                 conversation_store,
                 agent_store,
                 runner_router,
-                actor=_build_actor(user_id),
+                actor=_build_actor(turn_actor or user_id),
                 request=request,
             )
 

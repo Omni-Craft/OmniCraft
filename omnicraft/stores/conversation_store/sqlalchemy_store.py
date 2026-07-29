@@ -49,13 +49,13 @@ from omnicraft.db.enum_codecs import (
 from omnicraft.db.utils import (
     _supports_fts5,
     build_search_snippet,
-    delete_fts_by_conversation,
+    delete_fts_by_conversation_ids,
     ensure_fts_table,
     extract_search_text,
     generate_conversation_id,
     generate_item_id,
     get_or_create_engine,
-    insert_fts,
+    insert_fts_bulk,
     make_managed_session_maker,
     now_epoch,
     strip_nul_bytes,
@@ -1631,6 +1631,7 @@ class SqlAlchemyConversationStore(ConversationStore):
                     + 1
                 )
 
+            fts_rows: list[tuple[str, str, str]] = []
             for item in items:
                 position = next_pos
                 next_pos += 1
@@ -1655,7 +1656,7 @@ class SqlAlchemyConversationStore(ConversationStore):
                     created_by=item.created_by,
                 )
                 session.add(row)
-                insert_fts(session, item_id, conversation_id, search)
+                fts_rows.append((item_id, conversation_id, search))
                 persisted.append(
                     ConversationItem(
                         id=row.id,
@@ -1670,6 +1671,7 @@ class SqlAlchemyConversationStore(ConversationStore):
                         created_by=item.created_by,
                     )
                 )
+            insert_fts_bulk(session, fts_rows)
 
             # Persist the advanced counter so the next append reads it instead
             # of scanning; this also lazily backfills a pre-counter conversation.
@@ -2853,6 +2855,7 @@ class SqlAlchemyConversationStore(ConversationStore):
                 items_query = items_query.where(SqlConversationItem.position <= cutoff_position)
             source_items = session.execute(items_query).scalars().all()
 
+            fts_rows: list[tuple[str, str, str]] = []
             for pos, src_item in enumerate(source_items):
                 # src_item.type/status are int codes copied verbatim to the new
                 # row; only generate_item_id needs the decoded string type.
@@ -2870,12 +2873,8 @@ class SqlAlchemyConversationStore(ConversationStore):
                     created_by=src_item.created_by,
                 )
                 session.add(new_item)
-                insert_fts(
-                    session,
-                    new_item_id,
-                    new_conv.id,
-                    src_item.search_text or "",
-                )
+                fts_rows.append((new_item_id, new_conv.id, src_item.search_text or ""))
+            insert_fts_bulk(session, fts_rows)
 
             # The clone copied len(source_items) items at dense positions
             # 0..N-1, so its position allocator starts at N. Seed it from the
@@ -3126,8 +3125,7 @@ class SqlAlchemyConversationStore(ConversationStore):
 
             # Delete per-conversation child rows for every conversation in
             # the subtree before touching the conversation rows themselves.
-            for conv_id in subtree_ids:
-                delete_fts_by_conversation(session, conv_id)
+            delete_fts_by_conversation_ids(session, subtree_ids)
 
             session.execute(
                 delete(SqlConversationItem).where(

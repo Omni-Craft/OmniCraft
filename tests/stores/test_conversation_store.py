@@ -4921,3 +4921,45 @@ def test_list_conversations_owned_by_excludes_shared_sessions(
         ).data
     }
     assert ids == {mine.id}
+
+
+@pytest.mark.asyncio
+async def test_delete_conversation_purges_the_search_index(
+    conversation_store: SqlAlchemyConversationStore,
+) -> None:
+    """Deleting a subtree removes its FTS rows — for every conversation in it.
+
+    The purge is one batched statement over the whole subtree; a filho whose
+    id fell out of the batch would leave rows behind and the deleted text
+    would keep showing up in search.
+    """
+    parent = conversation_store.create_conversation()
+    child = conversation_store.create_conversation(
+        kind="sub_agent",
+        parent_conversation_id=parent.id,
+    )
+    for conv_id, texto in ((parent.id, "abacaxi do pai"), (child.id, "abacaxi do filho")):
+        conversation_store.append(
+            conv_id,
+            [
+                NewConversationItem(
+                    type="message",
+                    response_id=f"resp_{conv_id}",
+                    data=MessageData(
+                        role="user",
+                        content=[{"type": "input_text", "text": texto}],
+                    ),
+                )
+            ],
+        )
+    assert len(conversation_store.search("abacaxi")) == 2
+
+    assert await conversation_store.delete_conversation(parent.id) is True
+
+    # Contado direto na tabela FTS: `search` junta com as conversas, então
+    # uma linha órfã ficaria invisível por ali e sobreviveria calada, inchando
+    # o índice a cada sessão apagada.
+    with conversation_store._session() as session:
+        restantes = session.execute(text("SELECT COUNT(*) FROM conversation_items_fts")).scalar()
+    assert restantes == 0
+    assert conversation_store.search("abacaxi") == []

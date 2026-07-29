@@ -954,6 +954,32 @@ def test_reassign_user_grants_dedups_when_target_already_has_grant(
     assert store.list_for_user("local") == []
 
 
+def test_reassign_user_grants_mixes_duplicates_and_moves_in_one_batch(
+    store: SqlAlchemyPermissionStore, db_uri: str
+) -> None:
+    """Um lote com duplicata e movimento resolve cada conversa pelo seu caso.
+
+    A reatribuição particiona a lista em duas consultas — apagar as que o
+    destino já tem, repontar o resto. Trocar as duas metades apagaria a
+    concessão que devia mudar de dono e o usuário perderia o acesso.
+    """
+    _ensure_user(store, "local")
+    _ensure_user(store, "alice")
+    so_local = _create_conversation(db_uri)
+    ambos = _create_conversation(db_uri)
+    store.grant("local", so_local, level=2)
+    store.grant("local", ambos, level=2)
+    store.grant("alice", ambos, level=2)
+
+    moved = store.reassign_user_grants("local", "alice")
+
+    assert moved == 1  # só a que alice ainda não tinha
+    assert sorted(p.conversation_id for p in store.list_for_user("alice")) == sorted(
+        [so_local, ambos]
+    )
+    assert store.list_for_user("local") == []
+
+
 # ── check_access ──────────────────────────────────────────────────────────────
 
 

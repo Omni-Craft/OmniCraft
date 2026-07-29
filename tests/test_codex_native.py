@@ -16,6 +16,7 @@ import httpx
 import pytest
 import yaml
 
+import omnicraft._platform as _platform
 from omnicraft import codex_native, codex_native_app_server, codex_native_forwarder
 from omnicraft._runner_startup import RunnerStartupProgress
 from omnicraft.codex_native_bridge import (
@@ -64,6 +65,10 @@ def _point_codex_auth_check_at(
         "which",
         lambda name: f"/tmp/{name}" if binary_present else None,
     )
+    # `_find_codex_cli` resolve por PATH *e* pela escada de diretórios globais;
+    # sem zerar a escada, o codex real da máquina do desenvolvedor faz o caso
+    # "binário ausente" encontrar um binário.
+    monkeypatch.setattr(_platform, "_cli_fallback_dirs", lambda: ())
 
 
 def test_codex_auth_unavailable_reason_binary_missing(

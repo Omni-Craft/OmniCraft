@@ -857,3 +857,38 @@ class TestPinCodexConfigModel:
         # read_codex_config_model resolves codex-home under the bridge dir.
         _pin_codex_config_model(home, "databricks-gpt-5-4-mini")
         assert read_codex_config_model(bridge_dir) == "databricks-gpt-5-4-mini"
+
+
+async def test_close_flushes_hook_trust_back_to_the_global_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Encerrar a sessão devolve ao config global a confiança aceita nela.
+
+    A confiança em hooks que o usuário aceita dentro da sessão é gravada no
+    `config.toml` privado, que é efêmero. Sem esta descarga no `close`, a
+    próxima sessão copia um config sem a confiança e o Codex abre de novo o
+    prompt interativo — que um sub-agente headless nunca responde, e o turno
+    morre no timeout.
+    """
+    global_home = tmp_path / "codex-global"
+    global_home.mkdir()
+    (global_home / "config.toml").write_text('model = "gpt-5.4"\n', encoding="utf-8")
+    codex_home = tmp_path / "codex-private"
+    codex_home.mkdir()
+    (codex_home / "config.toml").write_text(
+        f'model = "gpt-5.4"\n\n[hooks.state."{codex_home}/hooks.json:pre_tool_use:0:0"]\n'
+        'trusted_hash = "sha256:abc"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("CODEX_HOME", str(global_home))
+
+    app_server = _test_app_server(tmp_path, codex_home, tmp_path / "bridge", tmp_path)
+    await app_server.close()
+
+    texto = (global_home / "config.toml").read_text(encoding="utf-8")
+    # A chave volta apontando para o home global, não para o privado efêmero.
+    assert f"{global_home}/hooks.json:pre_tool_use:0:0" in texto
+    assert str(codex_home) not in texto
+    assert 'trusted_hash = "sha256:abc"' in texto
+    # O resto do config do usuário sobrevive.
+    assert 'model = "gpt-5.4"' in texto

@@ -18292,3 +18292,67 @@ async def test_turn_time_self_heal_probes_a_registered_but_dead_pane(
         "o self-heal deveria ter recriado o painel morto-mas-registrado; "
         f"chamadas de ensure: {ensure_calls!r}"
     )
+
+
+@pytest.mark.asyncio
+async def _capture_cursor_elicitation_kwargs(
+    *,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    terminal_launch_args: list[str] | None,
+) -> dict[str, Any]:
+    """Drive the cursor auto-create and return the elicitation supervisor kwargs.
+
+    The supervisors run in a background task, so the stub signals an event and
+    this waits on it with a real deadline — a fixed number of event-loop yields
+    would race the task's own scheduling.
+    """
+    capturado: dict[str, Any] = {}
+    chegou = asyncio.Event()
+
+    async def _captura(**kwargs: Any) -> None:
+        """Record the supervisor kwargs instead of supervising."""
+        capturado.update(kwargs)
+        chegou.set()
+
+    monkeypatch.setattr(
+        "omnicraft.cursor_native_permissions.supervise_cursor_transcript_elicitations",
+        _captura,
+    )
+    await _run_auto_create_cursor_terminal(
+        tmp_path=tmp_path,
+        monkeypatch=monkeypatch,
+        agent_spec=None,
+        terminal_launch_args=terminal_launch_args,
+    )
+    await asyncio.wait_for(chegou.wait(), timeout=5)
+    return capturado
+
+
+@pytest.mark.asyncio
+async def test_auto_create_cursor_terminal_threads_yolo_into_auto_accept(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`--yolo` nos args de lançamento liga o auto-accept do supervisor.
+
+    Guarda a fiação: sem ela, uma sessão de Run Everything ainda espelharia
+    ApprovalCard para um pai piloto que não tem como clicar, e o turno ficaria
+    parado no cartão até o timeout.
+    """
+    capturado = await _capture_cursor_elicitation_kwargs(
+        tmp_path=tmp_path, monkeypatch=monkeypatch, terminal_launch_args=["--yolo"]
+    )
+    assert capturado["auto_accept_approvals"] is True
+
+
+@pytest.mark.asyncio
+async def test_auto_create_cursor_terminal_leaves_auto_accept_off_without_yolo(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sem `--yolo`, o cartão web continua sendo o caminho — nada é aceito só."""
+    capturado = await _capture_cursor_elicitation_kwargs(
+        tmp_path=tmp_path, monkeypatch=monkeypatch, terminal_launch_args=None
+    )
+    assert capturado["auto_accept_approvals"] is False

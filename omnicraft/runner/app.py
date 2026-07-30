@@ -2269,7 +2269,10 @@ async def _auto_create_cursor_terminal(
     _runner_auth = _RunnerDatabricksAuth(_make_auth_token_factory())
 
     from omnicraft.cursor_native_forwarder import supervise_cursor_forwarder
-    from omnicraft.cursor_native_permissions import supervise_cursor_transcript_elicitations
+    from omnicraft.cursor_native_permissions import (
+        cursor_launch_args_enable_yolo,
+        supervise_cursor_transcript_elicitations,
+    )
     from omnicraft.cursor_native_usage import supervise_cursor_usage_forwarder
 
     if server_client is not None and ensure_comment_relay is not None:
@@ -2314,6 +2317,12 @@ async def _auto_create_cursor_terminal(
                 workspace=workspace,
                 launch_epoch_ms=launch_epoch_ms,
                 auth=_runner_auth,
+                # Sessão de yolo/force ainda deixa marcador pendente às vezes;
+                # responder no painel em vez de espelhar um cartão para um pai
+                # que não tem como clicar nele.
+                auto_accept_approvals=cursor_launch_args_enable_yolo(
+                    launch_config.terminal_launch_args
+                ),
             ),
             supervise_cursor_usage_forwarder(
                 base_url=server_url,

@@ -493,6 +493,7 @@ _CODEX_NATIVE_SUBAGENT_ROLE_LABEL_KEY = "omnicraft.codex_native.agent_role"
 # mirrored from app-server ``thread/settings/updated``.
 _CODEX_NATIVE_COLLABORATION_MODE_LABEL_KEY = "omnicraft.codex_native.collaboration_mode"
 _EXTERNAL_CODEX_COLLABORATION_MODE_CHANGE_TYPE: str = "external_codex_collaboration_mode_change"
+_EXTERNAL_CODEX_APPROVAL_MODE_CHANGE_TYPE: str = "external_codex_approval_mode_change"
 _CODEX_NATIVE_COLLABORATION_MODES: frozenset[str] = frozenset({"default", "plan"})
 
 
@@ -879,6 +880,7 @@ _ALLOWED_EVENT_TYPES: frozenset[str] = frozenset(ITEM_TYPE_TO_DATA_CLS.keys()) |
     _EXTERNAL_SUBAGENT_START_TYPE,
     _EXTERNAL_CODEX_SUBAGENT_START_TYPE,
     _EXTERNAL_CODEX_COLLABORATION_MODE_CHANGE_TYPE,
+    _EXTERNAL_CODEX_APPROVAL_MODE_CHANGE_TYPE,
 }
 
 # Validates every dict that crosses the AP→client SSE boundary on
@@ -3787,6 +3789,101 @@ async def _persist_external_reasoning_effort_change(
         reasoning_effort=effort,
     )
     session_stream.publish(session_id, event.model_dump())
+
+
+async def _persist_external_codex_approval_mode_change(
+    session_id: str,
+    conv: Conversation,
+    body: SessionEventInput,
+    conversation_store: ConversationStore,
+) -> None:
+    """
+    Persist the permission launch args the Codex terminal reported.
+
+    O modo de aprovação escolhido dentro da TUI vive nos argumentos de
+    lançamento. Sem persistir, um resume do host relança o codex com a
+    política padrão e os portões voltam — o que trava um pai piloto.
+
+    :param session_id: OmniCraft conversation id, e.g. ``"conv_abc123"``.
+    :param conv: The conversation being updated.
+    :param body: Event body carrying ``data.terminal_launch_args``.
+    :param conversation_store: Store used to persist the merged args.
+    :raises OmniCraftError: 400 when the payload is malformed.
+    """
+    raw_args = body.data.get("terminal_launch_args")
+    if not isinstance(raw_args, list):
+        raise OmniCraftError(
+            "external_codex_approval_mode_change requires data.terminal_launch_args list",
+            code=ErrorCode.INVALID_INPUT,
+        )
+    try:
+        permission_args = _validate_terminal_launch_args(raw_args)
+        terminal_launch_args = _validate_terminal_launch_args(
+            _merge_codex_permission_launch_args(conv.terminal_launch_args, permission_args or [])
+        )
+    except ValueError as exc:
+        raise OmniCraftError(
+            f"invalid terminal_launch_args: {exc}",
+            code=ErrorCode.INVALID_INPUT,
+        ) from exc
+    if conv.terminal_launch_args == terminal_launch_args:
+        return
+    await asyncio.to_thread(
+        conversation_store.update_conversation,
+        session_id,
+        terminal_launch_args=terminal_launch_args,
+    )
+
+
+def _merge_codex_permission_launch_args(
+    existing_args: Sequence[str] | None,
+    permission_args: Sequence[str],
+) -> list[str]:
+    """
+    Replace Codex permission arguments while preserving other launch args.
+
+    :param existing_args: Args currently persisted for the terminal.
+    :param permission_args: The permission/sandbox args just observed.
+    :returns: The existing args minus every permission-related one, with
+        *permission_args* appended.
+    """
+    config_keys = {
+        "approval_policy",
+        "approvals_reviewer",
+        "default_permissions",
+        "sandbox_mode",
+    }
+    value_options = {"--ask-for-approval", "-a", "--sandbox", "-s"}
+    merged: list[str] = []
+    args = list(existing_args or ())
+    index = 0
+    while index < len(args):
+        arg = args[index]
+        if arg == "--dangerously-bypass-approvals-and-sandbox":
+            index += 1
+            continue
+        if arg in value_options:
+            index += 2
+            continue
+        if arg.startswith(("--ask-for-approval=", "-a=", "--sandbox=", "-s=")):
+            index += 1
+            continue
+        if arg in {"--config", "-c"} and index + 1 < len(args):
+            key = args[index + 1].partition("=")[0].strip()
+            if key in config_keys:
+                index += 2
+                continue
+            merged.extend(args[index : index + 2])
+            index += 2
+            continue
+        if arg.startswith(("--config=", "-c=")):
+            key = arg.split("=", 1)[1].partition("=")[0].strip()
+            if key in config_keys:
+                index += 1
+                continue
+        merged.append(arg)
+        index += 1
+    return [*merged, *permission_args]
 
 
 async def _persist_external_codex_collaboration_mode_change(
@@ -20047,6 +20144,7 @@ def create_sessions_router(
             _EXTERNAL_SUBAGENT_START_TYPE,
             _EXTERNAL_CODEX_SUBAGENT_START_TYPE,
             _EXTERNAL_CODEX_COLLABORATION_MODE_CHANGE_TYPE,
+            _EXTERNAL_CODEX_APPROVAL_MODE_CHANGE_TYPE,
         ):
             try:
                 parse_item_data(body.type, {"type": body.type, **body.data})
@@ -20637,6 +20735,14 @@ def create_sessions_router(
             return {"queued": False}
         if body.type == _EXTERNAL_CODEX_COLLABORATION_MODE_CHANGE_TYPE:
             await _persist_external_codex_collaboration_mode_change(
+                session_id,
+                conv,
+                body,
+                conversation_store,
+            )
+            return {"queued": False}
+        if body.type == _EXTERNAL_CODEX_APPROVAL_MODE_CHANGE_TYPE:
+            await _persist_external_codex_approval_mode_change(
                 session_id,
                 conv,
                 body,

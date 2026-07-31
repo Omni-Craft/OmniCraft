@@ -8852,6 +8852,8 @@ def _title_content_from_item(item: NewConversationItem) -> list[dict[str, Any]]:
         return []
     if item.data.role != "user":
         return []
+    if item.data.is_meta:
+        return []
     return item.data.content
 
 

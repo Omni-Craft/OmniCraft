@@ -5729,3 +5729,45 @@ def test_hook_record_non_stop_event_has_zero_background_tasks() -> None:
         )
     )
     assert record.background_task_count == 0
+
+
+def test_read_transcript_items_since_marks_task_notifications_meta(tmp_path: Path) -> None:
+    """Aviso de tarefa vira item meta, não mensagem do usuário.
+
+    O bloco `<task-notification>` é controle: entrou no transcript como se o
+    usuário tivesse digitado, aparecendo no chat e — pior — drenando a fila de
+    entrada pendente, o que engoliria a próxima mensagem real.
+    """
+    task_notification = (
+        "<task-notification>\n"
+        "<task-id>b1mhekpmy</task-id>\n"
+        '<summary>Monitor event: "PR 2086 E2E UI + npm test CI results"</summary>\n'
+        "<event>E2E UI Tests (shard 2/3)\tfail\t1m50s\thttps://example.test</event>\n"
+        "</task-notification>"
+    )
+    transcript_path = tmp_path / "session.jsonl"
+    transcript_path.write_text(
+        json.dumps(
+            {
+                "type": "user",
+                "uuid": "task-notification-1",
+                "message": {"role": "user", "content": task_notification},
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    _cursor, current_response_id, items = read_transcript_items_since(
+        transcript_path,
+        0,
+        agent_name="claude-native-ui",
+    )
+
+    assert current_response_id is None
+    assert [item.item_type for item in items] == ["message"]
+    assert items[0].data == {
+        "role": "user",
+        "is_meta": True,
+        "content": [{"type": "input_text", "text": task_notification}],
+    }

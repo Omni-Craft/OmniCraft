@@ -2027,21 +2027,28 @@ async def test_auto_create_codex_terminal_uses_persisted_resume_launch_config(
 
     published_events: list[dict[str, Any]] = []
     forward_calls: list[dict[str, Any]] = []
-    preload_calls: list[tuple[str, str]] = []
+    preload_calls: list[tuple[str, str, list[str] | None]] = []
 
-    async def _fake_preload_thread(transport: str, loaded_thread_id: str) -> None:
+    async def _fake_preload_thread(
+        transport: str,
+        loaded_thread_id: str,
+        *,
+        terminal_launch_args: list[str] | None = None,
+    ) -> None:
         """
         Record preloading of the known Codex thread.
 
         :param transport: App-server transport URL.
         :param loaded_thread_id: Thread id passed to ``thread/resume``.
+        :param terminal_launch_args: Args persisted for the terminal; the
+            resume must carry them so the approval mode survives.
         :returns: None.
         """
         assert codex_native_bridge.read_bridge_state(bridge_dir) is None, (
             "stale bridge state must be cleared until the new app-server has "
             "loaded the resume thread"
         )
-        preload_calls.append((transport, loaded_thread_id))
+        preload_calls.append((transport, loaded_thread_id, terminal_launch_args))
 
     async def _fake_forward_known_thread(**kwargs: Any) -> None:
         """
@@ -2106,7 +2113,15 @@ async def test_auto_create_codex_terminal_uses_persisted_resume_launch_config(
     assert launched.env["CODEX_HOME"] == str(app_server.codex_home)
     assert launched.tmux_start_on_attach is False
     assert launched.tmux_allow_passthrough is True
-    assert preload_calls == [(app_server.listen_url, thread_id)]
+    # O resume leva os argumentos de permissão persistidos: sem isso o codex
+    # sobe com a política padrão e os portões voltam.
+    assert preload_calls == [
+        (
+            app_server.listen_url,
+            thread_id,
+            ["--config", "approval_policy=on-request"],
+        )
+    ]
     assert published_events[0]["type"] == "session.resource.created"
     assert forward_calls == [
         {
@@ -2315,7 +2330,12 @@ async def test_auto_create_codex_terminal_fork_clones_rollout_and_resumes(
     forward_calls: list[dict[str, Any]] = []
     preload_calls: list[tuple[str, str]] = []
 
-    async def _fake_preload_thread(transport: str, loaded_thread_id: str) -> None:
+    async def _fake_preload_thread(
+        transport: str,
+        loaded_thread_id: str,
+        *,
+        terminal_launch_args: list[str] | None = None,
+    ) -> None:
         """
         Record preloading of the cloned Codex thread.
 
@@ -2574,7 +2594,12 @@ async def test_auto_create_codex_terminal_fork_builds_rollout_from_items_and_res
     forward_calls: list[dict[str, Any]] = []
     preload_calls: list[tuple[str, str]] = []
 
-    async def _fake_preload_thread(transport: str, loaded_thread_id: str) -> None:
+    async def _fake_preload_thread(
+        transport: str,
+        loaded_thread_id: str,
+        *,
+        terminal_launch_args: list[str] | None = None,
+    ) -> None:
         """:param transport: App-server URL. :param loaded_thread_id: Resumed thread."""
         preload_calls.append((transport, loaded_thread_id))
 
@@ -17689,7 +17714,12 @@ async def test_auto_create_codex_terminal_recreate_cancels_prior_forwarder(
         async def close(self) -> None:
             """:returns: None."""
 
-    async def _fake_preload_thread(transport: str, loaded_thread_id: str) -> None:
+    async def _fake_preload_thread(
+        transport: str,
+        loaded_thread_id: str,
+        *,
+        terminal_launch_args: list[str] | None = None,
+    ) -> None:
         """
         No-op thread preload.
 

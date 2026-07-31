@@ -4840,6 +4840,12 @@ def _codex_native_model_from_spec(agent_spec: AgentSpec | ResolvedSpec | None) -
     """
     Read the Codex model default from a resolved agent spec.
 
+    Lê o campo canônico ``spec.executor.model`` — o mesmo que o harness
+    em processo consome —, caindo em ``executor.config["model"]`` para specs
+    de bundle que pinam o modelo dentro do bloco de config do harness. O
+    carregador de agente em arquivo único nunca preenche o segundo, então ler
+    só ele trocava calado o ``model:`` declarado pelo padrão do provedor.
+
     :param agent_spec: Agent spec object, or a resolved wrapper carrying a
         ``spec`` attribute. ``None`` means no spec was available.
     :returns: Model id, e.g. ``"gpt-5.4-mini"``, or ``None``.
@@ -4847,8 +4853,11 @@ def _codex_native_model_from_spec(agent_spec: AgentSpec | ResolvedSpec | None) -
     spec = agent_spec.spec if isinstance(agent_spec, ResolvedSpec) else agent_spec
     if spec is None:
         return None
-    model = spec.executor.config.get("model")
-    return model if isinstance(model, str) and model else None
+    model = spec.executor.model
+    if isinstance(model, str) and model:
+        return model
+    config_model = spec.executor.config.get("model")
+    return config_model if isinstance(config_model, str) and config_model else None
 
 
 def _cursor_native_model_from_spec(agent_spec: AgentSpec | ResolvedSpec | None) -> str | None:

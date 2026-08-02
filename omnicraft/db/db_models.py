@@ -990,8 +990,9 @@ class SqlPolicy(Base):
     __table_args__ = (
         CheckConstraint("type IN (1, 2)", name="ck_policies_type"),
         CheckConstraint("scope IN (1, 2)", name="ck_policies_scope"),
-        Index("ix_policies_created_at", "workspace_id", "created_at", "id"),
-        Index("ix_policies_session_id", "workspace_id", "session_id", "id"),
+        # ``list_defaults`` filtra por escopo; sem este índice ela varria todas
+        # as linhas de sessão para achar as poucas globais.
+        Index("ix_policies_scope", "workspace_id", "scope", "id"),
         # Name uniqueness keys on name_cksum (sha256 of name) rather than the
         # wide name column, for a compact 32-byte index entry.
         UniqueConstraint(

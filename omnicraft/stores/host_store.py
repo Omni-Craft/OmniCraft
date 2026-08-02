@@ -12,6 +12,7 @@ connection state is tracked separately in the in-memory
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import logging
 from dataclasses import dataclass
@@ -699,33 +700,41 @@ class HostStore:
             session.add(row)
             return _row_to_host(row)
 
-    def resolve_launch_token(self, token: str) -> Host | None:
+    def resolve_launch_token(self, host_id: str, token: str) -> Host | None:
         """
-        Resolve a presented launch token to its managed host, if valid.
+        Resolve a launch token presented for *host_id* to its managed host.
 
-        The host tunnel's auth path for managed hosts. Lookup is by
-        SHA-256 digest — the comparison happens inside an indexed
-        equality query on a uniformly distributed hash, which is not
-        byte-by-byte comparable from the network (the standard
-        reset-token pattern; no timing oracle on the raw token).
-        Expired tokens do not authenticate; the expiry is checked
-        atomically with the lookup.
+        O caminho de auth do túnel de host gerenciado. O endpoint é
+        ``/hosts/{host_id}/tunnel``, então o par que conecta JÁ diz qual host
+        afirma ser — o token só prova a afirmação. A linha é buscada pela
+        chave primária ``(workspace_id, host_id)`` e o digest guardado é
+        comparado ao do token apresentado com :func:`hmac.compare_digest`:
+        tempo constante, sem oráculo de temporização sobre o token cru.
+        Apresentar o token de outro host falha fechado, porque o digest da
+        linha nomeada não bate. Token expirado não autentica.
 
+        :param host_id: O host que o par afirma ser, vindo do caminho do
+            túnel, e.g. ``"host_a1b2c3d4..."``.
         :param token: The raw token presented by a connecting host.
-        :returns: The matching :class:`Host` whose token is unexpired,
-            or ``None`` when the token is unknown or expired.
+        :returns: The matching :class:`Host` whose token is unexpired, or
+            ``None`` when the host is unknown, the token does not match, or
+            the token is expired.
         """
         with self._session() as session:
             row = session.execute(
                 select(SqlHost).where(
                     SqlHost.workspace_id == current_workspace_id(),
-                    SqlHost.token_hash == hash_host_launch_token(token),
+                    SqlHost.host_id == host_id,
                 )
             ).scalar_one_or_none()
-            # token_expires_at is written together with token_hash, so a
-            # matched row always carries it; the None arm is mypy
-            # narrowing that doubles as fail-closed.
-            if row is None or row.token_expires_at is None or row.token_expires_at < now_epoch():
+            # token_hash e token_expires_at são escritos juntos; linha com
+            # qualquer um deles vazio (host externo, ou credencial revogada)
+            # nunca autentica.
+            if row is None or row.token_hash is None or row.token_expires_at is None:
+                return None
+            if not hmac.compare_digest(row.token_hash, hash_host_launch_token(token)):
+                return None
+            if row.token_expires_at < now_epoch():
                 return None
             return _row_to_host(row)
 

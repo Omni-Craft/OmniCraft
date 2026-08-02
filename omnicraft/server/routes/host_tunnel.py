@@ -152,7 +152,9 @@ def create_host_tunnel_router(
             # into header/anonymous auth). The token is scoped to one
             # host_id; presenting it for any other path fails closed so a
             # leaked token cannot register arbitrary hosts.
-            managed = await asyncio.to_thread(host_store.resolve_launch_token, managed_token)
+            managed = await asyncio.to_thread(
+                host_store.resolve_launch_token, host_id, managed_token
+            )
             if managed is None or managed.host_id != host_id:
                 await ws.close(code=4004, reason="unauthenticated")
                 return

@@ -77,15 +77,21 @@ class FileStore(ABC):
     @abstractmethod
     def list(
         self,
+        session_id: str,
         limit: int = 20,
         after: str | None = None,
         before: str | None = None,
         order: str = "desc",
-        session_id: str | None = None,
         include_unscoped: bool = False,
     ) -> PagedList[StoredFile]:
         """
-        List files with cursor-based pagination.
+        List a session's files with cursor-based pagination.
+
+        Sempre escopada por ``session_id``: a consulta filtra por ele, então é
+        servida pelo ``ix_files_session_id_created_at``. A listagem sem escopo
+        que existia aqui não tinha chamador — as duas rotas de produção sempre
+        passavam a sessão — e era a única coisa que justificava o
+        ``ix_files_created_at`` separado.
 
         When ``session_id`` is set, only files owned by that
         session are returned. When ``None``, all files are listed

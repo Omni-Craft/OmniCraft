@@ -6,6 +6,10 @@ import pytest
 
 from omnicraft.stores.file_store.sqlalchemy_store import SqlAlchemyFileStore
 
+# Sessão dona dos arquivos nos testes que antes listavam sem escopo:
+# `list` agora exige o escopo, para a varredura sem índice não voltar.
+_SID = "conv_teste_arquivos"
+
 
 @pytest.fixture()
 def file_store(db_uri: str) -> SqlAlchemyFileStore:
@@ -45,35 +49,35 @@ def test_delete(file_store: SqlAlchemyFileStore) -> None:
 
 def test_list_pagination(file_store: SqlAlchemyFileStore) -> None:
     for i in range(4):
-        file_store.create(filename=f"f{i}.txt", bytes=i)
+        file_store.create(filename=f"f{i}.txt", bytes=i, session_id=_SID)
 
-    page1 = file_store.list(limit=2)
+    page1 = file_store.list(session_id=_SID, limit=2)
     assert len(page1.data) == 2
     assert page1.has_more is True
 
-    page2 = file_store.list(limit=2, after=page1.last_id)
+    page2 = file_store.list(session_id=_SID, limit=2, after=page1.last_id)
     assert len(page2.data) == 2
     assert page2.has_more is False
 
 
 def test_list_order_asc(file_store: SqlAlchemyFileStore) -> None:
     for i in range(3):
-        file_store.create(filename=f"f{i}.txt", bytes=i)
-    page_desc = file_store.list(order="desc")
-    page_asc = file_store.list(order="asc")
+        file_store.create(filename=f"f{i}.txt", bytes=i, session_id=_SID)
+    page_desc = file_store.list(session_id=_SID, order="desc")
+    page_asc = file_store.list(session_id=_SID, order="asc")
     assert [f.id for f in page_asc.data] == list(reversed([f.id for f in page_desc.data]))
 
 
 def test_list_asc_with_after_cursor(file_store: SqlAlchemyFileStore) -> None:
     for i in range(5):
-        file_store.create(filename=f"f{i}.txt", bytes=i)
+        file_store.create(filename=f"f{i}.txt", bytes=i, session_id=_SID)
 
-    page1 = file_store.list(limit=2, order="asc")
-    page2 = file_store.list(limit=2, order="asc", after=page1.last_id)
-    page3 = file_store.list(limit=2, order="asc", after=page2.last_id)
+    page1 = file_store.list(session_id=_SID, limit=2, order="asc")
+    page2 = file_store.list(session_id=_SID, limit=2, order="asc", after=page1.last_id)
+    page3 = file_store.list(session_id=_SID, limit=2, order="asc", after=page2.last_id)
 
     all_ids = [f.id for f in page1.data + page2.data + page3.data]
-    full_asc = file_store.list(limit=100, order="asc")
+    full_asc = file_store.list(session_id=_SID, limit=100, order="asc")
     assert all_ids == [f.id for f in full_asc.data]
 
 
@@ -190,7 +194,7 @@ def test_list_include_unscoped_false_excludes_global_files(
 
 def test_list_empty(file_store: SqlAlchemyFileStore) -> None:
     """list on an empty store returns empty PagedList."""
-    page = file_store.list()
+    page = file_store.list(session_id=_SID)
     assert page.data == []
     assert page.first_id is None
     assert page.last_id is None

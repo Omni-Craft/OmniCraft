@@ -254,7 +254,6 @@ class SqlFile(Base):
     session_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     __table_args__ = (
-        Index("ix_files_created_at", "workspace_id", "created_at", "id"),
         Index(
             "ix_files_session_id_created_at",
             "workspace_id",

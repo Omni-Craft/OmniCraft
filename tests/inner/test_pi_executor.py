@@ -3960,3 +3960,50 @@ def test_pi_turn_without_usage_leaves_usage_none() -> None:
         assert turn_complete[0].response == "Hi there"
 
     _run(_test())
+
+
+def test_pi_sandbox_grants_the_system_tmpdir(monkeypatch, tmp_path) -> None:
+    """O sandbox do pi precisa alcançar o $TMPDIR do sistema, não só /tmp.
+
+    No macOS o `$TMPDIR` é um diretório por usuário sob `/var/folders/`, e o
+    `PI_CODING_AGENT_DIR` nasce de `tempfile.mkdtemp()` — ou seja, lá dentro.
+    Conceder só `/tmp` deixava o pi sem acesso ao próprio diretório de
+    trabalho, e a sessão morria sem explicar por quê.
+    """
+    import tempfile
+
+    from omnicraft.inner import sandbox as sandbox_mod
+    from omnicraft.inner.datamodel import OSEnvSandboxSpec, OSEnvSpec
+    from omnicraft.inner.sandbox import SandboxPolicy
+
+    captured: dict[str, SandboxPolicy] = {}
+
+    def _fake_create_exec_launcher(target_path: str, sandbox: SandboxPolicy) -> str:
+        """Capture the policy handed to the launcher."""
+        del target_path
+        captured["policy"] = sandbox
+        return "/fake/launcher"
+
+    def _fake_resolve_sandbox(_os_env: OSEnvSpec, cwd: Path) -> SandboxPolicy:
+        """Deny-default policy with no spec-supplied grants."""
+        return SandboxPolicy(
+            backend_type="darwin_seatbelt",
+            active=True,
+            read_roots=None,
+            write_roots=[cwd.resolve(strict=False)],
+            write_files=[],
+            allow_network=False,
+        )
+
+    monkeypatch.setattr(sandbox_mod, "resolve_sandbox", _fake_resolve_sandbox)
+    monkeypatch.setattr(sandbox_mod, "create_exec_launcher", _fake_create_exec_launcher)
+
+    with patch("omnicraft.inner.pi_executor._find_pi_cli", return_value="/usr/bin/pi"):
+        PiExecutor(
+            cwd=str(tmp_path),
+            os_env=OSEnvSpec(sandbox=OSEnvSandboxSpec(type="darwin_seatbelt")),
+        )
+
+    write_roots = captured["policy"].write_roots
+    tmpdir = Path(tempfile.gettempdir()).resolve(strict=False)
+    assert tmpdir in write_roots, f"$TMPDIR ({tmpdir}) não foi concedido: {write_roots}"

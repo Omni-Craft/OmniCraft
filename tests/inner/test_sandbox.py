@@ -7,6 +7,7 @@ import contextlib
 import json
 import logging
 import os
+import pathlib
 import subprocess
 import sys
 
@@ -18,6 +19,7 @@ from omnicraft.inner.sandbox import (
     create_exec_launcher,
     create_private_tmpdir,
     run_launcher,
+    with_additional_read_roots,
     with_additional_write_roots,
 )
 from omnicraft.runner.identity import RUNNER_TUNNEL_BINDING_TOKEN_ENV_VAR
@@ -551,3 +553,28 @@ def test_adopt_or_mint_argv_scratch_bad_ownership_refused(tmp_path) -> None:
     finally:
         cleanup_private_tmpdir(minted_dir)
         cleanup_private_tmpdir(external)
+
+
+def test_with_additional_read_roots_honours_extras_when_spec_declares_none() -> None:
+    """`read_roots=None` não pode engolir o que o chamador está concedendo.
+
+    `None` significa "o spec não declarou grants" — nos backends de negação
+    por padrão (darwin_seatbelt, linux_bwrap) isso é o caso comum. Curto-
+    circuitar ali descartava calado as raízes que o chamador acrescenta de
+    propósito (o diretório de node_modules do pi, por exemplo), e o sandbox
+    subia sem elas.
+    """
+    base = SandboxPolicy(
+        backend_type="darwin_seatbelt",
+        active=True,
+        read_roots=None,
+        write_roots=[],
+        write_files=[],
+        allow_network=False,
+    )
+    extra = pathlib.Path("/opt/omnicraft/node_modules")
+
+    ampliada = with_additional_read_roots(base, [extra])
+
+    assert ampliada.read_roots is not None, "a concessão do chamador sumiu"
+    assert extra.resolve(strict=False) in ampliada.read_roots

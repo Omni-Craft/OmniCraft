@@ -89,7 +89,16 @@ def auth_app(
     :param tmp_path: Pytest temp dir for artifacts.
     :returns: A :class:`FastAPI` instance with auth and policy routes.
     """
+    from omnicraft.policies.registry import load_registry
     from omnicraft.server.auth import UnifiedAuthProvider
+
+    # O arranque do servidor popula o registro de políticas antes de servir
+    # (`app.py`, junto de `_ensure_default_agents`). Esta fixture monta o app
+    # direto, sem aquele passo, então `GET /v1/policy-registry` respondia com
+    # catálogo vazio. Passava assim mesmo quando a suíte inteira rodava, porque
+    # o registro é um singleton de módulo e algum teste anterior o carregava —
+    # e falhava na lane do CI, que roda só este subconjunto.
+    load_registry()
 
     artifact_store = LocalArtifactStore(str(tmp_path / "artifacts"))
     return create_app(

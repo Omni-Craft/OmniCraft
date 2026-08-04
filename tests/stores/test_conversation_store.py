@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import text
 
-from omnicraft.db.utils import get_or_create_engine
+from omnicraft.db.utils import _supports_fts5, get_or_create_engine
 from omnicraft.entities import (
     ErrorData,
     FunctionCallData,
@@ -4959,7 +4959,14 @@ async def test_delete_conversation_purges_the_search_index(
     # Contado direto na tabela FTS: `search` junta com as conversas, então
     # uma linha órfã ficaria invisível por ali e sobreviveria calada, inchando
     # o índice a cada sessão apagada.
+    #
+    # A tabela só existe nos dialetos com FTS5 (SQLite e D1); no Postgres e no
+    # MySQL a busca é outra e não há o que contar. Sem esta guarda o teste
+    # derrubava as lanes de banco real do CI, que rodam a mesma suíte.
     with conversation_store._session() as session:
-        restantes = session.execute(text("SELECT COUNT(*) FROM conversation_items_fts")).scalar()
-    assert restantes == 0
+        if _supports_fts5(session.bind.dialect.name):
+            restantes = session.execute(
+                text("SELECT COUNT(*) FROM conversation_items_fts")
+            ).scalar()
+            assert restantes == 0
     assert conversation_store.search("abacaxi") == []

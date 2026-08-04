@@ -10635,13 +10635,9 @@ async def _ensure_runner_relay_ready(
     return handle
 
 
-# Per-session compaction locks so concurrent ``/compact`` POSTs
-# don't race.
-_COMPACT_LOCKS: dict[str, asyncio.Lock] = {}
-
-
-# Valores fracos limitam o registro de locks por sessão sem separar quem espera
-# em objetos diferentes durante a evicção.
+# Locks de compactação por sessão, para dois ``/compact`` simultâneos não
+# correrem um contra o outro. Valores fracos limitam o registro sem separar
+# quem espera em objetos diferentes durante a evicção.
 _COMPACT_LOCKS: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 
 

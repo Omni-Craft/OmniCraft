@@ -30,7 +30,6 @@ import re
 import secrets
 import time
 import urllib.parse
-import weakref
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
@@ -198,6 +197,33 @@ from omnicraft.server.routes._content_type import (
 )
 from omnicraft.server.routes._host_worktree import CreatedWorktree
 from omnicraft.server.routes._origin import require_trusted_origin
+
+# Estado de processo compartilhado. Importado, não redefinido: estes são OS
+# objetos, e reatribuir qualquer um aqui quebraria o compartilhamento com
+# quem importa pelo mesmo nome. Ver _sessions/estado.py.
+from omnicraft.server.routes._sessions.estado import (  # noqa: F401 — reexportado
+    _COMPACT_LOCKS,
+    _WATCHER_TASKS,
+    _deferred_elicitation_clear_tasks,
+    _intentional_stop_sessions,
+    _interrupt_fenced_sessions,
+    _managed_launch_tasks,
+    _model_options_cache,
+    _model_options_inflight,
+    _native_ask_gate_locks,
+    _native_popup_forward_tasks,
+    _read_explicit_unread,
+    _read_last_seen,
+    _runner_skills_cache,
+    _runner_skills_inflight,
+    _session_active_response_cache,
+    _session_background_task_count_cache,
+    _session_mcp_startup_cache,
+    _session_sandbox_status_cache,
+    _session_status_cache,
+    _session_terminal_pending_cache,
+    _session_todos_cache,
+)
 from omnicraft.server.schemas import (
     AgentObject,
     ChildSessionList,
@@ -392,6 +418,7 @@ _EXTERNAL_SESSION_STATUS_TYPE: str = "external_session_status"
 _EXTERNAL_SESSION_STATUS_VALUES: frozenset[str] = frozenset(
     {"idle", "running", "waiting", "failed"}
 )
+
 # Native transcript forwarders post completed assistant items immediately
 # before ``external_session_status: idle``. Scanning the latest message
 # window avoids a full transcript read while still tolerating tool/user
@@ -887,58 +914,6 @@ _ALLOWED_EVENT_TYPES: frozenset[str] = frozenset(ITEM_TYPE_TO_DATA_CLS.keys()) |
 # the session stream. Built once at module load.
 _SERVER_STREAM_EVENT_ADAPTER: TypeAdapter[ServerStreamEvent] = TypeAdapter(ServerStreamEvent)
 
-# Strong-references for per-session task watchers spawned via
-# ``asyncio.create_task``. Without this, asyncio's task registry only
-# holds a weak reference and the GC can collect a running task before
-# it finishes (the well-known RUF006 / Python ``asyncio`` footgun).
-# Entries are evicted by a done-callback on the task itself.
-_WATCHER_TASKS: set[asyncio.Task[None]] = set()
-
-# Per-session status cache updated by the runner SSE relay.
-# Used by _get_session_snapshot.
-_session_status_cache: dict[str, str] = {}
-
-# Per-session in-flight response id, tracked alongside _session_status_cache.
-# Set when a running/waiting status edge carries a response_id (native Claude's
-# turn-start edge does); popped on idle/failed. Projected onto the session
-# snapshot as ``active_response_id`` so a client reconnecting mid-turn can
-# reopen the streaming ``activeResponse`` and keep forwarded tool cards
-# rendering LIVE — the SSE stream is "snapshot + live tail, no replay", so the
-# turn-start ``running`` event is never re-sent on reconnect.
-_session_active_response_cache: dict[str, str] = {}
-# Per-session background-shell tally (claude-native), kept in lockstep with
-# ``_session_status_cache`` so a snapshot/reload re-shows "N background tasks
-# still running" after the live SSE edge is gone. The authoritative source is
-# the ``Stop`` hook's ``background_tasks`` count: a positive count sets the
-# tally, an explicit ``0`` clears it (so a finished shell drops the indicator
-# at the next turn end), and a new turn (``running``) or a failure also clears
-# it. The trailing PTY-activity ``idle`` carries no count and must NOT clear it.
-#
-# KNOWN LIMITATION — the tally only refreshes at a turn boundary. Claude Code
-# emits no background-shell-completion hook, so a ``0`` is only ever posted by
-# the next ``Stop``. If a shell exits while the session is already idle and the
-# user never sends another message, no ``Stop`` fires and the indicator (chat,
-# sidebar, and reloads via ``_get_session_snapshot``) can read "N background
-# tasks still running" until the next turn. In practice the agent usually
-# narrates the shell's completion — which IS a turn, so its ``Stop`` clears the
-# tally — bounding the stale window to the next interaction. This mirrors the
-# TUI's own turn-boundary update of its "N shells still running" banner.
-# In-memory only — repopulates from live edges, exactly like the status cache.
-_session_background_task_count_cache: dict[str, int] = {}
-
-# Per-user read tracking, keyed by the user's discovery key (user id, or
-# the shared key in single-user mode) then by session id. Mirrors the two
-# values the web client used to keep in localStorage: a "last seen"
-# wall-clock baseline and an explicit "marked unread" override set.
-# In-memory only — like _session_status_cache it does NOT survive a server
-# restart. Unlike status (rederivable from the runner), read state has no
-# durable source, so a restart resets it; this is an accepted tradeoff for
-# keeping it server-side (shared across a user's devices while up) without
-# a DB. Entries are never pruned on session delete (bounded by churn,
-# wiped on restart).
-_read_last_seen: dict[str, dict[str, int]] = {}
-_read_explicit_unread: dict[str, set[str]] = {}
-
 
 def _read_state_entry(user_id: str | None, session_id: str) -> tuple[int | None, bool]:
     """
@@ -994,18 +969,6 @@ def _prune_session_read_state(session_id: str) -> None:
     for unread in _read_explicit_unread.values():
         unread.discard(session_id)
 
-
-# Sessions whose current turn was Stopped: the relay drops the turn's trailing
-# response.* output (no forward, no persist). The fence lifts on the next
-# turn's "running" status or on any terminal response.* event.
-_interrupt_fenced_sessions: set[str] = set()
-
-# Sessões cujo túnel do runner estamos prestes a derrubar DE PROPÓSITO, como
-# parte de um Stop pedido por quem usa. O tratamento de desconexão do relay
-# consulta isto para que a queda intencional vire um "parado" quieto em vez de
-# um `runner_disconnected` assustador. De uso único: o próprio tratamento
-# descarta, então uma desconexão real depois continua aparecendo.
-_intentional_stop_sessions: set[str] = set()
 
 # Turn-terminal response lifecycle events: the relay flushes buffered
 # assistant text on each of these and resets its turn-scoped state.
@@ -1080,45 +1043,6 @@ def _announce_session_added(user_id: str | None, session_id: str) -> None:
     )
 
 
-# Per-session todo cache updated by external_session_todos events from the
-# claude-native forwarder. Used by _build_session_response to populate the
-# ``todos`` snapshot field so the panel survives page refresh.
-_session_todos_cache: dict[str, list[dict[str, Any]]] = {}
-
-# Per-session terminal-spin-up flag updated by the runner SSE relay from
-# ``session.terminal_pending`` events (and self-healed when a real terminal
-# resource is created). Used by _build_session_response to populate the
-# ``terminal_pending`` snapshot field so a client connecting mid-spin-up
-# still sees the Terminal-pill spinner. Only ``True`` entries are stored —
-# the key is deleted on clear so the dict never accumulates stale ``False``
-# entries for every session that ever spun up a terminal.
-_session_terminal_pending_cache: dict[str, bool] = {}
-# Managed-sandbox launch progress keyed by session id. Written by
-# _publish_sandbox_status as the background launch pipeline advances;
-# read by _build_session_response to populate the ``sandbox_status``
-# snapshot field so a client opening the session mid-launch sees the
-# current stage. Successful launches are evicted on "ready" (absent ==
-# no launch in flight); failures are retained — mirroring
-# ManagedLaunchTracker — so a reload after a dead launch still shows
-# why the sandbox never came up.
-_session_sandbox_status_cache: dict[str, SandboxStatus] = {}
-# Per-MCP-server startup state keyed by session id. Written by
-# _publish_mcp_startup as the native forwarder reports harness MCP
-# startup progress; read by _build_session_response to populate the
-# ``mcp_startup`` snapshot field so a client opening (or reloading) the
-# session mid-startup still sees the startup band. Evicted when the
-# forwarder posts an empty/settled map — absent == no startup state.
-_session_mcp_startup_cache: dict[str, dict[str, McpServerStartup]] = {}
-# Per-session runner-skills cache + in-flight fetch. The snapshot fetches
-# these off its critical path (see _fetch_runner_skills) so the continuous
-# poll can't pin the runner's event loop and wedge a turn.
-_runner_skills_cache: dict[str, list[SkillSummary]] = {}
-_runner_skills_inflight: dict[str, asyncio.Task[None]] = {}
-# Per-session codex-native model catalog cache + in-flight fetch.
-# The snapshot warms this from the bound runner's live Codex app-server
-# (``model/list``) off the hot path, same shape as runner skills.
-_model_options_cache: dict[str, list[dict[str, Any]]] = {}
-_model_options_inflight: dict[str, asyncio.Task[None]] = {}
 _CODEX_MODEL_OPTIONS_RETRY_DELAYS_S = (0.25, 0.5, 1.0, 2.0, 2.0)
 
 
@@ -1198,25 +1122,6 @@ _pending_policy_ask_writes: cachetools.LRUCache[str, _PendingPolicyAskWrites] = 
 # server replica can read it back when the runner calls /policies/evaluate
 # or /mcp (tools/call).
 _TURN_ACTOR_LABEL = "omnicraft.turn_actor"
-
-
-# (conversation_id, deciding_policy) -> lock serializing native ASK gates.
-# When an agent fires several tool calls in parallel, each spawns its own
-# PreToolUse hook that lands in the policy-evaluate endpoint concurrently.
-# Without serialization every one of them would publish its own approval
-# elicitation for the same crossed checkpoint (e.g. a cost-budget warning),
-# prompting the human N times for one decision. Holding this lock across the
-# human wait lets the first ASK resolve and record its approval, so the
-# siblings re-evaluate to ALLOW (against the freshly persisted state) and never
-# prompt again. Keyed on the deciding policy so unrelated policies' asks don't
-# serialize against each other; keyed on the conversation so different sessions
-# stay independent (claude/codex-native sub-agent tool calls share the parent
-# conversation id, so this also covers them). A WeakValueDictionary drops a
-# lock once no in-flight coroutine references it, bounding the registry without
-# an eviction policy that could hand two waiters different lock objects.
-_native_ask_gate_locks: weakref.WeakValueDictionary[tuple[str, str], asyncio.Lock] = (
-    weakref.WeakValueDictionary()
-)
 
 
 def _native_ask_gate_lock(conversation_id: str, deciding_policy: str) -> asyncio.Lock:
@@ -1812,10 +1717,6 @@ def _signal_terminal_resolved_harness_elicitation(
         session_id,
         len(candidates),
     )
-
-
-# Strong refs so deferred card-clear tasks aren't GC'd mid-sleep.
-_deferred_elicitation_clear_tasks: set[asyncio.Task[None]] = set()
 
 
 def _schedule_deferred_elicitation_clear(
@@ -4358,12 +4259,6 @@ async def _resolve_elicitation(
     await _forward_approval_to_runner(session_id, data, runner_router)
 
 
-# Fire-and-forget tasks that ask the bound runner to pop a native-terminal
-# approval modal for a parked tool-policy ASK. Kept referenced so they aren't
-# garbage-collected before the POST completes.
-_native_popup_forward_tasks: set[asyncio.Task[None]] = set()
-
-
 def _spawn_native_approval_popup_forward(
     session_id: str, elicitation_id: str, message: str, policy_name: str | None = None
 ) -> None:
@@ -6611,13 +6506,6 @@ async def _launch_runner_on_host(
             error=result.get("error"),
         )
     return _HostLaunchAttempt(runner_id=new_runner_id)
-
-
-# Strong references to in-flight background managed-launch tasks.
-# asyncio.create_task results are weakly held by the loop; without a
-# reference here a long provision could be garbage-collected mid-flight.
-# Cancelled at server shutdown via cancel_managed_launch_tasks().
-_managed_launch_tasks: set[asyncio.Task[None]] = set()
 
 
 async def cancel_managed_launch_tasks() -> None:
@@ -10633,16 +10521,6 @@ async def _ensure_runner_relay_ready(
             code=ErrorCode.RUNNER_UNAVAILABLE,
         ) from exc
     return handle
-
-
-# Per-session compaction locks so concurrent ``/compact`` POSTs
-# don't race.
-_COMPACT_LOCKS: dict[str, asyncio.Lock] = {}
-
-
-# Valores fracos limitam o registro de locks por sessão sem separar quem espera
-# em objetos diferentes durante a evicção.
-_COMPACT_LOCKS: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 
 
 def _compact_lock(session_id: str) -> asyncio.Lock:
